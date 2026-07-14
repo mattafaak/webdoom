@@ -94,14 +94,23 @@ html, body {
     min-height: 18px;
 }
 
+/* long lists wrap into columns instead of scrolling offscreen */
+#dmenu .items {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    max-height: min(62vh, 640px);
+    gap: 10px 56px;
+}
+
 #dmenu .row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     cursor: pointer;
-    min-height: 26px;
 }
-#dmenu .skull { width: 28px; display: inline-flex; justify-content: center; }
+#dmenu .skull { width: 44px; display: inline-flex; justify-content: center; }
 #dmenu canvas { image-rendering: pixelated; }
 
 #countdown {

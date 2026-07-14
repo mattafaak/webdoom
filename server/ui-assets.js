@@ -12,7 +12,8 @@ let cached = null;
 
 export function uiAssets(wadDir) {
     if (cached) return cached;
-    const source = ['doom2.wad', 'doom.wad', 'tnt.wad', 'plutonia.wad']
+    // doom.wad first: its M_DOOM is the classic logo (doom2's says "II")
+    const source = ['doom.wad', 'doom2.wad', 'tnt.wad', 'plutonia.wad']
         .map(f => join(wadDir, f)).find(existsSync);
     if (!source) return null;
 

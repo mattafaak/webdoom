@@ -14,8 +14,8 @@ export function createMenu(font, host) {
     let entry = null;               // {item, value} while typing a name
     let hidden = false;
 
-    const skulls = [font.patch('M_SKULL1', 2), font.patch('M_SKULL2', 2)];
-    const logo = font.patch('M_DOOM', 2);
+    const skulls = [font.patch('M_SKULL1', 3), font.patch('M_SKULL2', 3)];
+    const logo = font.patch('M_DOOM', 3);
     setInterval(() => {
         skullFlip = !skullFlip;
         const on = root.querySelector('.row.sel .skull');
@@ -33,17 +33,24 @@ export function createMenu(font, host) {
             root.appendChild(Object.assign(document.createElement('div'), { className: 'logo' })).appendChild(logo);
         if (s.title)
             root.appendChild(Object.assign(document.createElement('div'), { className: 'mtitle' }))
-                .appendChild(font.text(s.title, { scale: 2 }));
+                .appendChild(font.text(s.title, { scale: 3 }));
         if (s.header) {
             const h = Object.assign(document.createElement('div'), { className: 'mheader' });
             for (const part of s.header) {
-                const c = font.text(part.text, { scale: 2, color: part.color ?? null });
+                const c = font.text(part.text, { scale: 3, color: part.color ?? null });
                 c.dataset.pname = part.text.trim();     // tests + a11y
                 h.appendChild(c);
             }
             root.appendChild(h);
         }
 
+        // big type by default; drop a notch when this screen has long
+        // labels so single-column lists stay onscreen widthwise
+        const longest = Math.max(0, ...s.items.map(it =>
+            (it.label + (it.value !== undefined ? String(it.value) : '')).length));
+        const scale = longest > 24 ? 3 : 4;
+
+        const list = Object.assign(document.createElement('div'), { className: 'items' });
         s.items.forEach((item, i) => {
             const row = document.createElement('div');
             row.className = 'row' + (i === sel ? ' sel' : '');
@@ -56,11 +63,12 @@ export function createMenu(font, host) {
             row.dataset.label = label.toUpperCase();    // tests + accessibility
             row.setAttribute('role', 'menuitem');
             row.setAttribute('aria-label', label);
-            row.appendChild(font.text(label, { scale: 2, color: item.color ?? null }));
+            row.appendChild(font.text(label, { scale, color: item.color ?? null }));
             row.onmouseenter = () => { if (!entry && sel !== i) { sel = i; render(); } };
             row.onclick = () => { if (!entry) { sel = i; activate(); } };
-            root.appendChild(row);
+            list.appendChild(row);
         });
+        root.appendChild(list);
     }
 
     function activate() {
@@ -98,9 +106,14 @@ export function createMenu(font, host) {
             return;
         }
         const n = screen().items.length;
+        // rows per wrapped column, for left/right jumps in long lists
+        const rows = [...root.querySelectorAll('.items .row')];
+        const col = rows.length ? rows.filter(r => r.offsetLeft === rows[0].offsetLeft).length : n;
         switch (e.code) {
             case 'ArrowUp':   sel = (sel + n - 1) % n; break;
             case 'ArrowDown': sel = (sel + 1) % n; break;
+            case 'ArrowLeft':  sel = Math.max(0, sel - col); break;
+            case 'ArrowRight': sel = Math.min(n - 1, sel + col); break;
             case 'Enter':     activate(); break;
             case 'Escape': case 'Backspace': back(); break;
             default: return;
