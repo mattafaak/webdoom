@@ -17,7 +17,7 @@ CFLAGS := -O2 -Dalloca=__builtin_alloca -std=gnu89 -DNORMALUNIX -Icore -Iweb \
           -Wno-parentheses -Wno-missing-braces -Wno-unused-value
 
 LDFLAGS := -sINITIAL_MEMORY=64MB -sSTACK_SIZE=4MB \
-           -sMODULARIZE=1 -sEXPORT_NAME=createDoom \
+           -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createDoom \
            -sINVOKE_RUN=0 \
            -sEXPORTED_RUNTIME_METHODS=callMain,FS,ENV,HEAPU8,HEAP32 \
            -sEXPORTED_FUNCTIONS=_main,_web_frame,_web_input_event,_web_framebuffer,_web_palette,_web_palette_version,_web_net_setup,_web_net_set_delay,_web_net_bundle,_web_net_scratch \

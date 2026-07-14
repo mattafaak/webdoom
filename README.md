@@ -30,7 +30,7 @@ make -C engine               # → build/doom.wasm + glue
 (cd server && npm i && node serve.js)
 ```
 
-Then open `http://<host>:8090/`.
+Then open `http://<host>:8666/`.
 
 ## License
 
