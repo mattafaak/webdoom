@@ -43,20 +43,31 @@ const cdp = (method, params = {}) => new Promise(res => {
     ws.send(JSON.stringify({ id: i, method, params }));
 });
 const evaluate = async expr =>
-    (await cdp('Runtime.evaluate', { expression: expr, returnByValue: true })).result?.result?.value;
+    (await cdp('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true })).result?.result?.value;
 
 await cdp('Runtime.enable');
 await cdp('Page.enable');
 
-// wait for boot: status element empties when the game is running
+// landing page → click PLAY → wait for the engine to run
+// (canvas unhidden + status empty)
 let booted = false;
-for (let i = 0; i < 40; i++) {
+let clicked = false;
+for (let i = 0; i < 60; i++) {
     await sleep(500);
     const s = await evaluate(`document.getElementById('status')?.textContent`);
-    if (s === '') { booted = true; break; }
-    if (s?.startsWith('engine error') || s?.startsWith('Error')) {
+    if (s?.startsWith('engine error') || s?.startsWith('Error') || s?.startsWith('cannot')) {
         console.error(`FAIL: ${s}`); cleanup(1);
     }
+    if (!clicked) {
+        clicked = await evaluate(
+            `!document.getElementById('play') ? false :
+             (document.getElementById('play').click(), true)`);
+        continue;
+    }
+    const running = await evaluate(
+        `document.getElementById('status')?.textContent === '' &&
+         !document.getElementById('screen').hidden`);
+    if (running) { booted = true; break; }
 }
 if (!booted) {
     console.error('FAIL: boot timeout');
@@ -97,11 +108,16 @@ const png4 = await shot('webdoom-e1m1-moved.png');
 const audioArmed = await evaluate(`window.doomAudio?.armed()`);
 console.log(`audio armed: ${audioArmed}`);
 
+const wadsCached = await evaluate(
+    `caches.open('webdoom-wads-v1').then(c => c.keys()).then(k => k.length)`);
+console.log(`service worker WAD cache entries: ${wadsCached}`);
+
 if (consoleErrors.length) console.log('console errors:', consoleErrors.slice(0, 5));
 if (png1 === png2) { console.error('FAIL: Escape did not open the menu — input dead'); cleanup(1); }
 if (png2 === png3) { console.error('FAIL: game did not start from menu'); cleanup(1); }
 if (png3 === png4) { console.error('FAIL: player did not move'); cleanup(1); }
 if (!audioArmed) { console.error('FAIL: audio never armed after key input'); cleanup(1); }
+if (!wadsCached) { console.error('FAIL: service worker cached no WADs'); cleanup(1); }
 if (consoleErrors.some(e => /worklet|audio/i.test(e))) { console.error('FAIL: audio errors'); cleanup(1); }
 console.log(`PASS — title/menu/e1m1/moved screenshots in ${outdir}`);
 cleanup(0);

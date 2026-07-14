@@ -1389,14 +1389,20 @@ G_InitNew
 
     if ( gamemode == retail )
     {
+      // webdoom: allow episodes past 4 when the maps exist (SIGIL is E5)
       if (episode > 4)
-	episode = 4;
+      {
+	char mapname[9];
+	sprintf (mapname, "E%iM1", episode);
+	if (W_CheckNumForName (mapname) < 0)
+	    episode = 4;
+      }
     }
     else if ( gamemode == shareware )
     {
-      if (episode > 1) 
+      if (episode > 1)
 	   episode = 1;	// only start episode 1 on shareware
-    }  
+    }
     else
     {
       if (episode > 3)

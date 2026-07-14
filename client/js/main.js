@@ -1,17 +1,18 @@
-// webdoom bootstrap: fetch engine + WAD, boot, drive D_DoomFrame per rAF.
+// webdoom boot: fetch engine + WAD stack, boot, drive D_DoomFrame per
+// rAF. Called by lobby.js for both single player and netplay.
 import { createRenderer } from './video.js';
 import { createInput, loadSettings } from './input.js';
 import { createAudio } from './audio.js';
 import { createSettingsUI } from './settings.js';
+import { attachRelay } from './net.js';
 
 const status = msg => { document.getElementById('status').textContent = msg; };
-const canvas = document.getElementById('screen');
 
 // The engine identifies Ultimate Doom by filename.
 const ENGINE_NAME = { 'doom.wad': 'doomu.wad' };
 
-async function fetchWad(file) {
-    const res = await fetch(`/wads/${file}`);
+async function fetchWad(file, sha) {
+    const res = await fetch(`/wads/${file}?v=${(sha ?? '').slice(0, 8)}`);
     if (!res.ok) throw new Error(`wad fetch failed: ${file} (${res.status})`);
     const total = +res.headers.get('content-length') || 0;
     const parts = [];
@@ -30,13 +31,17 @@ async function fetchWad(file) {
     return buf;
 }
 
-async function boot() {
-    const params = new URLSearchParams(location.search);
-    const wad = params.get('wad') ?? 'doom.wad';
+// wads: [{file, sha}] — first entry is the IWAD, the rest are PWADs.
+// net: {slot, numplayers, rttMs} or null for single player.
+export async function bootDoom({ wads, args = [], net = null }) {
+    const canvas = document.getElementById('screen');
+    document.getElementById('landing').hidden = true;
+    canvas.hidden = false;
 
     status('loading engine…');
     const { default: createDoom } = await import('/engine/doom.js');
-    const wadBytes = await fetchWad(wad);
+    const bytes = [];
+    for (const w of wads) bytes.push(await fetchWad(w.file, w.sha));
 
     status('booting…');
     const doom = await createDoom({
@@ -47,12 +52,21 @@ async function boot() {
             mod.ENV.DOOMWADDIR = '/wads';
             mod.ENV.HOME = '/home/web_user';
             mod.FS.mkdir('/wads');
-            mod.FS.writeFile(`/wads/${ENGINE_NAME[wad] ?? wad}`, wadBytes);
+            wads.forEach((w, i) => {
+                const name = i === 0 ? (ENGINE_NAME[w.file] ?? w.file) : w.file;
+                mod.FS.writeFile(`/wads/${name}`, bytes[i]);
+            });
         }],
     });
 
-    doom.callMain([]);
-    window.doomAudio = createAudio(doom);   // debug/test handle
+    const pwads = wads.slice(1).flatMap(w => ['-file', `/wads/${w.file}`]);
+    const relay = net
+        ? attachRelay(doom, `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`, net)
+        : null;
+
+    doom.callMain([...pwads, ...args]);
+    relay?.go();
+    window.doomAudio = createAudio(doom);
 
     const renderer = createRenderer(canvas);
     const fb = doom._web_framebuffer();
@@ -77,7 +91,6 @@ async function boot() {
         requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
-    console.log(`webdoom up — renderer: ${renderer.kind}`);
+    console.log(`webdoom up — renderer: ${renderer.kind}, ${net ? `netplay slot ${net.slot}/${net.numplayers}` : 'single player'}`);
+    return doom;
 }
-
-boot().catch(err => { status(String(err)); console.error(err); });
