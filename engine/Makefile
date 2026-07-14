@@ -20,7 +20,7 @@ LDFLAGS := -sINITIAL_MEMORY=64MB -sSTACK_SIZE=4MB \
            -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createDoom \
            -sINVOKE_RUN=0 \
            -sEXPORTED_RUNTIME_METHODS=callMain,FS,ENV,HEAPU8,HEAP32,HEAPF32 \
-           -sEXPORTED_FUNCTIONS=_main,_web_frame,_web_input_event,_web_framebuffer,_web_palette,_web_palette_version,_web_net_setup,_web_net_set_delay,_web_net_bundle,_web_net_scratch,_web_music_render,_web_music_init,_web_music_debug,_malloc,_free \
+           -sEXPORTED_FUNCTIONS=_main,_web_frame,_web_input_event,_web_framebuffer,_web_palette,_web_palette_version,_web_net_setup,_web_net_set_delay,_web_net_bundle,_web_net_scratch,_web_music_render,_web_music_init,_web_music_debug,_web_gamepad,_web_ui_mode,_web_weapon_state,_malloc,_free \
            -sENVIRONMENT=web,worker,node \
            -sALLOW_MEMORY_GROWTH=0
 

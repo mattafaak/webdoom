@@ -198,8 +198,12 @@ int		dclickstate2;
 int		dclicks2;
 
 // joystick values are repeated 
+// webdoom: axes are analog, -100..100 (vanilla was digital -1/0/1).
+// joysidemove is a second x-axis so twin-stick pads strafe and turn
+// at once. Local input only — ticcmd stays vanilla, netplay-safe.
 int             joyxmove;
 int		joyymove;
+int		joysidemove;
 boolean         joyarray[5]; 
 boolean*	joybuttons = &joyarray[1];		// allow [-1] 
  
@@ -287,24 +291,17 @@ void G_BuildTiccmd (ticcmd_t* cmd)
 	    //	fprintf(stderr, "strafe left\n");
 	    side -= sidemove[speed]; 
 	}
-	if (joyxmove > 0) 
-	    side += sidemove[speed]; 
-	if (joyxmove < 0) 
-	    side -= sidemove[speed]; 
- 
-    } 
-    else 
-    { 
-	if (gamekeydown[key_right]) 
-	    cmd->angleturn -= angleturn[tspeed]; 
-	if (gamekeydown[key_left]) 
-	    cmd->angleturn += angleturn[tspeed]; 
-	if (joyxmove > 0) 
-	    cmd->angleturn -= angleturn[tspeed]; 
-	if (joyxmove < 0) 
-	    cmd->angleturn += angleturn[tspeed]; 
-    } 
- 
+	side += joyxmove * sidemove[speed] / 100;
+    }
+    else
+    {
+	if (gamekeydown[key_right])
+	    cmd->angleturn -= angleturn[tspeed];
+	if (gamekeydown[key_left])
+	    cmd->angleturn += angleturn[tspeed];
+	cmd->angleturn -= joyxmove * angleturn[tspeed] / 100;
+    }
+
     if (gamekeydown[key_up]) 
     {
 	// fprintf(stderr, "up\n");
@@ -315,13 +312,11 @@ void G_BuildTiccmd (ticcmd_t* cmd)
 	// fprintf(stderr, "down\n");
 	forward -= forwardmove[speed]; 
     }
-    if (joyymove < 0) 
-	forward += forwardmove[speed]; 
-    if (joyymove > 0) 
-	forward -= forwardmove[speed]; 
-    if (gamekeydown[key_straferight]) 
-	side += sidemove[speed]; 
-    if (gamekeydown[key_strafeleft]) 
+    forward -= joyymove * forwardmove[speed] / 100;
+    side += joysidemove * sidemove[speed] / 100;
+    if (gamekeydown[key_straferight])
+	side += sidemove[speed];
+    if (gamekeydown[key_strafeleft])
 	side -= sidemove[speed];
     
     // buttons
@@ -573,12 +568,14 @@ boolean G_Responder (event_t* ev)
 	    gamekeydown[ev->data1] = false; 
 	return false;   // always let key up events filter down 
 		 
-      case ev_mouse: 
-	mousebuttons[0] = ev->data1 & 1; 
-	mousebuttons[1] = ev->data1 & 2; 
-	mousebuttons[2] = ev->data1 & 4; 
-	mousex = ev->data2*(mouseSensitivity+5)/10; 
-	mousey = ev->data3*(mouseSensitivity+5)/10; 
+      case ev_mouse:
+	mousebuttons[0] = ev->data1 & 1;
+	mousebuttons[1] = ev->data1 & 2;
+	mousebuttons[2] = ev->data1 & 4;
+	// webdoom: accumulate (vanilla overwrote — display rates above
+	// TICRATE would drop every event but the last per tic)
+	mousex += ev->data2*(mouseSensitivity+5)/10;
+	mousey += ev->data3*(mouseSensitivity+5)/10;
 	return true;    // eat events 
  
       case ev_joystick: 

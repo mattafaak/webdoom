@@ -37,3 +37,30 @@ html, body {
 }
 
 #status:empty { display: none; }
+
+#settings {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    translate: -50% -50%;
+    min-width: 22rem;
+    max-height: 90vh;
+    overflow-y: auto;
+    background: rgba(16,16,16,.95);
+    border: 2px solid #700;
+    border-radius: 6px;
+    padding: 1rem 1.4rem;
+}
+
+#settings h2 { color: #d33; font-size: 1.1rem; margin-bottom: .6rem; }
+#settings table { width: 100%; border-collapse: collapse; margin-bottom: .8rem; }
+#settings td { padding: .15rem 0; }
+#settings td:last-child { text-align: right; }
+#settings label { display: block; margin: .45rem 0; }
+#settings input[type=range] { vertical-align: middle; width: 9rem; }
+#settings button {
+    background: #222; color: #ddd;
+    border: 1px solid #555; border-radius: 4px;
+    padding: .2rem .7rem; cursor: pointer; font: inherit;
+}
+#settings button:hover { border-color: #d33; }
+#settings .row { display: flex; justify-content: space-between; margin-top: .8rem; }

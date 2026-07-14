@@ -1,7 +1,8 @@
 // webdoom bootstrap: fetch engine + WAD, boot, drive D_DoomFrame per rAF.
 import { createRenderer } from './video.js';
-import { attachKeyboard } from './input.js';
+import { createInput, loadSettings } from './input.js';
 import { createAudio } from './audio.js';
+import { createSettingsUI } from './settings.js';
 
 const status = msg => { document.getElementById('status').textContent = msg; };
 const canvas = document.getElementById('screen');
@@ -60,9 +61,11 @@ async function boot() {
 
     status('');
     canvas.focus();
-    attachKeyboard(window, (type, d1, d2, d3) => doom._web_input_event(type, d1, d2, d3));
+    const input = createInput(doom, canvas, loadSettings());
+    createSettingsUI(input);
 
     const frame = () => {
+        input.frame();
         doom._web_frame();
         const v = doom._web_palette_version();
         renderer.draw(
