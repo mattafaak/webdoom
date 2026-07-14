@@ -61,13 +61,14 @@ clients[0].lobby.setParams({ episode: 1, map: 1, skill: 3, mode: 'coop' });
 await sleep(200);
 clients[0].lobby.start();
 const launchMsgs = await Promise.all(launches);
-console.log(`launched ${launchMsgs[0].numplayers}p: ${JSON.stringify(launchMsgs[0].params)}`);
-if (launchMsgs[0].numplayers !== N) fail(`expected ${N} players`);
+console.log(`launched ${launchMsgs[0].slots.length}p (slots ${launchMsgs[0].slots}): ${JSON.stringify(launchMsgs[0].params)}`);
+if (launchMsgs[0].slots.length !== N) fail(`expected ${N} players`);
 
 // --- boot engines into the session -------------------------------------------
 clients.forEach((c, i) => {
     c.relay = attachRelay(c.doom, base, {
-        slot: c.lobby.slot, numplayers: N, rttMs: 2,
+        slot: c.lobby.slot, numplayers: launchMsgs[i].numplayers,
+        slots: launchMsgs[i].slots, names: launchMsgs[i].names, rttMs: 2,
     });
     c.doom.callMain(launchArgs(launchMsgs[i].params, false));
     c.relay.go();

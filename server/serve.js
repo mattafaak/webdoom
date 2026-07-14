@@ -6,6 +6,7 @@ import { createReadStream, readFileSync, statSync } from 'node:fs';
 import { join, normalize, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createGame } from './game.js';
+import { uiAssets } from './ui-assets.js';
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const HOST = process.env.DOOM_HOST ?? '0.0.0.0';
@@ -41,6 +42,12 @@ const server = createServer((req, res) => {
 
     if (path === '/api/wads')
         return send(res, 200, manifest(), { 'content-type': 'application/json' });
+    if (path === '/api/ui-assets') {
+        const assets = uiAssets(join(root, 'wads/lib'));
+        return assets
+            ? send(res, 200, assets, { 'content-type': 'application/json', 'cache-control': 'public, max-age=3600' })
+            : send(res, 404, 'no IWAD available');
+    }
     if (path === '/') path = '/index.html';
 
     for (const [prefix, dir] of MOUNTS) {

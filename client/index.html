@@ -10,40 +10,7 @@
 <main id="stage">
   <canvas id="screen" width="320" height="200" tabindex="0" hidden></canvas>
 
-  <section id="landing">
-    <h1>WEBDOOM</h1>
-
-    <button id="play" class="big">PLAY</button>
-    <div class="wad-row">
-      <select id="wad-select"></select>
-    </div>
-
-    <details id="mp">
-      <summary>Multiplayer</summary>
-      <div id="mp-body">
-        <div id="mp-roster"></div>
-        <div id="mp-params">
-          <label>Game <select id="mp-wad"></select></label>
-          <label id="mp-ep-wrap">Episode <select id="mp-episode"></select></label>
-          <label>Map <select id="mp-map"></select></label>
-          <label>Skill <select id="mp-skill">
-            <option value="1">I'm too young to die</option>
-            <option value="2">Hey, not too rough</option>
-            <option value="3" selected>Hurt me plenty</option>
-            <option value="4">Ultra-Violence</option>
-            <option value="5">Nightmare!</option>
-          </select></label>
-          <label>Mode <select id="mp-mode">
-            <option value="coop">Co-op</option>
-            <option value="deathmatch">Deathmatch</option>
-            <option value="altdeath">Deathmatch 2.0</option>
-          </select></label>
-        </div>
-        <button id="mp-start" class="big">START GAME</button>
-        <div id="mp-note"></div>
-      </div>
-    </details>
-  </section>
+  <section id="landing"></section>
 
   <div id="countdown" hidden></div>
   <div id="overlay"><div id="status">loading…</div></div>

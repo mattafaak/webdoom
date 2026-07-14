@@ -21,19 +21,22 @@ const defaultParams = () => ({
 
 export function createGame(log = console.log) {
     // --- lobby state -------------------------------------------------------
-    const lobby = new Map();        // slot → ws
+    const lobby = new Map();        // slot → {ws, name} (name null = color default)
     let params = defaultParams();
     let session = null;             // active relay session or null
 
+    const displayName = slot => lobby.get(slot)?.name ?? COLORS[slot];
     const roster = () => ({
         t: 'roster',
-        players: [...lobby.keys()].sort().map(s => ({ slot: s, color: COLORS[s] })),
+        players: [...lobby.keys()].sort().map(s =>
+            ({ slot: s, color: COLORS[s], name: displayName(s) })),
+        freeSlots: [0, 1, 2, 3].filter(s => !lobby.has(s)),
         params,
         inGame: !!session,
     });
     const cast = msg => {
         const s = JSON.stringify(msg);
-        for (const ws of lobby.values()) if (ws.readyState === 1) ws.send(s);
+        for (const p of lobby.values()) if (p.ws.readyState === 1) p.ws.send(s);
     };
 
     function lobbyConnect(ws) {
@@ -44,7 +47,7 @@ export function createGame(log = console.log) {
             ws.close();
             return;
         }
-        lobby.set(slot, ws);
+        lobby.set(slot, { ws, name: null });
         ws.send(JSON.stringify({ t: 'welcome', slot, color: COLORS[slot] }));
         cast(roster());
         log(`lobby: ${COLORS[slot]} joined (${lobby.size} in lobby)`);
@@ -54,6 +57,24 @@ export function createGame(log = console.log) {
             try { m = JSON.parse(raw); } catch { return; }
             if (m.t === 'ping') { ws.send(JSON.stringify({ t: 'pong', t0: m.t0 })); return; }
             if (session) return;
+            if (m.t === 'name') {
+                const name = String(m.name ?? '').replace(/[^A-Za-z0-9 _-]/g, '').trim().slice(0, 10);
+                lobby.get(slot).name = name || null;
+                cast(roster());
+                return;
+            }
+            if (m.t === 'slot') {
+                // color choice IS slot choice (the engine colors by slot)
+                const want = +m.slot;
+                if (want >= 0 && want < MAXPLAYERS && !lobby.has(want) && want !== slot) {
+                    lobby.set(want, lobby.get(slot));
+                    lobby.delete(slot);
+                    slot = want;
+                    ws.send(JSON.stringify({ t: 'welcome', slot, color: COLORS[slot] }));
+                    cast(roster());
+                }
+                return;
+            }
             if (m.t === 'params') {
                 const p = { ...params, ...m.params };
                 params = {
@@ -75,18 +96,20 @@ export function createGame(log = console.log) {
     }
 
     // --- game session -------------------------------------------------------
+    // Sessions are always MAXPLAYERS wide: color choice = slot choice, so
+    // occupied slots may be sparse (players on 0 and 3). Phantom slots are
+    // not-ingame from tic 0; the engine's playeringame mask mirrors this.
     function startGame() {
         const slots = [...lobby.keys()].sort();
-        const numplayers = slots.length;
         session = {
-            numplayers,
-            players: slots.map(slot => ({
+            numplayers: MAXPLAYERS,
+            players: [0, 1, 2, 3].map(slot => ({
                 slot, ws: null,
                 cmds: new Map(),        // tic → Buffer(8)
                 last: Buffer.alloc(CMD_SIZE),
                 lastSeen: Date.now(),
-                ingame: true,
-                joined: false,
+                ingame: lobby.has(slot),
+                joined: !lobby.has(slot),
             })),
             tic: 0,                     // next tic to seal
             timer: null,
@@ -96,8 +119,9 @@ export function createGame(log = console.log) {
         const tick = () => {
             if (!session) return;
             if (n > 0) { cast({ t: 'countdown', n: n-- }); setTimeout(tick, 1000); return; }
-            cast({ t: 'launch', params, numplayers, slots });
-            log(`game: launching ${numplayers}p ${params.wad} E${params.episode}M${params.map} skill ${params.skill} ${params.mode}`);
+            const names = [0, 1, 2, 3].map(s => lobby.has(s) ? displayName(s) : null);
+            cast({ t: 'launch', params, numplayers: MAXPLAYERS, slots, names });
+            log(`game: launching ${slots.length}p (slots ${slots.join(',')}) ${params.wad} E${params.episode}M${params.map} skill ${params.skill} ${params.mode}`);
             session.launched = Date.now();
             session.timer = setInterval(sealSweep, 50);
         };

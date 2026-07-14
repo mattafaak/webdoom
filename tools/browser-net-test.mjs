@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// Browser multiplayer test: two Chrome tabs join the lobby UI, one hits
-// START, both must end up in-game with the roster having shown both
-// colors. usage: node tools/browser-net-test.mjs [url] [outdir]
+// Browser multiplayer test through the DOOM-style drill-down menu:
+// tab A drills MULTIPLAYER → game → episode → map → mode → skill and
+// lands in the lobby; tab B joins, types a custom name, picks a free
+// color (slot change → sparse-slot launch path); A starts; both must
+// end up in-game. usage: node tools/browser-net-test.mjs [url] [outdir]
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -43,11 +45,26 @@ async function openTab(name) {
     await cdp('Runtime.enable');
     await cdp('Page.enable');
     return {
-        name, errors,
-        eval: async expr => (await cdp('Runtime.evaluate', { expression: expr, returnByValue: true })).result?.result?.value,
+        name, errors, cdp,
+        eval: async expr => (await cdp('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true })).result?.result?.value,
         shot: async file => {
             const { result } = await cdp('Page.captureScreenshot', { format: 'png' });
             writeFileSync(join(outdir, file), Buffer.from(result.data, 'base64'));
+        },
+        async click(label) {
+            for (let i = 0; i < 10; i++) {
+                const ok = await this.eval(
+                    `(() => { const r = document.querySelector('#dmenu .row[data-label*=${JSON.stringify(label)}]');
+                              return r ? (r.click(), true) : false; })()`);
+                if (ok) return true;
+                await sleep(300);
+            }
+            return false;
+        },
+        async key(key) {
+            await this.cdp('Input.dispatchKeyEvent', { type: 'keyDown', key, text: key.length === 1 ? key : undefined });
+            await this.cdp('Input.dispatchKeyEvent', { type: 'keyUp', key });
+            await sleep(80);
         },
     };
 }
@@ -56,23 +73,37 @@ const fail = msg => { console.error(`FAIL: ${msg}`); cleanup(1); };
 
 const A = await openTab('A');
 const B = await openTab('B');
+await sleep(2500);
 
-// wait for landing, open the MP panel in both
-for (const t of [A, B]) {
-    for (let i = 0; i < 20 && !(await t.eval(`!!document.getElementById('mp')`)); i++) await sleep(300);
-    await t.eval(`document.getElementById('mp').open = true`);
-    await sleep(400);
-}
-await sleep(600);
+// A drills the whole setup
+for (const step of ['MULTIPLAYER', 'ULTIMATE', 'EPISODE 1', 'E1M1', 'COOPERATIVE', 'HURT ME PLENTY'])
+    if (!await A.click(step)) fail(`A: menu item not found: ${step}`);
+await sleep(500);
+if (!await A.eval(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`))
+    fail('A: never reached the lobby screen');
 
-const rosterA = await A.eval(`document.getElementById('mp-roster').textContent`);
-console.log(`roster seen by A: ${rosterA}`);
-if (!/Green/.test(rosterA) || !/Indigo/.test(rosterA)) fail('both colors not in roster');
+// B joins → should land straight in the lobby, then personalize
+if (!await B.click('MULTIPLAYER')) fail('B: MULTIPLAYER not found');
+await sleep(700);
+if (!await B.eval(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`))
+    fail('B: did not land on the lobby screen');
+if (!await B.click('NAME')) fail('B: NAME item not found');
+for (const k of ['x', 'y', 'z']) await B.key(k);
+await B.key('Enter');
+await sleep(500);
+const names = await A.eval(
+    `[...document.querySelectorAll('#dmenu .mheader canvas')].map(c => c.dataset.pname)`);
+console.log(`roster seen by A: ${names}`);
+if (!names?.some(n => n === 'XYZ')) fail("B's custom name not in A's roster");
+if (!names?.some(n => n === 'Green')) fail('default color name missing');
 
-await A.shot('webdoom-lobby.png');
-await A.eval(`document.getElementById('mp-start').click()`);
+// B picks a free color → moves to a non-adjacent slot (sparse launch)
+if (!await B.click('COLOR')) fail('B: COLOR item not found');
+await sleep(500);
+await A.shot('webdoom-lobby-doomfont.png');
 
-// countdown is 3s; wait for both to be in-game
+if (!await A.click('START GAME')) fail('A: START GAME not clickable');
+
 let inGame = 0;
 for (let i = 0; i < 40; i++) {
     await sleep(500);
@@ -84,11 +115,11 @@ for (let i = 0; i < 40; i++) {
 }
 if (inGame !== 2) fail(`only ${inGame}/2 tabs in-game`);
 
-await sleep(2000);      // let the level render + tics flow
-await A.shot('webdoom-mp-green.png');
-await B.shot('webdoom-mp-indigo.png');
+await sleep(2000);
+await A.shot('webdoom-mp-a.png');
+await B.shot('webdoom-mp-b.png');
 
 const errs = [...A.errors, ...B.errors];
 if (errs.length) { console.log('exceptions:', errs.slice(0, 3)); fail('page exceptions'); }
-console.log('PASS — 2-tab lobby → countdown → co-op in-game');
+console.log('PASS — drill-down lobby → name/color → sparse-slot co-op in-game');
 cleanup(0);

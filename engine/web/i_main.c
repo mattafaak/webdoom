@@ -2,6 +2,7 @@
 // out); JS then drives D_DoomFrame from requestAnimationFrame. Input
 // events are posted from JS through web_input_event.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
+#include <stdio.h>
 #include <emscripten.h>
 
 #include "doomdef.h"
@@ -72,6 +73,23 @@ EMSCRIPTEN_KEEPALIVE
 int web_ui_mode (void)
 {
     return menuactive || gamestate != GS_LEVEL;
+}
+
+//
+// Lobby names → in-game chat prefixes ("Name: "). Vanilla strings live
+// in player_names[]; we repoint entries at static buffers.
+//
+extern char* player_names[];
+
+EMSCRIPTEN_KEEPALIVE
+void web_set_player_name (int player, const char* name)
+{
+    static char buf[MAXPLAYERS][16];
+
+    if (player < 0 || player >= MAXPLAYERS || !name || !name[0])
+        return;
+    snprintf (buf[player], sizeof buf[player], "%.10s: ", name);
+    player_names[player] = buf[player];
 }
 
 //

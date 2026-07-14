@@ -1,24 +1,33 @@
-// Landing + arcade lobby. Single player: pick a game, hit PLAY.
-// Multiplayer: open the panel — you get the next color slot, everyone
-// sees the roster live, any player tweaks params or hits START; a
-// countdown broadcasts and every client auto-launches identically.
+// DOOM-style drill-down front end. One short list per screen:
+//   SINGLE PLAYER → game → boot (engine's own menu takes it from there)
+//   MULTIPLAYER   → joins the lobby; first player drills
+//                   GAME → (EPISODE) → MAP → MODE → SKILL → lobby screen;
+//                   later joiners land straight on the lobby screen.
+// Lobby screen: roster in player colors, START, name entry, free-color
+// pick, setup summary. Doing nothing = you're Green/Indigo/… and ready.
 import { bootDoom } from './main.js';
 import { connectLobby, launchArgs } from './net.js';
+import { loadDoomFont } from './doomfont.js';
+import { createMenu } from './menu.js';
 
 const $ = id => document.getElementById(id);
 const status = msg => { $('status').textContent = msg; };
-const esc = s => String(s).replace(/[&<>"']/g, c =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const SKILLS = ["I'M TOO YOUNG TO DIE", 'HEY, NOT TOO ROUGH', 'HURT ME PLENTY',
+    'ULTRA-VIOLENCE', 'NIGHTMARE!'];
+const MODES = [['coop', 'COOPERATIVE'], ['deathmatch', 'DEATHMATCH'], ['altdeath', 'DEATHMATCH 2.0']];
+const COLORS = ['Green', 'Indigo', 'Brown', 'Red'];
 
 let manifest = [];
+let menu = null;
 let lobby = null;
+let roster = null;              // latest roster message
 let booted = false;
+let inLobbyScreen = false;
 
-const isCommercial = e => e?.maps?.[0]?.startsWith('MAP');
 const entry = file => manifest.find(w => w.file === file);
+const isCommercial = e => e?.maps?.[0]?.startsWith('MAP');
 
-// A selectable "game" = an IWAD, or a PWAD stacked on its base IWAD.
-// Official patch wads (tnt31) stack silently onto their base.
 function stackFor(file) {
     const e = entry(file);
     if (!e) return [];
@@ -29,93 +38,75 @@ function stackFor(file) {
     return stack.map(w => ({ file: w.file, sha: w.sha256 }));
 }
 
-function gameOptions() {
-    return manifest
-        .filter(w => !w.patch)
-        .map(w => `<option value="${esc(w.file)}">${w.group ? `${esc(w.group)}: ` : ''}${esc(w.title)}</option>`)
-        .join('');
+// Curated order; grouped entries (Master Levels) fold into a submenu so
+// each screen stays short.
+const GAME_ORDER = ['doom.wad', 'doom2.wad', 'sigil.wad', 'nerve.wad',
+    'tnt.wad', 'plutonia.wad', 'chex.wad', 'hacx.wad'];
+
+function gameItems(onPick) {
+    const top = manifest.filter(w => !w.patch && !w.group)
+        .sort((a, b) => {
+            const ia = GAME_ORDER.indexOf(a.file), ib = GAME_ORDER.indexOf(b.file);
+            return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+        })
+        .map(w => ({ label: w.title, action: () => onPick(w) }));
+    const grouped = [...new Set(manifest.filter(w => w.group).map(w => w.group))]
+        .map(g => ({
+            label: g,
+            action: () => menu.push({
+                title: g,
+                items: manifest.filter(w => w.group === g)
+                    .map(w => ({ label: w.title, action: () => onPick(w) })),
+            }),
+        }));
+    return [...top, ...grouped];
 }
 
-function fillMapSelectors(file) {
-    const e = entry(file);
-    const maps = e?.maps ?? [];
-    const commercial = isCommercial(e);
-    $('mp-ep-wrap').hidden = commercial;
-    if (commercial) {
-        $('mp-map').innerHTML = maps.map(m => `<option value="${+m.slice(3)}">${m}</option>`).join('');
-    } else {
-        const eps = [...new Set(maps.map(m => +m[1]))].sort();
-        $('mp-episode').innerHTML = eps.map(n => `<option value="${n}">Episode ${n}</option>`).join('');
-        const ep = +$('mp-episode').value || eps[0];
-        $('mp-map').innerHTML = maps.filter(m => +m[1] === ep)
-            .map(m => `<option value="${+m[3]}">${m}</option>`).join('');
-    }
-}
+// --- screens -----------------------------------------------------------------
 
-// --- single player -----------------------------------------------------------
-function initSP() {
-    $('wad-select').innerHTML = gameOptions();
-    $('wad-select').value = localStorage.getItem('webdoom.wad') ?? 'doom.wad';
-    if (!$('wad-select').value) $('wad-select').selectedIndex = 0;
-    $('play').onclick = () => {
-        if (booted) return;
-        booted = true;
-        const file = $('wad-select').value;
-        localStorage.setItem('webdoom.wad', file);
-        lobby?.close();
-        bootDoom({ wads: stackFor(file) }).catch(err => status(String(err)));
+function rootScreen() {
+    return {
+        items: [
+            { label: 'SINGLE PLAYER', action: () => menu.push(spGameScreen()) },
+            { label: 'MULTIPLAYER', action: enterMultiplayer },
+        ],
     };
 }
 
-// --- multiplayer ----------------------------------------------------------------
-const COLOR_CSS = { Green: '#3a3', Indigo: '#557', Brown: '#a73', Red: '#c33' };
-
-function initMP() {
-    $('mp-wad').innerHTML = gameOptions();
-    $('mp-wad').value = 'doom.wad';
-    fillMapSelectors('doom.wad');
-
-    $('mp').ontoggle = () => {
-        if ($('mp').open && !lobby) joinLobby();
+function spGameScreen() {
+    return {
+        title: 'CHOOSE GAME',
+        items: gameItems(w => {
+            if (booted) return;
+            booted = true;
+            menu.hide();
+            bootDoom({ wads: stackFor(w.file) }).catch(err => status(String(err)));
+        }),
     };
-
-    const sendParams = () => lobby?.setParams({
-        wad: $('mp-wad').value,
-        episode: +$('mp-episode').value || 1,
-        map: +$('mp-map').value || 1,
-        skill: +$('mp-skill').value,
-        mode: $('mp-mode').value,
-    });
-    $('mp-wad').onchange = () => { fillMapSelectors($('mp-wad').value); sendParams(); };
-    $('mp-episode').onchange = () => { fillMapSelectors($('mp-wad').value); sendParams(); };
-    for (const id of ['mp-map', 'mp-skill', 'mp-mode']) $(id).onchange = sendParams;
-    $('mp-start').onclick = () => lobby?.start();
 }
 
-function renderRoster(m) {
-    $('mp-roster').innerHTML = m.players.map(p => `
-        <span class="chip${p.slot === lobby.slot ? ' you' : ''}"
-              style="--c:${COLOR_CSS[p.color] ?? '#666'}">${esc(p.color)}${p.slot === lobby.slot ? ' (you)' : ''}</span>
-    `).join('');
-    // reflect params set by other players
-    const p = m.params;
-    if ($('mp-wad').value !== p.wad) { $('mp-wad').value = p.wad; fillMapSelectors(p.wad); }
-    $('mp-episode').value = p.episode;
-    $('mp-map').value = p.map;
-    $('mp-skill').value = p.skill;
-    $('mp-mode').value = p.mode;
-    $('mp-note').textContent = m.inGame ? 'game in progress — wait for it to finish'
-        : `${m.players.length} player${m.players.length > 1 ? 's' : ''} in lobby`;
-}
+// --- multiplayer -----------------------------------------------------------------
 
-function joinLobby() {
+function enterMultiplayer() {
+    if (lobby) { menu.push(lobbyScreen()); inLobbyScreen = true; return; }
     const base = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
     lobby = connectLobby(base);
     lobby
-        .on('roster', renderRoster)
-        .on('full', m => { $('mp-note').textContent = m.reason; lobby = null; })
+        .on('roster', m => {
+            const first = roster === null && m.players.length === 1;
+            roster = m;
+            if (first && !m.inGame) {
+                menu.push(mpGameScreen());         // first one in drills the setup
+            } else if (roster && menu.depth() === 1) {
+                if (m.inGame) { status('game in progress — try again shortly'); lobby.close(); }
+                else { menu.push(lobbyScreen()); inLobbyScreen = true; }
+            } else if (inLobbyScreen) {
+                menu.refresh(lobbyScreen());       // live roster/param updates
+            }
+        })
+        .on('full', m => { status(m.reason); lobby = null; })
         .on('countdown', m => {
-            if (booted) return;         // in-game: nothing may re-show it
+            if (booted) return;
             $('countdown').hidden = false;
             $('countdown').textContent = m.n;
         })
@@ -125,16 +116,145 @@ function joinLobby() {
             $('countdown').textContent = 'GO';
             const rtt = await lobby.ping().catch(() => 5);
             const e = entry(m.params.wad);
+            menu.hide();
             bootDoom({
                 wads: stackFor(m.params.wad),
                 args: launchArgs(m.params, isCommercial(e)),
-                net: { slot: lobby.slot, numplayers: m.numplayers, rttMs: rtt },
+                net: { slot: lobby.slot, numplayers: m.numplayers, rttMs: rtt, names: m.names, slots: m.slots },
             }).then(() => {
                 $('countdown').hidden = true;
-                lobby.close();          // lobby's job is done; the relay owns the game
+                lobby.close();
             }).catch(err => status(String(err)));
         })
-        .on('closed', () => { if (!booted) $('mp-note').textContent = 'lobby connection lost'; });
+        .on('closed', () => {
+            if (booted) return;
+            lobby = null; roster = null; inLobbyScreen = false;
+            status('lobby connection lost');
+            menu.reset(rootScreen());
+        });
+}
+
+// drill steps accumulate into this, sent progressively
+const setup = {};
+
+function mpGameScreen() {
+    return {
+        title: 'CHOOSE GAME',
+        onBack: leaveLobby,
+        items: gameItems(w => {
+            setup.wad = w.file;
+            lobby.setParams({ wad: w.file });
+            menu.push(isCommercial(w) ? mpMapScreen(w) : mpEpisodeScreen(w));
+        }),
+    };
+}
+
+function mpEpisodeScreen(w) {
+    const eps = [...new Set((w.maps ?? []).map(m => +m[1]))].sort();
+    return {
+        title: 'WHICH EPISODE?',
+        items: eps.map(n => ({
+            label: `EPISODE ${n}`,
+            action: () => {
+                setup.episode = n;
+                lobby.setParams({ episode: n });
+                menu.push(mpMapScreen(w, n));
+            },
+        })),
+    };
+}
+
+function mpMapScreen(w, ep = null) {
+    const maps = (w.maps ?? []).filter(m => ep === null || +m[1] === ep);
+    return {
+        title: 'WHICH MAP?',
+        items: maps.map(m => ({
+            label: m,
+            action: () => {
+                setup.map = ep === null ? +m.slice(3) : +m[3];
+                lobby.setParams({ map: setup.map });
+                menu.push(mpModeScreen());
+            },
+        })),
+    };
+}
+
+function mpModeScreen() {
+    return {
+        title: 'WHICH MODE?',
+        items: MODES.map(([value, label]) => ({
+            label,
+            action: () => {
+                setup.mode = value;
+                lobby.setParams({ mode: value });
+                menu.push(mpSkillScreen());
+            },
+        })),
+    };
+}
+
+function mpSkillScreen() {
+    return {
+        title: 'HOW TOUGH ARE YOU?',
+        items: SKILLS.map((label, i) => ({
+            label,
+            action: () => {
+                setup.skill = i + 1;
+                lobby.setParams({ skill: i + 1 });
+                menu.push(lobbyScreen());
+                inLobbyScreen = true;
+            },
+        })),
+    };
+}
+
+function summary(p) {
+    const e = entry(p.wad);
+    const map = isCommercial(e) ? `MAP${String(p.map).padStart(2, '0')}` : `E${p.episode}M${p.map}`;
+    const mode = MODES.find(m => m[0] === p.mode)?.[1] ?? p.mode;
+    return `${map} - ${mode} - ${SKILLS[p.skill - 1] ?? ''}`;
+}
+
+function lobbyScreen() {
+    const me = roster?.players.find(p => p.slot === lobby.slot);
+    const p = roster?.params ?? {};
+    const free = roster?.freeSlots ?? [];
+    return {
+        title: entry(p.wad)?.title ?? 'LOBBY',
+        header: (roster?.players ?? []).map(pl =>
+            ({ text: pl.name + '  ', color: pl.color })),
+        onBack: leaveLobby,
+        items: [
+            { label: summary(p), action: () => menu.push(mpGameScreen()) },
+            { label: 'START GAME', action: () => lobby.start() },
+            {
+                label: 'NAME: ', value: me?.name ?? '',
+                color: me?.color ?? null,
+                entry: {
+                    initial: me?.name === me?.color ? '' : (me?.name ?? ''),
+                    commit: v => lobby.send({ t: 'name', name: v }),
+                },
+            },
+            ...(free.length ? [{
+                label: 'COLOR: ', value: (me?.color ?? '').toUpperCase(),
+                color: me?.color ?? null,
+                action: () => {
+                    // cycle through free colors (slot change = color change)
+                    const order = [lobby.slot, ...free].sort();
+                    const next = order[(order.indexOf(lobby.slot) + 1) % order.length];
+                    if (next !== lobby.slot) lobby.send({ t: 'slot', slot: next });
+                },
+            }] : []),
+        ],
+    };
+}
+
+function leaveLobby() {
+    inLobbyScreen = false;
+    lobby?.close();
+    lobby = null;
+    roster = null;
+    menu.reset(rootScreen());
 }
 
 // --- boot ------------------------------------------------------------------------
@@ -143,11 +263,13 @@ function joinLobby() {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
     try {
         manifest = (await (await fetch('/api/wads')).json()).wads;
-    } catch {
-        status('cannot reach server manifest');
+        const font = await loadDoomFont();
+        menu = createMenu(font, $('landing'));
+    } catch (err) {
+        console.error(err);
+        status('cannot reach server');
         return;
     }
-    initSP();
-    initMP();
+    menu.reset(rootScreen());
     status('');
 })();

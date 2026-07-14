@@ -111,9 +111,19 @@ export function createInput(doom, canvas, settings) {
     window.addEventListener('keyup', onKey(false));
 
     // --- mouse (pointer lock) ---------------------------------------------
+    // Esc always exits pointer lock at the browser level and the keydown
+    // never reaches the page — so treat lock-loss as "open the menu", and
+    // re-lock when the engine menu closes. Esc then feels like one key:
+    // menu open + mouse free, menu closed + mouse captured.
     canvas.addEventListener('click', () => {
         if (document.pointerLockElement !== canvas)
             canvas.requestPointerLock();
+    });
+    document.addEventListener('pointerlockchange', () => {
+        const settingsOpen = !document.getElementById('settings')?.hidden;
+        if (document.pointerLockElement !== canvas && !settingsOpen
+            && !doom._web_ui_mode())
+            tapKey(DK.ESCAPE);          // engine opens its menu
     });
     window.addEventListener('mousemove', e => {
         if (document.pointerLockElement !== canvas) return;
@@ -203,7 +213,15 @@ export function createInput(doom, canvas, settings) {
 
     // --- per-frame flush -----------------------------------------------------
     let runHeld = false;
+    let wasUiMode = false;
     function frame() {
+        // engine menu just closed → recapture the mouse (the closing
+        // keypress counts as user activation; if not, the next canvas
+        // click re-locks)
+        const uiMode = !!doom._web_ui_mode();
+        if (wasUiMode && !uiMode && document.pointerLockElement !== canvas)
+            canvas.requestPointerLock()?.catch?.(() => {});
+        wasUiMode = uiMode;
         if (mouseAccX || mouseAccY || mouseDirty) {
             const dx = Math.round(mouseAccX * settings.mouseSens);
             const dy = settings.mouseMove ? Math.round(-mouseAccY * settings.mouseSens) : 0;

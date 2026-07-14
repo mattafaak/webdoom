@@ -74,12 +74,19 @@ says which). Every genuinely-transmitted cmd is still verified.
 
 ```
 → (connect)                    ← {t:'welcome', slot, color}
-                               ← {t:'roster', players:[{slot,color}], params, inGame}
+                               ← {t:'roster', players:[{slot,color,name}],
+                                              freeSlots, params, inGame}
+→ {t:'name', name}             (custom name; default is the color name)
+→ {t:'slot', slot}             (pick a free color — color IS slot)
 → {t:'params', params:{wad, episode, map, skill, mode}}
 → {t:'start'}                  ← {t:'countdown', n:3..1}
-                               ← {t:'launch', params, numplayers, slots}
+                               ← {t:'launch', params, numplayers:4, slots, names}
 → {t:'ping', t0}               ← {t:'pong', t0}
 ```
 
 Slots are assigned in join order: 0 Green, 1 Indigo, 2 Brown, 3 Red —
-DOOM's native player color translations. Nothing to type, ever.
+DOOM's native player color translations. Names default to the color;
+both are optional to touch. Because a chosen color = a chosen slot,
+occupied slots may be sparse: sessions are always 4 wide, phantom slots
+ride along not-ingame from tic 0, and the engine's playeringame mask
+mirrors the launch slots. Custom names reach in-game chat prefixes.

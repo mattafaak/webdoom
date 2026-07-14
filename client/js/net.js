@@ -33,12 +33,19 @@ export function connectLobby(baseUrl, WS = WebSocket) {
 }
 
 // Call before doom.callMain(): configures the engine for the session and
-// installs the send/receive hooks. rttMs sizes the input delay.
-export function attachRelay(doom, baseUrl, { slot, numplayers, rttMs = 5 }, WS = WebSocket) {
+// installs the send/receive hooks. rttMs sizes the input delay. slots =
+// occupied lobby slots (sparse: color choice = slot choice); the bundle
+// is always numplayers wide with phantoms marked not-ingame.
+export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, names = null, rttMs = 5 }, WS = WebSocket) {
     const ws = new WS(`${baseUrl}/ws/game?slot=${slot}`);
     ws.binaryType = 'arraybuffer';
 
-    doom._web_net_setup(slot, numplayers);
+    const mask = (slots ?? [...Array(numplayers).keys()])
+        .reduce((m, s) => m | (1 << s), 0);
+    doom._web_net_setup(slot, numplayers, mask);
+    names?.forEach((n, i) => {
+        if (n) doom.ccall('web_set_player_name', null, ['number', 'string'], [i, n]);
+    });
     // delay ≥ half-RTT in tics, minimum 1 (one tic = 28.6ms)
     doom._web_net_set_delay(Math.max(1, Math.ceil(rttMs / 2 / 28.6)));
 

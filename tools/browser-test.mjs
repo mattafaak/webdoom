@@ -59,9 +59,16 @@ for (let i = 0; i < 60; i++) {
         console.error(`FAIL: ${s}`); cleanup(1);
     }
     if (!clicked) {
-        clicked = await evaluate(
-            `!document.getElementById('play') ? false :
-             (document.getElementById('play').click(), true)`);
+        // drill: SINGLE PLAYER → THE ULTIMATE DOOM
+        clicked = await evaluate(`(() => {
+            const sp = document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]');
+            if (!sp) return false;
+            sp.click();
+            const g = document.querySelector('#dmenu .row[data-label*="ULTIMATE"]');
+            if (!g) return false;
+            g.click();
+            return true;
+        })()`);
         continue;
     }
     const running = await evaluate(

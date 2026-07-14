@@ -46,14 +46,19 @@ EM_JS (void, js_net_send, (int tic, ticcmd_t* cmd, int size), {
 
 //
 // web_net_setup
-// Called from JS before main() when entering a lobby game.
+// Called from JS before main() when entering a lobby game. Slots are
+// sparse (color choice = slot choice): numplayers is the bundle width
+// (always MAXPLAYERS from the relay) and ingamemask marks real players.
 //
+static int web_ingamemask;
+
 EMSCRIPTEN_KEEPALIVE
-void web_net_setup (int player, int numplayers)
+void web_net_setup (int player, int numplayers, int ingamemask)
 {
     consoleplayer = displayplayer = player;
     web_numplayers = numplayers;
-    netgame = numplayers > 1;
+    web_ingamemask = ingamemask;
+    netgame = true;
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -165,7 +170,8 @@ void D_CheckNetGame (void)
         nettics[i] = 0;
 
     for (i = 0; i < MAXPLAYERS; i++)
-        playeringame[i] = i < web_numplayers;
+        playeringame[i] = netgame ? (web_ingamemask >> i) & 1
+                                  : i < web_numplayers;
 
     if (!netgame)
         consoleplayer = displayplayer = 0;
