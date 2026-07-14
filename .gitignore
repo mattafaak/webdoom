@@ -1,0 +1,7 @@
+wads/
+!wads/.gitkeep
+build/
+node_modules/
+*.wasm
+*.wasm.map
+.emscripten_cache/
