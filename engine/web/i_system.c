@@ -84,8 +84,7 @@ void I_Error (char *error, ...)
     va_end (argptr);
     fprintf (stderr, "I_Error: %s\n", msg);
 
-    // Surface the message in the page, then halt this frame's execution
-    // without tearing down the runtime state (the page shows the error).
+    // Surface the message in the page, then halt.
     EM_ASM ({ if (Module.onDoomError) Module.onDoomError(UTF8ToString($0)); }, msg);
-    emscripten_force_exit (1);
+    abort ();
 }

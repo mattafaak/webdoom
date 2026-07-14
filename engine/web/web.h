@@ -12,4 +12,11 @@ void D_DoomFrame (void);
 // through these before main() runs; single player needs none of them.
 void web_net_setup (int consoleplayer, int numplayers);
 
+// MUS + OPL music sequencer (mus_opl.c)
+void mus_init (int samplerate);
+void mus_play (void* data, int len, int loop);
+void mus_stop (void);
+void mus_pause (int pause);
+void mus_setvolume (int vol127);
+
 #endif

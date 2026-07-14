@@ -14,7 +14,8 @@ const CDP_PORT = 9223;
 const chrome = spawn('google-chrome-stable', [
     '--headless=new', `--remote-debugging-port=${CDP_PORT}`,
     '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
-    '--use-angle=swiftshader', '--window-size=1280,960', 'about:blank',
+    '--use-angle=swiftshader', '--window-size=1280,960',
+    '--autoplay-policy=no-user-gesture-required', 'about:blank',
 ], { stdio: 'ignore' });
 const cleanup = code => { chrome.kill(); process.exit(code); };
 
@@ -93,9 +94,14 @@ await key('KeyW', 'w', 87, 700);                     // walk forward
 await sleep(300);
 const png4 = await shot('webdoom-e1m1-moved.png');
 
+const audioArmed = await evaluate(`window.doomAudio?.armed()`);
+console.log(`audio armed: ${audioArmed}`);
+
 if (consoleErrors.length) console.log('console errors:', consoleErrors.slice(0, 5));
 if (png1 === png2) { console.error('FAIL: Escape did not open the menu — input dead'); cleanup(1); }
 if (png2 === png3) { console.error('FAIL: game did not start from menu'); cleanup(1); }
 if (png3 === png4) { console.error('FAIL: player did not move'); cleanup(1); }
+if (!audioArmed) { console.error('FAIL: audio never armed after key input'); cleanup(1); }
+if (consoleErrors.some(e => /worklet|audio/i.test(e))) { console.error('FAIL: audio errors'); cleanup(1); }
 console.log(`PASS — title/menu/e1m1/moved screenshots in ${outdir}`);
 cleanup(0);

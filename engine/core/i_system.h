@@ -86,7 +86,8 @@ byte* I_AllocLow (int length);
 void I_Tactile (int on, int off, int total);
 
 
-void I_Error (char *error, ...);
+// webdoom: noreturn — lets the compiler see past error branches
+void I_Error (char *error, ...) __attribute__((noreturn));
 
 
 #endif

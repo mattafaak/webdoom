@@ -54,6 +54,18 @@ const px = doom.HEAPU8.subarray(fb, fb + 320 * 200);
 const nonzero = px.reduce((n, v) => n + (v !== 0), 0);
 console.log(`frames rendered: ${frames}, distinct: ${hashes.size}, nonzero px: ${nonzero}/64000`);
 
+// music: the title screen starts mus_intro on boot; render 2s of OPL
+// output and require audible signal.
+doom._web_music_init(44100);
+const nMusic = 44100 * 8;   // some tracks (Suspense) open nearly silent
+const scratch = doom._malloc(4 * 2 * nMusic);
+doom._web_music_render(scratch, nMusic);
+const f32 = new Float32Array(doom.HEAPU8.buffer, scratch, nMusic * 2);
+const rms = Math.sqrt(f32.reduce((s, v) => s + v * v, 0) / f32.length);
+const peak = f32.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+console.log(`music: rms=${rms.toFixed(5)} peak=${peak.toFixed(4)}`);
+
 if (hashes.size < 10) { console.error('FAIL: framebuffer barely changes — demo not running'); process.exit(1); }
 if (nonzero < 10000)  { console.error('FAIL: framebuffer mostly empty'); process.exit(1); }
+if (rms < 0.0005)      { console.error('FAIL: OPL music silent'); process.exit(1); }
 console.log('PASS');

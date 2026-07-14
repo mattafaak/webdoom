@@ -364,22 +364,8 @@ S_StartSoundAtVolume
   if (sfx->lumpnum < 0)
     sfx->lumpnum = I_GetSfxLumpNum(sfx);
 
-#ifndef SNDSRV
-  // cache data if necessary
-  if (!sfx->data)
-  {
-    fprintf( stderr,
-	     "S_StartSoundAtVolume: 16bit and not pre-cached - wtf?\n");
+  // webdoom: the platform layer caches sfx lumps itself in I_StartSound.
 
-    // DOS remains, 8bit handling
-    //sfx->data = (void *) W_CacheLumpNum(sfx->lumpnum, PU_MUSIC);
-    // fprintf( stderr,
-    //	     "S_StartSoundAtVolume: loading %d (lump %d) : 0x%x\n",
-    //       sfx_id, sfx->lumpnum, (int)sfx->data );
-    
-  }
-#endif
-  
   // increase the usefulness
   if (sfx->usefulness++ < 0)
     sfx->usefulness = 1;
@@ -677,7 +663,8 @@ S_ChangeMusic
 
     // load & register it
     music->data = (void *) W_CacheLumpNum(music->lumpnum, PU_MUSIC);
-    music->handle = I_RegisterSong(music->data);
+    // webdoom: pass the real lump length so the MUS parser can bound itself
+    music->handle = I_RegisterSong(music->data, W_LumpLength(music->lumpnum));
 
     // play it
     I_PlaySong(music->handle, looping);
