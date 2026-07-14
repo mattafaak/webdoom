@@ -2,7 +2,7 @@
 // F8 (or the gear button); state persists via input.js's localStorage.
 import { ACTIONS, saveSettings, defaultSettings } from './input.js';
 
-export function createSettingsUI(input) {
+export function createSettingsUI(input, doom) {
     const s = input.settings;
     const panel = document.createElement('div');
     panel.id = 'settings';
@@ -27,6 +27,7 @@ export function createSettingsUI(input) {
         <label>Mouse sensitivity <input type="range" id="sens" min="1" max="12" step="1" value="${s.mouseSens}"></label>
         <label><input type="checkbox" id="mmove" ${s.mouseMove ? 'checked' : ''}> Mouse Y moves player (1993 style)</label>
         <label><input type="checkbox" id="arun" ${s.alwaysRun ? 'checked' : ''}> Always run</label>
+        <label><input type="checkbox" id="smooth" ${s.smooth ? 'checked' : ''}> Smooth rendering (uncapped fps)</label>
         <label>Gamepad turn speed <input type="range" id="pturn" min="0.4" max="2" step="0.1" value="${s.padTurnSpeed}"></label>
         <div class="row">
           <button id="reset">Reset defaults</button>
@@ -42,6 +43,11 @@ export function createSettingsUI(input) {
         panel.querySelector('#sens').oninput = e => { s.mouseSens = +e.target.value; saveSettings(s); };
         panel.querySelector('#mmove').onchange = e => { s.mouseMove = e.target.checked; saveSettings(s); };
         panel.querySelector('#arun').onchange = e => { s.alwaysRun = e.target.checked; saveSettings(s); };
+        panel.querySelector('#smooth').onchange = e => {
+            s.smooth = e.target.checked;
+            saveSettings(s);
+            doom?._web_set_smooth(s.smooth ? 1 : 0);
+        };
         panel.querySelector('#pturn').oninput = e => { s.padTurnSpeed = +e.target.value; saveSettings(s); };
         panel.querySelector('#reset').onclick = () => {
             Object.assign(s, defaultSettings());

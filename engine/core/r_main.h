@@ -170,3 +170,8 @@ void R_SetViewSize (int blocks, int detail);
 // $Log:$
 //
 //-----------------------------------------------------------------------------
+
+// webdoom: render interpolation (r_main.c)
+extern boolean	smoothrender;
+fixed_t R_LerpFixed (fixed_t from, fixed_t to);
+angle_t R_LerpAngle (angle_t from, angle_t to);

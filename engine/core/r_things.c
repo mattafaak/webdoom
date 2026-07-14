@@ -478,10 +478,21 @@ void R_ProjectSprite (mobj_t* thing)
     
     angle_t		ang;
     fixed_t		iscale;
-    
+
+    fixed_t		ix;
+    fixed_t		iy;
+    fixed_t		iz;
+    angle_t		iangle;
+
+    // webdoom: interpolated position for this render frame
+    ix = R_LerpFixed (thing->oldx, thing->x);
+    iy = R_LerpFixed (thing->oldy, thing->y);
+    iz = R_LerpFixed (thing->oldz, thing->z);
+    iangle = R_LerpAngle (thing->oldangle, thing->angle);
+
     // transform the origin point
-    tr_x = thing->x - viewx;
-    tr_y = thing->y - viewy;
+    tr_x = ix - viewx;
+    tr_y = iy - viewy;
 	
     gxt = FixedMul(tr_x,viewcos); 
     gyt = -FixedMul(tr_y,viewsin);
@@ -519,8 +530,8 @@ void R_ProjectSprite (mobj_t* thing)
     if (sprframe->rotate)
     {
 	// choose a different rotation based on player view
-	ang = R_PointToAngle (thing->x, thing->y);
-	rot = (ang-thing->angle+(unsigned)(ANG45/2)*9)>>29;
+	ang = R_PointToAngle (ix, iy);
+	rot = (ang-iangle+(unsigned)(ANG45/2)*9)>>29;
 	lump = sprframe->lump[rot];
 	flip = (boolean)sprframe->flip[rot];
     }
@@ -550,10 +561,10 @@ void R_ProjectSprite (mobj_t* thing)
     vis = R_NewVisSprite ();
     vis->mobjflags = thing->flags;
     vis->scale = xscale<<detailshift;
-    vis->gx = thing->x;
-    vis->gy = thing->y;
-    vis->gz = thing->z;
-    vis->gzt = thing->z + spritetopoffset[lump];
+    vis->gx = ix;
+    vis->gy = iy;
+    vis->gz = iz;
+    vis->gzt = iz + spritetopoffset[lump];
     vis->texturemid = vis->gzt - viewz;
     vis->x1 = x1 < 0 ? 0 : x1;
     vis->x2 = x2 >= viewwidth ? viewwidth-1 : x2;	

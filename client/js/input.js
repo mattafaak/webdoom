@@ -46,6 +46,7 @@ export const defaultSettings = () => ({
     mouseSens: 4,          // multiplier; 4 ≈ vanilla's <<2
     mouseMove: false,      // mouse Y moves player (1993 style)
     alwaysRun: false,
+    smooth: true,          // uncapped-fps render interpolation
     padDeadzone: 0.15,
     padTurnSpeed: 1.0,
 });

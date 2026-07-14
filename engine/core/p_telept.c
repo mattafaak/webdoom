@@ -123,6 +123,12 @@ EV_Teleport
 
 		thing->angle = m->angle;
 		thing->momx = thing->momy = thing->momz = 0;
+
+		// webdoom: snap interpolation across the teleport
+		thing->oldx = thing->x;
+		thing->oldy = thing->y;
+		thing->oldz = thing->z;
+		thing->oldangle = thing->angle;
 		return 1;
 	    }	
 	}

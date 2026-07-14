@@ -74,11 +74,14 @@ P_Thrust
 // P_CalcHeight
 // Calculate the walking / running height adjustment
 //
-void P_CalcHeight (player_t* player) 
+void P_CalcHeight (player_t* player)
 {
     int		angle;
     fixed_t	bob;
-    
+
+    // webdoom: previous-tic snapshot for render interpolation
+    player->oldviewz = player->viewz;
+
     // Regular movement bobbing
     // (needs to be calculated for gun swing
     // even if not on ground)

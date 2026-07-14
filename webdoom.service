@@ -1,0 +1,19 @@
+# systemd unit — install with:
+#   sudo cp webdoom.service /etc/systemd/system/ && sudo systemctl enable --now webdoom
+[Unit]
+Description=webdoom server (lobby + tic relay + WAD library)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jwhit
+WorkingDirectory=/home/jwhit/projects/webdoom
+ExecStart=/usr/bin/node server/serve.js
+Restart=on-failure
+RestartSec=3
+Environment=DOOM_HOST=0.0.0.0
+Environment=DOOM_PORT=8666
+
+[Install]
+WantedBy=multi-user.target

@@ -76,7 +76,8 @@ export async function bootDoom({ wads, args = [], net = null }) {
     status('');
     canvas.focus();
     const input = createInput(doom, canvas, loadSettings());
-    createSettingsUI(input);
+    createSettingsUI(input, doom);
+    doom._web_set_smooth(input.settings.smooth ? 1 : 0);
 
     const frame = () => {
         input.frame();

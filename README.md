@@ -1,38 +1,69 @@
 # webdoom
 
 A slim, modern DOOM port for the browser, built directly from the
-[id-Software/DOOM](https://github.com/id-Software/DOOM) `linuxdoom-1.10` source.
+[id-Software/DOOM](https://github.com/id-Software/DOOM) `linuxdoom-1.10`
+source. 356 KB of wasm, zero client install, zero-config multiplayer.
 
 - Runs in stock Chrome / Edge / Firefox (WASM + WebGL2 + WebAudio)
-- Modern KB+M and gamepad controls (Doom 1+2 re-release defaults)
-- 1–4 players: instant single-player, zero-config network lobby
-- Server-authoritative deterministic-lockstep netcode over WebSocket
-- Server carries the WAD library; clients cache by content hash (Service Worker)
-- Arcade profiles: join order = slot = color (Green / Indigo / Brown / Red)
-
-## Layout
-
-| Path      | What |
-|-----------|------|
-| `engine/core/` | linuxdoom-1.10, vendored pristine, patched in reviewable commits |
-| `engine/web/`  | web platform layer (`i_video`, `i_sound`, `i_net`, `i_system`) |
-| `client/`      | vanilla-JS shell: lobby, input, audio, service worker |
-| `server/`      | Node ≥ 20, single process, single port, only dep `ws` |
-| `tools/`       | emsdk env, WAD fetch/identify |
-| `docs/`        | protocols + upstream README/LICENSE |
+- Uncapped framerate with 35 Hz-exact game logic (Crispy-style
+  interpolation; "vanilla mode" toggle in settings, F8)
+- Modern controls: pointer-lock mouse, WASD, rebindable keys, analog
+  twin-stick gamepad — Doom 1+2 re-release defaults
+- Authentic audio: DMX PCM sfx via WebAudio, music through an emulated
+  OPL2 (Nuked OPL3) playing the IWAD's own GENMIDI bank
+- 1–4 players: instant single player; arcade lobby for network play
+  (join order = color: Green/Indigo/Brown/Red — nothing to type)
+- Deterministic-lockstep netcode over a server tic relay (see
+  [docs/netcode.md](docs/netcode.md)); verified by a headless harness
+  that compares per-tic gamestate hashes across real clients
+- Server carries the WAD library (Ultimate Doom, Doom II, Final Doom,
+  SIGIL, Master Levels, NRFTL, Chex Quest, HACX); clients cache by
+  content hash via a service worker — second load is instant, single
+  player works offline
 
 ## Quick start
 
 ```sh
 tools/fetch-wads.sh          # pull WAD library from TANK, build manifest
-source tools/emsdk-env.sh    # emcc on PATH (pinned version)
-make -C engine               # → build/doom.wasm + glue
-(cd server && npm i && node serve.js)
+source tools/emsdk-env.sh    # pinned emcc on PATH
+make -C engine               # → build/doom.js + doom.wasm
+(cd server && npm i)
+./start.sh                   # http://<host>:8666/
 ```
 
-Then open `http://<host>:8666/`.
+LAN players (or tailnet peers) just open the URL. First player into the
+Multiplayer panel is Green, second Indigo, then Brown, Red. Anyone picks
+the game/map/skill/mode; anyone hits START; 3-2-1, everyone's in.
+
+`webdoom.service` is a ready systemd unit.
+
+## Layout
+
+| Path      | What |
+|-----------|------|
+| `engine/core/` | linuxdoom-1.10, vendored pristine in commit 1, patched in reviewable commits |
+| `engine/web/`  | web platform layer: video/audio/input/net + MUS→OPL sequencer |
+| `client/`      | vanilla-JS shell: lobby, WebGL2 renderer, input, audio, service worker |
+| `server/`      | Node ≥ 20, single process, single port; only dep `ws` |
+| `tools/`       | emsdk pin, WAD fetch/identify, test suites |
+| `docs/`        | netcode protocol + upstream README/LICENSE |
+
+## Tests
+
+```sh
+tools/run-tests.sh
+```
+
+- engine smoke: boots real IWADs headless in node, plays the attract
+  demo, renders OPL music, asserts life in framebuffer and audio
+- netplay: 2 and 4 real wasm clients through the real server; per-tic
+  gamestate hashes must match exactly; a client is killed mid-game and
+  the survivors must keep playing
+- browser: CDP-driven Chrome — title → menu → new game → movement,
+  audio arms, service worker caches; plus two tabs through the lobby
+  into a co-op game
 
 ## License
 
-GPL-2.0-or-later (the id Software source re-license). Game data (WADs) is
-not distributed with this repository.
+GPL-2.0-or-later (the id Software source re-license; Nuked OPL3 is
+GPL-2). Game data (WADs) is not distributed with this repository.

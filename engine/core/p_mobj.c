@@ -414,6 +414,12 @@ P_NightmareRespawn (mobj_t* mobj)
 //
 void P_MobjThinker (mobj_t* mobj)
 {
+    // webdoom: previous-tic snapshot for render interpolation
+    mobj->oldx = mobj->x;
+    mobj->oldy = mobj->y;
+    mobj->oldz = mobj->z;
+    mobj->oldangle = mobj->angle;
+
     // momentum movement
     if (mobj->momx
 	|| mobj->momy
@@ -523,8 +529,14 @@ P_SpawnMobj
 	mobj->z = mobj->floorz;
     else if (z == ONCEILINGZ)
 	mobj->z = mobj->ceilingz - mobj->info->height;
-    else 
+    else
 	mobj->z = z;
+
+    // webdoom: no interpolation streak on the spawn frame
+    mobj->oldx = mobj->x;
+    mobj->oldy = mobj->y;
+    mobj->oldz = mobj->z;
+    mobj->oldangle = mobj->angle;
 
     mobj->thinker.function.acp1 = (actionf_p1)P_MobjThinker;
 	
@@ -681,6 +693,8 @@ void P_SpawnPlayer (mapthing_t* mthing)
     p->extralight = 0;
     p->fixedcolormap = 0;
     p->viewheight = VIEWHEIGHT;
+    // webdoom: no interpolation streak into the spawn point
+    p->viewz = p->oldviewz = mobj->z + VIEWHEIGHT;
 
     // setup gun psprite
     P_SetupPsprites (p);

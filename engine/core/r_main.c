@@ -37,6 +37,7 @@ static const char rcsid[] = "$Id: r_main.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 
 #include "m_bbox.h"
 
+#include "i_system.h"
 #include "r_local.h"
 #include "r_sky.h"
 
@@ -827,18 +828,38 @@ R_PointInSubsector
 //
 // R_SetupFrame
 //
+// webdoom: render interpolation. Game logic runs at 35Hz; the renderer
+// lerps view and sprites between the previous and current tic by
+// fractic (0..FRACUNIT, from I_GetTimeFrac). Render-side only.
+boolean		smoothrender = true;
+fixed_t		fractic = FRACUNIT;
+
+fixed_t R_LerpFixed (fixed_t from, fixed_t to)
+{
+    return from + FixedMul (to - from, fractic);
+}
+
+angle_t R_LerpAngle (angle_t from, angle_t to)
+{
+    // signed difference takes the short way around
+    return from + (angle_t) FixedMul ((fixed_t)(to - from), fractic);
+}
+
 void R_SetupFrame (player_t* player)
-{		
+{
     int		i;
-    
+
     viewplayer = player;
-    viewx = player->mo->x;
-    viewy = player->mo->y;
-    viewangle = player->mo->angle + viewangleoffset;
+    fractic = smoothrender ? I_GetTimeFrac () : FRACUNIT;
+
+    viewx = R_LerpFixed (player->mo->oldx, player->mo->x);
+    viewy = R_LerpFixed (player->mo->oldy, player->mo->y);
+    viewangle = R_LerpAngle (player->mo->oldangle, player->mo->angle)
+	+ viewangleoffset;
     extralight = player->extralight;
 
-    viewz = player->viewz;
-    
+    viewz = R_LerpFixed (player->oldviewz, player->viewz);
+
     viewsin = finesine[viewangle>>ANGLETOFINESHIFT];
     viewcos = finecosine[viewangle>>ANGLETOFINESHIFT];
 	

@@ -23,6 +23,7 @@
 
 ticcmd_t localcmds[BACKUPTICS];
 ticcmd_t netcmds[MAXPLAYERS][BACKUPTICS];
+static double web_lastticms;    // when the sim last advanced (ms)
 int      nettics[MAXNETNODES];    // per PLAYER here; sealed-through tic
 int      maketic;
 int      ticdup = 1;
@@ -219,6 +220,22 @@ void TryRunTics (void)
         M_Ticker ();
         G_Ticker ();
         gametic++;
+        web_lastticms = emscripten_get_now ();
         NetUpdate ();   // pick up whatever the frame produced
     }
+}
+
+//
+// I_GetTimeFrac
+// Fraction of the current tic elapsed since the sim last advanced,
+// clamped to one tic: a stalled sim (netplay wait, pause) holds still
+// instead of sawtoothing between old and current positions.
+//
+int I_GetTimeFrac (void)
+{
+    double f = (emscripten_get_now () - web_lastticms) * TICRATE / 1000.0;
+
+    if (f < 0.0) f = 0.0;
+    if (f > 1.0) f = 1.0;
+    return (int) (f * FRACUNIT);
 }

@@ -214,6 +214,13 @@ typedef struct mobj_s
     fixed_t		y;
     fixed_t		z;
 
+    // webdoom: previous-tic position/angle, render-side interpolation
+    // only (never read by game logic; netplay/demo determinism intact).
+    fixed_t		oldx;
+    fixed_t		oldy;
+    fixed_t		oldz;
+    angle_t		oldangle;
+
     // More list: links in sector (if needed)
     struct mobj_s*	snext;
     struct mobj_s*	sprev;

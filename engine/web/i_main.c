@@ -75,6 +75,17 @@ int web_ui_mode (void)
 }
 
 //
+// Render interpolation toggle ("vanilla mode" = 35fps feel).
+//
+extern boolean smoothrender;
+
+EMSCRIPTEN_KEEPALIVE
+void web_set_smooth (int on)
+{
+    smoothrender = on;
+}
+
+//
 // Gamestate fingerprint for the netplay determinism harness: two clients
 // in the same game must return identical values at the same gametic.
 //

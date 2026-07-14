@@ -44,6 +44,11 @@ byte*	I_ZoneBase (int *size);
 // returns current time in tics.
 int I_GetTime (void);
 
+// webdoom: fraction of the current tic elapsed (0..FRACUNIT), clamped
+// so a stalled sim holds at the last completed position. For render
+// interpolation only.
+int I_GetTimeFrac (void);
+
 
 //
 // Called by D_DoomLoop,
