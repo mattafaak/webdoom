@@ -75,6 +75,33 @@ int web_ui_mode (void)
 }
 
 //
+// Gamestate fingerprint for the netplay determinism harness: two clients
+// in the same game must return identical values at the same gametic.
+//
+EMSCRIPTEN_KEEPALIVE
+int web_state_hash (void)
+{
+    unsigned h = 0x9e3779b9u ^ (unsigned) gametic;
+    int i;
+
+    for (i = 0; i < MAXPLAYERS; i++)
+        if (playeringame[i] && players[i].mo)
+        {
+            h = (h ^ (unsigned) players[i].mo->x) * 0x01000193u;
+            h = (h ^ (unsigned) players[i].mo->y) * 0x01000193u;
+            h = (h ^ (unsigned) players[i].mo->angle) * 0x01000193u;
+            h = (h ^ (unsigned) players[i].health) * 0x01000193u;
+        }
+    return (int) h;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int web_gametic (void)
+{
+    return gametic;
+}
+
+//
 // Weapon state for gamepad cycle buttons: low 4 bits = ready weapon,
 // bits 8.. = owned-weapon mask.
 //

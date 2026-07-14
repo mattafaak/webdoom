@@ -676,14 +676,17 @@ void G_Ticker (void)
 		players[consoleplayer].message = turbomessage;
 	    }
 			
-	    if (netgame && !netdemo && !(gametic%ticdup) ) 
-	    { 
-		if (gametic > BACKUPTICS 
-		    && consistancy[i][buf] != cmd->consistancy) 
-		{ 
+	    if (netgame && !netdemo && !(gametic%ticdup) )
+	    {
+		// webdoom: relay-fabricated cmds (stalled client) carry no
+		// valid checksum — skip only those; real cmds stay verified
+		if (gametic > BACKUPTICS
+		    && !D_NetCmdFabricated (i, gametic)
+		    && consistancy[i][buf] != cmd->consistancy)
+		{
 		    I_Error ("consistency failure (%i should be %i)",
-			     cmd->consistancy, consistancy[i][buf]); 
-		} 
+			     cmd->consistancy, consistancy[i][buf]);
+		}
 		if (players[i].mo) 
 		    consistancy[i][buf] = players[i].mo->x; 
 		else 

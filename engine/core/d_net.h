@@ -131,6 +131,9 @@ typedef struct
 // Create any new ticcmds and broadcast to other players.
 void NetUpdate (void);
 
+// webdoom: true if the relay fabricated this player's cmd for this tic
+boolean D_NetCmdFabricated (int player, int tic);
+
 // Broadcasts special packets to other players
 //  to notify of game exit
 void D_QuitNetGame (void);

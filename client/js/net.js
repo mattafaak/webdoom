@@ -1,0 +1,98 @@
+// Netplay client: joins the lobby, and once launched wires the engine's
+// tic stream to the relay. Environment-agnostic (browser + node test
+// harness) — pass in a WebSocket constructor and the base URL.
+
+const CMD_SIZE = 8;
+
+export function connectLobby(baseUrl, WS = WebSocket) {
+    const ws = new WS(`${baseUrl}/ws/lobby`);
+    const handlers = new Map();
+    const api = {
+        slot: -1, color: null,
+        on(t, fn) { handlers.set(t, fn); return api; },
+        send(msg) { ws.send(JSON.stringify(msg)); },
+        setParams(params) { api.send({ t: 'params', params }); },
+        start() { api.send({ t: 'start' }); },
+        ping() {
+            return new Promise(res => {
+                const t0 = performance.now();
+                handlers.set('pong', () => res(performance.now() - t0));
+                api.send({ t: 'ping', t0 });
+            });
+        },
+        close() { ws.close(); },
+    };
+    ws.onmessage = ev => {
+        const m = JSON.parse(ev.data);
+        if (m.t === 'welcome') { api.slot = m.slot; api.color = m.color; }
+        handlers.get(m.t)?.(m);
+    };
+    ws.onclose = () => handlers.get('closed')?.();
+    ws.onerror = e => handlers.get('error')?.(e);
+    return api;
+}
+
+// Call before doom.callMain(): configures the engine for the session and
+// installs the send/receive hooks. rttMs sizes the input delay.
+export function attachRelay(doom, baseUrl, { slot, numplayers, rttMs = 5 }, WS = WebSocket) {
+    const ws = new WS(`${baseUrl}/ws/game?slot=${slot}`);
+    ws.binaryType = 'arraybuffer';
+
+    doom._web_net_setup(slot, numplayers);
+    // delay ≥ half-RTT in tics, minimum 1 (one tic = 28.6ms)
+    doom._web_net_set_delay(Math.max(1, Math.ceil(rttMs / 2 / 28.6)));
+
+    const up = new Uint8Array(4 + CMD_SIZE);
+    const upView = new DataView(up.buffer);
+    doom.netSend = (tic, cmdPtr) => {
+        upView.setUint32(0, tic, true);
+        up.set(doom.HEAPU8.subarray(cmdPtr, cmdPtr + CMD_SIZE), 4);
+        if (ws.readyState === 1) ws.send(up);
+    };
+
+    const scratch = doom._web_net_scratch();
+    const ingamePtr = doom._malloc(8);
+    let ready = false;
+    const backlog = [];
+
+    const deliver = data => {
+        const b = new Uint8Array(data);
+        if (b.length !== 6 + CMD_SIZE * numplayers) return;
+        const tic = new DataView(b.buffer, b.byteOffset).getUint32(0, true);
+        const ingameMask = b[4], fabMask = b[5];
+        for (let i = 0; i < numplayers; i++) {
+            doom.HEAPU8[ingamePtr + i] = (ingameMask >> i) & 1;
+            doom.HEAPU8.set(
+                b.subarray(6 + i * CMD_SIZE, 6 + (i + 1) * CMD_SIZE),
+                scratch + i * CMD_SIZE,
+            );
+        }
+        doom._web_net_bundle(tic, scratch, ingamePtr, fabMask);
+    };
+
+    ws.onmessage = ev => {
+        if (!ready) { backlog.push(ev.data); return; }
+        deliver(ev.data);
+    };
+
+    return {
+        // call once callMain has run (scratch/netcmds are live from boot,
+        // but bundles arriving mid-init are queued to be safe)
+        go() { ready = true; for (const d of backlog.splice(0)) deliver(d); },
+        quit() { ws.close(); },
+    };
+}
+
+// Engine argv for a launch message — identical on every client.
+// `commercial` = MAP01-style wad (doom2/finaldoom family): single -warp N.
+export function launchArgs(params, commercial) {
+    const args = ['-warp'];
+    if (commercial)
+        args.push(String(params.map));
+    else
+        args.push(String(params.episode), String(params.map));
+    args.push('-skill', String(params.skill));
+    if (params.mode === 'deathmatch') args.push('-deathmatch');
+    if (params.mode === 'altdeath') args.push('-altdeath');
+    return args;
+}

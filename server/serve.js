@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { createReadStream, readFileSync, statSync } from 'node:fs';
 import { join, normalize, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createGame } from './game.js';
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const HOST = process.env.DOOM_HOST ?? '0.0.0.0';
@@ -33,7 +34,7 @@ function send(res, code, body, headers = {}) {
     res.end(body);
 }
 
-createServer((req, res) => {
+const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
     let path = normalize(url.pathname);
     if (path.includes('..')) return send(res, 400, 'bad path');
@@ -60,6 +61,10 @@ createServer((req, res) => {
         return;
     }
     send(res, 404, 'not found');
-}).listen(PORT, HOST, () => {
+});
+
+const game = createGame();
+server.on('upgrade', (req, socket, head) => game.upgrade(req, socket, head));
+server.listen(PORT, HOST, () => {
     console.log(`webdoom: http://${HOST}:${PORT}/`);
 });

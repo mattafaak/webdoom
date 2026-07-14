@@ -67,12 +67,17 @@ void web_net_set_delay (int tics)
 // web_net_bundle
 // JS delivers one sealed tic: every live player's ticcmd, in slot order.
 // Bundles always arrive in tic order (the relay guarantees it).
+// fabmask: bit N set = slot N's cmd was fabricated by the relay (stalled
+// client) and carries no valid consistancy checksum.
 //
+static byte fabricated[BACKUPTICS];
+
 EMSCRIPTEN_KEEPALIVE
-void web_net_bundle (int tic, ticcmd_t* cmds, byte* ingame)
+void web_net_bundle (int tic, ticcmd_t* cmds, byte* ingame, int fabmask)
 {
     int i;
 
+    fabricated[tic % BACKUPTICS] = (byte) fabmask;
     for (i = 0; i < web_numplayers; i++)
     {
         playeringame[i] = ingame[i];
@@ -80,6 +85,18 @@ void web_net_bundle (int tic, ticcmd_t* cmds, byte* ingame)
             netcmds[i][tic % BACKUPTICS] = cmds[i];
         nettics[i] = tic + 1;
     }
+}
+
+//
+// D_NetCmdFabricated
+// g_game's consistancy check skips relay-fabricated cmds (their checksum
+// is meaningless); every real cmd is still verified.
+//
+boolean D_NetCmdFabricated (int player, int tic)
+{
+    if (!netgame)
+        return false;
+    return (fabricated[tic % BACKUPTICS] >> player) & 1;
 }
 
 EMSCRIPTEN_KEEPALIVE

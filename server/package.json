@@ -1,0 +1,6 @@
+{
+  "name": "webdoom-server",
+  "private": true,
+  "type": "module",
+  "dependencies": { "ws": "^8" }
+}
