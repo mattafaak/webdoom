@@ -1,5 +1,9 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* author display rules (flex/grid) silently defeat the UA's [hidden]
+   style — this guarantees the hidden attribute always wins */
+[hidden] { display: none !important; }
+
 html, body {
     height: 100%;
     background: #000;
@@ -113,8 +117,12 @@ button.big:hover { background: #a00; }
 }
 #mp summary { cursor: pointer; color: #c33; letter-spacing: .1em; }
 #mp-body { display: flex; flex-direction: column; gap: .8rem; margin-top: .8rem; }
-#mp-params { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem .8rem; }
-#mp-params label { display: flex; flex-direction: column; gap: .2rem; font-size: .85rem; color: #999; }
+/* minmax(0,…) lets grid tracks shrink below select intrinsic width;
+   selects then fill their track instead of overrunning the panel */
+#mp-params { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: .5rem .8rem; }
+#mp-params label { display: flex; flex-direction: column; gap: .2rem; font-size: .85rem; color: #999; min-width: 0; }
+#mp-params select { width: 100%; min-width: 0; }
+#mp-params label:first-child { grid-column: 1 / -1; }   /* Game titles are long */
 #mp-note { font-size: .85rem; color: #888; min-height: 1.2em; }
 
 #mp-roster { display: flex; gap: .5rem; flex-wrap: wrap; min-height: 1.8rem; }

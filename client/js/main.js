@@ -80,6 +80,8 @@ export async function bootDoom({ wads, args = [], net = null }) {
     doom._web_set_smooth(input.settings.smooth ? 1 : 0);
 
     const frame = () => {
+        // the first rendered frame owns the screen — no overlay survives it
+        document.getElementById('countdown').hidden = true;
         input.frame();
         doom._web_frame();
         const v = doom._web_palette_version();

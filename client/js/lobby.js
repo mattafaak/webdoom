@@ -115,6 +115,7 @@ function joinLobby() {
         .on('roster', renderRoster)
         .on('full', m => { $('mp-note').textContent = m.reason; lobby = null; })
         .on('countdown', m => {
+            if (booted) return;         // in-game: nothing may re-show it
             $('countdown').hidden = false;
             $('countdown').textContent = m.n;
         })
@@ -128,8 +129,10 @@ function joinLobby() {
                 wads: stackFor(m.params.wad),
                 args: launchArgs(m.params, isCommercial(e)),
                 net: { slot: lobby.slot, numplayers: m.numplayers, rttMs: rtt },
-            }).then(() => { $('countdown').hidden = true; })
-              .catch(err => status(String(err)));
+            }).then(() => {
+                $('countdown').hidden = true;
+                lobby.close();          // lobby's job is done; the relay owns the game
+            }).catch(err => status(String(err)));
         })
         .on('closed', () => { if (!booted) $('mp-note').textContent = 'lobby connection lost'; });
 }
