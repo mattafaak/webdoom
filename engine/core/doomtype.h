@@ -31,6 +31,9 @@
 #ifdef __cplusplus
 typedef bool boolean;
 #else
+// webdoom: <stdbool.h> may already be in scope via system headers.
+#undef false
+#undef true
 typedef enum {false, true} boolean;
 #endif
 typedef unsigned char byte;
@@ -39,7 +42,7 @@ typedef unsigned char byte;
 
 // Predefined with some OS.
 #ifdef LINUX
-#include <values.h>
+/* webdoom: <values.h> is obsolete; MAXINT defined below */
 #else
 #define MAXCHAR		((char)0x7f)
 #define MAXSHORT	((short)0x7fff)

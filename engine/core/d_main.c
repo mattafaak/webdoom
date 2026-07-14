@@ -190,6 +190,33 @@ extern  boolean setsizeneeded;
 extern  int             showMessages;
 void R_ExecuteSetViewSize (void);
 
+// webdoom: the melt wipe may not block the browser main thread, so it
+// runs as a state machine: D_Display arms it, D_DoomFrame steps it once
+// per animation frame until done. Game tics pause meanwhile, as vanilla's
+// blocking loop did.
+static boolean wipeactive;
+static int     wipestart;
+
+static void D_WipeFrame (void)
+{
+    int		nowtime;
+    int		tics;
+    boolean	done;
+
+    nowtime = I_GetTime ();
+    tics = nowtime - wipestart;
+    if (!tics)
+	return;
+    wipestart = nowtime;
+    done = wipe_ScreenWipe(wipe_Melt
+			   , 0, 0, SCREENWIDTH, SCREENHEIGHT, tics);
+    I_UpdateNoBlit ();
+    M_Drawer ();                            // menu is drawn even on top of wipes
+    I_FinishUpdate ();                      // page flip or blit buffer
+    if (done)
+	wipeactive = false;
+}
+
 void D_Display (void)
 {
     static  boolean		viewactivestate = false;
@@ -198,11 +225,7 @@ void D_Display (void)
     static  boolean		fullscreen = false;
     static  gamestate_t		oldgamestate = -1;
     static  int			borderdrawcount;
-    int				nowtime;
-    int				tics;
-    int				wipestart;
     int				y;
-    boolean			done;
     boolean			wipe;
     boolean			redrawsbar;
 
@@ -326,22 +349,9 @@ void D_Display (void)
     // wipe update
     wipe_EndScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
 
+    wipeactive = true;
     wipestart = I_GetTime () - 1;
-
-    do
-    {
-	do
-	{
-	    nowtime = I_GetTime ();
-	    tics = nowtime - wipestart;
-	} while (!tics);
-	wipestart = nowtime;
-	done = wipe_ScreenWipe(wipe_Melt
-			       , 0, 0, SCREENWIDTH, SCREENHEIGHT, tics);
-	I_UpdateNoBlit ();
-	M_Drawer ();                            // menu is drawn even on top of wipes
-	I_FinishUpdate ();                      // page flip or blit buffer
-    } while (!done);
+    D_WipeFrame ();
 }
 
 
@@ -366,44 +376,53 @@ void D_DoomLoop (void)
 	
     I_InitGraphics ();
 
-    while (1)
-    {
-	// frame syncronous IO operations
-	I_StartFrame ();                
-	
-	// process one or more tics
-	if (singletics)
-	{
-	    I_StartTic ();
-	    D_ProcessEvents ();
-	    G_BuildTiccmd (&netcmds[consoleplayer][maketic%BACKUPTICS]);
-	    if (advancedemo)
-		D_DoAdvanceDemo ();
-	    M_Ticker ();
-	    G_Ticker ();
-	    gametic++;
-	    maketic++;
-	}
-	else
-	{
-	    TryRunTics (); // will run at least one tic
-	}
-		
-	S_UpdateSounds (players[consoleplayer].mo);// move positional sounds
+    // webdoom: no loop here. The browser drives D_DoomFrame once per
+    // animation frame; D_DoomMain returns to JS after init.
+}
 
-	// Update display, next frame, with current state.
-	D_Display ();
+void D_DoomFrame (void)
+{
+    if (wipeactive)
+    {
+	D_WipeFrame ();
+	return;
+    }
+
+    // frame syncronous IO operations
+    I_StartFrame ();
+
+    // process one or more tics
+    if (singletics)
+    {
+	I_StartTic ();
+	D_ProcessEvents ();
+	G_BuildTiccmd (&netcmds[consoleplayer][maketic%BACKUPTICS]);
+	if (advancedemo)
+	    D_DoAdvanceDemo ();
+	M_Ticker ();
+	G_Ticker ();
+	gametic++;
+	maketic++;
+    }
+    else
+    {
+	TryRunTics (); // runs every tic that is sealed and due
+    }
+
+    S_UpdateSounds (players[consoleplayer].mo);// move positional sounds
+
+    // Update display, next frame, with current state.
+    D_Display ();
 
 #ifndef SNDSERV
-	// Sound mixing for the buffer is snychronous.
-	I_UpdateSound();
-#endif	
-	// Synchronous sound output is explicitly called.
-#ifndef SNDINTR
-	// Update sound output.
-	I_SubmitSound();
+    // Sound mixing for the buffer is snychronous.
+    I_UpdateSound();
 #endif
-    }
+    // Synchronous sound output is explicitly called.
+#ifndef SNDINTR
+    // Update sound output.
+    I_SubmitSound();
+#endif
 }
 
 
@@ -1054,10 +1073,8 @@ void D_DoomMain (void)
 	    "ATTENTION:  This version of DOOM has been modified.  If you would like to\n"
 	    "get a copy of the original game, call 1-800-IDGAMES or see the readme file.\n"
 	    "        You will not receive technical support for modified games.\n"
-	    "                      press enter to continue\n"
 	    "===========================================================================\n"
 	    );
-	getchar ();
     }
 	
 
@@ -1137,14 +1154,16 @@ void D_DoomMain (void)
     {
 	singledemo = true;              // quit after one demo
 	G_DeferedPlayDemo (myargv[p+1]);
-	D_DoomLoop ();  // never returns
+	D_DoomLoop ();  // webdoom: init only; frames driven from JS
+	return;
     }
 	
     p = M_CheckParm ("-timedemo");
     if (p && p < myargc-1)
     {
 	G_TimeDemo (myargv[p+1]);
-	D_DoomLoop ();  // never returns
+	D_DoomLoop ();  // webdoom: init only; frames driven from JS
+	return;
     }
 	
     p = M_CheckParm ("-loadgame");
@@ -1167,5 +1186,5 @@ void D_DoomMain (void)
 
     }
 
-    D_DoomLoop ();  // never returns
+    D_DoomLoop ();  // webdoom: init only; frames driven from JS
 }

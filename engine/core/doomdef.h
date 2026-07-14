@@ -81,7 +81,8 @@ typedef enum
 //  and unfinished. Default is synchronous.
 // Experimental asynchronous timer based is
 //  handled by SNDINTR. 
-#define SNDSERV  1
+// webdoom: no external sound server; i_sound speaks WebAudio directly.
+//#define SNDSERV  1
 //#define SNDINTR  1
 
 

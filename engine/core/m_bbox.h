@@ -23,7 +23,7 @@
 #ifndef __M_BBOX__
 #define __M_BBOX__
 
-#include <values.h>
+#include "doomtype.h" /* webdoom: for MAXINT */
 
 #include "m_fixed.h"
 

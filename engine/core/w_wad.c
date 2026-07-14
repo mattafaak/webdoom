@@ -66,7 +66,7 @@ void**			lumpcache;
 
 #define strcmpi	strcasecmp
 
-void strupr (char* s)
+static void w_strupr (char* s)
 {
     while (*s) { *s = toupper(*s); s++; }
 }
@@ -367,7 +367,7 @@ int W_CheckNumForName (char* name)
     name8.s[8] = 0;
 
     // case insensitive
-    strupr (name8.s);		
+    w_strupr (name8.s);		
 
     v1 = name8.x[0];
     v2 = name8.x[1];
