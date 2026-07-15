@@ -79,7 +79,13 @@ export function createInput(doom, canvas, settings) {
     let capture = null;             // action id being rebound, or null
     let mouseAccX = 0, mouseAccY = 0, mouseButtons = 0, mouseDirty = false;
 
-    const codeToDk = code => {
+    const codeToDk = (code, key) => {
+        // in menus, typed characters beat game bindings (savegame names
+        // must accept W/A/S/D); navigation keys stay in FIXED
+        if (doom._web_ui_mode() && key?.length === 1) {
+            const c = key.toLowerCase().charCodeAt(0);
+            if (c >= 32 && c < 127) return c;
+        }
         for (const a of ACTIONS)
             if (settings.binds[a.id] === code) return a.dk;
         return FIXED[code] ?? null;
@@ -97,7 +103,7 @@ export function createInput(doom, canvas, settings) {
             e.preventDefault();
             return;
         }
-        let dk = codeToDk(e.code);
+        let dk = codeToDk(e.code, e.key);
         if (dk === null && e.key.length === 1) {
             const c = e.key.toLowerCase().charCodeAt(0);
             if (c >= 32 && c < 127) dk = c;

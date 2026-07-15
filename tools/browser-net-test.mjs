@@ -75,12 +75,18 @@ const A = await openTab('A');
 const B = await openTab('B');
 await sleep(2500);
 
-// A drills the whole setup
-for (const step of ['MULTIPLAYER', 'ULTIMATE', 'EPISODE 1', 'E1M1', 'COOPERATIVE', 'HURT ME PLENTY'])
-    if (!await A.click(step)) fail(`A: menu item not found: ${step}`);
-await sleep(500);
+// lobby-first: MULTIPLAYER lands straight on the lobby screen
+if (!await A.click('MULTIPLAYER')) fail('A: MULTIPLAYER not found');
+await sleep(700);
 if (!await A.eval(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`))
     fail('A: never reached the lobby screen');
+
+// exercise one optional picker: SKILL → ULTRA-VIOLENCE → back at lobby
+if (!await A.click('SKILL')) fail('A: SKILL item not found');
+if (!await A.click('ULTRA-VIOLENCE')) fail('A: skill option not found');
+await sleep(500);
+if (!await A.eval(`!!document.querySelector('#dmenu .row[data-label*="SKILL: ULTRA-VIOLENCE"]')`))
+    fail('A: picker did not return to lobby with the new value');
 
 // B joins → should land straight in the lobby, then personalize
 if (!await B.click('MULTIPLAYER')) fail('B: MULTIPLAYER not found');
@@ -115,7 +121,15 @@ for (let i = 0; i < 40; i++) {
 }
 if (inGame !== 2) fail(`only ${inGame}/2 tabs in-game`);
 
-await sleep(2000);
+// GO melt ~1s in the foreground; background tabs throttle the timer
+// backstop, so poll rather than assume
+let overlaysGone = false;
+for (let i = 0; i < 16 && !overlaysGone; i++) {
+    await sleep(500);
+    overlaysGone = (await A.eval(`document.getElementById('countdown').hidden`))
+        && (await B.eval(`document.getElementById('countdown').hidden`));
+}
+if (!overlaysGone) fail('countdown overlay still visible in-game');
 await A.shot('webdoom-mp-a.png');
 await B.shot('webdoom-mp-b.png');
 

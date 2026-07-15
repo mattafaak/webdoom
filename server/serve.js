@@ -43,9 +43,10 @@ const server = createServer((req, res) => {
     if (path === '/api/wads')
         return send(res, 200, manifest(), { 'content-type': 'application/json' });
     if (path === '/api/ui-assets') {
-        const assets = uiAssets(join(root, 'wads/lib'));
+        // no-store: a stale hour-long cache kept serving the old logo
+        const assets = uiAssets(join(root, 'wads/lib'), JSON.parse(manifest()));
         return assets
-            ? send(res, 200, assets, { 'content-type': 'application/json', 'cache-control': 'public, max-age=3600' })
+            ? send(res, 200, assets, { 'content-type': 'application/json' })
             : send(res, 404, 'no IWAD available');
     }
     if (path === '/') path = '/index.html';
@@ -72,6 +73,17 @@ const server = createServer((req, res) => {
 
 const game = createGame();
 server.on('upgrade', (req, socket, head) => game.upgrade(req, socket, head));
-server.listen(PORT, HOST, () => {
-    console.log(`webdoom: http://${HOST}:${PORT}/`);
+server.listen(PORT, HOST, async () => {
+    // one lobby, any route in: LAN and tailnet clients land in the same
+    // game because everything relays through this server
+    const { networkInterfaces } = await import('node:os');
+    const urls = [];
+    for (const addrs of Object.values(networkInterfaces()))
+        for (const a of addrs ?? [])
+            if (a.family === 'IPv4' && !a.internal) {
+                const kind = a.address.startsWith('100.') ? 'tailnet' : 'LAN';
+                urls.push(`  ${kind}: http://${a.address}:${PORT}/`);
+            }
+    console.log(`webdoom up — share whichever URL the player can reach:`);
+    console.log(urls.join('\n') || `  http://${HOST}:${PORT}/`);
 });

@@ -103,6 +103,7 @@ html, body {
     max-height: min(62vh, 640px);
     gap: 10px 56px;
 }
+#dmenu .items.noWrap { flex-wrap: nowrap; max-height: none; gap: 8px; }
 
 #dmenu .row {
     display: flex;
@@ -112,6 +113,10 @@ html, body {
 }
 #dmenu .skull { width: 44px; display: inline-flex; justify-content: center; }
 #dmenu canvas { image-rendering: pixelated; }
+#dmenu .row.art canvas:first-of-type { border: 2px solid #311; border-radius: 3px; }
+#dmenu .row.art.sel canvas:first-of-type { border-color: #c33; }
+
+#countdown #melt { image-rendering: pixelated; }
 
 #countdown {
     position: absolute;

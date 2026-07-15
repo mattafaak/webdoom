@@ -1,7 +1,7 @@
 #!/bin/bash
 # webdoom test suite. Requires: built engine, wads fetched, chrome.
 # Starts its own throwaway server for the browser suites.
-set -e
+set -eo pipefail
 cd "$(dirname "$0")/.."
 
 echo "── engine smoke (doom, doom2) ──────────────────────────"
@@ -18,5 +18,6 @@ trap "kill $SRV 2>/dev/null" EXIT
 sleep 1
 node tools/browser-test.mjs http://127.0.0.1:8668/ | tail -2
 node tools/browser-net-test.mjs http://127.0.0.1:8668/ | tail -1
+node tools/persist-test.mjs http://127.0.0.1:8668/ | tail -1
 
 echo "ALL SUITES PASS"

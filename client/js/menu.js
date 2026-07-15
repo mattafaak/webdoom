@@ -51,6 +51,7 @@ export function createMenu(font, host) {
         const scale = longest > 24 ? 3 : 4;
 
         const list = Object.assign(document.createElement('div'), { className: 'items' });
+        if (s.items.some(it => it.thumb)) list.classList.add('noWrap');   // art rows: one column
         s.items.forEach((item, i) => {
             const row = document.createElement('div');
             row.className = 'row' + (i === sel ? ' sel' : '');
@@ -63,7 +64,11 @@ export function createMenu(font, host) {
             row.dataset.label = label.toUpperCase();    // tests + accessibility
             row.setAttribute('role', 'menuitem');
             row.setAttribute('aria-label', label);
-            row.appendChild(font.text(label, { scale, color: item.color ?? null }));
+            if (item.thumb) {
+                row.classList.add('art');
+                row.appendChild(item.thumb);
+            }
+            row.appendChild(font.text(label, { scale: item.thumb ? 3 : scale, color: item.color ?? null }));
             row.onmouseenter = () => { if (!entry && sel !== i) { sel = i; render(); } };
             row.onclick = () => { if (!entry) { sel = i; activate(); } };
             list.appendChild(row);
@@ -133,6 +138,9 @@ export function createMenu(font, host) {
         refresh(s) { if (s) stack[stack.length - 1] = s; if (sel >= screen().items.length) sel = 0; render(); },
         hide() { hidden = true; render(); },
         show() { hidden = false; render(); },
+        // pop n screens without onBack side effects (picker flows)
+        unwind(n = 1) { while (n-- > 0 && stack.length > 1) stack.pop(); sel = screen().sel ?? 0; render(); },
         depth: () => stack.length,
+        current: () => screen(),
     };
 }

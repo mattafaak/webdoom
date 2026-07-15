@@ -147,7 +147,7 @@ export function createGame(log = console.log) {
         ws.binaryType = 'nodebuffer';
 
         ws.on('message', buf => {
-            if (buf.length !== 4 + CMD_SIZE) return;
+            if (!session || buf.length !== 4 + CMD_SIZE) return;
             const tic = buf.readUInt32LE(0);
             p.sentAny = true;
             p.lastSeen = Date.now();

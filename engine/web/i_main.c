@@ -93,6 +93,19 @@ void web_set_player_name (int player, const char* name)
 }
 
 //
+// Config flush: vanilla only writes .doomrc at I_Quit, which a browser
+// tab never reaches. JS calls this periodically so menu settings
+// (screen size, volumes, gamma) survive reloads.
+//
+void M_SaveDefaults (void);
+
+EMSCRIPTEN_KEEPALIVE
+void web_save_defaults (void)
+{
+    M_SaveDefaults ();
+}
+
+//
 // Render interpolation toggle ("vanilla mode" = 35fps feel).
 //
 extern boolean smoothrender;

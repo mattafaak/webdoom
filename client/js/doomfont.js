@@ -11,10 +11,10 @@ const COLOR_BASE = { Green: 0x70, Indigo: 0x60, Brown: 0x40, Red: 0xb0 };
 const FONT_RANGE = [0xb0, 0xbf];        // STCFN glyphs live in the red run
 
 export async function loadDoomFont() {
-    const { lumps } = await (await fetch('/api/ui-assets')).json();
+    const { lumps, titles = {} } = await (await fetch('/api/ui-assets')).json();
     const playpal = b64(lumps.PLAYPAL);
 
-    function decodePatch(bytes, remapBase = null) {
+    function decodePatch(bytes, remapBase = null, pal = playpal) {
         const v = new DataView(bytes.buffer, bytes.byteOffset);
         const w = v.getUint16(0, true), h = v.getUint16(2, true);
         if (!w || !h || w > 320 || h > 200) return null;
@@ -33,9 +33,9 @@ export async function loadDoomFont() {
                     if (remapBase !== null && idx >= FONT_RANGE[0] && idx <= FONT_RANGE[1])
                         idx = remapBase + (idx - FONT_RANGE[0]);
                     const p = ((top + i) * w + x) * 4;
-                    img.data[p]     = playpal[idx * 3];
-                    img.data[p + 1] = playpal[idx * 3 + 1];
-                    img.data[p + 2] = playpal[idx * 3 + 2];
+                    img.data[p]     = pal[idx * 3];
+                    img.data[p + 1] = pal[idx * 3 + 1];
+                    img.data[p + 2] = pal[idx * 3 + 2];
                     img.data[p + 3] = 255;
                 }
                 o += len + 4;
@@ -97,5 +97,26 @@ export async function loadDoomFont() {
         return out;
     }
 
-    return { text, patch };
+    // box art: each game's TITLEPIC, decoded with its own palette
+    const thumbCache = new Map();
+    function titleThumb(file, height = 60) {
+        if (thumbCache.has(file)) return thumbCache.get(file);
+        let out = null;
+        const t = titles[file];
+        if (t) {
+            const c = decodePatch(b64(t.pic), null, b64(t.pal));
+            if (c) {
+                out = document.createElement('canvas');
+                out.height = height;
+                out.width = Math.round(height * 4 / 3);   // aspect-corrected 4:3
+                const ctx = out.getContext('2d');
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(c, 0, 0, out.width, out.height);
+            }
+        }
+        thumbCache.set(file, out);
+        return out;
+    }
+
+    return { text, patch, titleThumb };
 }

@@ -5,6 +5,7 @@ import { createInput, loadSettings } from './input.js';
 import { createAudio } from './audio.js';
 import { createSettingsUI } from './settings.js';
 import { attachRelay } from './net.js';
+import { loadPersisted, restoreFiles, startSync } from './persist.js';
 
 const status = msg => { document.getElementById('status').textContent = msg; };
 
@@ -42,6 +43,7 @@ export async function bootDoom({ wads, args = [], net = null }) {
     const { default: createDoom } = await import('/engine/doom.js');
     const bytes = [];
     for (const w of wads) bytes.push(await fetchWad(w.file, w.sha));
+    const persisted = await loadPersisted(wads[0].file);
 
     status('booting…');
     const doom = await createDoom({
@@ -56,6 +58,7 @@ export async function bootDoom({ wads, args = [], net = null }) {
                 const name = i === 0 ? (ENGINE_NAME[w.file] ?? w.file) : w.file;
                 mod.FS.writeFile(`/wads/${name}`, bytes[i]);
             });
+            restoreFiles(mod.FS, persisted);   // savegames + .doomrc
         }],
     });
 
@@ -67,6 +70,8 @@ export async function bootDoom({ wads, args = [], net = null }) {
     doom.callMain([...pwads, ...args]);
     relay?.go();
     window.doomAudio = createAudio(doom);
+    window.webdoom = { doom };              // debug/test handle
+    startSync(doom, wads[0].file);
 
     const renderer = createRenderer(canvas);
     const fb = doom._web_framebuffer();
@@ -80,8 +85,6 @@ export async function bootDoom({ wads, args = [], net = null }) {
     doom._web_set_smooth(input.settings.smooth ? 1 : 0);
 
     const frame = () => {
-        // the first rendered frame owns the screen — no overlay survives it
-        document.getElementById('countdown').hidden = true;
         input.frame();
         doom._web_frame();
         const v = doom._web_palette_version();

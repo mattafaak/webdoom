@@ -12,9 +12,14 @@ export function createAudio(doom) {
     let musicNode = null, musicQueued = 0, musicScratch = 0, pumpTimer = 0;
 
     // Browsers gate audio behind a user gesture; arm on the first one.
+    // Later gestures re-resume a context the browser suspended.
     const arm = async () => {
-        if (ctx) return;
+        if (ctx) {
+            if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+            return;
+        }
         ctx = new AudioContext();
+        if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
         doom._web_music_init(ctx.sampleRate);
         try {
             await ctx.audioWorklet.addModule('js/music-worklet.js');
@@ -53,7 +58,7 @@ export function createAudio(doom) {
         if (len < 40 || bytes[0] !== 3) return null;
         const rate = bytes[2] | (bytes[3] << 8);
         const n = ((bytes[4] | (bytes[5] << 8) | (bytes[6] << 16) | (bytes[7] << 24)) >>> 0) - 32;
-        if (n <= 0 || 24 + n > len) return null;
+        if (n <= 0 || 24 + n > len || rate < 3000) return null;   // WebAudio min rate
         buf = ctx.createBuffer(1, n, rate);
         const ch = buf.getChannelData(0);
         for (let i = 0; i < n; i++) ch[i] = (bytes[24 + i] - 128) / 128;
