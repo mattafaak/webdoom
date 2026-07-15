@@ -4,6 +4,9 @@
 set -eo pipefail
 cd "$(dirname "$0")/.."
 
+echo "── lint (clang-format + JS syntax) ─────────────────────"
+bash tools/lint.sh
+
 echo "── engine smoke (doom, doom2) ──────────────────────────"
 node tools/smoke-test.mjs doom.wad 700 | tail -2
 node tools/smoke-test.mjs doom2.wad 1100 | tail -2

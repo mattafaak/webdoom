@@ -1,0 +1,19 @@
+# webdoom clang-format style.
+# Pinned: clang-format major version 22 (clang-format 22.x).
+# Derives from the LLVM base with overrides to match the existing
+# engine/web/*.c style: 4-space indent, Allman braces, GNU-style
+# spaces before parens, ~80 col, pointer-left.
+# Applies to: engine/web/ and tools/archaeology/ only.
+# engine/core/ is EXEMPT (vendored linuxdoom-1.10).
+---
+Language: Cpp
+BasedOnStyle: LLVM
+IndentWidth: 4
+BreakBeforeBraces: Allman
+ColumnLimit: 80
+AllowShortFunctionsOnASingleLine: Empty
+PointerAlignment: Left
+SpaceBeforeParens: Always
+SpaceAfterCStyleCast: true
+SortIncludes: Never
+AttributeMacros: ['EMSCRIPTEN_KEEPALIVE']

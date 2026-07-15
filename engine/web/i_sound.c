@@ -17,6 +17,7 @@
 
 // --- JS bridge (no-ops until client/js/audio.js installs the hooks) ----
 
+// clang-format off
 EM_JS (void, js_sfx_start, (int handle, int id, void* data, int len,
                             int vol, int sep, int pitch), {
     if (Module["sfxStart"]) Module["sfxStart"](handle, id, data, len, vol, sep, pitch);
@@ -33,8 +34,12 @@ EM_JS (void, js_sfx_update, (int handle, int vol, int sep, int pitch), {
 EM_JS (void, js_music_event, (int what), {   // 1 play, 0 stop
     if (Module["musicEvent"]) Module["musicEvent"](what);
 });
+// clang-format on
 
-void I_InitSound (void) { I_InitMusic (); }
+void I_InitSound (void)
+{
+    I_InitMusic ();
+}
 void I_UpdateSound (void) {}
 void I_SubmitSound (void) {}
 void I_ShutdownSound (void) {}
@@ -59,16 +64,22 @@ int I_StartSound (int id, int vol, int sep, int pitch, int priority)
     if (sfx->lumpnum < 0)
         sfx->lumpnum = I_GetSfxLumpNum (sfx);
     if (sfx->lumpnum < 0)
-        return 0;               // lump absent in this wad
+        return 0; // lump absent in this wad
     len = W_LumpLength (sfx->lumpnum);
-    data = W_CacheLumpNum (sfx->lumpnum, PU_STATIC);   // stays; JS decodes once
+    data = W_CacheLumpNum (sfx->lumpnum, PU_STATIC); // stays; JS decodes once
 
     js_sfx_start (++soundhandle, id, data, len, vol, sep, pitch);
     return soundhandle;
 }
 
-void I_StopSound (int handle)                  { js_sfx_stop (handle); }
-int  I_SoundIsPlaying (int handle)             { return js_sfx_playing (handle); }
+void I_StopSound (int handle)
+{
+    js_sfx_stop (handle);
+}
+int I_SoundIsPlaying (int handle)
+{
+    return js_sfx_playing (handle);
+}
 void I_UpdateSoundParams (int handle, int vol, int sep, int pitch)
 {
     js_sfx_update (handle, vol, sep, pitch);
@@ -79,22 +90,24 @@ void I_UpdateSoundParams (int handle, int vol, int sep, int pitch)
 // The engine registers/plays lumps; actual sample generation happens in
 // mus_opl.c when JS pulls. One song at a time (matches the game).
 static void* songdata;
-static int   songlen;
+static int songlen;
 
 void I_InitMusic (void)
 {
-    mus_init (44100);   // JS re-inits with the real AudioContext rate
+    mus_init (44100); // JS re-inits with the real AudioContext rate
 }
 
-EMSCRIPTEN_KEEPALIVE
-void web_music_init (int samplerate)
+EMSCRIPTEN_KEEPALIVE void web_music_init (int samplerate)
 {
     mus_init (samplerate);
 }
 
-void I_ShutdownMusic (void) { mus_stop (); }
+void I_ShutdownMusic (void)
+{
+    mus_stop ();
+}
 
-void I_SetMusicVolume (int volume)      // menu slider 0..15
+void I_SetMusicVolume (int volume) // menu slider 0..15
 {
     mus_setvolume (volume * 127 / 15);
 }
@@ -113,8 +126,16 @@ void I_PlaySong (int handle, int looping)
     js_music_event (1);
 }
 
-void I_PauseSong (int handle)  { (void) handle; mus_pause (1); }
-void I_ResumeSong (int handle) { (void) handle; mus_pause (0); }
+void I_PauseSong (int handle)
+{
+    (void) handle;
+    mus_pause (1);
+}
+void I_ResumeSong (int handle)
+{
+    (void) handle;
+    mus_pause (0);
+}
 
 void I_StopSong (int handle)
 {
@@ -123,4 +144,8 @@ void I_StopSong (int handle)
     js_music_event (0);
 }
 
-void I_UnRegisterSong (int handle) { (void) handle; songdata = 0; }
+void I_UnRegisterSong (int handle)
+{
+    (void) handle;
+    songdata = 0;
+}

@@ -16,9 +16,9 @@
 
 typedef struct
 {
-    char  name[32];
+    char name[32];
     byte* data;
-    int   len;
+    int len;
 } webfile_t;
 
 static webfile_t webfiles[MAXWEBFILES];
@@ -26,6 +26,7 @@ static int numwebfiles;
 
 // --- JS bridge: the small-file Map -------------------------------------
 
+// clang-format off
 EM_JS (int, js_file_len, (const char* name), {
     var m = Module["fileMap"];
     if (!m) return -1;
@@ -42,6 +43,7 @@ EM_JS (void, js_file_write, (const char* name, unsigned char* data, int len), {
     Module["fileMap"].set(n, HEAPU8.slice(data, data + len));
     if (Module["onFileWrite"]) Module["onFileWrite"](n);
 });
+// clang-format on
 
 // --- registry ------------------------------------------------------------
 
@@ -51,13 +53,13 @@ static const char* web_basename (const char* path)
     return s ? s + 1 : path;
 }
 
-EMSCRIPTEN_KEEPALIVE
-void web_register_file (const char* name, byte* data, int len)
+EMSCRIPTEN_KEEPALIVE void web_register_file (const char* name, byte* data,
+                                             int len)
 {
     if (numwebfiles >= MAXWEBFILES)
         return;
-    snprintf (webfiles[numwebfiles].name, sizeof webfiles[0].name,
-              "%s", web_basename (name));
+    snprintf (webfiles[numwebfiles].name, sizeof webfiles[0].name, "%s",
+              web_basename (name));
     webfiles[numwebfiles].data = data;
     webfiles[numwebfiles].len = len;
     numwebfiles++;

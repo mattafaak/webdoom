@@ -13,11 +13,11 @@ void D_DoomFrame (void);
 void web_net_setup (int consoleplayer, int numplayers);
 
 // In-heap file registry + JS small-file bridge (files.c)
-byte*   W_WebFile (const char* path, int* len);
+byte* W_WebFile (const char* path, int* len);
 boolean W_WebFileExists (const char* path);
-int     Web_FileLen (const char* path);
-void    Web_FileCopy (const char* path, byte* dest);
-void    Web_FileWrite (const char* path, byte* data, int len);
+int Web_FileLen (const char* path);
+void Web_FileCopy (const char* path, byte* dest);
+void Web_FileWrite (const char* path, byte* data, int len);
 
 // MUS + OPL music sequencer (mus_opl.c)
 void mus_init (int samplerate);

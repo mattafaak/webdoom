@@ -31,30 +31,31 @@
 
 #include <inttypes.h>
 
-#define OPL_WRITEBUF_SIZE   1024
-#define OPL_WRITEBUF_DELAY  2
+#define OPL_WRITEBUF_SIZE 1024
+#define OPL_WRITEBUF_DELAY 2
 
-typedef uintptr_t       Bitu;
-typedef intptr_t        Bits;
-typedef uint64_t        Bit64u;
-typedef int64_t         Bit64s;
-typedef uint32_t        Bit32u;
-typedef int32_t         Bit32s;
-typedef uint16_t        Bit16u;
-typedef int16_t         Bit16s;
-typedef uint8_t         Bit8u;
-typedef int8_t          Bit8s;
+typedef uintptr_t Bitu;
+typedef intptr_t Bits;
+typedef uint64_t Bit64u;
+typedef int64_t Bit64s;
+typedef uint32_t Bit32u;
+typedef int32_t Bit32s;
+typedef uint16_t Bit16u;
+typedef int16_t Bit16s;
+typedef uint8_t Bit8u;
+typedef int8_t Bit8s;
 
 typedef struct _opl3_slot opl3_slot;
 typedef struct _opl3_channel opl3_channel;
 typedef struct _opl3_chip opl3_chip;
 
-struct _opl3_slot {
-    opl3_channel *channel;
-    opl3_chip *chip;
+struct _opl3_slot
+{
+    opl3_channel* channel;
+    opl3_chip* chip;
     Bit16s out;
     Bit16s fbmod;
-    Bit16s *mod;
+    Bit16s* mod;
     Bit16s prout;
     Bit16s eg_rout;
     Bit16s eg_out;
@@ -62,7 +63,7 @@ struct _opl3_slot {
     Bit8u eg_gen;
     Bit8u eg_rate;
     Bit8u eg_ksl;
-    Bit8u *trem;
+    Bit8u* trem;
     Bit8u reg_vib;
     Bit8u reg_type;
     Bit8u reg_ksr;
@@ -81,11 +82,12 @@ struct _opl3_slot {
     Bit8u slot_num;
 };
 
-struct _opl3_channel {
-    opl3_slot *slots[2];
-    opl3_channel *pair;
-    opl3_chip *chip;
-    Bit16s *out[4];
+struct _opl3_channel
+{
+    opl3_slot* slots[2];
+    opl3_channel* pair;
+    opl3_chip* chip;
+    Bit16s* out[4];
     Bit8u chtype;
     Bit16u f_num;
     Bit8u block;
@@ -97,13 +99,15 @@ struct _opl3_channel {
     Bit8u ch_num;
 };
 
-typedef struct _opl3_writebuf {
+typedef struct _opl3_writebuf
+{
     Bit64u time;
     Bit16u reg;
     Bit8u data;
 } opl3_writebuf;
 
-struct _opl3_chip {
+struct _opl3_chip
+{
     opl3_channel channel[18];
     opl3_slot slot[36];
     Bit16u timer;
@@ -128,7 +132,7 @@ struct _opl3_chip {
     Bit8u rm_hh_bit8;
     Bit8u rm_tc_bit3;
     Bit8u rm_tc_bit5;
-    //OPL3L
+    // OPL3L
     Bit32s rateratio;
     Bit32s samplecnt;
     Bit16s oldsamples[2];
@@ -141,10 +145,10 @@ struct _opl3_chip {
     opl3_writebuf writebuf[OPL_WRITEBUF_SIZE];
 };
 
-void OPL3_Generate(opl3_chip *chip, Bit16s *buf);
-void OPL3_GenerateResampled(opl3_chip *chip, Bit16s *buf);
-void OPL3_Reset(opl3_chip *chip, Bit32u samplerate);
-void OPL3_WriteReg(opl3_chip *chip, Bit16u reg, Bit8u v);
-void OPL3_WriteRegBuffered(opl3_chip *chip, Bit16u reg, Bit8u v);
-void OPL3_GenerateStream(opl3_chip *chip, Bit16s *sndptr, Bit32u numsamples);
+void OPL3_Generate (opl3_chip* chip, Bit16s* buf);
+void OPL3_GenerateResampled (opl3_chip* chip, Bit16s* buf);
+void OPL3_Reset (opl3_chip* chip, Bit32u samplerate);
+void OPL3_WriteReg (opl3_chip* chip, Bit16u reg, Bit8u v);
+void OPL3_WriteRegBuffered (opl3_chip* chip, Bit16u reg, Bit8u v);
+void OPL3_GenerateStream (opl3_chip* chip, Bit16s* sndptr, Bit32u numsamples);
 #endif

@@ -17,73 +17,77 @@
 #include "z_zone.h"
 #include "opl3.h"
 
-#define MUS_RATE       140
-#define OPL_CHANNELS   9
-#define MUS_CHANNELS   16
-#define PERCUSSION_CH  15
+#define MUS_RATE 140
+#define OPL_CHANNELS 9
+#define MUS_CHANNELS 16
+#define PERCUSSION_CH 15
 
 // --- GENMIDI bank -------------------------------------------------------
 
-typedef struct {
+typedef struct
+{
     byte tremolo, attack, sustain, waveform, scale, level;
 } genmidi_op_t;
 
-typedef struct {
+typedef struct
+{
     genmidi_op_t mod;
-    byte         feedback;
+    byte feedback;
     genmidi_op_t car;
-    byte         unused;
-    short        offset;         // note offset (double voice detune lives here)
+    byte unused;
+    short offset; // note offset (double voice detune lives here)
 } genmidi_voice_t;
 
-typedef struct {
-    unsigned short  flags;
-    byte            finetune;
-    byte            fixednote;
+typedef struct
+{
+    unsigned short flags;
+    byte finetune;
+    byte fixednote;
     genmidi_voice_t voice[2];
 } genmidi_instr_t;
 
-#define GENMIDI_FLAG_FIXED   0x01
-#define GENMIDI_FLAG_2VOICE  0x04
+#define GENMIDI_FLAG_FIXED 0x01
+#define GENMIDI_FLAG_2VOICE 0x04
 
 static genmidi_instr_t bank[175];
 static boolean bank_loaded;
 
 // --- OPL voice state ----------------------------------------------------
 
-typedef struct {
-    int         muschan;        // owning MUS channel, -1 free
-    int         note;           // MUS note that keyed us on
-    int         basenote;       // note after fixed/offset adjustment
-    int         notevol;        // 0..127
-    int         age;            // for oldest-voice stealing
+typedef struct
+{
+    int muschan;  // owning MUS channel, -1 free
+    int note;     // MUS note that keyed us on
+    int basenote; // note after fixed/offset adjustment
+    int notevol;  // 0..127
+    int age;      // for oldest-voice stealing
     const genmidi_voice_t* gv;
-    boolean     second;         // second voice of a 2VOICE instrument
+    boolean second; // second voice of a 2VOICE instrument
 } oplvoice_t;
 
 static opl3_chip chip;
 static oplvoice_t voice[OPL_CHANNELS];
-static int dbg_events, dbg_noteons;     // test-harness counters
-static int  samplerate = 44100;
-static int  agecounter;
+static int dbg_events, dbg_noteons; // test-harness counters
+static int samplerate = 44100;
+static int agecounter;
 
 // per-MUS-channel state
-static int  ch_instr[MUS_CHANNELS];
-static int  ch_vol[MUS_CHANNELS];
-static int  ch_bend[MUS_CHANNELS];      // 128 = center, 1/64 semitone units
-static int  ch_lastvol[MUS_CHANNELS];
+static int ch_instr[MUS_CHANNELS];
+static int ch_vol[MUS_CHANNELS];
+static int ch_bend[MUS_CHANNELS]; // 128 = center, 1/64 semitone units
+static int ch_lastvol[MUS_CHANNELS];
 
 // sequencer state
-static byte*    mus;            // full lump
-static int      muslen;
-static byte*    ev;             // event cursor
-static byte*    ev_start;
-static byte*    ev_end;
-static boolean  playing;
-static boolean  looping;
-static double   samples_per_tick;
-static double   tick_accum;     // samples until next event group
-static int      musicvolume = 127;   // 0..127 master (menu music slider)
+static byte* mus; // full lump
+static int muslen;
+static byte* ev; // event cursor
+static byte* ev_start;
+static byte* ev_end;
+static boolean playing;
+static boolean looping;
+static double samples_per_tick;
+static double tick_accum;     // samples until next event group
+static int musicvolume = 127; // 0..127 master (menu music slider)
 
 static void opl_write (int reg, int val)
 {
@@ -91,7 +95,8 @@ static void opl_write (int reg, int val)
 }
 
 // operator offsets for the 9 two-op channels
-static const int op1off[OPL_CHANNELS] = {0x00,0x01,0x02,0x08,0x09,0x0a,0x10,0x11,0x12};
+static const int op1off[OPL_CHANNELS] = {0x00, 0x01, 0x02, 0x08, 0x09,
+                                         0x0a, 0x10, 0x11, 0x12};
 
 // OPL frequency for a midi-ish note + bend (1/64 semitones off center).
 // fnum table for one octave starting at block boundary; computed from
@@ -104,32 +109,41 @@ static const unsigned short fnumtab[12] = {
 static void voice_freq (int v, boolean keyon)
 {
     int note = voice[v].basenote;
-    int bend = ch_bend[voice[v].muschan] - 128;   // ±128 = ±2 semitones
-    int cents64;    // note position in 1/64 semitones
+    int bend = ch_bend[voice[v].muschan] - 128; // ±128 = ±2 semitones
+    int cents64; // note position in 1/64 semitones
     int block, idx, fnum, frac;
 
     cents64 = note * 64 + bend;
-    if (cents64 < 0) cents64 = 0;
+    if (cents64 < 0)
+        cents64 = 0;
 
-    block = cents64 / (12*64) - 1;                // note 12..23 => block 0
-    idx   = cents64 % (12*64);
+    block = cents64 / (12 * 64) - 1; // note 12..23 => block 0
+    idx = cents64 % (12 * 64);
     // linear interpolation between semitone fnums (fine enough for bends)
-    frac  = idx % 64;
-    idx  /= 64;
-    fnum  = fnumtab[idx];
+    frac = idx % 64;
+    idx /= 64;
+    fnum = fnumtab[idx];
     if (idx < 11)
-        fnum += ((fnumtab[idx+1] - fnumtab[idx]) * frac) >> 6;
+        fnum += ((fnumtab[idx + 1] - fnumtab[idx]) * frac) >> 6;
     else
         fnum += ((0x2ae - fnumtab[11]) * frac) >> 6;
 
-    if (block < 0)  { block = 0; fnum >>= 1; }
-    if (block > 7)    block = 7;
+    if (block < 0)
+    {
+        block = 0;
+        fnum >>= 1;
+    }
+    if (block > 7)
+        block = 7;
 
     opl_write (0xa0 + v, fnum & 0xff);
     opl_write (0xb0 + v, (keyon ? 0x20 : 0) | (block << 2) | (fnum >> 8));
 }
 
-static int op2off (int v) { return op1off[v] + 3; }
+static int op2off (int v)
+{
+    return op1off[v] + 3;
+}
 
 // Combined MIDI-style volume (0..127) → extra OPL total-level steps
 // (0.75 dB each). Perceptual: ~40dB span like DMX, not linear — a linear
@@ -150,21 +164,25 @@ static void init_volatten (void)
 static void voice_volume (int v)
 {
     const genmidi_voice_t* gv = voice[v].gv;
-    int vol;     // 0..127 combined
+    int vol; // 0..127 combined
     int level;
 
-    vol = (ch_vol[voice[v].muschan] * voice[v].notevol * musicvolume) / (127*127);
-    if (vol > 127) vol = 127;
+    vol = (ch_vol[voice[v].muschan] * voice[v].notevol * musicvolume) /
+          (127 * 127);
+    if (vol > 127)
+        vol = 127;
 
     level = (gv->car.level & 0x3f) + volatten[vol];
-    if (level > 63) level = 63;
+    if (level > 63)
+        level = 63;
     opl_write (0x40 + op2off (v), (gv->car.scale & 0xc0) | level);
 
     // additive connection: the modulator reaches the output too
     if (gv->feedback & 1)
     {
         level = (gv->mod.level & 0x3f) + volatten[vol];
-        if (level > 63) level = 63;
+        if (level > 63)
+            level = 63;
         opl_write (0x40 + op1off[v], (gv->mod.scale & 0xc0) | level);
     }
 }
@@ -185,7 +203,7 @@ static void voice_program (int v)
     opl_write (0x80 + o2, gv->car.sustain);
     opl_write (0xe0 + o2, gv->car.waveform);
 
-    opl_write (0xc0 + v, gv->feedback | 0x30);    // both speakers
+    opl_write (0xc0 + v, gv->feedback | 0x30); // both speakers
     voice_volume (v);
 }
 
@@ -193,7 +211,7 @@ static void voice_off (int v)
 {
     if (voice[v].muschan < 0)
         return;
-    opl_write (0xb0 + v, 0);    // key off, keep freq bits harmless
+    opl_write (0xb0 + v, 0); // key off, keep freq bits harmless
     voice[v].muschan = -1;
 }
 
@@ -205,7 +223,11 @@ static int voice_alloc (void)
         if (voice[v].muschan < 0)
             return v;
     for (v = 0; v < OPL_CHANNELS; v++)
-        if (voice[v].age < oldage) { oldage = voice[v].age; oldest = v; }
+        if (voice[v].age < oldage)
+        {
+            oldage = voice[v].age;
+            oldest = v;
+        }
     voice_off (oldest);
     return oldest;
 }
@@ -285,51 +307,62 @@ static int run_event_group (void)
 
         switch (type)
         {
-          case 0:                               // release
+        case 0: // release
             note_off (chan, *ev++ & 0x7f);
             break;
-          case 1:                               // play
-          {
+        case 1: // play
+        {
             int note = *ev++;
             if (note & 0x80)
                 ch_lastvol[chan] = *ev++ & 0x7f;
             note_on (chan, note & 0x7f, ch_lastvol[chan], false);
             break;
-          }
-          case 2:                               // pitch bend
+        }
+        case 2: // pitch bend
             ch_bend[chan] = *ev++;
             channel_update (chan);
             break;
-          case 3:                               // system event
+        case 3: // system event
             switch (*ev++ & 0x7f)
             {
-              case 10: case 11: all_notes_off (); break;   // all sounds/notes off
-              default: break;
+            case 10:
+            case 11:
+                all_notes_off ();
+                break; // all sounds/notes off
+            default:
+                break;
             }
             break;
-          case 4:                               // controller
-          {
+        case 4: // controller
+        {
             int ctrl = *ev++ & 0x7f;
-            int val  = *ev++ & 0x7f;
+            int val = *ev++ & 0x7f;
             switch (ctrl)
             {
-              case 0: ch_instr[chan] = val; break;
-              case 3: ch_vol[chan] = val; channel_update (chan); break;
-              default: break;
+            case 0:
+                ch_instr[chan] = val;
+                break;
+            case 3:
+                ch_vol[chan] = val;
+                channel_update (chan);
+                break;
+            default:
+                break;
             }
             break;
-          }
-          case 6:                               // score end
+        }
+        case 6: // score end
             return -1;
-          default:                              // unknown: skip payload
+        default: // unknown: skip payload
             ev++;
             break;
         }
 
-        if (b & 0x80)                           // delay follows
+        if (b & 0x80) // delay follows
         {
             delay = 0;
-            do {
+            do
+            {
                 b = *ev++;
                 delay = (delay << 7) | (b & 0x7f);
             } while (b & 0x80);
@@ -391,7 +424,7 @@ void mus_play (void* data, int len, int loop)
     if (!bank_loaded || !m || len < 16 || memcmp (m, "MUS\x1a", 4) != 0)
         return;
 
-    scorelen   = m[4] | (m[5] << 8);
+    scorelen = m[4] | (m[5] << 8);
     scorestart = m[6] | (m[7] << 8);
     if (scorestart + scorelen > len)
         return;
@@ -425,7 +458,7 @@ void mus_stop (void)
 void mus_pause (int pause)
 {
     if (pause)
-        all_notes_off ();       // sequencer position is kept
+        all_notes_off (); // sequencer position is kept
     playing = !pause && mus != NULL;
 }
 
@@ -438,19 +471,23 @@ void mus_setvolume (int vol127)
             voice_volume (v);
 }
 
-EMSCRIPTEN_KEEPALIVE
-int web_music_debug (int what)
+EMSCRIPTEN_KEEPALIVE int web_music_debug (int what)
 {
     int v, n = 0;
     switch (what)
     {
-      case 0: return playing;
-      case 1: return dbg_events;
-      case 2: return dbg_noteons;
-      case 3: return bank_loaded;
-      case 4:
+    case 0:
+        return playing;
+    case 1:
+        return dbg_events;
+    case 2:
+        return dbg_noteons;
+    case 3:
+        return bank_loaded;
+    case 4:
         for (v = 0; v < OPL_CHANNELS; v++)
-            if (voice[v].muschan >= 0) n++;
+            if (voice[v].muschan >= 0)
+                n++;
         return n;
     }
     return -1;
@@ -459,8 +496,7 @@ int web_music_debug (int what)
 //
 // web_music_render — JS pulls interleaved stereo f32 here.
 //
-EMSCRIPTEN_KEEPALIVE
-void web_music_render (float* out, int nframes)
+EMSCRIPTEN_KEEPALIVE void web_music_render (float* out, int nframes)
 {
     Bit16s buf[2];
     int i;
@@ -475,14 +511,22 @@ void web_music_render (float* out, int nframes)
                 int wait = run_event_group ();
                 if (wait < 0)
                 {
-                    if (looping) { ev = ev_start; wait = 1; }
-                    else         { playing = false; break; }
+                    if (looping)
+                    {
+                        ev = ev_start;
+                        wait = 1;
+                    }
+                    else
+                    {
+                        playing = false;
+                        break;
+                    }
                 }
                 tick_accum += wait * samples_per_tick;
             }
         }
         OPL3_GenerateResampled (&chip, buf);
-        out[i*2]   = buf[0] / 16384.0f;
-        out[i*2+1] = buf[1] / 16384.0f;
+        out[i * 2] = buf[0] / 16384.0f;
+        out[i * 2 + 1] = buf[1] / 16384.0f;
     }
 }

@@ -8,12 +8,12 @@
 // demos.  Populated only when the render pass runs (nodrawers == 0).
 // sim is accumulated by the G_Ticker wrapper in d_main.c.
 extern double web_perf_sim_us;
-extern double web_perf_frame_us;   // R_SetupFrame + buffer clears
-extern double web_perf_bsp_us;     // R_RenderBSPNode (BSP walk + segs, interleaved)
-extern double web_perf_planes_us;  // R_DrawPlanes
-extern double web_perf_masked_us;  // R_DrawMasked (sprites + midtextures)
-extern long   web_perf_frame_count; // frames rendered (for per-frame averages)
-extern long   web_perf_tic_count;   // G_Ticker calls (for per-tic averages)
+extern double web_perf_frame_us; // R_SetupFrame + buffer clears
+extern double web_perf_bsp_us; // R_RenderBSPNode (BSP walk + segs, interleaved)
+extern double web_perf_planes_us; // R_DrawPlanes
+extern double web_perf_masked_us; // R_DrawMasked (sprites + midtextures)
+extern long web_perf_frame_count; // frames rendered (for per-frame averages)
+extern long web_perf_tic_count;   // G_Ticker calls (for per-tic averages)
 
 // High-resolution µs timestamp.  Wraps emscripten_get_now() * 1000.
 // Defined in perf.c so core files need not include <emscripten.h>.

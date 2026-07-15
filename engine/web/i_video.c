@@ -10,28 +10,22 @@
 #include "v_video.h"
 #include "i_video.h"
 
-static byte webpalette[256*3];
-static int  paletteversion;     // bumped on every I_SetPalette
+static byte webpalette[256 * 3];
+static int paletteversion; // bumped on every I_SetPalette
 
-void I_InitGraphics (void)
-{
-}
+void I_InitGraphics (void) {}
 
-void I_ShutdownGraphics (void)
-{
-}
+void I_ShutdownGraphics (void) {}
 
 void I_SetPalette (byte* palette)
 {
     int i;
-    for (i = 0; i < 256*3; i++)
+    for (i = 0; i < 256 * 3; i++)
         webpalette[i] = gammatable[usegamma][palette[i]];
     paletteversion++;
 }
 
-void I_UpdateNoBlit (void)
-{
-}
+void I_UpdateNoBlit (void) {}
 
 void I_FinishUpdate (void)
 {
@@ -40,11 +34,20 @@ void I_FinishUpdate (void)
 
 void I_ReadScreen (byte* scr)
 {
-    memcpy (scr, screens[0], SCREENWIDTH*SCREENHEIGHT);
+    memcpy (scr, screens[0], SCREENWIDTH * SCREENHEIGHT);
 }
 
 // --- JS bridge ---------------------------------------------------------
 
-EMSCRIPTEN_KEEPALIVE byte* web_framebuffer (void) { return screens[0]; }
-EMSCRIPTEN_KEEPALIVE byte* web_palette (void)     { return webpalette; }
-EMSCRIPTEN_KEEPALIVE int   web_palette_version (void) { return paletteversion; }
+EMSCRIPTEN_KEEPALIVE byte* web_framebuffer (void)
+{
+    return screens[0];
+}
+EMSCRIPTEN_KEEPALIVE byte* web_palette (void)
+{
+    return webpalette;
+}
+EMSCRIPTEN_KEEPALIVE int web_palette_version (void)
+{
+    return paletteversion;
+}

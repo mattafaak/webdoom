@@ -5,13 +5,13 @@
 #include "perf.h"
 
 // Accumulators — µs (double precision).
-double web_perf_sim_us     = 0;
-double web_perf_frame_us   = 0;
-double web_perf_bsp_us     = 0;
-double web_perf_planes_us  = 0;
-double web_perf_masked_us  = 0;
-long   web_perf_frame_count = 0;
-long   web_perf_tic_count   = 0;
+double web_perf_sim_us = 0;
+double web_perf_frame_us = 0;
+double web_perf_bsp_us = 0;
+double web_perf_planes_us = 0;
+double web_perf_masked_us = 0;
+long web_perf_frame_count = 0;
+long web_perf_tic_count = 0;
 
 // emscripten_get_now() returns milliseconds; multiply by 1000 for µs.
 double web_perf_now (void)
@@ -24,52 +24,45 @@ double web_perf_now (void)
 // then divides by web_perf_frames() to get per-frame averages.
 // The fleet runner (task 0.2) will branch on schemaVersion to consume them.
 
-EMSCRIPTEN_KEEPALIVE
-double web_perf_sim (void)
+EMSCRIPTEN_KEEPALIVE double web_perf_sim (void)
 {
     return web_perf_sim_us;
 }
 
-EMSCRIPTEN_KEEPALIVE
-double web_perf_frame (void)
+EMSCRIPTEN_KEEPALIVE double web_perf_frame (void)
 {
     return web_perf_frame_us;
 }
 
-EMSCRIPTEN_KEEPALIVE
-double web_perf_bsp (void)
+EMSCRIPTEN_KEEPALIVE double web_perf_bsp (void)
 {
     return web_perf_bsp_us;
 }
 
-EMSCRIPTEN_KEEPALIVE
-double web_perf_planes (void)
+EMSCRIPTEN_KEEPALIVE double web_perf_planes (void)
 {
     return web_perf_planes_us;
 }
 
-EMSCRIPTEN_KEEPALIVE
-double web_perf_masked (void)
+EMSCRIPTEN_KEEPALIVE double web_perf_masked (void)
 {
     return web_perf_masked_us;
 }
 
-EMSCRIPTEN_KEEPALIVE
-double web_perf_frames (void)
+EMSCRIPTEN_KEEPALIVE double web_perf_frames (void)
 {
     return (double) web_perf_frame_count;
 }
 
 // Reset all accumulators.  Call between demos so each demo's numbers are
 // independent.
-EMSCRIPTEN_KEEPALIVE
-void web_perf_reset (void)
+EMSCRIPTEN_KEEPALIVE void web_perf_reset (void)
 {
-    web_perf_sim_us      = 0;
-    web_perf_frame_us    = 0;
-    web_perf_bsp_us      = 0;
-    web_perf_planes_us   = 0;
-    web_perf_masked_us   = 0;
+    web_perf_sim_us = 0;
+    web_perf_frame_us = 0;
+    web_perf_bsp_us = 0;
+    web_perf_planes_us = 0;
+    web_perf_masked_us = 0;
     web_perf_frame_count = 0;
-    web_perf_tic_count   = 0;
+    web_perf_tic_count = 0;
 }

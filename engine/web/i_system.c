@@ -15,7 +15,7 @@
 #include "i_system.h"
 
 // 32 MB zone: vanilla's 6 MB starves limit-raised rendering and big PWADs.
-#define ZONESIZE (32*1024*1024)
+#define ZONESIZE (32 * 1024 * 1024)
 
 int mb_used = 32;
 
@@ -56,7 +56,9 @@ void I_Quit (void)
     I_ShutdownGraphics ();
     // webdoom: hand control back to the page (return to the main menu)
     // instead of leaving a dead, frozen canvas.
+    // clang-format off
     EM_ASM ({ if (Module["onQuit"]) Module["onQuit"](); });
+    // clang-format on
     emscripten_force_exit (0);
 }
 
@@ -77,7 +79,7 @@ byte* I_AllocLow (int length)
 void I_StartFrame (void) {}
 void I_StartTic (void) {}
 
-void I_Error (char *error, ...)
+void I_Error (char* error, ...)
 {
     va_list argptr;
     char msg[512];
@@ -88,6 +90,8 @@ void I_Error (char *error, ...)
     fprintf (stderr, "I_Error: %s\n", msg);
 
     // Surface the message in the page, then halt.
+    // clang-format off
     EM_ASM ({ if (Module["onDoomError"]) Module["onDoomError"](UTF8ToString($0)); }, msg);
+    // clang-format on
     abort ();
 }

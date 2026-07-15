@@ -12,27 +12,26 @@
 #include "d_player.h"
 #include "m_argv.h"
 #include "web.h"
-#include "perf.h"	// webdoom: per-stage timing
+#include "perf.h" // webdoom: per-stage timing
 
 int main (int argc, char** argv)
 {
     myargc = argc;
     myargv = argv;
 
-    D_DoomMain ();      // returns after init; JS drives frames
+    D_DoomMain (); // returns after init; JS drives frames
 
     emscripten_exit_with_live_runtime ();
 }
 
-EMSCRIPTEN_KEEPALIVE
-void web_frame (void)
+EMSCRIPTEN_KEEPALIVE void web_frame (void)
 {
     D_DoomFrame ();
 }
 
 // type: 0 keydown, 1 keyup, 2 mouse, 3 joystick — mirrors evtype_t.
-EMSCRIPTEN_KEEPALIVE
-void web_input_event (int type, int data1, int data2, int data3)
+EMSCRIPTEN_KEEPALIVE void web_input_event (int type, int data1, int data2,
+                                           int data3)
 {
     event_t ev;
 
@@ -49,11 +48,11 @@ void web_input_event (int type, int data1, int data2, int data3)
 // buttons: bit0 fire, bit1 strafe-mod, bit2 speed, bit3 use.
 // Axes -100..100: turn (RS x), fwd (LS y, stick-down positive), strafe (LS x).
 //
-extern int      joyxmove, joyymove, joysidemove;
+extern int joyxmove, joyymove, joysidemove;
 extern boolean* joybuttons;
 
-EMSCRIPTEN_KEEPALIVE
-void web_gamepad (int buttons, int turn, int fwd, int strafe)
+EMSCRIPTEN_KEEPALIVE void web_gamepad (int buttons, int turn, int fwd,
+                                       int strafe)
 {
     int i;
 
@@ -70,8 +69,7 @@ void web_gamepad (int buttons, int turn, int fwd, int strafe)
 //
 extern boolean menuactive;
 
-EMSCRIPTEN_KEEPALIVE
-int web_ui_mode (void)
+EMSCRIPTEN_KEEPALIVE int web_ui_mode (void)
 {
     return menuactive || gamestate != GS_LEVEL;
 }
@@ -86,11 +84,10 @@ int web_ui_mode (void)
 //
 void ST_Start (void);
 
-EMSCRIPTEN_KEEPALIVE
-void web_set_console (int player)
+EMSCRIPTEN_KEEPALIVE void web_set_console (int player)
 {
     consoleplayer = displayplayer = player;
-    ST_Start ();        // rebind the status bar to the new view player
+    ST_Start (); // rebind the status bar to the new view player
 }
 
 //
@@ -99,20 +96,21 @@ void web_set_console (int player)
 //
 #include "tables.h"
 
-EMSCRIPTEN_KEEPALIVE
-void web_gen_tables (void)
+EMSCRIPTEN_KEEPALIVE void web_gen_tables (void)
 {
     T_GenerateTables ();
 }
 
-EMSCRIPTEN_KEEPALIVE
-int* web_table (int which)
+EMSCRIPTEN_KEEPALIVE int* web_table (int which)
 {
     switch (which)
     {
-      case 0: return (int*) finesine;
-      case 1: return (int*) finetangent;
-      case 2: return (int*) tantoangle;
+    case 0:
+        return (int*) finesine;
+    case 1:
+        return (int*) finetangent;
+    case 2:
+        return (int*) tantoangle;
     }
     return 0;
 }
@@ -123,8 +121,7 @@ int* web_table (int which)
 //
 extern char* player_names[];
 
-EMSCRIPTEN_KEEPALIVE
-void web_set_player_name (int player, const char* name)
+EMSCRIPTEN_KEEPALIVE void web_set_player_name (int player, const char* name)
 {
     static char buf[MAXPLAYERS][16];
 
@@ -141,8 +138,7 @@ void web_set_player_name (int player, const char* name)
 //
 void M_SaveDefaults (void);
 
-EMSCRIPTEN_KEEPALIVE
-void web_save_defaults (void)
+EMSCRIPTEN_KEEPALIVE void web_save_defaults (void)
 {
     M_SaveDefaults ();
 }
@@ -153,8 +149,7 @@ void web_save_defaults (void)
 //
 extern int lookdir;
 
-EMSCRIPTEN_KEEPALIVE
-void web_set_pitch (int pixels)
+EMSCRIPTEN_KEEPALIVE void web_set_pitch (int pixels)
 {
     lookdir = pixels;
 }
@@ -164,8 +159,7 @@ void web_set_pitch (int pixels)
 //
 extern boolean smoothrender;
 
-EMSCRIPTEN_KEEPALIVE
-void web_set_smooth (int on)
+EMSCRIPTEN_KEEPALIVE void web_set_smooth (int on)
 {
     smoothrender = on;
 }
@@ -178,8 +172,7 @@ void web_set_smooth (int on)
 //
 extern int prndindex;
 
-EMSCRIPTEN_KEEPALIVE
-int web_state_hash (void)
+EMSCRIPTEN_KEEPALIVE int web_state_hash (void)
 {
     unsigned h = 0x9e3779b9u ^ (unsigned) gametic;
     int i;
@@ -196,8 +189,7 @@ int web_state_hash (void)
     return (int) h;
 }
 
-EMSCRIPTEN_KEEPALIVE
-int web_gametic (void)
+EMSCRIPTEN_KEEPALIVE int web_gametic (void)
 {
     return gametic;
 }
@@ -205,8 +197,7 @@ int web_gametic (void)
 //
 // web_ingame_mask: current playeringame bitmask (drop-in test assertion).
 //
-EMSCRIPTEN_KEEPALIVE
-int web_ingame_mask (void)
+EMSCRIPTEN_KEEPALIVE int web_ingame_mask (void)
 {
     int i, m = 0;
     for (i = 0; i < MAXPLAYERS; i++)
@@ -219,8 +210,7 @@ int web_ingame_mask (void)
 // Raw player-0 tuple for cross-validation against a reference port
 // (Chocolate Doom instrumented to print the same fields per tic).
 //
-EMSCRIPTEN_KEEPALIVE
-void web_demo_state (int* out)
+EMSCRIPTEN_KEEPALIVE void web_demo_state (int* out)
 {
     out[0] = prndindex;
     out[1] = players[0].mo ? players[0].mo->x : 0;
@@ -233,8 +223,7 @@ void web_demo_state (int* out)
 // Weapon state for gamepad cycle buttons: low 4 bits = ready weapon,
 // bits 8.. = owned-weapon mask.
 //
-EMSCRIPTEN_KEEPALIVE
-int web_weapon_state (void)
+EMSCRIPTEN_KEEPALIVE int web_weapon_state (void)
 {
     player_t* p = &players[consoleplayer];
     int owned = 0, i;
@@ -253,8 +242,7 @@ int web_weapon_state (void)
 //
 extern boolean wipeactive;
 
-EMSCRIPTEN_KEEPALIVE
-void web_wipe_skip (void)
+EMSCRIPTEN_KEEPALIVE void web_wipe_skip (void)
 {
     wipeactive = 0;
 }
