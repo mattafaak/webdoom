@@ -1,6 +1,6 @@
 # webdoom performance baseline — memory & size audit
 
-Measured at HEAD commit recorded in the task-0.5 commit, 2026-07-15.
+Measured at commit 6de6256 (engine state; audit landed as e9e4e61), 2026-07-15.
 All numbers taken on the dev host (alder, i9-12900K) unless noted; zone/heap
 figures are deterministic (same wasm, same allocator, same WAD bytes) and
 host-independent.
@@ -90,10 +90,11 @@ headroom. Task 2.5 (Z_Zone review) and task 2.6 (INITIAL_MEMORY knob sweep)
 should consider reducing `ZONESIZE` to 4–8 MB as a first pass, re-running all
 13 golden demos + interactive playthroughs for confirmation.
 
-The HWM reflects both live (non-purgeable, tag < PU_PURGELEVEL) and purgeable
-(tag ≥ PU_PURGELEVEL) blocks; `Z_FreeMemory()` counts free + purgeable as
-free, so the HWM here is the true peak of irreducible live+purgeable committed
-usage at any single tic.
+`Z_FreeMemory()` counts free + purgeable (tag ≥ PU_PURGELEVEL) blocks as
+free, so the HWM here is the peak of **non-purgeable (irreducible) live
+usage only** — purgeable cache blocks (e.g. textures) are not counted. It
+is a minimum-committed-footprint bound, which slightly understates total
+committed bytes when purgeable caches are large at peak.
 
 ---
 
