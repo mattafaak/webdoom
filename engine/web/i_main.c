@@ -12,6 +12,7 @@
 #include "d_player.h"
 #include "m_argv.h"
 #include "web.h"
+#include "perf.h"	// webdoom: per-stage timing
 
 int main (int argc, char** argv)
 {
@@ -242,4 +243,18 @@ int web_weapon_state (void)
         if (p->weaponowned[i])
             owned |= 1 << i;
     return (p->readyweapon & 15) | (owned << 8);
+}
+
+//
+// web_wipe_skip
+// Instantly clears the melt-wipe state machine so bench.mjs can jump
+// straight to measurement frames without waiting for wall-clock time.
+// The wipe is purely cosmetic — calling this does not affect simulation.
+//
+extern boolean wipeactive;
+
+EMSCRIPTEN_KEEPALIVE
+void web_wipe_skip (void)
+{
+    wipeactive = 0;
 }

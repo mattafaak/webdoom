@@ -40,6 +40,7 @@ static const char rcsid[] = "$Id: r_main.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 #include "i_system.h"
 #include "r_local.h"
 #include "r_sky.h"
+#include "perf.h"	// webdoom: per-stage timing
 
 
 
@@ -954,7 +955,12 @@ static void R_InterpolateSectors (boolean restore)
 }
 
 void R_RenderPlayerView (player_t* player)
-{	
+{
+    // webdoom: per-stage timing (accumulates into web_perf_*_us globals)
+    double t0, t1;
+
+    // --- frame setup + buffer clears ---
+    t0 = web_perf_now ();
     R_SetupFrame (player);
     R_ShearView ();
     R_InterpolateSectors (false);
@@ -964,25 +970,41 @@ void R_RenderPlayerView (player_t* player)
     R_ClearDrawSegs ();
     R_ClearPlanes ();
     R_ClearSprites ();
-    
+    t1 = web_perf_now ();
+    web_perf_frame_us += t1 - t0;
+
     // check for new console commands.
     NetUpdate ();
 
+    // --- BSP walk + seg column draw (interleaved via R_StoreWallRange) ---
+    t0 = web_perf_now ();
     // The head node is the last node output.
     R_RenderBSPNode (numnodes-1);
-    
+    t1 = web_perf_now ();
+    web_perf_bsp_us += t1 - t0;
+
     // Check for new console commands.
     NetUpdate ();
-    
+
+    // --- flat planes ---
+    t0 = web_perf_now ();
     R_DrawPlanes ();
-    
+    t1 = web_perf_now ();
+    web_perf_planes_us += t1 - t0;
+
     // Check for new console commands.
     NetUpdate ();
-    
+
+    // --- masked sprites + midtextures ---
+    t0 = web_perf_now ();
     R_DrawMasked ();
+    t1 = web_perf_now ();
+    web_perf_masked_us += t1 - t0;
+
+    web_perf_frame_count++;   // webdoom: count rendered frames
 
     R_InterpolateSectors (true);
 
     // Check for new console commands.
-    NetUpdate ();				
+    NetUpdate ();
 }

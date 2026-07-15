@@ -77,6 +77,7 @@ static const char rcsid[] = "$Id: d_main.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 
 #include "d_main.h"
 #include "web.h"	// webdoom file registry
+#include "perf.h"	// webdoom: per-stage timing
 
 //
 // D-DoomLoop()
@@ -195,7 +196,7 @@ void R_ExecuteSetViewSize (void);
 // runs as a state machine: D_Display arms it, D_DoomFrame steps it once
 // per animation frame until done. Game tics pause meanwhile, as vanilla's
 // blocking loop did.
-static boolean wipeactive;
+boolean wipeactive;           // webdoom: non-static so bench can skip it
 static int     wipestart;
 
 static void D_WipeFrame (void)
@@ -395,13 +396,17 @@ void D_DoomFrame (void)
     // process one or more tics
     if (singletics)
     {
+	double _ts;  // webdoom: perf sim start (must be first for gnu89)
 	I_StartTic ();
 	D_ProcessEvents ();
 	G_BuildTiccmd (&netcmds[consoleplayer][maketic%BACKUPTICS]);
 	if (advancedemo)
 	    D_DoAdvanceDemo ();
 	M_Ticker ();
+	_ts = web_perf_now ();  // webdoom: time the sim tick
 	G_Ticker ();
+	web_perf_sim_us += web_perf_now () - _ts;
+	web_perf_tic_count++;
 	gametic++;
 	maketic++;
     }

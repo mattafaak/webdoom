@@ -1,20 +1,43 @@
 {
-  "note": "render+sim fps (doom.wad attract demos, best-of-5, -nodraw) before/after the fixed-point inline+int64 change, on the network's weakest devices. End-to-end is within noise everywhere; the real wins are complexity/size/exactness, not fps.",
-  "frameThroughput": {
-    "baseline_commit": "f92fc05",
-    "baseline_wasmBytes": 357301,
-    "optimized_wasmBytes": 356680,
-    "avg_fps": {
-      "alder-i9-12900K": { "before": 204937 },
-      "tank-i5-8350U":   { "before": 105868, "after": 103648 },
-      "pi5-aarch64":     { "before": 79377,  "after": 80128 },
-      "wbox-amd-g-t56n": { "before": 20697,  "after": 21107 }
+  "schemaVersion": 2,
+  "note": "v1 fps and microbench data preserved under history.v1. v2 adds perStage per-host data from the render pass (no -nodraw). The fleet runner (task 0.2) branches on schemaVersion to consume perStage.",
+  "history": {
+    "v1": {
+      "note": "render+sim fps (doom.wad attract demos, best-of-5, -nodraw) before/after the fixed-point inline+int64 change, on the network's weakest devices. End-to-end is within noise everywhere; the real wins are complexity/size/exactness, not fps.",
+      "frameThroughput": {
+        "baseline_commit": "f92fc05",
+        "baseline_wasmBytes": 357301,
+        "optimized_wasmBytes": 356680,
+        "avg_fps": {
+          "alder-i9-12900K": { "before": 204937 },
+          "tank-i5-8350U":   { "before": 105868, "after": 103648 },
+          "pi5-aarch64":     { "before": 79377,  "after": 80128 },
+          "wbox-amd-g-t56n": { "before": 20697,  "after": 21107 }
+        }
+      },
+      "primitiveMicrobench": {
+        "note": "isolated wasm FixedDiv, 2e8 iters, double path vs int64 path, ms (lower=faster). Chosen: int64.",
+        "double_ms": { "alder": 419, "pi5": 754, "wbox": 12304, "tank": 964 },
+        "int64_ms":  { "alder": 403, "pi5": 630, "wbox": 13054, "tank": 2725 },
+        "int64_vs_double": { "alder": 1.04, "pi5": 1.20, "wbox": 0.94, "tank": 0.35 }
+      }
     }
   },
-  "primitiveMicrobench": {
-    "note": "isolated wasm FixedDiv, 2e8 iters, double path vs int64 path, ms (lower=faster). Chosen: int64.",
-    "double_ms": { "alder": 419, "pi5": 754, "wbox": 12304, "tank": 964 },
-    "int64_ms":  { "alder": 403, "pi5": 630, "wbox": 13054, "tank": 2725 },
-    "int64_vs_double": { "alder": 1.04, "pi5": 1.20, "wbox": 0.94, "tank": 0.35 }
+  "perStage": {
+    "note": "Per-stage ms/frame from the render pass (doom.wad attract demos, best-of-3, no -nodraw). stages: frame-setup+clears, bsp+segs (R_RenderBSPNode, interleaved), planes (R_DrawPlanes), masked (R_DrawMasked). sim: G_Ticker ms/tic. Recorded by bench.mjs schemaVersion 2.",
+    "alder-i9-12900K": {
+      "commit": "HEAD",
+      "wasmBytes": 357787,
+      "reps": 3,
+      "demos": {
+        "demo1": { "frames": 1709, "frame_ms": 0.001, "bsp_ms": 0.027, "planes_ms": 0.024, "masked_ms": 0.012, "sum_ms": 0.064, "sim_ms_per_tic": 0.010 },
+        "demo2": { "frames": 2346, "frame_ms": 0.001, "bsp_ms": 0.037, "planes_ms": 0.024, "masked_ms": 0.010, "sum_ms": 0.072, "sim_ms_per_tic": 0.011 },
+        "demo3": { "frames": 3862, "frame_ms": 0.001, "bsp_ms": 0.030, "planes_ms": 0.019, "masked_ms": 0.010, "sum_ms": 0.060, "sim_ms_per_tic": 0.007 }
+      },
+      "simFpsNodraw": { "demo1": 136743, "demo2": 114916, "demo3": 118942, "avg": 123534 }
+    },
+    "wbox-amd-g-t56n": null,
+    "tank-i5-8350U":   null,
+    "pi5-aarch64":     null
   }
 }
