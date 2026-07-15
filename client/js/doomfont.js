@@ -20,6 +20,10 @@ export async function loadDoomFont() {
         if (!w || !h || w > 320 || h > 200) return null;
         const canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
+        // patch vertical/horizontal offsets — punctuation glyphs use these
+        // to sit at the right height (comma low, apostrophe high, etc.)
+        canvas.topoff = v.getInt16(6, true);
+        canvas.leftoff = v.getInt16(4, true);
         const ctx = canvas.getContext('2d');
         const img = ctx.createImageData(w, h);
         for (let x = 0; x < w; x++) {
@@ -80,8 +84,11 @@ export async function loadDoomFont() {
         canvas.height = LH * scale;
         const ctx = canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false;
+        // draw each glyph at its patch offset (V_DrawPatch: top = -topoffset)
+        // so punctuation lands at the correct height within the line
         for (const p of parts)
-            if (p.g) ctx.drawImage(p.g, p.x * scale, 0, p.g.width * scale, p.g.height * scale);
+            if (p.g) ctx.drawImage(p.g, p.x * scale, -p.g.topoff * scale,
+                p.g.width * scale, p.g.height * scale);
         return canvas;
     }
 

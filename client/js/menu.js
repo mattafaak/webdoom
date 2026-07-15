@@ -33,31 +33,63 @@ export function createMenu(font, host) {
         if (hidden || !screen()) return;
         const s = screen();
 
+        // A long list (Doom II's 32 maps, Master Levels) wraps into
+        // columns and gets the full viewport width, centred; a normal
+        // menu keeps the fixed 1080 block with items left-anchored.
+        const wrapped = !s.items.some(it => it.thumb) && s.items.length > 8;
+        root.classList.toggle('wide', wrapped);
+
+        // Pick the scale. Cycleable values always reserve their "< >"
+        // width (so scale is stable regardless of selection). For a
+        // wrapped list, choose the largest clean scale whose column
+        // layout fits both the width and the viewport height. Row heights
+        // are skull-driven (fixed), so all scales are nearest-neighbour
+        // crisp. Title is one notch larger (heading), header a touch
+        // smaller (secondary).
+        // width uses maxValue (the item's longest possible value) where
+        // given, so cycling a value never re-scales the menu
+        const sizingLabel = it => {
+            const v = it.maxValue ?? (it.value !== undefined ? String(it.value) : undefined);
+            return it.label + (v !== undefined ? (it.cycle ? `< ${v} >` : v) : '');
+        };
+        const SKULL = 64, GAPH = 56, ROWH = 66;
+        const availW = Math.min(window.innerWidth * 0.94, wrapped ? 1800 : 1080);
+        const availH = window.innerHeight * 0.72;
+        const px = it => font.text(sizingLabel(it) || 'M', { scale: 1 }).width;
+        const w1 = Math.max(1, Math.max(0, ...s.items.map(px)));
+
+        let scale = 5;
+        if (wrapped) {
+            while (scale > 2) {
+                const cols = Math.max(1, Math.floor((availW + GAPH) / (SKULL + w1 * scale + GAPH)));
+                if (Math.ceil(s.items.length / cols) * ROWH <= availH) break;
+                scale--;
+            }
+        } else {
+            // single column: largest scale that fits the block width
+            while (scale > 3 && SKULL + w1 * scale > availW) scale--;
+        }
+        const titleScale = Math.min(6, scale + 1);
+        const headerScale = Math.min(4, scale);
+
         if (s.logo !== false && stack.length === 1 && logo)
             root.appendChild(Object.assign(document.createElement('div'), { className: 'logo' })).appendChild(logo);
         if (s.title)
             root.appendChild(Object.assign(document.createElement('div'), { className: 'mtitle' }))
-                .appendChild(font.text(s.title, { scale: 3 }));
+                .appendChild(font.text(s.title, { scale: titleScale }));
         if (s.header) {
             const h = Object.assign(document.createElement('div'), { className: 'mheader' });
             for (const part of s.header) {
-                const c = font.text(part.text, { scale: 3, color: part.color ?? null });
+                const c = font.text(part.text, { scale: headerScale, color: part.color ?? null });
                 c.dataset.pname = part.text.trim();     // tests + a11y
                 h.appendChild(c);
             }
             root.appendChild(h);
         }
 
-        // big type by default (~skull height); step down at clean integer
-        // scales as labels get longer so single-column lists stay onscreen
-        // widthwise. Every scale is nearest-neighbour crisp.
-        const longest = Math.max(0, ...s.items.map(it =>
-            (it.label + (it.value !== undefined ? String(it.value) : '')).length
-            + (it.cycle ? 4 : 0)));   // room for the "< >" affordance
-        const scale = longest > 30 ? 3 : longest > 20 ? 4 : 5;
-
         const list = Object.assign(document.createElement('div'), { className: 'items' });
         if (s.items.some(it => it.thumb)) list.classList.add('noWrap');   // art rows: one column
+        if (wrapped) list.style.alignSelf = 'center';   // multi-column: centre in the wide block
         s.items.forEach((item, i) => {
             const row = document.createElement('div');
             row.className = 'row' + (i === sel ? ' sel' : '');
@@ -69,11 +101,9 @@ export function createMenu(font, host) {
                 label = `${item.label}${entry.value}_`;
             else {
                 const val = item.value !== undefined ? String(item.value) : '';
-                // a left/right-cycleable value shows "< value >" when
-                // selected, as a discoverability cue
-                label = (i === sel && item.cycle && val)
-                    ? `${item.label}< ${val} >`
-                    : item.label + val;
+                // cycleable values always show "< value >" — a fixed-width
+                // affordance that also signals ←/→ adjustability
+                label = (item.cycle && val) ? `${item.label}< ${val} >` : item.label + val;
             }
             row.dataset.label = label.toUpperCase();    // tests + accessibility
             row.setAttribute('role', 'menuitem');
@@ -88,6 +118,20 @@ export function createMenu(font, host) {
             list.appendChild(row);
         });
         root.appendChild(list);
+
+        // Wrapped multi-column lists (Doom II's 32 maps, Master Levels):
+        // constrain columns to the menu's fixed width so they never run off
+        // the screen. Measure the widest row, then cap the height so it
+        // wraps into only as many columns as fit.
+        if (!list.classList.contains('noWrap') && list.children.length > 8) {
+            const rows = [...list.children];
+            const rowH = rows[0].offsetHeight, gapV = 6, gapH = 56;
+            const rowW = Math.max(...rows.map(r => r.offsetWidth));
+            const avail = root.clientWidth || window.innerWidth;
+            const cols = Math.max(1, Math.floor((avail + gapH) / (rowW + gapH)));
+            const perCol = Math.ceil(rows.length / cols);
+            list.style.maxHeight = (perCol * (rowH + gapV)) + 'px';
+        }
     }
 
     function activate() {

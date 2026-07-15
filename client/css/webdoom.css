@@ -82,7 +82,13 @@ html, body {
     align-items: flex-start;
     gap: 6px;
     user-select: none;
+    /* fixed width, centred in the stage: item rows left-anchor here and
+       grow rightward, so a row changing width never shifts the others
+       (title/header still centre via align-self) */
+    width: min(94vw, 1080px);
 }
+/* long wrapped lists (map/master-levels pickers) get the full width */
+#dmenu.wide { width: min(94vw, 1800px); }
 
 #dmenu .logo { align-self: center; margin-bottom: 24px; }
 #dmenu .mtitle { align-self: center; margin-bottom: 14px; opacity: .85; }
@@ -100,10 +106,11 @@ html, body {
     flex-direction: column;
     flex-wrap: wrap;
     align-content: flex-start;
-    max-height: min(66vh, 680px);
     gap: 6px 56px;
+    /* max-height (which drives column wrapping) is set per-screen by
+       menu.js so long lists wrap into only as many columns as fit */
 }
-#dmenu .items.noWrap { flex-wrap: nowrap; max-height: none; gap: 6px; }
+#dmenu .items.noWrap { flex-wrap: nowrap; gap: 6px; }
 
 /* fixed row height (covers the ×3 skull) so the cursor appearing on a
    row never grows it — menu items stay put as selection moves */

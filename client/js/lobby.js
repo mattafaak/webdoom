@@ -271,15 +271,18 @@ function lobbyScreen() {
         onBack: leaveLobby,
         // GAME/MAP/MODE/SKILL/COLOR: Enter opens the full picker, ←/→
         // cycles the value in place (both land on the same result)
+        // maxValue = the longest value each cycler can show, so the menu
+        // scale/width never changes as you cycle through them
         items: [
             { label: 'START GAME', action: () => lobby.start() },
             { label: 'GAME: ', value: entry(p.wad)?.title ?? p.wad,
+              maxValue: sortedGames().reduce((a, b) => b.title.length > a.length ? b.title : a, ''),
               action: () => menu.push(gamePick()), cycle: cycleGame },
-            { label: 'MAP: ', value: mapName(p),
+            { label: 'MAP: ', value: mapName(p), maxValue: 'MAP00',
               action: () => menu.push(mapPick()), cycle: cycleMap },
-            { label: 'MODE: ', value: mode,
+            { label: 'MODE: ', value: mode, maxValue: 'DEATHMATCH 2.0',
               action: () => menu.push(modePick()), cycle: cycleMode },
-            { label: 'SKILL: ', value: SKILLS[p.skill - 1] ?? '',
+            { label: 'SKILL: ', value: SKILLS[p.skill - 1] ?? '', maxValue: "I'M TOO YOUNG TO DIE",
               action: () => menu.push(skillPick()), cycle: cycleSkill },
             { label: 'OPTIONS', action: () => menu.push(optionsPick()) },
             {
