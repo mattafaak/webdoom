@@ -14,6 +14,7 @@ const MAXPLAYERS = 4;
 const CMD_SIZE = 8;
 const GRACE_MS = 250;       // fabricate a missing cmd after this
 const DROP_MS = 5000;       // remove the player after this
+const JOIN_MARGIN = 12;     // tics between a drop-in going live and spawning
 
 const defaultParams = () => ({
     wad: 'doom.wad', episode: 1, map: 1, skill: 3, mode: 'coop',
@@ -41,10 +42,29 @@ export function createGame(log = console.log) {
     };
 
     function lobbyConnect(ws) {
+        // Join in progress: a game is live — hand this client the first free
+        // slot and the running game's params so it can drop in via catch-up.
+        if (session) {
+            const p = session.players.find(q => !q.ingame && !q.ws && !q.joining);
+            if (!p) { ws.send(JSON.stringify({ t: 'full', reason: 'game full' })); ws.close(); return; }
+            p.joining = true;
+            const s = p.slot;
+            ws.send(JSON.stringify({ t: 'welcome', slot: s, color: COLORS[s] }));
+            ws.send(JSON.stringify({ t: 'launch', params: session.params, numplayers: MAXPLAYERS,
+                slots: session.slots, names: session.names, join: true, frontier: session.tic }));
+            log(`lobby: ${COLORS[s]} joining in progress (frontier ${session.tic})`);
+            ws.on('message', raw => {
+                let m; try { m = JSON.parse(raw); } catch { return; }
+                if (m.t === 'ping') ws.send(JSON.stringify({ t: 'pong', t0: m.t0 }));
+            });
+            ws.on('close', () => { if (session && !p.ingame && !p.ws) p.joining = false; });
+            return;
+        }
+
         let slot = 0;
         while (lobby.has(slot)) slot++;
-        if (slot >= MAXPLAYERS || session) {
-            ws.send(JSON.stringify({ t: 'full', reason: session ? 'game in progress' : 'lobby full' }));
+        if (slot >= MAXPLAYERS) {
+            ws.send(JSON.stringify({ t: 'full', reason: 'lobby full' }));
             ws.close();
             return;
         }
@@ -119,12 +139,17 @@ export function createGame(log = console.log) {
             tic: 0,                     // next tic to seal
             timer: null,
             launched: 0,
+            params: { ...params },      // frozen for the game; handed to drop-ins
+            slots,                      // the tic-0 ingame slots
+            names: null,
+            history: [],                // every sealed bundle, for drop-in catch-up
         };
         let n = 3;
         const tick = () => {
             if (!session) return;
             if (n > 0) { cast({ t: 'countdown', n: n-- }); setTimeout(tick, 1000); return; }
             const names = [0, 1, 2, 3].map(s => lobby.has(s) ? displayName(s) : null);
+            session.names = names;
             cast({ t: 'launch', params, numplayers: MAXPLAYERS, slots, names });
             log(`game: launching ${slots.length}p (slots ${slots.join(',')}) ${params.wad} E${params.episode}M${params.map} skill ${params.skill} ${params.mode}`);
             session.launched = Date.now();
@@ -151,11 +176,26 @@ export function createGame(log = console.log) {
         p.lastSeen = Date.now();
         ws.binaryType = 'nodebuffer';
 
+        // Drop-in: a slot connecting while not-ingame during a live game is a
+        // joiner. Stream the whole sealed history so it can re-simulate to the
+        // current frontier; live bundles then follow via sealTic's broadcast.
+        if (!p.ingame) {
+            p.joining = true;
+            for (const b of session.history) ws.send(b);
+            log(`game: ${COLORS[slot]} catching up (${session.history.length} tics)`);
+        }
+
         ws.on('message', buf => {
             if (!session || buf.length !== 4 + CMD_SIZE) return;
             const tic = buf.readUInt32LE(0);
             p.sentAny = true;
             p.lastSeen = Date.now();
+            // a joiner's first cmd means it caught up and went live: promote
+            // it a short margin ahead so its cmds are ready by the join tic
+            if (p.joining && !p.ingame && !p.joinAt) {
+                p.joinAt = session.tic + JOIN_MARGIN;
+                log(`game: ${COLORS[slot]} live — dropping in at tic ${p.joinAt}`);
+            }
             if (tic < session.tic || tic > session.tic + 512) return;  // sealed or absurd
             p.cmds.set(tic, buf.subarray(4));
             seal();
@@ -164,6 +204,8 @@ export function createGame(log = console.log) {
             if (!session) return;
             p.ws = null;
             p.ingame = false;
+            p.joining = false;
+            p.joinAt = 0;
             log(`game: ${COLORS[p.slot]} disconnected`);
             if (session.players.every(q => !q.ingame)) endSession('all players left');
         });
@@ -171,12 +213,16 @@ export function createGame(log = console.log) {
 
     const allJoined = () => session.players.every(p => p.joined || !p.ingame);
 
-    // Seal every tic whose live cmds are all present.
+    // Seal every tic whose live cmds are all present. Recompute the live set
+    // each pass: sealTic may promote a drop-in mid-loop, and the next tic
+    // must then wait for that new player's cmd rather than fabricating it.
     function seal() {
-        if (!session) return;
-        const live = session.players.filter(p => p.ingame);
-        if (!live.length || !allJoined()) return;
-        while (live.every(p => p.cmds.has(session.tic))) sealTic();
+        if (!session || !allJoined()) return;
+        for (;;) {
+            const live = session.players.filter(p => p.ingame);
+            if (!live.length || !live.every(p => p.cmds.has(session.tic))) break;
+            sealTic();
+        }
     }
 
     // Grace/drop sweep: keeps the game moving when a client stalls.
@@ -217,6 +263,15 @@ export function createGame(log = console.log) {
     // detector fully armed for every real cmd.
     function sealTic() {
         const tic = session.tic++;
+        // A drop-in goes live exactly at its scheduled tic — every client
+        // sees the ingame bit flip on the same sealed tic and spawns it in
+        // lockstep (engine's PST_REBORN path).
+        for (const p of session.players)
+            if (p.joinAt && tic >= p.joinAt) {
+                p.ingame = true;
+                p.joinAt = 0;
+                log(`game: ${COLORS[p.slot]} dropped in at tic ${tic}`);
+            }
         const buf = Buffer.alloc(6 + CMD_SIZE * session.numplayers);
         buf.writeUInt32LE(tic, 0);
         let mask = 0, fab = 0;
@@ -230,6 +285,7 @@ export function createGame(log = console.log) {
         });
         buf[4] = mask;
         buf[5] = fab;
+        session.history.push(buf);      // for drop-in catch-up replay
         for (const p of session.players)
             if (p.ws?.readyState === 1) p.ws.send(buf);
     }

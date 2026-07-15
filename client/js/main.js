@@ -91,7 +91,18 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
         : null;
 
     doom.callMain([...pwads, ...args]);
-    relay?.go();
+    if (net?.join) {
+        // Drop-in: re-simulate the streamed cmd history to the live frontier
+        // (headless, at speed), then park the view on a live player until our
+        // own slot spawns — the engine snaps it back to us at that tic.
+        loading.show('JOINING — CATCHING UP');
+        await relay.catchUp(net.frontier ?? 0, (done, total) =>
+            loading.set('JOINING — CATCHING UP', total ? Math.min(1, done / total) : 0));
+        const anchor = doom._web_first_ingame();
+        if (anchor >= 0 && anchor !== net.slot) doom._web_set_console(anchor);
+    } else {
+        relay?.go();
+    }
     window.doomAudio = createAudio(doom);
     window.webdoom = { doom };              // debug/test handle
     startSync(doom, wads[0].file);

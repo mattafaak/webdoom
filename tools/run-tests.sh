@@ -15,6 +15,10 @@ echo "── netplay determinism (2p, 4p) ────────────�
 node tools/net-test.mjs 2 | tail -2
 node tools/net-test.mjs 4 | tail -2
 
+echo "── drop-in determinism (coop, deathmatch) ──────────────"
+node tools/join-test.mjs | tail -1
+node tools/join-test.mjs dm | tail -1
+
 echo "── browser (SP gate + 2-tab multiplayer) ───────────────"
 DOOM_PORT=8668 DOOM_HOST=127.0.0.1 node server/serve.js & SRV=$!
 trap "kill $SRV 2>/dev/null" EXIT

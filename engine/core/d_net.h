@@ -137,6 +137,15 @@ void NetUpdate (void);
 // webdoom: true if the relay fabricated this player's cmd for this tic
 boolean D_NetCmdFabricated (int player, int tic);
 
+// webdoom: gametic at which each slot went live (0 = present from the
+// start). A drop-in's ring history is stale for its first cycle, so the
+// consistancy check skips a slot until gametic reaches joinTic + BACKUPTICS.
+extern int web_joinTic[];
+
+// webdoom: true only while a drop-in is re-simulating history at speed;
+// tells G_Ticker to skip the display-only tickers during the replay.
+extern boolean web_replaying;
+
 // Broadcasts special packets to other players
 //  to notify of game exit
 void D_QuitNetGame (void);

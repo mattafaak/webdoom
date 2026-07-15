@@ -67,9 +67,10 @@ export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, nam
 
     const scratch = doom._web_net_scratch();
     const ingamePtr = doom._malloc(8);
-    let ready = false;
-    const backlog = [];
+    let live = false;               // once true, bundles just fill netcmds
+    const queue = [];               // bundles awaiting go()/catchUp
 
+    // Push one sealed bundle into the engine (netcmds + per-tic ingame ring).
     const deliver = data => {
         const b = new Uint8Array(data);
         if (b.length !== 6 + CMD_SIZE * numplayers) return;
@@ -86,14 +87,40 @@ export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, nam
     };
 
     ws.onmessage = ev => {
-        if (!ready) { backlog.push(ev.data); return; }
-        deliver(ev.data);
+        if (live) deliver(ev.data);
+        else queue.push(ev.data);   // buffered until go()/catchUp drains it
     };
 
     return {
-        // call once callMain has run (scratch/netcmds are live from boot,
-        // but bundles arriving mid-init are queued to be safe)
-        go() { ready = true; for (const d of backlog.splice(0)) deliver(d); },
+        // Non-join: start live delivery (bundles fill netcmds; the rAF loop's
+        // TryRunTics paces them). Call once callMain has run.
+        go() { live = true; for (const d of queue.splice(0)) deliver(d); },
+
+        // Join in progress: replay the streamed history (and any live bundles
+        // that arrive meanwhile) UNPACED — one web_replay_tic per bundle — up
+        // to the frontier, then switch to live. onProgress(done, total) drives
+        // the loading bar. The sim rebuilds the exact world by construction.
+        async catchUp(frontier, onProgress) {
+            const CHUNK = 512;      // replay this many tics before yielding
+            const yieldToNet = () => new Promise(r => setTimeout(r, 0));
+            for (;;) {
+                let n = 0;
+                while (queue.length) {
+                    deliver(queue.shift());     // netcmds for this tic
+                    doom._web_replay_tic();      // advance the sim one tic
+                    if (++n >= CHUNK) {
+                        onProgress?.(doom._web_gametic(), frontier);
+                        await yieldToNet();      // let more bundles arrive
+                        n = 0;
+                    }
+                }
+                onProgress?.(doom._web_gametic(), frontier);
+                if (doom._web_gametic() >= frontier && !queue.length) break;
+                await yieldToNet();
+            }
+            live = true;
+            for (const d of queue.splice(0)) deliver(d);
+        },
         quit() { ws.close(); },
     };
 }

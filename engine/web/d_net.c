@@ -32,10 +32,13 @@ int      ticdup = 1;
 // The JS bridge can raise it from measured RTT before the game starts.
 static int web_inputdelay = 1;
 static int web_numplayers = 1;
+static int web_localslot = 0;   // this client's own slot (for view auto-restore)
+boolean web_replaying = false;  // true only inside web_replay_tic (skip cosmetic tickers)
 
 void D_ProcessEvents (void);
 void G_BuildTiccmd (ticcmd_t* cmd);
 void D_DoAdvanceDemo (void);
+void ST_Start (void);
 extern boolean advancedemo;
 
 // Send one local ticcmd to the relay. No-op stub until the JS side
@@ -56,6 +59,7 @@ EMSCRIPTEN_KEEPALIVE
 void web_net_setup (int player, int numplayers, int ingamemask)
 {
     consoleplayer = displayplayer = player;
+    web_localslot = player;
     web_numplayers = numplayers;
     web_ingamemask = ingamemask;
     netgame = true;
@@ -77,20 +81,30 @@ void web_net_set_delay (int tics)
 // client) and carries no valid consistancy checksum.
 //
 static byte fabricated[BACKUPTICS];
+static byte ingamering[BACKUPTICS];     // per-tic ingame mask, applied at the sim tic
+int web_joinTic[MAXPLAYERS];            // gametic each slot went live (consistancy skip)
 
 EMSCRIPTEN_KEEPALIVE
 void web_net_bundle (int tic, ticcmd_t* cmds, byte* ingame, int fabmask)
 {
     int i;
+    byte mask = 0;
 
     fabricated[tic % BACKUPTICS] = (byte) fabmask;
     for (i = 0; i < web_numplayers; i++)
     {
-        playeringame[i] = ingame[i];
         if (ingame[i])
+        {
+            mask |= 1 << i;
             netcmds[i][tic % BACKUPTICS] = cmds[i];
+        }
         nettics[i] = tic + 1;
     }
+    // The roster is applied at the sim tic (apply_roster), NOT here: bundles
+    // arrive ahead of the sim, so writing playeringame now would flip a
+    // join/leave at a per-client-variable moment and desync. Stash the mask
+    // per tic instead.
+    ingamering[tic % BACKUPTICS] = mask;
 }
 
 //
@@ -189,6 +203,88 @@ void D_QuitNetGame (void)
 }
 
 //
+// apply_roster
+// Bring playeringame into line with the sealed mask for `tic` at the exact
+// instant the sim runs it (netplay only — single player's roster is fixed
+// by D_CheckNetGame). A slot going 0->1 is a drop-in: mark it PST_REBORN so
+// G_Ticker spawns it (coop start or a P_Random deathmatch spot) on this very
+// tic, identically on every client because they share the deterministic
+// state and the sealed mask.
+//
+static void apply_roster (int tic)
+{
+    byte mask = ingamering[tic % BACKUPTICS];
+    int i;
+
+    for (i = 0; i < web_numplayers; i++)
+    {
+        boolean now = (mask >> i) & 1;
+        if (now && !playeringame[i])
+        {
+            players[i].playerstate = PST_REBORN;
+            web_joinTic[i] = tic;
+            // our own slot just spawned: snap the view back to it (the
+            // catch-up replay had parked it on an already-live player) and
+            // rebind the status bar to us
+            if (i == web_localslot)
+            {
+                consoleplayer = displayplayer = i;
+                ST_Start ();
+            }
+        }
+        playeringame[i] = now;
+    }
+}
+
+//
+// run_tic
+// Advance the simulation exactly one tic. Shared by the live loop below and
+// the join catch-up replay (web_replay_tic). Does not touch the network or
+// the clock pacing — the caller owns those.
+//
+static void run_tic (void)
+{
+    if (netgame)
+        apply_roster (gametic);
+    if (advancedemo)
+        D_DoAdvanceDemo ();
+    M_Ticker ();
+    G_Ticker ();
+    gametic++;
+    web_lastticms = emscripten_get_now ();
+}
+
+//
+// web_replay_tic
+// Run one sim tic unpaced (no wall-clock gate, no render/sound), consuming
+// the bundle a JS catch-up loop has already fed into netcmds. Lets a joiner
+// re-simulate the whole cmd history to the live frontier in a fraction of a
+// second, arriving at the identical world state by construction.
+//
+EMSCRIPTEN_KEEPALIVE
+void web_replay_tic (void)
+{
+    web_replaying = true;
+    run_tic ();
+    web_replaying = false;
+}
+
+//
+// web_first_ingame
+// Lowest currently-live slot (or -1). A joiner parks the view here for the
+// brief window between going live and its own slot spawning.
+//
+EMSCRIPTEN_KEEPALIVE
+int web_first_ingame (void)
+{
+    int i;
+    for (i = 0; i < MAXPLAYERS; i++)
+        if (playeringame[i])
+            return i;
+    return -1;
+}
+
+//
 // TryRunTics
 // Run every tic that is both sealed and due. Never blocks, never spins:
 // if the relay is behind, we render the frozen world and return.
@@ -256,12 +352,7 @@ void TryRunTics (void)
 
     while (counts-- > 0)
     {
-        if (advancedemo)
-            D_DoAdvanceDemo ();
-        M_Ticker ();
-        G_Ticker ();
-        gametic++;
-        web_lastticms = emscripten_get_now ();
+        run_tic ();
         NetUpdate ();   // pick up whatever the frame produced
     }
 }

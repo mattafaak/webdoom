@@ -127,7 +127,7 @@ function enterMultiplayer() {
         .on('launch', async m => {
             if (booted) return;
             booted = true;
-            countdown.show('GO');
+            if (!m.join) countdown.show('GO');    // drop-ins get the catch-up bar, not a countdown
             // Sample RTT and size the buffer to a ROBUST jitter estimate:
             // the 75th-percentile spread above the fastest ping, not the mean
             // (already in lockstep's inherent lag) nor the worst spike. On a
@@ -143,7 +143,8 @@ function enterMultiplayer() {
             bootDoom({
                 wads: stackFor(m.params.wad),
                 args: launchArgs(m.params, isCommercial(e)),
-                net: { slot: lobby.slot, numplayers: m.numplayers, jitterMs, names: m.names, slots: m.slots },
+                net: { slot: lobby.slot, numplayers: m.numplayers, jitterMs, names: m.names, slots: m.slots,
+                       join: !!m.join, frontier: m.frontier },
                 onQuit: returnToMenu,
             }).then(() => {
                 countdown.dismiss();

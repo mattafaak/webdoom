@@ -76,6 +76,23 @@ int web_ui_mode (void)
 }
 
 //
+// web_set_console
+// Repoint the console/display player. A drop-in boots as its own (not-yet-
+// ingame) slot, whose mobj is NULL during catch-up replay; point the
+// cosmetic tickers at an already-live slot for the replay, then restore the
+// real slot when the player spawns. consoleplayer is display-only — it never
+// touches the deterministic simulation — so this cannot affect lockstep.
+//
+void ST_Start (void);
+
+EMSCRIPTEN_KEEPALIVE
+void web_set_console (int player)
+{
+    consoleplayer = displayplayer = player;
+    ST_Start ();        // rebind the status bar to the new view player
+}
+
+//
 // Table-generation access for tools/gen-tables.mjs: run the generator
 // standalone and read the raw arrays (the fix stream starts empty).
 //
@@ -182,6 +199,19 @@ EMSCRIPTEN_KEEPALIVE
 int web_gametic (void)
 {
     return gametic;
+}
+
+//
+// web_ingame_mask: current playeringame bitmask (drop-in test assertion).
+//
+EMSCRIPTEN_KEEPALIVE
+int web_ingame_mask (void)
+{
+    int i, m = 0;
+    for (i = 0; i < MAXPLAYERS; i++)
+        if (playeringame[i])
+            m |= 1 << i;
+    return m;
 }
 
 //

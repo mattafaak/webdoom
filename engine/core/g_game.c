@@ -681,8 +681,11 @@ void G_Ticker (void)
 	    if (netgame && !netdemo && !(gametic%ticdup) )
 	    {
 		// webdoom: relay-fabricated cmds (stalled client) carry no
-		// valid checksum — skip only those; real cmds stay verified
+		// valid checksum — skip only those; real cmds stay verified.
+		// A dropped-in slot's ring is stale for its first cycle, so
+		// skip it until its join tic is a full BACKUPTICS behind.
 		if (gametic > BACKUPTICS
+		    && gametic >= web_joinTic[i] + BACKUPTICS
 		    && !D_NetCmdFabricated (i, gametic)
 		    && consistancy[i][buf] != cmd->consistancy)
 		{
@@ -729,12 +732,20 @@ void G_Ticker (void)
     // do main actions
     switch (gamestate) 
     { 
-      case GS_LEVEL: 
-	P_Ticker (); 
-	ST_Ticker (); 
-	AM_Ticker (); 
-	HU_Ticker ();            
-	break; 
+      case GS_LEVEL:
+	P_Ticker ();
+	// webdoom: the cosmetic tickers (status bar/automap/HUD) only drive
+	// local display — status uses M_Random, not the sim RNG — so a drop-in
+	// skips them while re-simulating history at speed. That keeps the
+	// deterministic sim (P_Ticker) bit-identical while dodging the NULL
+	// player-mobj deref they'd hit for the not-yet-spawned joiner.
+	if (!web_replaying)
+	{
+	    ST_Ticker ();
+	    AM_Ticker ();
+	    HU_Ticker ();
+	}
+	break;
 	 
       case GS_INTERMISSION: 
 	WI_Ticker (); 
