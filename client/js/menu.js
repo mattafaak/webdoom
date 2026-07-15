@@ -89,7 +89,9 @@ export function createMenu(font, host) {
 
         const list = Object.assign(document.createElement('div'), { className: 'items' });
         if (s.items.some(it => it.thumb)) list.classList.add('noWrap');   // art rows: one column
-        if (wrapped) list.style.alignSelf = 'center';   // multi-column: centre in the wide block
+        // centre the items under the title/logo, EXCEPT when a value can be
+        // cycled — those left-anchor so a changing value never shifts rows
+        if (wrapped || !s.items.some(it => it.cycle)) list.style.alignSelf = 'center';
         s.items.forEach((item, i) => {
             const row = document.createElement('div');
             row.className = 'row' + (i === sel ? ' sel' : '');
@@ -170,16 +172,17 @@ export function createMenu(font, host) {
         }
         const n = screen().items.length;
         const item = screen().items[sel];
-        // rows per wrapped column, for left/right jumps in long lists
+        // rows per column (for column jumps in wrapped multi-column lists)
         const rows = [...root.querySelectorAll('.items .row')];
         const col = rows.length ? rows.filter(r => r.offsetLeft === rows[0].offsetLeft).length : n;
+        const multiCol = col < n;   // list actually wrapped into >1 column
         switch (e.code) {
             case 'ArrowUp':   sel = (sel + n - 1) % n; break;
             case 'ArrowDown': sel = (sel + 1) % n; break;
-            // left/right adjusts a cycleable value in place; otherwise it
-            // jumps a column (for wrapped long lists)
-            case 'ArrowLeft':  if (item?.cycle) item.cycle(-1); else sel = Math.max(0, sel - col); break;
-            case 'ArrowRight': if (item?.cycle) item.cycle(1);  else sel = Math.min(n - 1, sel + col); break;
+            // left/right adjusts a cycleable value; in a wrapped list it
+            // jumps a column; on a plain single-column item it does nothing
+            case 'ArrowLeft':  if (item?.cycle) item.cycle(-1); else if (multiCol) sel = Math.max(0, sel - col); break;
+            case 'ArrowRight': if (item?.cycle) item.cycle(1);  else if (multiCol) sel = Math.min(n - 1, sel + col); break;
             case 'Enter':     activate(); break;
             case 'Escape': case 'Backspace': back(); break;
             default: return;

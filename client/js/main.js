@@ -9,6 +9,20 @@ import { loadPersisted, startSync } from './persist.js';
 
 const status = msg => { document.getElementById('status').textContent = msg; };
 
+// centred loading panel + progress bar
+const loading = {
+    show(label) {
+        document.getElementById('loading-label').textContent = label;
+        document.getElementById('loading-fill').style.width = '0%';
+        document.getElementById('loading').hidden = false;
+    },
+    set(label, frac) {
+        document.getElementById('loading-label').textContent = label;
+        document.getElementById('loading-fill').style.width = `${Math.round((frac ?? 0) * 100)}%`;
+    },
+    hide() { document.getElementById('loading').hidden = true; },
+};
+
 // The engine identifies games by 1993 filenames. Ultimate Doom must be
 // doomu.wad (retail detection); the standalone TCs get the filename of
 // the game mode they are shaped like, or IdentifyVersion finds nothing
@@ -22,6 +36,7 @@ async function fetchWad(file, sha) {
     const res = await fetch(`/wads/${file}?v=${(sha ?? '').slice(0, 8)}`);
     if (!res.ok) throw new Error(`wad fetch failed: ${file} (${res.status})`);
     const total = +res.headers.get('content-length') || 0;
+    const mb = n => (n / 1048576).toFixed(1);
     const parts = [];
     let got = 0;
     const reader = res.body.getReader();
@@ -30,7 +45,8 @@ async function fetchWad(file, sha) {
         if (done) break;
         parts.push(value);
         got += value.length;
-        if (total) status(`fetching ${file} — ${(got/1048576).toFixed(1)} / ${(total/1048576).toFixed(1)} MB`);
+        loading.set(total ? `FETCHING ${file} — ${mb(got)} / ${mb(total)} MB` : `FETCHING ${file}…`,
+            total ? got / total : 0);
     }
     const buf = new Uint8Array(got);
     let o = 0;
@@ -46,17 +62,17 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
     document.getElementById('landing').hidden = true;
     canvas.hidden = false;
 
-    status('loading engine…');
+    loading.show('LOADING ENGINE…');
     const { default: createDoom } = await import('/engine/doom.js');
     const bytes = [];
     for (const w of wads) bytes.push(await fetchWad(w.file, w.sha));
     const persisted = await loadPersisted(wads[0].file);
 
-    status('booting…');
+    loading.set('BOOTING…', 1);
     const doom = await createDoom({
         print: t => console.log(t),
         printErr: t => console.warn(t),
-        onDoomError: msg => status(`engine error: ${msg}`),
+        onDoomError: msg => { loading.hide(); status(`engine error: ${msg}`); },
     });
 
     // no filesystem: WADs live once in the heap, small files in a JS Map
@@ -85,6 +101,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
     const pal = doom._web_palette();
     let palVersion = -1;
 
+    loading.hide();
     status('');
     canvas.focus();
     const input = createInput(doom, canvas, loadSettings());

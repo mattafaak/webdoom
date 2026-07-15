@@ -70,12 +70,19 @@ function returnToMenu() {
     menu.reset(rootScreen());
 }
 
+// a single-map PWAD (a Master Level, at its own slot like MAP25) is
+// launched straight into that map — the engine's New Game would start at
+// MAP01, i.e. the base IWAD's map, not the one you picked.
+const singleMap = w => (w.maps?.length === 1 && !w.maps[0].startsWith('E')) ? +w.maps[0].slice(3) : null;
+
 function spGameScreen() {
     const boot = w => {
         if (booted) return;
         booted = true;
         menu.hide();
-        bootDoom({ wads: stackFor(w.file), onQuit: returnToMenu })
+        const m = singleMap(w);
+        const args = m ? ['-warp', String(m), '-skill', '3'] : [];
+        bootDoom({ wads: stackFor(w.file), args, onQuit: returnToMenu })
             .catch(err => status(String(err)));
     };
     return {
@@ -162,17 +169,21 @@ const setParams = p => {
     lobby.setParams(p);
 };
 
+// choosing a game sets wad + its starting map (a Master Level jumps to
+// its own slot, e.g. MAP25, not MAP01)
+const pickWad = w => setParams({ wad: w.file, episode: 1, map: singleMap(w) ?? 1 });
+
 function gamePick() {
     return picker('CHOOSE GAME', sortedGames().map(w => ({
         label: w.title,
         thumb: font.titleThumb(w.file, 52),
-        apply: () => setParams({ wad: w.file, episode: 1, map: 1 }),
+        apply: () => pickWad(w),
     })).concat(groups().map(g => ({
         label: g,
         action: () => menu.push(picker(g,
             manifest.filter(w => w.group === g).map(w => ({
                 label: w.title,
-                apply: () => setParams({ wad: w.file, episode: 1, map: 1 }),
+                apply: () => pickWad(w),
             })), 2)),
     }))));
 }
