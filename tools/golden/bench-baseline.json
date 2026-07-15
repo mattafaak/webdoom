@@ -9,35 +9,171 @@
         "baseline_wasmBytes": 357301,
         "optimized_wasmBytes": 356680,
         "avg_fps": {
-          "alder-i9-12900K": { "before": 204937 },
-          "tank-i5-8350U":   { "before": 105868, "after": 103648 },
-          "pi5-aarch64":     { "before": 79377,  "after": 80128 },
-          "wbox-amd-g-t56n": { "before": 20697,  "after": 21107 }
+          "alder-i9-12900K": {
+            "before": 204937
+          },
+          "tank-i5-8350U": {
+            "before": 105868,
+            "after": 103648
+          },
+          "pi5-aarch64": {
+            "before": 79377,
+            "after": 80128
+          },
+          "wbox-amd-g-t56n": {
+            "before": 20697,
+            "after": 21107
+          }
         }
       },
       "primitiveMicrobench": {
         "note": "isolated wasm FixedDiv, 2e8 iters, double path vs int64 path, ms (lower=faster). Chosen: int64.",
-        "double_ms": { "alder": 419, "pi5": 754, "wbox": 12304, "tank": 964 },
-        "int64_ms":  { "alder": 403, "pi5": 630, "wbox": 13054, "tank": 2725 },
-        "int64_vs_double": { "alder": 1.04, "pi5": 1.20, "wbox": 0.94, "tank": 0.35 }
+        "double_ms": {
+          "alder": 419,
+          "pi5": 754,
+          "wbox": 12304,
+          "tank": 964
+        },
+        "int64_ms": {
+          "alder": 403,
+          "pi5": 630,
+          "wbox": 13054,
+          "tank": 2725
+        },
+        "int64_vs_double": {
+          "alder": 1.04,
+          "pi5": 1.2,
+          "wbox": 0.94,
+          "tank": 0.35
+        }
       }
     }
   },
   "perStage": {
     "note": "Per-stage ms/frame from the render pass (doom.wad attract demos, best-of-3, no -nodraw). stages: frame-setup+clears, bsp+segs (R_RenderBSPNode, interleaved), planes (R_DrawPlanes), masked (R_DrawMasked). sim: G_Ticker ms/tic. Recorded by bench.mjs schemaVersion 2.",
     "alder-i9-12900K": {
-      "commit": "HEAD",
-      "wasmBytes": 357787,
+      "commit": "15770d9",
+      "date": "2026-07-15",
       "reps": 3,
+      "wasmBytes": 357787,
       "demos": {
-        "demo1": { "frames": 1709, "frame_ms": 0.001, "bsp_ms": 0.027, "planes_ms": 0.024, "masked_ms": 0.012, "sum_ms": 0.064, "sim_ms_per_tic": 0.010 },
-        "demo2": { "frames": 2346, "frame_ms": 0.001, "bsp_ms": 0.037, "planes_ms": 0.024, "masked_ms": 0.010, "sum_ms": 0.072, "sim_ms_per_tic": 0.011 },
-        "demo3": { "frames": 3862, "frame_ms": 0.001, "bsp_ms": 0.030, "planes_ms": 0.019, "masked_ms": 0.010, "sum_ms": 0.060, "sim_ms_per_tic": 0.007 }
+        "demo1": {
+          "frames": 1709,
+          "frame_ms": 0.0005,
+          "bsp_ms": 0.0266,
+          "planes_ms": 0.0201,
+          "masked_ms": 0.0107,
+          "sum_ms": 0.0579,
+          "sim_ms_per_tic": 0.0103
+        },
+        "demo2": {
+          "frames": 2346,
+          "frame_ms": 0.0009,
+          "bsp_ms": 0.0557,
+          "planes_ms": 0.0371,
+          "masked_ms": 0.0183,
+          "sum_ms": 0.112,
+          "sim_ms_per_tic": 0.0153
+        },
+        "demo3": {
+          "frames": 3862,
+          "frame_ms": 0.0006,
+          "bsp_ms": 0.0382,
+          "planes_ms": 0.0227,
+          "masked_ms": 0.0104,
+          "sum_ms": 0.072,
+          "sim_ms_per_tic": 0.0078
+        }
       },
-      "simFpsNodraw": { "demo1": 136743, "demo2": 114916, "demo3": 118942, "avg": 123534 }
+      "simFpsNodraw": {
+        "demo1": 128836.0,
+        "demo2": 182953.0,
+        "demo3": 231241.0,
+        "avg": 181010.0
+      }
     },
-    "wbox-amd-g-t56n": null,
-    "tank-i5-8350U":   null,
-    "pi5-aarch64":     null
+    "wbox-amd-g-t56n": {
+      "commit": "15770d9",
+      "date": "2026-07-15",
+      "reps": 3,
+      "wasmBytes": 357787,
+      "demos": {
+        "demo1": {
+          "frames": 1709,
+          "frame_ms": 0.0067,
+          "bsp_ms": 0.2763,
+          "planes_ms": 0.1879,
+          "masked_ms": 0.0721,
+          "sum_ms": 0.543,
+          "sim_ms_per_tic": 0.099
+        },
+        "demo2": {
+          "frames": 2346,
+          "frame_ms": 0.0074,
+          "bsp_ms": 0.2623,
+          "planes_ms": 0.1522,
+          "masked_ms": 0.0584,
+          "sum_ms": 0.4803,
+          "sim_ms_per_tic": 0.0696
+        },
+        "demo3": {
+          "frames": 3862,
+          "frame_ms": 0.0071,
+          "bsp_ms": 0.2581,
+          "planes_ms": 0.1366,
+          "masked_ms": 0.0602,
+          "sum_ms": 0.462,
+          "sim_ms_per_tic": 0.0534
+        }
+      },
+      "simFpsNodraw": {
+        "demo1": 17168.0,
+        "demo2": 18958.0,
+        "demo3": 23397.0,
+        "avg": 19841.0
+      }
+    },
+    "tank-i5-8350U": null,
+    "pi5-aarch64": {
+      "commit": "15770d9",
+      "date": "2026-07-15",
+      "reps": 3,
+      "wasmBytes": 357787,
+      "demos": {
+        "demo1": {
+          "frames": 1709,
+          "frame_ms": 0.0019,
+          "bsp_ms": 0.0849,
+          "planes_ms": 0.0596,
+          "masked_ms": 0.0254,
+          "sum_ms": 0.1718,
+          "sim_ms_per_tic": 0.0245
+        },
+        "demo2": {
+          "frames": 2346,
+          "frame_ms": 0.0016,
+          "bsp_ms": 0.0687,
+          "planes_ms": 0.0461,
+          "masked_ms": 0.0189,
+          "sum_ms": 0.1353,
+          "sim_ms_per_tic": 0.0152
+        },
+        "demo3": {
+          "frames": 3862,
+          "frame_ms": 0.0017,
+          "bsp_ms": 0.0693,
+          "planes_ms": 0.0414,
+          "masked_ms": 0.0191,
+          "sum_ms": 0.1316,
+          "sim_ms_per_tic": 0.012
+        }
+      },
+      "simFpsNodraw": {
+        "demo1": 66112.0,
+        "demo2": 73956.0,
+        "demo3": 93987.0,
+        "avg": 78018.0
+      }
+    }
   }
 }
