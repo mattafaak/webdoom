@@ -3,6 +3,7 @@
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <emscripten.h>
 #include "perf.h"
+#include "z_zone.h" // webdoom: Z_FreeMemory() for zone stats (task 0.5)
 
 // Accumulators — µs (double precision).
 double web_perf_sim_us = 0;
@@ -65,4 +66,54 @@ EMSCRIPTEN_KEEPALIVE void web_perf_reset (void)
     web_perf_masked_us = 0;
     web_perf_frame_count = 0;
     web_perf_tic_count = 0;
+}
+
+// --- webdoom: Z_Zone memory stats (task 0.5 memory audit) ---
+// web_zone_sample() snapshots current used bytes and updates the HWM.
+// Call once per tic from measurement scripts; O(n) scan over memblock list,
+// same cost as Z_FreeMemory().
+// web_zone_hwm()/web_zone_size() let JS harvest results.
+// web_zone_hwm_reset() clears between IWADs.  Exports are kept permanently —
+// they feed the task 2.5 Z_Zone review and task 2.6 knob sweep.
+
+// webdoom: must match ZONESIZE in engine/web/i_system.c
+#define WEB_ZONE_POOL_SIZE (32 * 1024 * 1024)
+
+// webdoom: zone HWM (peak used bytes since last reset)
+static int zone_hwm = 0;
+
+// webdoom: sample current zone usage; update HWM if higher.
+// used = zone_pool_size - free_bytes (Z_FreeMemory walks the block list).
+EMSCRIPTEN_KEEPALIVE void web_zone_sample (void)
+{
+    int used = WEB_ZONE_POOL_SIZE - Z_FreeMemory ();
+    if (used > zone_hwm)
+        zone_hwm = used;
+}
+
+// webdoom: return zone high-water mark (bytes) since last reset
+EMSCRIPTEN_KEEPALIVE int web_zone_hwm (void)
+{
+    return zone_hwm;
+}
+
+// webdoom: return total zone pool size (bytes); always WEB_ZONE_POOL_SIZE
+EMSCRIPTEN_KEEPALIVE int web_zone_size (void)
+{
+    return WEB_ZONE_POOL_SIZE;
+}
+
+// webdoom: reset zone HWM (call between IWADs)
+EMSCRIPTEN_KEEPALIVE void web_zone_hwm_reset (void)
+{
+    zone_hwm = 0;
+}
+
+// webdoom: return wasm linear-memory heap base (address of first dynamic
+// allocation = static-data + C-shadow-stack bytes).
+// Headroom formula: INITIAL_MEMORY - heap_base - zone_size - peak_wad_malloc.
+extern int __heap_base; // provided by the emscripten/wasm linker
+EMSCRIPTEN_KEEPALIVE int web_heap_base (void)
+{
+    return (int) &__heap_base;
 }
