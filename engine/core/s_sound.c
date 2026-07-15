@@ -658,7 +658,14 @@ S_ChangeMusic
     if (!music->lumpnum)
     {
 	sprintf(namebuf, "d_%s", music->name);
-	music->lumpnum = W_GetNumForName(namebuf);
+	// webdoom: total conversions may omit tracks; silence beats abort
+	music->lumpnum = W_CheckNumForName(namebuf);
+	if (music->lumpnum < 0)
+	{
+	    fprintf(stderr, "S_ChangeMusic: no lump %s\n", namebuf);
+	    music->lumpnum = 0;
+	    return;
+	}
     }
 
     // load & register it

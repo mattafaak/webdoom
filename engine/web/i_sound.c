@@ -44,7 +44,8 @@ int I_GetSfxLumpNum (sfxinfo_t* sfx)
 {
     char namebuf[9];
     sprintf (namebuf, "ds%s", sfx->name);
-    return W_GetNumForName (namebuf);
+    // total conversions may omit sounds; -1 = play nothing
+    return W_CheckNumForName (namebuf);
 }
 
 static int soundhandle;
@@ -57,6 +58,8 @@ int I_StartSound (int id, int vol, int sep, int pitch, int priority)
 
     if (sfx->lumpnum < 0)
         sfx->lumpnum = I_GetSfxLumpNum (sfx);
+    if (sfx->lumpnum < 0)
+        return 0;               // lump absent in this wad
     len = W_LumpLength (sfx->lumpnum);
     data = W_CacheLumpNum (sfx->lumpnum, PU_STATIC);   // stays; JS decodes once
 

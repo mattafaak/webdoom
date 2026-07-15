@@ -286,7 +286,9 @@ menuitem_t EpisodeMenu[]=
     {1,"M_EPI1", M_Episode,'k'},
     {1,"M_EPI2", M_Episode,'t'},
     {1,"M_EPI3", M_Episode,'i'},
-    {1,"M_EPI4", M_Episode,'t'}
+    {1,"M_EPI4", M_Episode,'t'},
+    // webdoom: shown only when a PWAD provides it (SIGIL's episode 5)
+    {1,"M_EPI5", M_Episode,'s'}
 };
 
 menu_t  EpiDef =
@@ -1884,10 +1886,14 @@ void M_Init (void)
 	EpiDef.numitems--;
 	break;
       case retail:
-	// We are fine.
+	// webdoom: a fifth episode appears when a loaded PWAD supplies
+	// both the maps and the menu graphic (SIGIL)
+	if (W_CheckNumForName("M_EPI5") >= 0
+	    && W_CheckNumForName("E5M1") >= 0)
+	    EpiDef.numitems = 5;
       default:
 	break;
     }
-    
+
 }
 

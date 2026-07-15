@@ -17,7 +17,9 @@ const KNOWN = {
     'plutonia.wad': { title: 'Final Doom: The Plutonia Experiment' },
     'nerve.wad':    { title: 'No Rest for the Living', base: 'doom2.wad' },
     'chex.wad':     { title: 'Chex Quest', standalone: true },
-    'hacx.wad':     { title: 'HACX: Twitch ’n Kill', standalone: true },
+    // HACX v2.0-r61 is the GZDoom-era remaster (ACS scripts, no vanilla
+    // data) — not runnable on a vanilla engine. v1.2 (doom2 PWAD) would be.
+    'hacx.wad':     { skip: true },
     'sigil.wad':        { title: 'SIGIL', base: 'doom.wad' },
     'sigil_v1_21.wad':  { title: 'SIGIL', base: 'doom.wad', rename: 'sigil.wad' },
     'tnt31.wad':    { title: 'TNT: Evilution — MAP31 fix', base: 'tnt.wad', patch: true },
@@ -50,6 +52,7 @@ for (const f of readdirSync(dir).filter(f => f.toLowerCase().endsWith('.wad')).s
     if (magic !== 'IWAD' && magic !== 'PWAD') { console.error(`skip ${f}: not a WAD`); continue; }
     const name = basename(f).toLowerCase();
     const known = KNOWN[name];
+    if (known?.skip) { console.error(`skip ${f}: not vanilla-engine compatible`); continue; }
     const canonical = known?.rename ?? name;
     const lumpNames = lumps(buf);
     const maps = lumpNames.filter(l => /^(E\d+M\d+|MAP\d\d)$/.test(l));

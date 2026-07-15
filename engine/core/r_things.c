@@ -251,21 +251,23 @@ void R_InitSpriteDefs (char** namelist)
 	    switch ((int)sprtemp[frame].rotate)
 	    {
 	      case -1:
-		// no rotations were found for that frame at all
-		I_Error ("R_InitSprites: No patches found "
-			 "for %s frame %c", namelist[i], frame+'A');
+		// webdoom: total conversions (HACX) drop frames of
+		// monsters they never spawn; vanilla aborted. Warn only —
+		// fatal iff the game actually uses the frame.
+		fprintf (stderr, "R_InitSprites: no patches for %s frame %c\n",
+			 namelist[i], frame+'A');
 		break;
-		
+
 	      case 0:
 		// only the first rotation is needed
 		break;
-			
+
 	      case 1:
 		// must have all 8 frames
 		for (rotation=0 ; rotation<8 ; rotation++)
 		    if (sprtemp[frame].lump[rotation] == -1)
-			I_Error ("R_InitSprites: Sprite %s frame %c "
-				 "is missing rotations",
+			fprintf (stderr, "R_InitSprites: sprite %s frame %c "
+				 "is missing rotations\n",
 				 namelist[i], frame+'A');
 		break;
 	    }
@@ -520,11 +522,10 @@ void R_ProjectSprite (mobj_t* thing)
 		 thing->sprite);
 #endif
     sprdef = &sprites[thing->sprite];
-#ifdef RANGECHECK
+    // webdoom: a wad with missing sprite frames drops the sprite from
+    // the frame instead of killing the game (vanilla RANGECHECK abort)
     if ( (thing->frame&FF_FRAMEMASK) >= sprdef->numframes )
-	I_Error ("R_ProjectSprite: invalid sprite frame %i : %i ",
-		 thing->sprite, thing->frame);
-#endif
+	return;
     sprframe = &sprdef->spriteframes[ thing->frame & FF_FRAMEMASK];
 
     if (sprframe->rotate)
@@ -673,11 +674,9 @@ void R_DrawPSprite (pspdef_t* psp)
 		 psp->state->sprite);
 #endif
     sprdef = &sprites[psp->state->sprite];
-#ifdef RANGECHECK
+    // webdoom: as above — skip rather than abort on missing frames
     if ( (psp->state->frame & FF_FRAMEMASK)  >= sprdef->numframes)
-	I_Error ("R_ProjectSprite: invalid sprite frame %i : %i ",
-		 psp->state->sprite, psp->state->frame);
-#endif
+	return;
     sprframe = &sprdef->spriteframes[ psp->state->frame & FF_FRAMEMASK ];
 
     lump = sprframe->lump[0];

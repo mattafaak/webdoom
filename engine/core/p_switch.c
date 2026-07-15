@@ -129,20 +129,15 @@ void P_InitSwitchList(void)
 		
 	if (alphSwitchList[i].episode <= episode)
 	{
-#if 0	// UNUSED - debug?
-	    int		value;
-			
-	    if (R_CheckTextureNumForName(alphSwitchList[i].name1) < 0)
-	    {
-		I_Error("Can't find switch texture '%s'!",
-			alphSwitchList[i].name1);
+	    int	t1 = R_CheckTextureNumForName(alphSwitchList[i].name1);
+	    int	t2 = R_CheckTextureNumForName(alphSwitchList[i].name2);
+
+	    // webdoom: total conversions (HACX) drop stock switch
+	    // textures; vanilla aborted here. Skip missing pairs.
+	    if (t1 < 0 || t2 < 0)
 		continue;
-	    }
-	    
-	    value = R_TextureNumForName(alphSwitchList[i].name1);
-#endif
-	    switchlist[index++] = R_TextureNumForName(alphSwitchList[i].name1);
-	    switchlist[index++] = R_TextureNumForName(alphSwitchList[i].name2);
+	    switchlist[index++] = t1;
+	    switchlist[index++] = t2;
 	}
     }
 }

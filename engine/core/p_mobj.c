@@ -770,9 +770,13 @@ void P_SpawnMapThing (mapthing_t* mthing)
 	    break;
 	
     if (i==NUMMOBJTYPES)
-	I_Error ("P_SpawnMapThing: Unknown type %i at (%i, %i)",
-		 mthing->type,
-		 mthing->x, mthing->y);
+    {
+	// webdoom: editor things from newer ports (HACX uses 2999)
+	// — skip them instead of vanilla's abort
+	fprintf (stderr, "P_SpawnMapThing: unknown type %i at (%i, %i)\n",
+		 mthing->type, mthing->x, mthing->y);
+	return;
+    }
 		
     // don't spawn keycards and players in deathmatch
     if (deathmatch && mobjinfo[i].flags & MF_NOTDMATCH)

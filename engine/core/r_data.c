@@ -718,13 +718,16 @@ int	R_CheckTextureNumForName (char *name)
 int	R_TextureNumForName (char* name)
 {
     int		i;
-	
+
     i = R_CheckTextureNumForName (name);
 
     if (i==-1)
     {
-	I_Error ("R_TextureNumForName: %s not found",
-		 name);
+	// webdoom: some wads (HACX) reference flats as wall textures,
+	// which vanilla cannot draw. 0 renders as no-texture; the map
+	// still plays. Vanilla aborted the whole game here.
+	fprintf (stderr, "R_TextureNumForName: %.8s not found\n", name);
+	return 0;
     }
     return i;
 }

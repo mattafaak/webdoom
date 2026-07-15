@@ -9,8 +9,14 @@ import { loadPersisted, restoreFiles, startSync } from './persist.js';
 
 const status = msg => { document.getElementById('status').textContent = msg; };
 
-// The engine identifies Ultimate Doom by filename.
-const ENGINE_NAME = { 'doom.wad': 'doomu.wad' };
+// The engine identifies games by 1993 filenames. Ultimate Doom must be
+// doomu.wad (retail detection); the standalone TCs get the filename of
+// the game mode they are shaped like, or IdentifyVersion finds nothing
+// and the engine aborts with an empty WAD list.
+const ENGINE_NAME = {
+    'doom.wad': 'doomu.wad',
+    'chex.wad': 'doomu.wad',    // 4-episode doom-shaped TC (has DEMO4)
+};
 
 async function fetchWad(file, sha) {
     const res = await fetch(`/wads/${file}?v=${(sha ?? '').slice(0, 8)}`);
