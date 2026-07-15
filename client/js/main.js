@@ -55,7 +55,7 @@ async function fetchWad(file, sha) {
 }
 
 // wads: [{file, sha}] — first entry is the IWAD, the rest are PWADs.
-// net: {slot, numplayers, rttMs} or null for single player.
+// net: {slot, numplayers, jitterMs} or null for single player.
 // onQuit: called when the player quits in-game (Quit Game → Y).
 export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
     const canvas = document.getElementById('screen');

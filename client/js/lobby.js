@@ -128,13 +128,18 @@ function enterMultiplayer() {
             if (booted) return;
             booted = true;
             countdown.show('GO');
-            const rtt = await lobby.ping().catch(() => 5);
+            // Sample RTT several times and size the buffer to the jitter
+            // (peak spread), not the mean — the mean is already in lockstep's
+            // inherent lag; only variance needs absorbing (see attachRelay).
+            const rtts = [];
+            for (let i = 0; i < 8; i++) rtts.push(await lobby.ping().catch(() => 30));
+            const jitterMs = Math.max(...rtts) - Math.min(...rtts);
             const e = entry(m.params.wad);
             menu.hide();
             bootDoom({
                 wads: stackFor(m.params.wad),
                 args: launchArgs(m.params, isCommercial(e)),
-                net: { slot: lobby.slot, numplayers: m.numplayers, rttMs: rtt, names: m.names, slots: m.slots },
+                net: { slot: lobby.slot, numplayers: m.numplayers, jitterMs, names: m.names, slots: m.slots },
                 onQuit: returnToMenu,
             }).then(() => {
                 countdown.dismiss();

@@ -36,7 +36,7 @@ export function connectLobby(baseUrl, WS = WebSocket) {
 // installs the send/receive hooks. rttMs sizes the input delay. slots =
 // occupied lobby slots (sparse: color choice = slot choice); the bundle
 // is always numplayers wide with phantoms marked not-ingame.
-export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, names = null, rttMs = 5 }, WS = WebSocket) {
+export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, names = null, jitterMs = 5 }, WS = WebSocket) {
     const ws = new WS(`${baseUrl}/ws/game?slot=${slot}`);
     ws.binaryType = 'arraybuffer';
 
@@ -46,12 +46,14 @@ export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, nam
     names?.forEach((n, i) => {
         if (n) doom.ccall('web_set_player_name', null, ['number', 'string'], [i, n]);
     });
-    // jitter buffer: keep the sim this many tics behind the sealed
-    // frontier so jitter never starves it (one tic = 28.6ms). In lockstep
-    // a tic runs only after the FULL round-trip (send cmd → receive sealed
-    // bundle), so the frontier lags real time by the whole RTT — buffer
-    // must cover that, plus a tic of jitter margin. Floor of 2 for LAN.
-    doom._web_net_set_delay(Math.max(2, Math.ceil(rttMs / 28.6) + 1));
+    // Jitter buffer depth (tics behind the sealed frontier, one tic =
+    // 28.6ms). Size it to network JITTER, never to mean RTT: in lockstep
+    // your cmd must round-trip before it applies, so the mean latency is
+    // already baked into the frontier — adding it to the buffer double-lags
+    // the game. The buffer only has to cover arrival-time *variance* so the
+    // sim's wall-clock pacing never outruns the frontier. Floor of 2 for LAN
+    // micro-jitter; the sim's safety drain mops up any rarer spike.
+    doom._web_net_set_delay(Math.max(2, Math.ceil(jitterMs / 28.6) + 1));
 
     const up = new Uint8Array(4 + CMD_SIZE);
     const upView = new DataView(up.buffer);
