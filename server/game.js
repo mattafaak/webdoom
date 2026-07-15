@@ -15,6 +15,7 @@ const CMD_SIZE = 8;
 const GRACE_MS = 250;       // fabricate a missing cmd after this
 const DROP_MS = 5000;       // remove the player after this
 const JOIN_MARGIN = 12;     // tics between a drop-in going live and spawning
+const JOIN_TIMEOUT_MS = +(process.env.WEBDOOM_JOIN_TIMEOUT || 30000);  // reclaim a stalled reservation
 
 const defaultParams = () => ({
     wad: 'doom.wad', episode: 1, map: 1, skill: 3, mode: 'coop',
@@ -42,22 +43,44 @@ export function createGame(log = console.log) {
     };
 
     function lobbyConnect(ws) {
-        // Join in progress: a game is live — hand this client the first free
-        // slot and the running game's params so it can drop in via catch-up.
+        // Join in progress: a game is live. Show the newcomer a summary and
+        // let them choose to drop in — no slot is reserved until they ask, so
+        // merely looking never blocks a slot.
         if (session) {
-            const p = session.players.find(q => !q.ingame && !q.ws && !q.joining);
-            if (!p) { ws.send(JSON.stringify({ t: 'full', reason: 'game full' })); ws.close(); return; }
-            p.joining = true;
-            const s = p.slot;
-            ws.send(JSON.stringify({ t: 'welcome', slot: s, color: COLORS[s] }));
-            ws.send(JSON.stringify({ t: 'launch', params: session.params, numplayers: MAXPLAYERS,
-                slots: session.slots, names: session.names, join: true, frontier: session.tic }));
-            log(`lobby: ${COLORS[s]} joining in progress (frontier ${session.tic})`);
+            const inProgress = () => ({
+                t: 'inprogress',
+                params: session.params,
+                frontier: session.tic,
+                players: session.players.filter(p => p.ingame || p.joining).map(p =>
+                    ({ slot: p.slot, color: COLORS[p.slot], name: session.names?.[p.slot] ?? COLORS[p.slot], live: p.ingame })),
+                freeSlots: session.players.filter(p => !p.ingame && !p.joining).map(p => p.slot),
+            });
+            ws.send(JSON.stringify(inProgress()));
+            let mySlot = -1;
             ws.on('message', raw => {
                 let m; try { m = JSON.parse(raw); } catch { return; }
-                if (m.t === 'ping') ws.send(JSON.stringify({ t: 'pong', t0: m.t0 }));
+                if (m.t === 'ping') { ws.send(JSON.stringify({ t: 'pong', t0: m.t0 })); return; }
+                if (!session) { ws.send(JSON.stringify({ t: 'full', reason: 'game over' })); return; }
+                if (m.t === 'join' && mySlot < 0) {
+                    const want = Number.isInteger(m.slot) ? m.slot : -1;
+                    const p = session.players.find(q => q.slot === want && !q.ingame && !q.joining && !q.ws)
+                        ?? session.players.find(q => !q.ingame && !q.joining && !q.ws);
+                    if (!p) { ws.send(JSON.stringify({ t: 'full', reason: 'game full' })); return; }
+                    mySlot = p.slot;
+                    p.joining = true;
+                    p.reservedAt = Date.now();
+                    const nm = String(m.name ?? '').replace(/[^A-Za-z0-9 _-]/g, '').trim().slice(0, 10);
+                    if (nm) { session.names = session.names ?? [null, null, null, null]; session.names[p.slot] = nm; }
+                    ws.send(JSON.stringify({ t: 'welcome', slot: p.slot, color: COLORS[p.slot] }));
+                    ws.send(JSON.stringify({ t: 'launch', params: session.params, numplayers: MAXPLAYERS,
+                        slots: session.slots, names: session.names, join: true, frontier: session.tic }));
+                    log(`lobby: ${COLORS[p.slot]} dropping in (frontier ${session.tic})`);
+                }
             });
-            ws.on('close', () => { if (session && !p.ingame && !p.ws) p.joining = false; });
+            ws.on('close', () => {
+                const p = mySlot >= 0 && session?.players[mySlot];
+                if (p && !p.ingame && !p.ws) { p.joining = false; p.reservedAt = 0; }
+            });
             return;
         }
 
@@ -181,6 +204,7 @@ export function createGame(log = console.log) {
         // current frontier; live bundles then follow via sealTic's broadcast.
         if (!p.ingame) {
             p.joining = true;
+            p.reservedAt = p.reservedAt || Date.now();
             for (const b of session.history) ws.send(b);
             log(`game: ${COLORS[slot]} catching up (${session.history.length} tics)`);
         }
@@ -229,6 +253,15 @@ export function createGame(log = console.log) {
     function sealSweep() {
         if (!session) return;
         const now = Date.now();
+        // reclaim a drop-in reservation that never caught up and went live in
+        // the window — a crashed or abandoned joiner must not hold a slot
+        for (const p of session.players)
+            if (p.joining && !p.ingame && now - (p.reservedAt || now) > JOIN_TIMEOUT_MS) {
+                p.joining = false;
+                p.reservedAt = 0;
+                if (p.ws) { p.ws.close(); p.ws = null; }
+                log(`game: ${COLORS[p.slot]} join timed out — slot freed`);
+            }
         // a client that never connected can't block the launch forever
         if (now - session.launched > 10000)
             for (const p of session.players)

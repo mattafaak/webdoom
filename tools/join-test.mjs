@@ -71,7 +71,12 @@ vets.forEach((c, i) => c.doom._web_input_event(0, KEYS[i], 0, 0));
 // --- a 3rd client drops in mid-game -------------------------------------------
 async function joinInProgress() {
     const c = await makeClient('J');
-    const m = await new Promise(res => { c.lobby = connectLobby(base); c.lobby.on('launch', res); });
+    // new protocol: the server offers 'inprogress' first; request the drop-in
+    const m = await new Promise(res => {
+        c.lobby = connectLobby(base);
+        c.lobby.on('inprogress', () => c.lobby.send({ t: 'join' }));
+        c.lobby.on('launch', res);
+    });
     if (!m.join) fail('joiner did not receive a join launch');
     c.slot = c.lobby.slot;
     c.relay = attachRelay(c.doom, base, {

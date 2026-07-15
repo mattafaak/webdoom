@@ -22,7 +22,10 @@ let manifest = [];
 let font = null;
 let menu = null;
 let lobby = null;
-let roster = null;              // latest roster message
+let roster = null;              // latest roster message (pre-game lobby)
+let ipSummary = null;          // latest 'inprogress' summary (game already live)
+let ipSlot = -1;               // chosen drop-in color/slot
+let ipName = '';               // chosen drop-in name (optional)
 let booted = false;
 
 const entry = file => manifest.find(w => w.file === file);
@@ -66,6 +69,7 @@ function returnToMenu() {
     booted = false;
     if (lobby) { lobby.close(); lobby = null; }
     roster = null;
+    ipSummary = null; ipSlot = -1;
     menu.show();
     menu.reset(rootScreen());
 }
@@ -110,17 +114,20 @@ function spGameScreen() {
 let countdown = null;
 
 function enterMultiplayer() {
-    if (lobby) { menu.push(lobbyScreen()); return; }
+    if (lobby) { menu.push(ipSummary ? inProgressScreen() : lobbyScreen()); return; }
     const base = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
     lobby = connectLobby(base);
     lobby
+        // a game is already live: offer to drop in rather than form a lobby
+        .on('inprogress', m => {
+            ipSummary = m;
+            if (menu.current()?.id === 'inprogress') menu.refresh(inProgressScreen());
+            else if (menu.depth() === 1) menu.push(inProgressScreen());
+        })
         .on('roster', m => {
             roster = m;
             if (menu.current()?.id === 'lobby') menu.refresh(lobbyScreen());
-            else if (menu.depth() === 1) {
-                if (m.inGame) { status('game in progress — try again shortly'); lobby.close(); lobby = null; }
-                else menu.push(lobbyScreen());
-            }
+            else if (menu.depth() === 1) menu.push(lobbyScreen());
         })
         .on('full', m => { status(m.reason); lobby = null; })
         .on('countdown', m => { if (!booted) countdown.show(m.n); })
@@ -255,6 +262,51 @@ function mapName(p) {
 // wrap-around cycle helper
 const cyc = (arr, cur, dir) => arr[(arr.indexOf(cur) + dir + arr.length) % arr.length];
 
+// Shown when you open MULTIPLAYER and a game is already live: a summary
+// (wad art, map, mode, who's in) plus optional color/name and a DROP IN that
+// catches you up into the running game.
+function inProgressScreen() {
+    const s = ipSummary;
+    const p = s.params;
+    const free = s.freeSlots ?? [];
+    if (!free.includes(ipSlot)) ipSlot = free[0] ?? -1;
+    const mode = MODES.find(m => m[0] === p.mode)?.[1] ?? p.mode;
+    const refresh = () => menu.refresh(inProgressScreen());
+    const cycleColor = dir => {
+        if (free.length < 2) return;
+        ipSlot = free[(free.indexOf(ipSlot) + dir + free.length) % free.length];
+        refresh();
+    };
+    const dropIn = () => {
+        if (booted || ipSlot < 0) return;
+        lobby.send({ t: 'join', slot: ipSlot, name: ipName || undefined });
+        // server replies welcome + launch(join); the launch handler boots
+        // straight into catch-up
+    };
+    return {
+        id: 'inprogress',
+        title: 'GAME IN PROGRESS',
+        header: (s.players ?? []).map(pl =>
+            ({ text: (pl.name ?? pl.color) + (pl.live ? '  ' : '… '), color: pl.color })),
+        onBack: leaveLobby,
+        items: [
+            free.length
+                ? { label: 'DROP IN', action: dropIn }
+                : { label: 'GAME FULL', color: 'Red' },
+            { label: 'GAME: ', value: entry(p.wad)?.title ?? p.wad, thumb: font.titleThumb(p.wad, 52) },
+            { label: 'MAP: ', value: mapName(p) },
+            { label: 'MODE: ', value: mode },
+            { label: 'NAME: ', value: ipName,
+              color: free.length ? COLORS[ipSlot] : null,
+              entry: { initial: ipName, commit: v => { ipName = v; refresh(); } } },
+            ...(free.length > 1 ? [{
+                label: 'COLOR: ', value: (COLORS[ipSlot] ?? '').toUpperCase(), color: COLORS[ipSlot],
+                action: () => cycleColor(1), cycle: cycleColor,
+            }] : []),
+        ],
+    };
+}
+
 function lobbyScreen() {
     const me = roster?.players.find(pl => pl.slot === lobby.slot);
     const p = roster?.params ?? {};
@@ -328,6 +380,7 @@ function leaveLobby() {
     lobby = null;               // mark deliberate before the close event
     l?.close();
     roster = null;
+    ipSummary = null; ipSlot = -1;
     menu.reset(rootScreen());
 }
 

@@ -270,6 +270,20 @@ void web_replay_tic (void)
 }
 
 //
+// web_end_catchup
+// Called once a drop-in has replayed to the frontier and is about to go live.
+// Replay advanced gametic but never maketic, so without this the joiner would
+// build cmds from maketic 0 — ancient tics the relay discards — and freeze
+// until maketic crawled back up to gametic. Snap maketic to gametic (and the
+// clocks to now) so the very next NetUpdate sends cmds for CURRENT tics.
+//
+EMSCRIPTEN_KEEPALIVE
+void web_end_catchup (void)
+{
+    maketic = gametic;
+}
+
+//
 // web_first_ingame
 // Lowest currently-live slot (or -1). A joiner parks the view here for the
 // brief window between going live and its own slot spawning.

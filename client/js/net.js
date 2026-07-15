@@ -118,6 +118,7 @@ export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, nam
                 if (doom._web_gametic() >= frontier && !queue.length) break;
                 await yieldToNet();
             }
+            doom._web_end_catchup();
             live = true;
             for (const d of queue.splice(0)) deliver(d);
         },

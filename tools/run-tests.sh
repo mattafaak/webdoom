@@ -19,12 +19,17 @@ echo "── drop-in determinism (coop, deathmatch) ─────────�
 node tools/join-test.mjs | tail -1
 node tools/join-test.mjs dm | tail -1
 
+echo "── drop-in edge cases + churn ──────────────────────────"
+node tools/edge-test.mjs | tail -1
+node tools/churn-test.mjs | tail -1
+
 echo "── browser (SP gate + 2-tab multiplayer) ───────────────"
 DOOM_PORT=8668 DOOM_HOST=127.0.0.1 node server/serve.js & SRV=$!
 trap "kill $SRV 2>/dev/null" EXIT
 sleep 1
 node tools/browser-test.mjs http://127.0.0.1:8668/ | tail -2
 node tools/browser-net-test.mjs http://127.0.0.1:8668/ | tail -1
+node tools/browser-join-test.mjs http://127.0.0.1:8668/ | tail -1
 node tools/persist-test.mjs http://127.0.0.1:8668/ | tail -1
 
 echo "ALL SUITES PASS"
