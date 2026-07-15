@@ -76,6 +76,30 @@ int web_ui_mode (void)
 }
 
 //
+// Table-generation access for tools/gen-tables.mjs: run the generator
+// standalone and read the raw arrays (the fix stream starts empty).
+//
+#include "tables.h"
+
+EMSCRIPTEN_KEEPALIVE
+void web_gen_tables (void)
+{
+    T_GenerateTables ();
+}
+
+EMSCRIPTEN_KEEPALIVE
+int* web_table (int which)
+{
+    switch (which)
+    {
+      case 0: return (int*) finesine;
+      case 1: return (int*) finetangent;
+      case 2: return (int*) tantoangle;
+    }
+    return 0;
+}
+
+//
 // Lobby names → in-game chat prefixes ("Name: "). Vanilla strings live
 // in player_names[]; we repoint entries at static buffers.
 //

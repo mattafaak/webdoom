@@ -715,6 +715,8 @@ void D_DoomMain (void)
     int             p;
     char                    file[256];
 
+    T_GenerateTables ();	// webdoom: tables are computed, not shipped
+
     FindResponseFile ();
 	
     IdentifyVersion ();

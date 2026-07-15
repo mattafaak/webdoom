@@ -83,6 +83,10 @@ typedef unsigned angle_t;
 //  without additional checking.
 extern angle_t		tantoangle[SLOPERANGE+1];
 
+// webdoom: fills the three tables above at boot, bit-identical to the
+// 1993 data (recipes + correction stream + checksum). tables.c
+void T_GenerateTables (void);
+
 
 // Utility function,
 //  called by R_PointToAngle.
