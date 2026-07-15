@@ -56,6 +56,13 @@ tools/run-tests.sh
 
 - engine smoke: boots real IWADs headless in node, plays the attract
   demo, renders OPL music, asserts life in framebuffer and audio
+- demo compatibility: all 13 built-in IWAD demos (Doom, Doom II, TNT,
+  Plutonia) replayed headless; per-tic gamestate fingerprints pinned
+  against golden traces — a single diverging P_Random call fails CI at
+  the exact tic. The baseline is cross-validated tic-for-tic against an
+  instrumented Chocolate Doom (the vanilla reference):
+  `tools/build-choco-reference.sh`, then
+  `node tools/demo-test.mjs --cross <binary>` — 44,580 tics identical
 - netplay: 2 and 4 real wasm clients through the real server; per-tic
   gamestate hashes must match exactly; a client is killed mid-game and
   the survivors must keep playing

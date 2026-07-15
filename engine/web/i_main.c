@@ -129,15 +129,20 @@ void web_set_smooth (int on)
 }
 
 //
-// Gamestate fingerprint for the netplay determinism harness: two clients
-// in the same game must return identical values at the same gametic.
+// Gamestate fingerprint for the netplay and demo-compatibility
+// harnesses: identical simulations must return identical values at the
+// same gametic. prndindex (the P_Random cursor) is the sharpest desync
+// detector — any diverging gameplay decision shifts RNG consumption.
 //
+extern int prndindex;
+
 EMSCRIPTEN_KEEPALIVE
 int web_state_hash (void)
 {
     unsigned h = 0x9e3779b9u ^ (unsigned) gametic;
     int i;
 
+    h = (h ^ (unsigned) prndindex) * 0x01000193u;
     for (i = 0; i < MAXPLAYERS; i++)
         if (playeringame[i] && players[i].mo)
         {
@@ -153,6 +158,20 @@ EMSCRIPTEN_KEEPALIVE
 int web_gametic (void)
 {
     return gametic;
+}
+
+//
+// Raw player-0 tuple for cross-validation against a reference port
+// (Chocolate Doom instrumented to print the same fields per tic).
+//
+EMSCRIPTEN_KEEPALIVE
+void web_demo_state (int* out)
+{
+    out[0] = prndindex;
+    out[1] = players[0].mo ? players[0].mo->x : 0;
+    out[2] = players[0].mo ? players[0].mo->y : 0;
+    out[3] = players[0].mo ? (int) players[0].mo->angle : 0;
+    out[4] = players[0].health;
 }
 
 //

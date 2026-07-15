@@ -1,0 +1,29 @@
+diff --git a/src/doom/g_game.c b/src/doom/g_game.c
+index 4258712..6fae857 100644
+--- a/src/doom/g_game.c
++++ b/src/doom/g_game.c
+@@ -907,6 +907,16 @@ boolean G_Responder (event_t* ev)
+ // G_Ticker
+ // Make ticcmd_ts for the players.
+ //
++// webdoom demo-compat cross-validation: per-tic fingerprint on stderr
++extern int prndindex;
++static void WebdoomTrace (void)
++{
++    if (demoplayback && gamestate == GS_LEVEL && players[0].mo)
++        fprintf(stderr, "T %d %d %d %u %d\n", prndindex,
++                players[0].mo->x, players[0].mo->y,
++                (unsigned) players[0].mo->angle, players[0].health);
++}
++
+ void G_Ticker (void) 
+ { 
+     int		i;
+@@ -1078,6 +1088,7 @@ void G_Ticker (void)
+ 	D_PageTicker (); 
+ 	break;
+     }        
++    WebdoomTrace ();
+ } 
+  
+  

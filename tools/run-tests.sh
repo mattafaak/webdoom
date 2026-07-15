@@ -8,6 +8,9 @@ echo "── engine smoke (doom, doom2) ─────────────�
 node tools/smoke-test.mjs doom.wad 700 | tail -2
 node tools/smoke-test.mjs doom2.wad 1100 | tail -2
 
+echo "── demo compatibility (golden traces) ──────────────────"
+node tools/demo-test.mjs | tail -2
+
 echo "── netplay determinism (2p, 4p) ────────────────────────"
 node tools/net-test.mjs 2 | tail -2
 node tools/net-test.mjs 4 | tail -2
