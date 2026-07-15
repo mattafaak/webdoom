@@ -1652,11 +1652,14 @@ void WI_loadData(void)
     sp_secret = W_CacheLumpName("WISCRT2", PU_STATIC);
 
     // Yuck. 
-    if (french)
+    // webdoom: vanilla wrote `if (french)` — but `french` is an enum
+    // CONSTANT (==1), so this was always true and coop intermissions
+    // loaded WIOBJ, a French-only lump absent from English IWADs → crash.
+    if (language == french)
     {
 	// "items"
 	if (netgame && !deathmatch)
-	    items = W_CacheLumpName("WIOBJ", PU_STATIC);    
+	    items = W_CacheLumpName("WIOBJ", PU_STATIC);
   	else
 	    items = W_CacheLumpName("WIOSTI", PU_STATIC);
     } else
