@@ -1,0 +1,20 @@
+{
+  "note": "render+sim fps (doom.wad attract demos, best-of-5, -nodraw) before/after the fixed-point inline+int64 change, on the network's weakest devices. End-to-end is within noise everywhere; the real wins are complexity/size/exactness, not fps.",
+  "frameThroughput": {
+    "baseline_commit": "f92fc05",
+    "baseline_wasmBytes": 357301,
+    "optimized_wasmBytes": 356680,
+    "avg_fps": {
+      "alder-i9-12900K": { "before": 204937 },
+      "tank-i5-8350U":   { "before": 105868, "after": 103648 },
+      "pi5-aarch64":     { "before": 79377,  "after": 80128 },
+      "wbox-amd-g-t56n": { "before": 20697,  "after": 21107 }
+    }
+  },
+  "primitiveMicrobench": {
+    "note": "isolated wasm FixedDiv, 2e8 iters, double path vs int64 path, ms (lower=faster). Chosen: int64.",
+    "double_ms": { "alder": 419, "pi5": 754, "wbox": 12304, "tank": 964 },
+    "int64_ms":  { "alder": 403, "pi5": 630, "wbox": 13054, "tank": 2725 },
+    "int64_vs_double": { "alder": 1.04, "pi5": 1.20, "wbox": 0.94, "tank": 0.35 }
+  }
+}

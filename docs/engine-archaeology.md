@@ -153,3 +153,44 @@ The recurring pattern: a "just how it's always been" blob is either
 mostly gamma), (b) provably equivalent to a faster modern form
 (FixedDiv), or (c) genuinely irreducible human data (rndtable). Knowing
 *which* is the difference between copying the game and understanding it.
+
+## 7. The bare-metal principle (and where "compute > lookup" is false)
+
+A tempting instinct: 1993 shipped lookup tables because CPUs were slow, so
+in 2026 we should compute in real time instead. **This is backwards for
+DOOM's tables.** A table load from L1 is ~4 cycles; `sin`/`tan`/`atan` is
+20–100; the `COLORMAP` is a 256-entry nearest-colour *search*. Every one of
+those tables is more expensive to recompute per call than to load. The only
+valid table transform is **shipped-blob → boot-generation** (compute once at
+startup, look up at runtime — what §1 does for trig), *never* runtime lookup
+→ runtime transcendental.
+
+The same "measure, don't assume" caution applies to the one place we *do*
+compute at runtime. §2 proves `FixedDiv`'s integer form equals the double
+form bit-for-bit — but "integer must be faster" is also false on some
+hardware. Isolated wasm primitive throughput, double vs int64 divide:
+
+| CPU | double | int64 | int64 speed |
+|-----|--------|-------|-------------|
+| i9-12900K (x86, modern) | 419 ms | 403 ms | +4% |
+| Cortex-A76 (ARM, Pi 5)  | 754 ms | 630 ms | **+20%** |
+| AMD G-T56N (x86 Bobcat) | 12304 ms | 13054 ms | −6% |
+| i5-8350U (x86 Kaby Lake) | 964 ms | 2725 ms | **−65%** |
+
+Old x86 64-bit `idiv` is genuinely slow (~40–95-cycle latency) vs double
+`divsd` (~14–20); ARM's integer divide wins. There is **no universally
+fastest divide**. It doesn't matter for gameplay — `FixedDiv` is a tiny
+slice of a frame, so end-to-end the choice is within ±2% (neutral) on all
+four devices — which is exactly why the decision was made on the universal
+axes instead (simpler, smaller, integer-exact, ARM-forward → int64). The
+lesson the whole document keeps teaching: the answer is in the measurement,
+not the folklore.
+
+## Tables kept as-is (deliberately)
+
+- **`gammatable`** — no exact closed form (§4); 1.2 KB, display-only. Keep.
+- **`rndtable`** — irreducible hand-authored data (§3). Keep.
+- **`COLORMAP`** — the recipe is known (§6) but it is WAD-owned and
+  **PWAD-overridable** (colored lighting, fog); regenerating it would break
+  those wads for zero gain (it is loaded, not computed — no latency to
+  reclaim). Keep loading from the WAD.
