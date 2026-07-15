@@ -100,21 +100,29 @@ html, body {
     flex-direction: column;
     flex-wrap: wrap;
     align-content: flex-start;
-    max-height: min(62vh, 640px);
-    gap: 10px 56px;
+    max-height: min(66vh, 680px);
+    gap: 6px 56px;
 }
-#dmenu .items.noWrap { flex-wrap: nowrap; max-height: none; gap: 8px; }
+#dmenu .items.noWrap { flex-wrap: nowrap; max-height: none; gap: 6px; }
 
+/* fixed row height (covers the ×3 skull) so the cursor appearing on a
+   row never grows it — menu items stay put as selection moves */
 #dmenu .row {
     display: flex;
     align-items: center;
     gap: 12px;
     cursor: pointer;
+    min-height: 60px;
 }
-#dmenu .skull { width: 44px; display: inline-flex; justify-content: center; }
+#dmenu .skull {
+    width: 64px;
+    height: 60px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
 #dmenu canvas { image-rendering: pixelated; }
-#dmenu .row.art canvas:first-of-type { border: 2px solid #311; border-radius: 3px; }
-#dmenu .row.art.sel canvas:first-of-type { border-color: #c33; }
 
 #countdown #melt { image-rendering: pixelated; }
 

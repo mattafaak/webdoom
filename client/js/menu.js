@@ -14,6 +14,10 @@ export function createMenu(font, host) {
     let entry = null;               // {item, value} while typing a name
     let hidden = false;
 
+    // Rows are a fixed height (CSS) so the cursor appearing never shifts a
+    // row. Text is scaled UP toward the skull's height at clean integer
+    // multiples (nearest-neighbour, always crisp) rather than shrinking
+    // the skull. Skull ×3 ≈ 57px; body text ×5 ≈ 45px sits just under it.
     const skulls = [font.patch('M_SKULL1', 3), font.patch('M_SKULL2', 3)];
     const logo = font.patch('M_DOOM', 3);
     setInterval(() => {
@@ -44,11 +48,13 @@ export function createMenu(font, host) {
             root.appendChild(h);
         }
 
-        // big type by default; drop a notch when this screen has long
-        // labels so single-column lists stay onscreen widthwise
+        // big type by default (~skull height); step down at clean integer
+        // scales as labels get longer so single-column lists stay onscreen
+        // widthwise. Every scale is nearest-neighbour crisp.
         const longest = Math.max(0, ...s.items.map(it =>
-            (it.label + (it.value !== undefined ? String(it.value) : '')).length));
-        const scale = longest > 24 ? 3 : 4;
+            (it.label + (it.value !== undefined ? String(it.value) : '')).length
+            + (it.cycle ? 4 : 0)));   // room for the "< >" affordance
+        const scale = longest > 30 ? 3 : longest > 20 ? 4 : 5;
 
         const list = Object.assign(document.createElement('div'), { className: 'items' });
         if (s.items.some(it => it.thumb)) list.classList.add('noWrap');   // art rows: one column
@@ -58,9 +64,17 @@ export function createMenu(font, host) {
             const sk = Object.assign(document.createElement('span'), { className: 'skull' });
             if (i === sel && skulls[+skullFlip]) sk.appendChild(skulls[+skullFlip]);
             row.appendChild(sk);
-            const label = entry && entry.item === item
-                ? `${item.label}${entry.value}_`
-                : item.label + (item.value !== undefined ? String(item.value) : '');
+            let label;
+            if (entry && entry.item === item)
+                label = `${item.label}${entry.value}_`;
+            else {
+                const val = item.value !== undefined ? String(item.value) : '';
+                // a left/right-cycleable value shows "< value >" when
+                // selected, as a discoverability cue
+                label = (i === sel && item.cycle && val)
+                    ? `${item.label}< ${val} >`
+                    : item.label + val;
+            }
             row.dataset.label = label.toUpperCase();    // tests + accessibility
             row.setAttribute('role', 'menuitem');
             row.setAttribute('aria-label', label);
@@ -111,14 +125,17 @@ export function createMenu(font, host) {
             return;
         }
         const n = screen().items.length;
+        const item = screen().items[sel];
         // rows per wrapped column, for left/right jumps in long lists
         const rows = [...root.querySelectorAll('.items .row')];
         const col = rows.length ? rows.filter(r => r.offsetLeft === rows[0].offsetLeft).length : n;
         switch (e.code) {
             case 'ArrowUp':   sel = (sel + n - 1) % n; break;
             case 'ArrowDown': sel = (sel + 1) % n; break;
-            case 'ArrowLeft':  sel = Math.max(0, sel - col); break;
-            case 'ArrowRight': sel = Math.min(n - 1, sel + col); break;
+            // left/right adjusts a cycleable value in place; otherwise it
+            // jumps a column (for wrapped long lists)
+            case 'ArrowLeft':  if (item?.cycle) item.cycle(-1); else sel = Math.max(0, sel - col); break;
+            case 'ArrowRight': if (item?.cycle) item.cycle(1);  else sel = Math.min(n - 1, sel + col); break;
             case 'Enter':     activate(); break;
             case 'Escape': case 'Backspace': back(); break;
             default: return;
@@ -127,6 +144,15 @@ export function createMenu(font, host) {
         render();
     }
     window.addEventListener('keydown', onKey);
+
+    // mouse wheel moves the cursor (and the skull-hover already re-selects)
+    root.addEventListener('wheel', e => {
+        if (hidden || entry || !screen()) return;
+        e.preventDefault();
+        const n = screen().items.length;
+        sel = (sel + (e.deltaY > 0 ? 1 : n - 1)) % n;
+        render();
+    }, { passive: false });
 
     return {
         // replace the whole stack (initial/root screen)

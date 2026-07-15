@@ -40,7 +40,8 @@ async function fetchWad(file, sha) {
 
 // wads: [{file, sha}] — first entry is the IWAD, the rest are PWADs.
 // net: {slot, numplayers, rttMs} or null for single player.
-export async function bootDoom({ wads, args = [], net = null }) {
+// onQuit: called when the player quits in-game (Quit Game → Y).
+export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
     const canvas = document.getElementById('screen');
     document.getElementById('landing').hidden = true;
     canvas.hidden = false;
@@ -90,9 +91,25 @@ export async function bootDoom({ wads, args = [], net = null }) {
     createSettingsUI(input, doom);
     doom._web_set_smooth(input.settings.smooth ? 1 : 0);
 
+    // Quit Game → Y calls I_Quit → this hook: stop the loop, tear down,
+    // and let the front end return to the main menu (a fresh wasm boots
+    // on the next PLAY — this instance force-exits).
+    let running = true;
+    doom.onQuit = () => {
+        running = false;
+        document.exitPointerLock?.();
+        canvas.hidden = true;
+        document.getElementById('landing').hidden = false;
+        try { window.doomAudio?.stop?.(); } catch { /* dead instance */ }
+        onQuit?.();
+    };
+
     const frame = () => {
-        input.frame();
-        doom._web_frame();
+        if (!running) return;
+        try {
+            input.frame();
+            doom._web_frame();
+        } catch { running = false; return; }   // I_Quit/I_Error aborted
         const v = doom._web_palette_version();
         renderer.draw(
             doom.HEAPU8.subarray(fb, fb + 320 * 200),
@@ -100,7 +117,7 @@ export async function bootDoom({ wads, args = [], net = null }) {
             v !== palVersion,
         );
         palVersion = v;
-        requestAnimationFrame(frame);
+        if (running) requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
     console.log(`webdoom up — renderer: ${renderer.kind}, ${net ? `netplay slot ${net.slot}/${net.numplayers}` : 'single player'}`);

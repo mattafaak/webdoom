@@ -98,5 +98,16 @@ export function createAudio(doom) {
     };
     doom.musicEvent = () => {};         // pump runs continuously once armed
 
-    return { armed: () => !!ctx };
+    return {
+        armed: () => !!ctx,
+        // called on quit: stop the render pump and release the context so
+        // the interval doesn't poke a force-exited wasm instance
+        stop() {
+            if (pumpTimer) clearInterval(pumpTimer);
+            for (const evt of ['keydown', 'mousedown', 'touchstart'])
+                window.removeEventListener(evt, arm, { capture: true });
+            try { ctx?.close(); } catch { /* already closed */ }
+            ctx = null;
+        },
+    };
 }

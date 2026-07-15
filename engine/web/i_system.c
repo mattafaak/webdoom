@@ -54,6 +54,9 @@ void I_Quit (void)
     I_ShutdownMusic ();
     M_SaveDefaults ();
     I_ShutdownGraphics ();
+    // webdoom: hand control back to the page (return to the main menu)
+    // instead of leaving a dead, frozen canvas.
+    EM_ASM ({ if (Module["onQuit"]) Module["onQuit"](); });
     emscripten_force_exit (0);
 }
 

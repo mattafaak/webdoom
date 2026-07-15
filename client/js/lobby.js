@@ -61,12 +61,22 @@ function rootScreen() {
     };
 }
 
+// Quit Game (→ Y) inside the engine returns here.
+function returnToMenu() {
+    booted = false;
+    if (lobby) { lobby.close(); lobby = null; }
+    roster = null;
+    menu.show();
+    menu.reset(rootScreen());
+}
+
 function spGameScreen() {
     const boot = w => {
         if (booted) return;
         booted = true;
         menu.hide();
-        bootDoom({ wads: stackFor(w.file) }).catch(err => status(String(err)));
+        bootDoom({ wads: stackFor(w.file), onQuit: returnToMenu })
+            .catch(err => status(String(err)));
     };
     return {
         title: 'CHOOSE GAME',
@@ -118,6 +128,7 @@ function enterMultiplayer() {
                 wads: stackFor(m.params.wad),
                 args: launchArgs(m.params, isCommercial(e)),
                 net: { slot: lobby.slot, numplayers: m.numplayers, rttMs: rtt, names: m.names, slots: m.slots },
+                onQuit: returnToMenu,
             }).then(() => {
                 countdown.dismiss();
                 lobby.close();
@@ -196,19 +207,21 @@ const skillPick = () => picker('HOW TOUGH ARE YOU?', SKILLS.map((label, i) =>
 function optionsPick() {
     const p = roster?.params ?? {};
     const onoff = v => v ? 'ON' : 'OFF';
-    const toggle = patch => () => { setParams(patch); menu.refresh(optionsPick()); };
+    const set = patch => { setParams(patch); menu.refresh(optionsPick()); };
     const timers = [0, 5, 10, 15, 20, 30];
+    const bump = dir => set({ timer: timers[(timers.indexOf(p.timer ?? 0) + dir + timers.length) % timers.length] });
+    const flip = key => () => set({ [key]: !p[key] });
     return {
         title: 'OPTIONS',
         items: [
             { label: 'NO MONSTERS: ', value: onoff(p.nomonsters),
-              action: toggle({ nomonsters: !p.nomonsters }) },
+              action: flip('nomonsters'), cycle: flip('nomonsters') },
             { label: 'FAST MONSTERS: ', value: onoff(p.fast),
-              action: toggle({ fast: !p.fast }) },
+              action: flip('fast'), cycle: flip('fast') },
             { label: 'RESPAWN MONSTERS: ', value: onoff(p.respawn),
-              action: toggle({ respawn: !p.respawn }) },
+              action: flip('respawn'), cycle: flip('respawn') },
             { label: 'TIME LIMIT: ', value: p.timer ? `${p.timer} MIN` : 'OFF',
-              action: toggle({ timer: timers[(timers.indexOf(p.timer ?? 0) + 1) % timers.length] }) },
+              action: () => bump(1), cycle: bump },
         ],
     };
 }
@@ -218,23 +231,56 @@ function mapName(p) {
     return isCommercial(e) ? `MAP${String(p.map).padStart(2, '0')}` : `E${p.episode}M${p.map}`;
 }
 
+// wrap-around cycle helper
+const cyc = (arr, cur, dir) => arr[(arr.indexOf(cur) + dir + arr.length) % arr.length];
+
 function lobbyScreen() {
     const me = roster?.players.find(pl => pl.slot === lobby.slot);
     const p = roster?.params ?? {};
     const free = roster?.freeSlots ?? [];
     const mode = MODES.find(m => m[0] === p.mode)?.[1] ?? p.mode;
+    const refresh = () => menu.refresh(lobbyScreen());
+
+    const cycleGame = dir => {
+        const files = sortedGames().map(w => w.file);
+        setParams({ wad: cyc(files, p.wad, dir), episode: 1, map: 1 });
+        refresh();
+    };
+    const cycleMap = dir => {
+        const w = entry(p.wad), maps = w?.maps ?? [];
+        const cur = mapName(p);
+        const next = maps[(maps.indexOf(cur) + dir + maps.length) % maps.length];
+        if (!next) return;
+        if (isCommercial(w)) setParams({ map: +next.slice(3) });
+        else setParams({ episode: +next[1], map: +next[3] });
+        refresh();
+    };
+    const cycleMode = dir => { setParams({ mode: cyc(MODES.map(m => m[0]), p.mode, dir) }); refresh(); };
+    const cycleSkill = dir => { setParams({ skill: ((p.skill - 1 + dir + 5) % 5) + 1 }); refresh(); };
+    const cycleColor = dir => {
+        const order = [lobby.slot, ...free].sort((a, b) => a - b);
+        const next = order[(order.indexOf(lobby.slot) + dir + order.length) % order.length];
+        if (next !== lobby.slot) lobby.send({ t: 'slot', slot: next });
+    };
+
     return {
         id: 'lobby',
         title: 'FIGHT TOGETHER',
         header: (roster?.players ?? []).map(pl =>
             ({ text: pl.name + '  ', color: pl.color })),
         onBack: leaveLobby,
+        // GAME/MAP/MODE/SKILL/COLOR: Enter opens the full picker, ←/→
+        // cycles the value in place (both land on the same result)
         items: [
             { label: 'START GAME', action: () => lobby.start() },
-            { label: 'GAME: ', value: entry(p.wad)?.title ?? p.wad, action: () => menu.push(gamePick()) },
-            { label: 'MAP: ', value: mapName(p), action: () => menu.push(mapPick()) },
-            { label: 'MODE: ', value: mode, action: () => menu.push(modePick()) },
-            { label: 'SKILL: ', value: SKILLS[p.skill - 1] ?? '', action: () => menu.push(skillPick()) },
+            { label: 'GAME: ', value: entry(p.wad)?.title ?? p.wad,
+              action: () => menu.push(gamePick()), cycle: cycleGame },
+            { label: 'MAP: ', value: mapName(p),
+              action: () => menu.push(mapPick()), cycle: cycleMap },
+            { label: 'MODE: ', value: mode,
+              action: () => menu.push(modePick()), cycle: cycleMode },
+            { label: 'SKILL: ', value: SKILLS[p.skill - 1] ?? '',
+              action: () => menu.push(skillPick()), cycle: cycleSkill },
             { label: 'OPTIONS', action: () => menu.push(optionsPick()) },
             {
                 label: 'NAME: ', value: me?.name ?? '',
@@ -247,11 +293,7 @@ function lobbyScreen() {
             ...(free.length ? [{
                 label: 'COLOR: ', value: (me?.color ?? '').toUpperCase(),
                 color: me?.color ?? null,
-                action: () => {
-                    const order = [lobby.slot, ...free].sort();
-                    const next = order[(order.indexOf(lobby.slot) + 1) % order.length];
-                    if (next !== lobby.slot) lobby.send({ t: 'slot', slot: next });
-                },
+                action: () => cycleColor(1), cycle: cycleColor,
             }] : []),
         ],
     };

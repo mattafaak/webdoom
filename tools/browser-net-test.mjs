@@ -62,8 +62,10 @@ async function openTab(name) {
             return false;
         },
         async key(key) {
-            await this.cdp('Input.dispatchKeyEvent', { type: 'keyDown', key, text: key.length === 1 ? key : undefined });
-            await this.cdp('Input.dispatchKeyEvent', { type: 'keyUp', key });
+            // the menu switches on e.code, so send a matching code
+            const code = key.length === 1 ? `Key${key.toUpperCase()}` : key;
+            for (const type of ['keyDown', 'keyUp'])
+                await this.cdp('Input.dispatchKeyEvent', { type, key, code, text: type === 'keyDown' && key.length === 1 ? key : undefined });
             await sleep(80);
         },
     };
@@ -85,8 +87,22 @@ if (!await A.eval(`!!document.querySelector('#dmenu .row[data-label*="START GAME
 if (!await A.click('SKILL')) fail('A: SKILL item not found');
 if (!await A.click('ULTRA-VIOLENCE')) fail('A: skill option not found');
 await sleep(500);
-if (!await A.eval(`!!document.querySelector('#dmenu .row[data-label*="SKILL: ULTRA-VIOLENCE"]')`))
-    fail('A: picker did not return to lobby with the new value');
+// back on the lobby, the SKILL row now reads the chosen value (the
+// selected row also shows a "< >" cycle hint, so match on the value)
+const skillRow = await A.eval(
+    `[...document.querySelectorAll('#dmenu .row')].find(r => r.dataset.label.startsWith('SKILL'))?.dataset.label`);
+if (!skillRow?.includes('ULTRA-VIOLENCE'))
+    fail(`A: picker did not return to lobby with the new value (${skillRow})`);
+
+// left/right also cycles a lobby value in place: right-arrow on SKILL
+// should advance it (and it's already the selected row)
+await A.key('ArrowRight');
+await sleep(300);
+const skillAfter = await A.eval(
+    `[...document.querySelectorAll('#dmenu .row')].find(r => r.dataset.label.startsWith('SKILL'))?.dataset.label`);
+if (skillAfter === skillRow) fail('A: left/right did not cycle SKILL');
+await A.key('ArrowLeft');   // back to ULTRA-VIOLENCE
+await sleep(300);
 
 // B joins → should land straight in the lobby, then personalize
 if (!await B.click('MULTIPLAYER')) fail('B: MULTIPLAYER not found');
