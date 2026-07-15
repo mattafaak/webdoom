@@ -46,7 +46,10 @@
 
 
 // Networking and tick handling related.
-#define BACKUPTICS		12
+// webdoom: was 12 (1993 LAN-IPX). A bigger ring gives the browser netcode
+// room for a real jitter buffer plus send-ahead (BACKUPTICS/2-1 tics each)
+// so tailnet/WAN jitter is absorbed instead of causing catch-up hitches.
+#define BACKUPTICS		35
 
 typedef enum
 {

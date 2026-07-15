@@ -213,11 +213,46 @@ void TryRunTics (void)
         if (playeringame[i] && nettics[i] < lowtic)
             lowtic = nettics[i];
 
-    // Sealed and due. realtics caps sim speed at wall-clock rate; the
-    // +web_inputdelay slack lets a late frame catch up gradually.
-    counts = lowtic - gametic;
-    if (counts > realtics + web_inputdelay)
-        counts = realtics + web_inputdelay;
+    if (netgame)
+    {
+        // Jitter buffer. Network delivery is uneven, so running straight to
+        // the sealed frontier makes the sim alternate stalls with multi-tic
+        // catch-up bursts — and render interpolation only smooths a burst's
+        // last tic, so the rest reads as a rubber-band jump.
+        //
+        // Instead aim at a point web_inputdelay tics BEHIND the frontier and
+        // advance toward it at wall-clock rate (realtics = 0 or 1 per 60fps
+        // frame). The buffer is runway: when jitter briefly freezes the
+        // frontier the sim keeps gliding on the runway instead of stalling,
+        // and when the frontier lurches forward the realtics cap stops the
+        // sim from swallowing the gap in one visible jump. Target and gametic
+        // share the level-relative tic origin — I_GetTime counts from boot,
+        // so it can't be the reference here.
+        int target = lowtic - web_inputdelay;
+        counts = target - gametic;
+        // Steady state paces strictly at wall-clock (realtics = 0 or 1 per
+        // frame) so the view never jumps — ordinary jitter just breathes the
+        // buffer depth in and out, invisibly. The one exception is a safety
+        // drain: if a stall far deeper than the buffer has let the frontier
+        // margin grow past twice its target, reclaim latency one tic/frame so
+        // input lag can't creep upward without bound on a bad link.
+        int cap = (lowtic - gametic > 2 * web_inputdelay) ? realtics + 1
+                                                          : realtics;
+        if (counts > cap)
+            counts = cap;
+        if (counts > lowtic - gametic)      // never run past sealed tics
+            counts = lowtic - gametic;
+    }
+    else
+    {
+        // Single player: no network, so the frontier is always ready;
+        // run to it, capped at wall-clock rate plus a tic of slack.
+        counts = lowtic - gametic;
+        if (counts > realtics + web_inputdelay)
+            counts = realtics + web_inputdelay;
+    }
+    if (counts < 0)
+        counts = 0;
 
     while (counts-- > 0)
     {

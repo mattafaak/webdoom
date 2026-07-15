@@ -46,8 +46,12 @@ export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, nam
     names?.forEach((n, i) => {
         if (n) doom.ccall('web_set_player_name', null, ['number', 'string'], [i, n]);
     });
-    // delay ≥ half-RTT in tics, minimum 1 (one tic = 28.6ms)
-    doom._web_net_set_delay(Math.max(1, Math.ceil(rttMs / 2 / 28.6)));
+    // jitter buffer: keep the sim this many tics behind the sealed
+    // frontier so jitter never starves it (one tic = 28.6ms). In lockstep
+    // a tic runs only after the FULL round-trip (send cmd → receive sealed
+    // bundle), so the frontier lags real time by the whole RTT — buffer
+    // must cover that, plus a tic of jitter margin. Floor of 2 for LAN.
+    doom._web_net_set_delay(Math.max(2, Math.ceil(rttMs / 28.6) + 1));
 
     const up = new Uint8Array(4 + CMD_SIZE);
     const upView = new DataView(up.buffer);
