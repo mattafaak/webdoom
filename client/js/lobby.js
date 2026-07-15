@@ -128,12 +128,16 @@ function enterMultiplayer() {
             if (booted) return;
             booted = true;
             countdown.show('GO');
-            // Sample RTT several times and size the buffer to the jitter
-            // (peak spread), not the mean — the mean is already in lockstep's
-            // inherent lag; only variance needs absorbing (see attachRelay).
+            // Sample RTT and size the buffer to a ROBUST jitter estimate:
+            // the 75th-percentile spread above the fastest ping, not the mean
+            // (already in lockstep's inherent lag) nor the worst spike. On a
+            // high-jitter relay link the max would balloon the buffer into
+            // pure lag; the sim's safety drain absorbs the rare straggler a
+            // tighter buffer lets through.
             const rtts = [];
-            for (let i = 0; i < 8; i++) rtts.push(await lobby.ping().catch(() => 30));
-            const jitterMs = Math.max(...rtts) - Math.min(...rtts);
+            for (let i = 0; i < 12; i++) rtts.push(await lobby.ping().catch(() => 50));
+            rtts.sort((a, b) => a - b);
+            const jitterMs = rtts[Math.floor(rtts.length * 0.75)] - rtts[0];
             const e = entry(m.params.wad);
             menu.hide();
             bootDoom({

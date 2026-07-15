@@ -52,8 +52,10 @@ export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, nam
     // already baked into the frontier — adding it to the buffer double-lags
     // the game. The buffer only has to cover arrival-time *variance* so the
     // sim's wall-clock pacing never outruns the frontier. Floor of 2 for LAN
-    // micro-jitter; the sim's safety drain mops up any rarer spike.
-    doom._web_net_set_delay(Math.max(2, Math.ceil(jitterMs / 28.6) + 1));
+    // micro-jitter; capped at 4 so a pathological link can't trade all its
+    // responsiveness for smoothness — the sim's safety drain mops up spikes.
+    const delay = Math.min(4, Math.max(2, Math.ceil(jitterMs / 28.6) + 1));
+    doom._web_net_set_delay(delay);
 
     const up = new Uint8Array(4 + CMD_SIZE);
     const upView = new DataView(up.buffer);
