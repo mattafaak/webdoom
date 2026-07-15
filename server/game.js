@@ -236,9 +236,12 @@ export function createGame(log = console.log) {
 
     // --- ws mounting ---------------------------------------------------------
     // maxPayload: lobby messages are small JSON, relay messages are 12
-    // bytes — anything bigger is garbage (default cap is 100MB)
-    const lobbyWss = new WebSocketServer({ noServer: true, maxPayload: 1024 });
-    const gameWss = new WebSocketServer({ noServer: true, maxPayload: 64 });
+    // bytes — anything bigger is garbage (default cap is 100MB).
+    // perMessageDeflate off: compressing 12-byte, latency-critical packets
+    // only burns CPU and adds delay; pin it so a ws default flip can't
+    // silently re-enable it.
+    const lobbyWss = new WebSocketServer({ noServer: true, maxPayload: 1024, perMessageDeflate: false });
+    const gameWss = new WebSocketServer({ noServer: true, maxPayload: 64, perMessageDeflate: false });
     lobbyWss.on('connection', lobbyConnect);
     gameWss.on('connection', (ws, req) => relayConnect(ws, req.url));
 
