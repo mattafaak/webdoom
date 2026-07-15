@@ -6,14 +6,17 @@
 // that shifts the sim by even one P_Random call fails with the exact
 // tic where it diverged.
 //
-// usage: node tools/demo-test.mjs           # verify against golden
-//        node tools/demo-test.mjs --record  # (re)write golden traces
+// usage: node tools/demo-test.mjs             # verify sim traces against golden
+//        node tools/demo-test.mjs --record    # (re)write sim golden traces
+//        node tools/demo-test.mjs --render    # verify render goldens (auto-record if absent)
+//        node tools/demo-test.mjs --render --record  # force re-record render goldens
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const record = process.argv.includes('--record');
+const renderMode = process.argv.includes('--render');
 const crossIdx = process.argv.indexOf('--cross');
 const chocoBin = crossIdx >= 0 ? process.argv[crossIdx + 1] : null;
 const goldenDir = join(root, 'tools/golden');
@@ -28,6 +31,145 @@ const MATRIX = [
     ['tnt.wad', 'tnt.wad', ['demo1', 'demo2', 'demo3']],
     ['plutonia.wad', 'plutonia.wad', ['demo1', 'demo2', 'demo3']],
 ];
+
+// ── render mode ─────────────────────────────────────────────────────────────
+//
+// Per-tic FNV-1a 32-bit hash of the palette-indexed engine framebuffer
+// (screens[0], 320*200=64000 bytes) plus the current palette version counter,
+// stored in tools/golden/<wad>-<demo>-render.json as {"tics":N,"trace":[u32...]}.
+//
+// Determinism design:
+//   - NO -nodraw: the full render path (R_RenderPlayerView → D_Display) runs.
+//   - web_set_smooth(0): sets smoothrender=false in r_main.c, pinning fractic
+//     to FRACUNIT.  Every render is the canonical end-of-tic snapshot with no
+//     contribution from emscripten_get_now() (wall-clock time).  Without this,
+//     I_GetTimeFrac() introduces wall-clock dependency into the interpolated
+//     positions of all moving objects, making renders non-deterministic.
+//   - web_wipe_skip() before every frame: melt wipes are wall-clock driven
+//     (non-deterministic) and purely cosmetic.  Clearing wipeactive=0 before
+//     D_DoomFrame prevents it from entering D_WipeFrame and returning early,
+//     ensuring the sim always advances and we capture rendered game frames only.
+//
+// What is hashed:
+//   screens[0] — 64000 indexed bytes capturing all renderer output including
+//   colormap effects: light levels, berserk green tint (fixedcolormap),
+//   invulnerability sphere — any change in which color-indices the renderer
+//   writes is detected here.
+//
+//   paletteversion (4-byte little-endian fold) — a monotonically increasing
+//   counter bumped on every I_SetPalette call.  Damage/pickup palette flashes
+//   (blood-red tint, etc.) change webpalette (the RGB mapping) but NOT the
+//   indexed pixel values in screens[0].  Folding paletteversion catches those
+//   regressions too.  The call sequence is game-logic driven and therefore
+//   deterministic across runs.
+
+if (renderMode) {
+    // FNV-1a 32-bit: offset_basis=0x811c9dc5, prime=0x01000193
+    function fnv1aRender(heapu8, fbPtr, palVer) {
+        let h = 0x811c9dc5;
+        const end = fbPtr + 320 * 200;
+        for (let i = fbPtr; i < end; i++) {
+            h = Math.imul(h ^ heapu8[i], 0x01000193);
+        }
+        // Fold palette version as 4 little-endian bytes.
+        h = Math.imul(h ^ ( palVer        & 0xff), 0x01000193);
+        h = Math.imul(h ^ ((palVer >>> 8)  & 0xff), 0x01000193);
+        h = Math.imul(h ^ ((palVer >>> 16) & 0xff), 0x01000193);
+        h = Math.imul(h ^ ((palVer >>> 24) & 0xff), 0x01000193);
+        return h >>> 0;
+    }
+
+    let failures = 0;
+
+    for (const [wad, engineName, demos] of MATRIX) {
+        const path = join(root, 'wads/lib', wad);
+        if (!existsSync(path)) { console.log(`skip ${wad}: not fetched`); continue; }
+        const wadBytes = readFileSync(path);
+
+        for (const demo of demos) {
+            let done = null;
+            const doom = await createDoom({
+                print: () => {},
+                printErr: t => { const m = /timed (\d+) gametics/.exec(t); if (m) done = +m[1]; },
+                onDoomError: msg => { if (!/timed \d+ gametics/.test(msg)) done = `error: ${msg}`; },
+            });
+            {
+                const p = doom._malloc(wadBytes.length);
+                doom.HEAPU8.set(wadBytes, p);
+                doom.ccall('web_register_file', null, ['string', 'number', 'number'],
+                    [engineName, p, wadBytes.length]);
+            }
+
+            const trace = [];
+            try {
+                // No -nodraw: the full render path must run.
+                doom.callMain(['-timedemo', demo]);
+                // Pin fractic=FRACUNIT so renders are deterministic end-of-tic
+                // snapshots with no wall-clock (emscripten_get_now) contribution.
+                doom._web_set_smooth(0);
+                // Stable pointer into wasm memory for screens[0]; valid for this
+                // doom instance's lifetime and does not move between frames.
+                const fbPtr = doom._web_framebuffer();
+                let lastTic = -1;
+                for (let i = 0; i < 200000 && done === null; i++) {
+                    // Skip any active melt wipe before stepping: wipes are
+                    // wall-clock driven and would cause D_DoomFrame to return
+                    // early (via D_WipeFrame) without advancing the sim or
+                    // rendering, and their frames are non-deterministic.
+                    doom._web_wipe_skip();
+                    doom._web_frame();
+                    const tic = doom._web_gametic();
+                    if (tic !== lastTic) {
+                        trace.push(fnv1aRender(doom.HEAPU8, fbPtr,
+                            doom._web_palette_version()));
+                        lastTic = tic;
+                    }
+                }
+            } catch (e) {
+                // timedemo I_Error unwinds here; done is already set
+                if (done === null) done = `threw: ${String(e).slice(0, 80)}`;
+            }
+
+            const name = `${wad.replace('.wad', '')}-${demo}`;
+            if (typeof done !== 'number') {
+                console.log(`FAIL ${name} render: ${done ?? 'never finished'}`);
+                failures++;
+                continue;
+            }
+
+            const goldenPath = join(goldenDir, `${name}-render.json`);
+            if (record || !existsSync(goldenPath)) {
+                writeFileSync(goldenPath, JSON.stringify({ tics: done, trace }));
+                console.log(`recorded ${name} render: ${done} gametics, ${trace.length} hashes`);
+                continue;
+            }
+
+            const golden = JSON.parse(readFileSync(goldenPath));
+            if (golden.tics !== done) {
+                console.log(`FAIL ${name} render: ran ${done} gametics, golden ${golden.tics}`);
+                failures++;
+                continue;
+            }
+            let diverged = -1;
+            for (let i = 0; i < golden.trace.length; i++) {
+                if (golden.trace[i] !== trace[i]) { diverged = i; break; }
+            }
+            if (diverged >= 0) {
+                console.log(`FAIL ${name} render: PIXEL DESYNC at tic ${diverged} of ${golden.trace.length} (wad=${wad} demo=${demo})`);
+                failures++;
+            } else {
+                console.log(`PASS ${name} render: ${done} gametics pixel-identical`);
+            }
+        }
+    }
+
+    if (failures) { console.log(`${failures} render golden(s) failed`); process.exit(1); }
+    console.log(record ? 'render golden traces written'
+                       : 'PASS — all render goldens pixel-identical');
+    process.exit(0);
+}
+
+// ── sim mode (original code, unchanged) ─────────────────────────────────────
 
 let failures = 0;
 
