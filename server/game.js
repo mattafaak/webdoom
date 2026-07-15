@@ -247,6 +247,9 @@ export function createGame(log = console.log) {
             const path = new URL(req.url, 'http://x').pathname;
             const wss = path === '/ws/lobby' ? lobbyWss : path === '/ws/game' ? gameWss : null;
             if (!wss) { socket.destroy(); return; }
+            // Kill Nagle: ticcmds and bundles are tiny and time-critical, so
+            // batching them behind delayed-ACK would add tens of ms of lag.
+            socket.setNoDelay(true);
             wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
         },
     };
