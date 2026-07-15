@@ -19,19 +19,19 @@
 
 EM_JS (void, js_sfx_start, (int handle, int id, void* data, int len,
                             int vol, int sep, int pitch), {
-    if (Module.sfxStart) Module.sfxStart(handle, id, data, len, vol, sep, pitch);
+    if (Module["sfxStart"]) Module["sfxStart"](handle, id, data, len, vol, sep, pitch);
 });
 EM_JS (void, js_sfx_stop, (int handle), {
-    if (Module.sfxStop) Module.sfxStop(handle);
+    if (Module["sfxStop"]) Module["sfxStop"](handle);
 });
 EM_JS (int, js_sfx_playing, (int handle), {
-    return Module.sfxPlaying ? Module.sfxPlaying(handle) : 0;
+    return Module["sfxPlaying"] ? Module["sfxPlaying"](handle) : 0;
 });
 EM_JS (void, js_sfx_update, (int handle, int vol, int sep, int pitch), {
-    if (Module.sfxUpdate) Module.sfxUpdate(handle, vol, sep, pitch);
+    if (Module["sfxUpdate"]) Module["sfxUpdate"](handle, vol, sep, pitch);
 });
 EM_JS (void, js_music_event, (int what), {   // 1 play, 0 stop
-    if (Module.musicEvent) Module.musicEvent(what);
+    if (Module["musicEvent"]) Module["musicEvent"](what);
 });
 
 void I_InitSound (void) { I_InitMusic (); }

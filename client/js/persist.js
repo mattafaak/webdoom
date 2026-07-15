@@ -1,13 +1,13 @@
-// Savegame + config persistence: the engine writes into the wasm's
-// in-memory FS, which dies with the page. This mirrors the files that
-// matter into IndexedDB — savegames keyed per IWAD (a doom2 save is
-// meaningless to doom.wad), config shared — and restores them before
-// the engine boots.
+// Savegame + config persistence. The engine has no filesystem: small
+// files (savegames, .doomrc) live in a JS Map (Module.fileMap) bridged
+// through three wasm imports. This module fills the Map from IndexedDB
+// before boot and mirrors changes back — savegames keyed per IWAD,
+// config shared.
 
 const DB = 'webdoom';
 const STORE = 'files';
-const SAVES = [...Array(6).keys()].map(i => `/doomsav${i}.dsg`);
-const CONFIG = '/home/web_user/.doomrc';
+const SAVES = [...Array(6).keys()].map(i => `doomsav${i}.dsg`);
+const CONFIG = '.doomrc';
 
 function db() {
     return new Promise((res, rej) => {
@@ -25,16 +25,20 @@ const tx = (d, mode, fn) => new Promise((res, rej) => {
     t.onerror = () => rej(t.error);
 });
 
-const keyFor = (iwad, path) => path === CONFIG ? `config:${path}` : `${iwad}:${path}`;
+const keyFor = (iwad, name) => name === CONFIG ? `config:${name}` : `${iwad}:${name}`;
+// pre-registry builds keyed by MEMFS paths
+const legacyKeyFor = (iwad, name) =>
+    name === CONFIG ? 'config:/home/web_user/.doomrc' : `${iwad}:/${name}`;
 
-// → Map(path → Uint8Array), fetched before the engine boots
+// → Map(name → Uint8Array), fetched before the engine boots
 export async function loadPersisted(iwad) {
     const files = new Map();
     try {
         const d = await db();
-        for (const path of [...SAVES, CONFIG]) {
-            const bytes = await tx(d, 'readonly', s => s.get(keyFor(iwad, path)));
-            if (bytes) files.set(path, bytes);
+        for (const name of [...SAVES, CONFIG]) {
+            const bytes = await tx(d, 'readonly', s => s.get(keyFor(iwad, name)))
+                ?? await tx(d, 'readonly', s => s.get(legacyKeyFor(iwad, name)));
+            if (bytes) files.set(name, bytes);
         }
         d.close();
     } catch (err) {
@@ -43,18 +47,9 @@ export async function loadPersisted(iwad) {
     return files;
 }
 
-// call inside preRun, once the FS exists
-export function restoreFiles(FS, files) {
-    for (const [path, bytes] of files) {
-        try { FS.writeFile(path, bytes); }
-        catch (err) { console.warn(`restore failed for ${path}:`, err); }
-    }
-}
-
-// mirror changes out every few seconds (+ on tab hide); cheap no-op
-// when nothing changed
+// mirror fileMap changes out every few seconds (+ on tab hide)
 export function startSync(doom, iwad, intervalMs = 3000) {
-    const lastLen = new Map();      // path → last synced byte length+sum
+    const lastFp = new Map();
 
     const fingerprint = b => {
         let sum = 0;
@@ -63,17 +58,19 @@ export function startSync(doom, iwad, intervalMs = 3000) {
     };
 
     async function sync() {
-        doom._web_save_defaults();
+        doom._web_save_defaults();      // flush live config into the Map
+        const m = doom['fileMap'];
+        if (!m) return;
         let d = null;
-        for (const path of [...SAVES, CONFIG]) {
-            let bytes;
-            try { bytes = doom.FS.readFile(path); } catch { continue; }
+        for (const name of [...SAVES, CONFIG]) {
+            const bytes = m.get(name);
+            if (!bytes) continue;
             const fp = fingerprint(bytes);
-            if (lastLen.get(path) === fp) continue;
+            if (lastFp.get(name) === fp) continue;
             try {
                 d ??= await db();
-                await tx(d, 'readwrite', s => s.put(bytes, keyFor(iwad, path)));
-                lastLen.set(path, fp);
+                await tx(d, 'readwrite', s => s.put(bytes, keyFor(iwad, name)));
+                lastFp.set(name, fp);
             } catch (err) {
                 console.warn('save sync failed:', err);
                 return;

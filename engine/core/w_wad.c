@@ -47,6 +47,7 @@ rcsid[] = "$Id: w_wad.c,v 1.5 1997/02/03 16:47:57 b1 Exp $";
 #pragma implementation "w_wad.h"
 #endif
 #include "w_wad.h"
+#include "web.h"	// webdoom in-heap file registry
 
 
 
@@ -140,27 +141,19 @@ char*			reloadname;
 
 void W_AddFile (char *filename)
 {
-    wadinfo_t		header;
+    wadinfo_t*		header;
     lumpinfo_t*		lump_p;
     unsigned		i;
-    int			handle;
+    byte*		data;
     int			length;
     int			startlump;
     filelump_t*		fileinfo;
     filelump_t		singleinfo;
-    int			storehandle;
-    
-    // open the file and add to directory
 
-    // handle reload indicator.
-    if (filename[0] == '~')
-    {
-	filename++;
-	reloadname = filename;
-	reloadlump = numlumps;
-    }
-		
-    if ( (handle = open (filename,O_RDONLY | O_BINARY)) == -1)
+    // webdoom: files come from the in-heap registry (JS put them there);
+    // lumps are read by pointer, never through a filesystem.
+    data = W_WebFile (filename, &length);
+    if (!data)
     {
 	printf (" couldn't open %s\n",filename);
 	return;
@@ -168,41 +161,33 @@ void W_AddFile (char *filename)
 
     printf (" adding %s\n",filename);
     startlump = numlumps;
-	
+
     if (strcmpi (filename+strlen(filename)-3 , "wad" ) )
     {
 	// single lump file
 	fileinfo = &singleinfo;
 	singleinfo.filepos = 0;
-	singleinfo.size = LONG(filelength(handle));
+	singleinfo.size = LONG(length);
 	ExtractFileBase (filename, singleinfo.name);
 	numlumps++;
     }
-    else 
+    else
     {
 	// WAD file
-	read (handle, &header, sizeof(header));
-	if (strncmp(header.identification,"IWAD",4))
+	header = (wadinfo_t*) data;
+	if (strncmp(header->identification,"IWAD",4))
 	{
 	    // Homebrew levels?
-	    if (strncmp(header.identification,"PWAD",4))
+	    if (strncmp(header->identification,"PWAD",4))
 	    {
 		I_Error ("Wad file %s doesn't have IWAD "
 			 "or PWAD id\n", filename);
 	    }
-	    
-	    // ???modifiedgame = true;		
 	}
-	header.numlumps = LONG(header.numlumps);
-	header.infotableofs = LONG(header.infotableofs);
-	length = header.numlumps*sizeof(filelump_t);
-	fileinfo = alloca (length);
-	lseek (handle, header.infotableofs, SEEK_SET);
-	read (handle, fileinfo, length);
-	numlumps += header.numlumps;
+	fileinfo = (filelump_t*) (data + LONG(header->infotableofs));
+	numlumps += LONG(header->numlumps);
     }
 
-    
     // Fill in lumpinfo
     lumpinfo = realloc (lumpinfo, numlumps*sizeof(lumpinfo_t));
 
@@ -210,19 +195,14 @@ void W_AddFile (char *filename)
 	I_Error ("Couldn't realloc lumpinfo");
 
     lump_p = &lumpinfo[startlump];
-	
-    storehandle = reloadname ? -1 : handle;
-	
+
     for (i=startlump ; i<numlumps ; i++,lump_p++, fileinfo++)
     {
-	lump_p->handle = storehandle;
-	lump_p->position = LONG(fileinfo->filepos);
+	lump_p->handle = (int) (data + LONG(fileinfo->filepos));
+	lump_p->position = 0;
 	lump_p->size = LONG(fileinfo->size);
 	strncpy (lump_p->name, fileinfo->name, 8);
     }
-	
-    if (reloadname)
-	close (handle);
 }
 
 
@@ -235,43 +215,7 @@ void W_AddFile (char *filename)
 //
 void W_Reload (void)
 {
-    wadinfo_t		header;
-    int			lumpcount;
-    lumpinfo_t*		lump_p;
-    unsigned		i;
-    int			handle;
-    int			length;
-    filelump_t*		fileinfo;
-	
-    if (!reloadname)
-	return;
-		
-    if ( (handle = open (reloadname,O_RDONLY | O_BINARY)) == -1)
-	I_Error ("W_Reload: couldn't open %s",reloadname);
-
-    read (handle, &header, sizeof(header));
-    lumpcount = LONG(header.numlumps);
-    header.infotableofs = LONG(header.infotableofs);
-    length = lumpcount*sizeof(filelump_t);
-    fileinfo = alloca (length);
-    lseek (handle, header.infotableofs, SEEK_SET);
-    read (handle, fileinfo, length);
-    
-    // Fill in lumpinfo
-    lump_p = &lumpinfo[reloadlump];
-	
-    for (i=reloadlump ;
-	 i<reloadlump+lumpcount ;
-	 i++,lump_p++, fileinfo++)
-    {
-	if (lumpcache[i])
-	    Z_Free (lumpcache[i]);
-
-	lump_p->position = LONG(fileinfo->filepos);
-	lump_p->size = LONG(fileinfo->size);
-    }
-	
-    close (handle);
+    // webdoom: the '~' dev-reload feature needs a filesystem; gone.
 }
 
 
@@ -433,37 +377,15 @@ W_ReadLump
 ( int		lump,
   void*		dest )
 {
-    int		c;
     lumpinfo_t*	l;
-    int		handle;
-	
+
     if (lump >= numlumps)
 	I_Error ("W_ReadLump: %i >= numlumps",lump);
 
     l = lumpinfo+lump;
-	
-    // ??? I_BeginRead ();
-	
-    if (l->handle == -1)
-    {
-	// reloadable file, so use open / read / close
-	if ( (handle = open (reloadname,O_RDONLY | O_BINARY)) == -1)
-	    I_Error ("W_ReadLump: couldn't open %s",reloadname);
-    }
-    else
-	handle = l->handle;
-		
-    lseek (handle, l->position, SEEK_SET);
-    c = read (handle, dest, l->size);
 
-    if (c < l->size)
-	I_Error ("W_ReadLump: only read %i of %i on lump %i",
-		 c,l->size,lump);	
-
-    if (l->handle == -1)
-	close (handle);
-		
-    // ??? I_EndRead ();
+    // webdoom: handle IS the lump's byte pointer into the registered wad
+    memcpy (dest, (byte*) l->handle, l->size);
 }
 
 

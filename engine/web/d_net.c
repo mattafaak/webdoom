@@ -41,7 +41,7 @@ extern boolean advancedemo;
 // Send one local ticcmd to the relay. No-op stub until the JS side
 // defines it (single player, or netcode phase not wired yet).
 EM_JS (void, js_net_send, (int tic, ticcmd_t* cmd, int size), {
-    if (Module.netSend) Module.netSend(tic, cmd, size);
+    if (Module["netSend"]) Module["netSend"](tic, cmd, size);
 });
 
 //
@@ -185,7 +185,7 @@ void D_QuitNetGame (void)
     if (!netgame || !usergame || consoleplayer == -1 || demoplayback)
         return;
 
-    EM_ASM ({ if (Module.netQuit) Module.netQuit(); });
+    EM_ASM ({ if (Module["netQuit"]) Module["netQuit"](); });
 }
 
 //

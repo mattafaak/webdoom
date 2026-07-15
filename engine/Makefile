@@ -11,15 +11,15 @@ CORE_SRC := $(filter-out $(CORE_EXCLUDE),$(wildcard core/*.c))
 WEB_SRC  := $(wildcard web/*.c)
 SRC      := $(CORE_SRC) $(WEB_SRC)
 
-CFLAGS := -O2 -Dalloca=__builtin_alloca -std=gnu89 -DNORMALUNIX -Icore -Iweb \
+CFLAGS := -O3 -flto -Dalloca=__builtin_alloca -std=gnu89 -DNORMALUNIX -Icore -Iweb \
           -fno-strict-aliasing -Wall -Wno-unused-variable \
           -Wno-unused-but-set-variable -Wno-dangling-else \
           -Wno-parentheses -Wno-missing-braces -Wno-unused-value
 
-LDFLAGS := -sINITIAL_MEMORY=64MB -sSTACK_SIZE=4MB \
+LDFLAGS := -flto -sMALLOC=emmalloc -sASSERTIONS=0 --closure 1 -sINITIAL_MEMORY=64MB -sSTACK_SIZE=4MB \
            -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createDoom \
            -sINVOKE_RUN=0 \
-           -sEXPORTED_RUNTIME_METHODS=callMain,ccall,FS,ENV,HEAPU8,HEAP32,HEAPF32 \
+           -sFILESYSTEM=0 -sEXPORTED_RUNTIME_METHODS=callMain,ccall,HEAPU8,HEAP32,HEAPF32 \
            -sEXPORTED_FUNCTIONS=_main,_web_frame,_web_input_event,_web_framebuffer,_web_palette,_web_palette_version,_web_net_setup,_web_net_set_delay,_web_net_bundle,_web_net_scratch,_web_music_render,_web_music_init,_web_music_debug,_web_gamepad,_web_set_smooth,_web_set_pitch,_web_set_player_name,_web_save_defaults,_web_ui_mode,_web_weapon_state,_malloc,_free \
            -sENVIRONMENT=web,worker,node \
            -sALLOW_MEMORY_GROWTH=0

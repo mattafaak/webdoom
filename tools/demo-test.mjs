@@ -42,12 +42,12 @@ for (const [wad, engineName, demos] of MATRIX) {
             print: () => {},
             printErr: t => { const m = /timed (\d+) gametics/.exec(t); if (m) done = +m[1]; },
             onDoomError: msg => { if (!/timed \d+ gametics/.test(msg)) done = `error: ${msg}`; },
-            preRun: [m => {
-                m.ENV.DOOMWADDIR = '/wads'; m.ENV.HOME = '/h';
-                m.FS.mkdir('/h'); m.FS.mkdir('/wads');
-                m.FS.writeFile(`/wads/${engineName}`, wadBytes);
-            }],
         });
+        {
+            const p = doom._malloc(wadBytes.length);
+            doom.HEAPU8.set(wadBytes, p);
+            doom.ccall('web_register_file', null, ['string', 'number', 'number'], [engineName, p, wadBytes.length]);
+        }
 
         const trace = [];
         const raw = [];

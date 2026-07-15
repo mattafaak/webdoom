@@ -235,8 +235,10 @@ export function createGame(log = console.log) {
     }
 
     // --- ws mounting ---------------------------------------------------------
-    const lobbyWss = new WebSocketServer({ noServer: true });
-    const gameWss = new WebSocketServer({ noServer: true });
+    // maxPayload: lobby messages are small JSON, relay messages are 12
+    // bytes — anything bigger is garbage (default cap is 100MB)
+    const lobbyWss = new WebSocketServer({ noServer: true, maxPayload: 1024 });
+    const gameWss = new WebSocketServer({ noServer: true, maxPayload: 64 });
     lobbyWss.on('connection', lobbyConnect);
     gameWss.on('connection', (ws, req) => relayConnect(ws, req.url));
 

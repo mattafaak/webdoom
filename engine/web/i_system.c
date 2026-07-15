@@ -85,6 +85,6 @@ void I_Error (char *error, ...)
     fprintf (stderr, "I_Error: %s\n", msg);
 
     // Surface the message in the page, then halt.
-    EM_ASM ({ if (Module.onDoomError) Module.onDoomError(UTF8ToString($0)); }, msg);
+    EM_ASM ({ if (Module["onDoomError"]) Module["onDoomError"](UTF8ToString($0)); }, msg);
     abort ();
 }

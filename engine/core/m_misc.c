@@ -58,6 +58,7 @@ rcsid[] = "$Id: m_misc.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 #include "dstrings.h"
 
 #include "m_misc.h"
+#include "web.h"	// webdoom file bridge
 
 //
 // M_DrawText
@@ -115,20 +116,9 @@ M_WriteFile
   void*		source,
   int		length )
 {
-    int		handle;
-    int		count;
-	
-    handle = open ( name, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666);
-
-    if (handle == -1)
-	return false;
-
-    count = write (handle, source, length);
-    close (handle);
-	
-    if (count < length)
-	return false;
-		
+    // webdoom: small files (savegames) go through the JS bridge —
+    // persistence hooks pick them up from there
+    Web_FileWrite (name, (byte*) source, length);
     return true;
 }
 
@@ -141,23 +131,15 @@ M_ReadFile
 ( char const*	name,
   byte**	buffer )
 {
-    int	handle, count, length;
-    struct stat	fileinfo;
-    byte		*buf;
-	
-    handle = open (name, O_RDONLY | O_BINARY, 0666);
-    if (handle == -1)
+    int		length;
+    byte*	buf;
+
+    // webdoom: via the JS bridge (fileMap)
+    length = Web_FileLen (name);
+    if (length < 0)
 	I_Error ("Couldn't read file %s", name);
-    if (fstat (handle,&fileinfo) == -1)
-	I_Error ("Couldn't read file %s", name);
-    length = fileinfo.st_size;
     buf = Z_Malloc (length, PU_STATIC, NULL);
-    count = read (handle, buf, length);
-    close (handle);
-	
-    if (count < length)
-	I_Error ("Couldn't read file %s", name);
-		
+    Web_FileCopy (name, buf);
     *buffer = buf;
     return length;
 }
@@ -307,28 +289,26 @@ char*	defaultfile;
 //
 void M_SaveDefaults (void)
 {
+    // webdoom: serialize into a buffer and hand it to the JS bridge
+    static char buf[8192];
     int		i;
     int		v;
-    FILE*	f;
-	
-    f = fopen (defaultfile, "w");
-    if (!f)
-	return; // can't write the file, but don't complain
-		
-    for (i=0 ; i<numdefaults ; i++)
+    int		n = 0;
+
+    for (i=0 ; i<numdefaults && n < (int)sizeof(buf)-160 ; i++)
     {
 	if (defaults[i].defaultvalue > -0xfff
 	    && defaults[i].defaultvalue < 0xfff)
 	{
 	    v = *defaults[i].location;
-	    fprintf (f,"%s\t\t%i\n",defaults[i].name,v);
+	    n += sprintf (buf+n,"%s\t\t%i\n",defaults[i].name,v);
 	} else {
-	    fprintf (f,"%s\t\t\"%s\"\n",defaults[i].name,
+	    n += sprintf (buf+n,"%s\t\t\"%s\"\n",defaults[i].name,
 		     * (char **) (defaults[i].location));
 	}
     }
-	
-    fclose (f);
+
+    Web_FileWrite (".doomrc", (byte*) buf, n);
 }
 
 
@@ -341,65 +321,67 @@ void M_LoadDefaults (void)
 {
     int		i;
     int		len;
-    FILE*	f;
     char	def[80];
     char	strparm[100];
     char*	newstring;
     int		parm;
     boolean	isstring;
-    
+    int		flen;
+    char*	fbuf;
+    char*	line;
+    char*	next;
+
     // set everything to base values
     numdefaults = sizeof(defaults)/sizeof(defaults[0]);
     for (i=0 ; i<numdefaults ; i++)
 	*defaults[i].location = defaults[i].defaultvalue;
-    
-    // check for a custom default file
-    i = M_CheckParm ("-config");
-    if (i && i<myargc-1)
+
+    defaultfile = basedefault;
+
+    // webdoom: config text comes from the JS bridge, parsed line-wise
+    flen = Web_FileLen (".doomrc");
+    if (flen <= 0)
+	return;
+    fbuf = (char*) malloc (flen + 1);
+    Web_FileCopy (".doomrc", (byte*) fbuf);
+    fbuf[flen] = 0;
+
+    for (line = fbuf; line && *line; line = next)
     {
-	defaultfile = myargv[i+1];
-	printf ("	default file: %s\n",defaultfile);
-    }
-    else
-	defaultfile = basedefault;
-    
-    // read the file in, overriding any set defaults
-    f = fopen (defaultfile, "r");
-    if (f)
-    {
-	while (!feof(f))
+	next = strchr (line, '\n');
+	if (next)
+	    *next++ = 0;
+
+	isstring = false;
+	if (sscanf (line, "%79s %99[^\n]", def, strparm) == 2)
 	{
-	    isstring = false;
-	    if (fscanf (f, "%79s %[^\n]\n", def, strparm) == 2)
+	    if (strparm[0] == '"')
 	    {
-		if (strparm[0] == '"')
-		{
-		    // get a string default
-		    isstring = true;
-		    len = strlen(strparm);
-		    newstring = (char *) malloc(len);
-		    strparm[len-1] = 0;
-		    strcpy(newstring, strparm+1);
-		}
-		else if (strparm[0] == '0' && strparm[1] == 'x')
-		    sscanf(strparm+2, "%x", &parm);
-		else
-		    sscanf(strparm, "%i", &parm);
-		for (i=0 ; i<numdefaults ; i++)
-		    if (!strcmp(def, defaults[i].name))
-		    {
-			if (!isstring)
-			    *defaults[i].location = parm;
-			else
-			    *defaults[i].location =
-				(int) newstring;
-			break;
-		    }
+		// get a string default
+		isstring = true;
+		len = strlen(strparm);
+		newstring = (char *) malloc(len);
+		strparm[len-1] = 0;
+		strcpy(newstring, strparm+1);
 	    }
+	    else if (strparm[0] == '0' && strparm[1] == 'x')
+		sscanf(strparm+2, "%x", &parm);
+	    else
+		sscanf(strparm, "%i", &parm);
+	    for (i=0 ; i<numdefaults ; i++)
+		if (!strcmp(def, defaults[i].name))
+		{
+		    if (!isstring)
+			*defaults[i].location = parm;
+		    else
+			*defaults[i].location =
+			    (int) newstring;
+		    break;
+		}
 	}
-		
-	fclose (f);
     }
+
+    free (fbuf);
 }
 
 

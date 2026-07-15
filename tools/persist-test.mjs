@@ -50,14 +50,14 @@ await sleep(3000);
 // save: F2, Enter (slot 0), type name char, Enter
 await key('F2', 0x71); await key('Enter', 13); await key('a', 65); await key('Enter', 13);
 await sleep(4500);      // sync interval is 3s
-const inFs = await ev(`(() => { try { return window.webdoom.doom.FS.stat('/doomsav0.dsg').size; } catch { return 0; } })()`);
+const inFs = await ev(`window.webdoom.doom['fileMap']?.get('doomsav0.dsg')?.length ?? 0`);
 console.log('savegame bytes in FS:', inFs);
 console.log('console tail:', logs.filter(l => /sync|persist|EXC|error/i.test(l)).slice(-5));
 const inIdb = await ev(`(async () => {
     const d = await new Promise((res, rej) => { const r = indexedDB.open('webdoom', 1);
         r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
     const v = await new Promise(res => { const t = d.transaction('files');
-        const g = t.objectStore('files').get('doom.wad:/doomsav0.dsg');
+        const g = t.objectStore('files').get('doom.wad:doomsav0.dsg');
         t.oncomplete = () => res(g.result); });
     return v ? v.length : 0;
 })()`);
@@ -66,7 +66,7 @@ if (!inIdb) fail('save never synced to IndexedDB');
 
 await cdp('Page.reload');
 await bootSP();
-const restored = await ev(`(() => { try { return window.webdoom.doom.FS.stat('/doomsav0.dsg').size; } catch { return 0; } })()`);
+const restored = await ev(`window.webdoom.doom['fileMap']?.get('doomsav0.dsg')?.length ?? 0`);
 console.log('savegame bytes restored after reload:', restored);
 if (!restored) fail('savegame not restored after reload');
 console.log('PASS — savegame survives a page reload');

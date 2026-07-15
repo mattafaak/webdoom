@@ -5,7 +5,7 @@ import { createInput, loadSettings } from './input.js';
 import { createAudio } from './audio.js';
 import { createSettingsUI } from './settings.js';
 import { attachRelay } from './net.js';
-import { loadPersisted, restoreFiles, startSync } from './persist.js';
+import { loadPersisted, startSync } from './persist.js';
 
 const status = msg => { document.getElementById('status').textContent = msg; };
 
@@ -56,19 +56,19 @@ export async function bootDoom({ wads, args = [], net = null }) {
         print: t => console.log(t),
         printErr: t => console.warn(t),
         onDoomError: msg => status(`engine error: ${msg}`),
-        preRun: [mod => {
-            mod.ENV.DOOMWADDIR = '/wads';
-            mod.ENV.HOME = '/home/web_user';
-            mod.FS.mkdir('/wads');
-            wads.forEach((w, i) => {
-                const name = i === 0 ? (ENGINE_NAME[w.file] ?? w.file) : w.file;
-                mod.FS.writeFile(`/wads/${name}`, bytes[i]);
-            });
-            restoreFiles(mod.FS, persisted);   // savegames + .doomrc
-        }],
     });
 
-    const pwads = wads.slice(1).flatMap(w => ['-file', `/wads/${w.file}`]);
+    // no filesystem: WADs live once in the heap, small files in a JS Map
+    doom['fileMap'] = persisted;
+    wads.forEach((w, i) => {
+        const name = i === 0 ? (ENGINE_NAME[w.file] ?? w.file) : w.file;
+        const p = doom._malloc(bytes[i].length);
+        doom.HEAPU8.set(bytes[i], p);
+        doom.ccall('web_register_file', null,
+            ['string', 'number', 'number'], [name, p, bytes[i].length]);
+    });
+
+    const pwads = wads.slice(1).flatMap(w => ['-file', w.file]);
     const relay = net
         ? attachRelay(doom, `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`, net)
         : null;

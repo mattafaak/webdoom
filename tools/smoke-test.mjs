@@ -18,19 +18,19 @@ const createDoom = (await import(join(root, 'build/doom.js'))).default;
 const engineName = wad === 'doom.wad' ? 'doomu.wad' : wad;
 const wadBytes = readFileSync(join(root, 'wads/lib', wad));
 
+const reg = (doom, name, bytes) => {
+    const p = doom._malloc(bytes.length);
+    doom.HEAPU8.set(bytes, p);
+    doom.ccall('web_register_file', null, ['string', 'number', 'number'], [name, p, bytes.length]);
+};
+
 let fatal = null;
 const doom = await createDoom({
     print: t => process.stdout.write(`  | ${t}\n`),
     printErr: t => process.stderr.write(`  ! ${t}\n`),
     onDoomError: msg => { fatal = msg; },
-    preRun: [mod => {
-        // ENV is materialized at runtime init — must be set here.
-        mod.ENV.DOOMWADDIR = '/wads';
-        mod.ENV.HOME = '/home/web_user';
-        mod.FS.mkdir('/wads');
-        mod.FS.writeFile(`/wads/${engineName}`, wadBytes);
-    }],
 });
+reg(doom, engineName, wadBytes);
 
 doom.callMain([]);
 if (fatal) { console.error(`FAIL: I_Error during init: ${fatal}`); process.exit(1); }

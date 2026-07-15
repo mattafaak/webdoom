@@ -39,12 +39,12 @@ async function makeClient(name) {
         print: () => {},
         printErr: t => { if (/consistency|I_Error/i.test(t)) { fatal = t; console.error(`  [${name}] ${t}`); } },
         onDoomError: msg => { fatal = msg; },
-        preRun: [m => {
-            m.ENV.DOOMWADDIR = '/wads'; m.ENV.HOME = '/h';
-            m.FS.mkdir('/h'); m.FS.mkdir('/wads');
-            m.FS.writeFile('/wads/doomu.wad', wadBytes);
-        }],
     });
+    {
+        const p = doom._malloc(wadBytes.length);
+        doom.HEAPU8.set(wadBytes, p);
+        doom.ccall('web_register_file', null, ['string', 'number', 'number'], ['doomu.wad', p, wadBytes.length]);
+    }
     return { name, doom, isFatal: () => fatal, hashes: new Map(), dead: false };
 }
 
