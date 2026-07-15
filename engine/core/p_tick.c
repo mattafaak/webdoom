@@ -145,6 +145,13 @@ void P_Ticker (void)
     }
     
 		
+    // webdoom: previous-tic sector heights for render interpolation
+    for (i=0 ; i<numsectors ; i++)
+    {
+	sectors[i].oldfloorheight = sectors[i].floorheight;
+	sectors[i].oldceilingheight = sectors[i].ceilingheight;
+    }
+
     for (i=0 ; i<MAXPLAYERS ; i++)
 	if (playeringame[i])
 	    P_PlayerThink (&players[i]);

@@ -180,6 +180,8 @@ void P_UnArchiveWorld (void)
     {
 	sec->floorheight = *get++ << FRACBITS;
 	sec->ceilingheight = *get++ << FRACBITS;
+	sec->oldfloorheight = sec->floorheight;		/* webdoom: snap */
+	sec->oldceilingheight = sec->ceilingheight;
 	sec->floorpic = *get++;
 	sec->ceilingpic = *get++;
 	sec->lightlevel = *get++;
@@ -299,6 +301,11 @@ void P_UnArchiveThinkers (void)
 	    mobj = Z_Malloc (sizeof(*mobj), PU_LEVEL, NULL);
 	    memcpy (mobj, save_p, sizeof(*mobj));
 	    save_p += sizeof(*mobj);
+	    // webdoom: no interpolation streak out of a loaded game
+	    mobj->oldx = mobj->x;
+	    mobj->oldy = mobj->y;
+	    mobj->oldz = mobj->z;
+	    mobj->oldangle = mobj->angle;
 	    mobj->state = &states[(int)mobj->state];
 	    mobj->target = NULL;
 	    if (mobj->player)

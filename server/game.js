@@ -17,6 +17,7 @@ const DROP_MS = 5000;       // remove the player after this
 
 const defaultParams = () => ({
     wad: 'doom.wad', episode: 1, map: 1, skill: 3, mode: 'coop',
+    nomonsters: false, fast: false, respawn: false, timer: 0,
 });
 
 export function createGame(log = console.log) {
@@ -83,6 +84,10 @@ export function createGame(log = console.log) {
                     map: Math.max(1, Math.min(32, +p.map || 1)),
                     skill: Math.max(1, Math.min(5, +p.skill || 3)),
                     mode: ['coop', 'deathmatch', 'altdeath'].includes(p.mode) ? p.mode : 'coop',
+                    nomonsters: !!p.nomonsters,
+                    fast: !!p.fast,
+                    respawn: !!p.respawn,
+                    timer: [0, 5, 10, 15, 20, 30].includes(+p.timer) ? +p.timer : 0,
                 };
                 cast(roster());
             }

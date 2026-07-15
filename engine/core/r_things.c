@@ -683,7 +683,7 @@ void R_DrawPSprite (pspdef_t* psp)
     flip = (boolean)sprframe->flip[0];
     
     // calculate edges of the shape
-    tx = psp->sx-160*FRACUNIT;
+    tx = R_LerpFixed (psp->oldsx, psp->sx) - 160*FRACUNIT;
 	
     tx -= spriteoffset[lump];	
     x1 = (centerxfrac + FixedMul (tx,pspritescale) ) >>FRACBITS;
@@ -700,9 +700,13 @@ void R_DrawPSprite (pspdef_t* psp)
 	return;
     
     // store information in a vissprite
+    // webdoom: interpolate the sway between tics; the lookdir term pins
+    // the weapon in place while the view shears (freelook)
     vis = &avis;
     vis->mobjflags = 0;
-    vis->texturemid = (BASEYCENTER<<FRACBITS)+FRACUNIT/2-(psp->sy-spritetopoffset[lump]);
+    vis->texturemid = (BASEYCENTER<<FRACBITS)+FRACUNIT/2
+	- (R_LerpFixed (psp->oldsy, psp->sy) - spritetopoffset[lump])
+	+ (lookdir<<FRACBITS);
     vis->x1 = x1 < 0 ? 0 : x1;
     vis->x2 = x2 >= viewwidth ? viewwidth-1 : x2;	
     vis->scale = pspritescale<<detailshift;

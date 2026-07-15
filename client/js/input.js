@@ -44,7 +44,7 @@ const EV_KEYDOWN = 0, EV_KEYUP = 1, EV_MOUSE = 2;
 export const defaultSettings = () => ({
     binds: Object.fromEntries(ACTIONS.map(a => [a.id, a.def])),
     mouseSens: 4,          // multiplier; 4 ≈ vanilla's <<2
-    mouseMove: false,      // mouse Y moves player (1993 style)
+    mouseY: 'off',         // 'off' | 'look' (freelook) | 'move' (1993)
     alwaysRun: false,
     smooth: true,          // uncapped-fps render interpolation
     padDeadzone: 0.15,
@@ -53,7 +53,10 @@ export const defaultSettings = () => ({
 
 export function loadSettings() {
     try {
-        return { ...defaultSettings(), ...JSON.parse(localStorage.getItem('webdoom.input') ?? '{}') };
+        const s = { ...defaultSettings(), ...JSON.parse(localStorage.getItem('webdoom.input') ?? '{}') };
+        if (s.mouseMove === true && !s.mouseY) s.mouseY = 'move';   // pre-freelook migration
+        delete s.mouseMove;
+        return s;
     } catch { return defaultSettings(); }
 }
 
@@ -78,6 +81,7 @@ export function createInput(doom, canvas, settings) {
 
     let capture = null;             // action id being rebound, or null
     let mouseAccX = 0, mouseAccY = 0, mouseButtons = 0, mouseDirty = false;
+    let pitch = 0, sentPitch = 0;   // freelook shear, screen pixels
 
     const codeToDk = (code, key) => {
         // in menus, typed characters beat game bindings (savegame names
@@ -215,6 +219,9 @@ export function createInput(doom, canvas, settings) {
         const fwd  = Math.round(curve(gp.axes[1] ?? 0) * 100);
         const strafe = Math.round(curve(gp.axes[0] ?? 0) * 100);
         doom._web_gamepad(held, turn, fwd, strafe);
+        if (settings.mouseY === 'look')
+            pitch -= curve(gp.axes[3] ?? 0) * 4;    // RS vertical
+        else if (b(11)) pitch = 0;                  // RS click centers
     }
 
     // --- per-frame flush -----------------------------------------------------
@@ -230,10 +237,18 @@ export function createInput(doom, canvas, settings) {
         wasUiMode = uiMode;
         if (mouseAccX || mouseAccY || mouseDirty) {
             const dx = Math.round(mouseAccX * settings.mouseSens);
-            const dy = settings.mouseMove ? Math.round(-mouseAccY * settings.mouseSens) : 0;
+            const dy = settings.mouseY === 'move' ? Math.round(-mouseAccY * settings.mouseSens) : 0;
+            if (settings.mouseY === 'look')
+                pitch -= mouseAccY * settings.mouseSens / 16;
             post(EV_MOUSE, mouseButtons, dx, dy);
             mouseAccX = mouseAccY = 0;
             mouseDirty = false;
+        }
+        if (settings.mouseY !== 'look' && pitch) pitch = 0;
+        pitch = Math.max(-90, Math.min(90, pitch));
+        if (Math.round(pitch) !== sentPitch) {
+            sentPitch = Math.round(pitch);
+            doom._web_set_pitch(sentPitch);
         }
         if (settings.alwaysRun !== runHeld) {
             runHeld = settings.alwaysRun;

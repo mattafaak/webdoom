@@ -603,7 +603,8 @@ PIT_AddLineIntercepts (line_t* ld)
     intercept_p->frac = frac;
     intercept_p->isaline = true;
     intercept_p->d.line = ld;
-    intercept_p++;
+    if (intercept_p - intercepts < MAXINTERCEPTS-1)
+	intercept_p++;	// webdoom: clamp, vanilla overran on long traces
 
     return true;	// continue
 }
@@ -668,7 +669,8 @@ boolean PIT_AddThingIntercepts (mobj_t* thing)
     intercept_p->frac = frac;
     intercept_p->isaline = false;
     intercept_p->d.thing = thing;
-    intercept_p++;
+    if (intercept_p - intercepts < MAXINTERCEPTS-1)
+	intercept_p++;	// webdoom: clamp, vanilla overran on long traces
 
     return true;		// keep going
 }

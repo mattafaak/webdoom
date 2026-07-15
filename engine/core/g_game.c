@@ -71,7 +71,7 @@ rcsid[] = "$Id: g_game.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 #include "g_game.h"
 
 
-#define SAVEGAMESIZE	0x2c000
+#define SAVEGAMESIZE	0x80000	// webdoom: was 0x2c000; big maps overran
 #define SAVESTRINGSIZE	24
 
 
@@ -1215,7 +1215,7 @@ void G_DoLoadGame (void)
     
     // skip the description field 
     memset (vcheck,0,sizeof(vcheck)); 
-    sprintf (vcheck,"version %i",VERSION); 
+    sprintf (vcheck,"webdm2 %i",VERSION);	/* webdoom savegame format rev */ 
     if (strcmp (save_p, vcheck)) 
 	return;				// bad version 
     save_p += VERSIONSIZE; 
@@ -1289,7 +1289,7 @@ void G_DoSaveGame (void)
     memcpy (save_p, description, SAVESTRINGSIZE); 
     save_p += SAVESTRINGSIZE; 
     memset (name2,0,sizeof(name2)); 
-    sprintf (name2,"version %i",VERSION); 
+    sprintf (name2,"webdm2 %i",VERSION); 
     memcpy (save_p, name2, VERSIONSIZE); 
     save_p += VERSIONSIZE; 
 	 

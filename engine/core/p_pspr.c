@@ -149,6 +149,7 @@ void P_BringUpWeapon (player_t* player)
 
     player->pendingweapon = wp_nochange;
     player->psprites[ps_weapon].sy = WEAPONBOTTOM;
+    player->psprites[ps_weapon].oldsy = WEAPONBOTTOM;	// webdoom: no raise streak
 
     P_SetPsprite (player, ps_weapon, newstate);
 }
@@ -855,6 +856,12 @@ void P_MovePsprites (player_t* player)
     state_t*	state;
 	
     psp = &player->psprites[0];
+    // webdoom: previous-tic snapshot for weapon-sway interpolation
+    for (i=0 ; i<NUMPSPRITES ; i++)
+    {
+	player->psprites[i].oldsx = player->psprites[i].sx;
+	player->psprites[i].oldsy = player->psprites[i].sy;
+    }
     for (i=0 ; i<NUMPSPRITES ; i++, psp++)
     {
 	// a null state means not active

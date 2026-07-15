@@ -106,6 +106,18 @@ void web_save_defaults (void)
 }
 
 //
+// Freelook: render-local y-shear in screen pixels. Never enters the
+// simulation (autoaim untouched) — safe for demos and netplay.
+//
+extern int lookdir;
+
+EMSCRIPTEN_KEEPALIVE
+void web_set_pitch (int pixels)
+{
+    lookdir = pixels;
+}
+
+//
 // Render interpolation toggle ("vanilla mode" = 35fps feel).
 //
 extern boolean smoothrender;

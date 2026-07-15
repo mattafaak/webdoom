@@ -102,6 +102,11 @@ typedef	struct
 {
     fixed_t	floorheight;
     fixed_t	ceilingheight;
+    // webdoom: previous-tic heights + render-swap scratch, interpolation only
+    fixed_t	oldfloorheight;
+    fixed_t	oldceilingheight;
+    fixed_t	savedfloorheight;
+    fixed_t	savedceilingheight;
     short	floorpic;
     short	ceilingpic;
     short	lightlevel;

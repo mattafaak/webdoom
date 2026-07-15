@@ -192,6 +192,27 @@ const modePick = () => picker('WHICH MODE?', MODES.map(([value, label]) =>
 const skillPick = () => picker('HOW TOUGH ARE YOU?', SKILLS.map((label, i) =>
     ({ label, apply: () => setParams({ skill: i + 1 }) })));
 
+// gameplay flags: toggles stay on this screen; Esc returns to the lobby
+function optionsPick() {
+    const p = roster?.params ?? {};
+    const onoff = v => v ? 'ON' : 'OFF';
+    const toggle = patch => () => { setParams(patch); menu.refresh(optionsPick()); };
+    const timers = [0, 5, 10, 15, 20, 30];
+    return {
+        title: 'OPTIONS',
+        items: [
+            { label: 'NO MONSTERS: ', value: onoff(p.nomonsters),
+              action: toggle({ nomonsters: !p.nomonsters }) },
+            { label: 'FAST MONSTERS: ', value: onoff(p.fast),
+              action: toggle({ fast: !p.fast }) },
+            { label: 'RESPAWN MONSTERS: ', value: onoff(p.respawn),
+              action: toggle({ respawn: !p.respawn }) },
+            { label: 'TIME LIMIT: ', value: p.timer ? `${p.timer} MIN` : 'OFF',
+              action: toggle({ timer: timers[(timers.indexOf(p.timer ?? 0) + 1) % timers.length] }) },
+        ],
+    };
+}
+
 function mapName(p) {
     const e = entry(p.wad);
     return isCommercial(e) ? `MAP${String(p.map).padStart(2, '0')}` : `E${p.episode}M${p.map}`;
@@ -214,6 +235,7 @@ function lobbyScreen() {
             { label: 'MAP: ', value: mapName(p), action: () => menu.push(mapPick()) },
             { label: 'MODE: ', value: mode, action: () => menu.push(modePick()) },
             { label: 'SKILL: ', value: SKILLS[p.skill - 1] ?? '', action: () => menu.push(skillPick()) },
+            { label: 'OPTIONS', action: () => menu.push(optionsPick()) },
             {
                 label: 'NAME: ', value: me?.name ?? '',
                 color: me?.color ?? null,

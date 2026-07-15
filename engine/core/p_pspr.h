@@ -71,6 +71,9 @@ typedef struct
     int		tics;
     fixed_t	sx;
     fixed_t	sy;
+    // webdoom: previous-tic offsets, render interpolation only
+    fixed_t	oldsx;
+    fixed_t	oldsy;
 
 } pspdef_t;
 

@@ -48,6 +48,8 @@ static const char rcsid[] = "$Id: r_main.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 // Fineangles in the SCREENWIDTH wide window.
 #define FIELDOFVIEW		2048	
 
+void R_ForceReshear (void);	// webdoom freelook
+
 
 
 int			viewangleoffset;
@@ -734,6 +736,7 @@ void R_ExecuteSetViewSize (void)
 	dy = abs(dy);
 	yslope[i] = FixedDiv ( (viewwidth<<detailshift)/2*FRACUNIT, dy);
     }
+    R_ForceReshear ();	// webdoom: table above assumes centered view
 	
     for (i=0 ; i<viewwidth ; i++)
     {
@@ -888,9 +891,73 @@ void R_SetupFrame (player_t* player)
 //
 // R_RenderView
 //
+// webdoom: freelook (y-shearing). Render-local — pitch never enters the
+// simulation (shots keep vanilla autoaim), so demos and netplay are
+// untouched. JS feeds lookdir in screen pixels via web_set_pitch.
+int	lookdir;
+static int rendered_lookdir = 0;
+
+void R_ForceReshear (void)
+{
+    rendered_lookdir = -30000;
+    skytexturemid = 100*FRACUNIT;
+}
+
+static void R_ShearView (void)
+{
+    int		i;
+    fixed_t	dy;
+    int		clamp = viewheight/2 - 8;
+
+    if (lookdir > clamp)  lookdir = clamp;
+    if (lookdir < -clamp) lookdir = -clamp;
+    if (lookdir == rendered_lookdir)
+	return;
+
+    centery = viewheight/2 + lookdir;
+    centeryfrac = centery<<FRACBITS;
+    for (i=0 ; i<viewheight ; i++)
+    {
+	dy = ((i-centery)<<FRACBITS)+FRACUNIT/2;
+	dy = abs(dy);
+	yslope[i] = FixedDiv ( (viewwidth<<detailshift)/2*FRACUNIT, dy);
+    }
+    // scroll the sky with the shear
+    skytexturemid = 100*FRACUNIT + (lookdir<<FRACBITS);
+    rendered_lookdir = lookdir;
+}
+
+// webdoom: swap interpolated sector heights in for the render, restore
+// after — game code between frames always sees true values.
+static void R_InterpolateSectors (boolean restore)
+{
+    int	i;
+
+    if (!smoothrender)
+	return;
+    for (i=0 ; i<numsectors ; i++)
+    {
+	sector_t* s = &sectors[i];
+	if (restore)
+	{
+	    s->floorheight = s->savedfloorheight;
+	    s->ceilingheight = s->savedceilingheight;
+	}
+	else
+	{
+	    s->savedfloorheight = s->floorheight;
+	    s->savedceilingheight = s->ceilingheight;
+	    s->floorheight = R_LerpFixed (s->oldfloorheight, s->floorheight);
+	    s->ceilingheight = R_LerpFixed (s->oldceilingheight, s->ceilingheight);
+	}
+    }
+}
+
 void R_RenderPlayerView (player_t* player)
 {	
     R_SetupFrame (player);
+    R_ShearView ();
+    R_InterpolateSectors (false);
 
     // Clear buffers.
     R_ClearClipSegs ();
@@ -913,6 +980,8 @@ void R_RenderPlayerView (player_t* player)
     NetUpdate ();
     
     R_DrawMasked ();
+
+    R_InterpolateSectors (true);
 
     // Check for new console commands.
     NetUpdate ();				
