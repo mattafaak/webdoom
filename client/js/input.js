@@ -82,6 +82,19 @@ export function createInput(doom, canvas, settings) {
     let capture = null;             // action id being rebound, or null
     let mouseAccX = 0, mouseAccY = 0, mouseButtons = 0, mouseDirty = false;
     let pitch = 0, sentPitch = 0;   // freelook shear, screen pixels
+    const heldKeys = new Set();     // game keys currently down (for release-all)
+
+    // Release every held key + mouse button. A keyup can be lost whenever
+    // focus or pointer-lock changes mid-press — most infamously ALT (the
+    // strafe modifier), which the OS/browser steals to reach a menu bar,
+    // leaving the engine stuck in strafe-lock. Flush on menu-open and blur
+    // so no modifier can latch on.
+    const releaseAll = () => {
+        for (const dk of heldKeys) post(EV_KEYUP, dk);
+        heldKeys.clear();
+        if (mouseButtons) { post(EV_MOUSE, 0, 0, 0); mouseButtons = 0; }
+        runHeld = false;            // let always-run re-assert next frame
+    };
 
     const codeToDk = (code, key) => {
         // in menus, typed characters beat game bindings (savegame names
@@ -115,10 +128,14 @@ export function createInput(doom, canvas, settings) {
         if (dk === null) return;
         e.preventDefault();
         if (settings.alwaysRun && dk === DK.RSHIFT) return;   // run held below
+        if (down) heldKeys.add(dk); else heldKeys.delete(dk);
         post(down ? EV_KEYDOWN : EV_KEYUP, dk);
     };
     window.addEventListener('keydown', onKey(true));
     window.addEventListener('keyup', onKey(false));
+    // Focus loss (alt-tab, OS menu) drops keyups — release everything so no
+    // key latches down while we're not listening.
+    window.addEventListener('blur', releaseAll);
 
     // --- mouse (pointer lock) ---------------------------------------------
     // Esc always exits pointer lock at the browser level and the keydown
@@ -232,6 +249,7 @@ export function createInput(doom, canvas, settings) {
         // keypress counts as user activation; if not, the next canvas
         // click re-locks)
         const uiMode = !!doom._web_ui_mode();
+        if (!wasUiMode && uiMode) releaseAll();   // menu opened → drop held keys
         if (wasUiMode && !uiMode && document.pointerLockElement !== canvas)
             canvas.requestPointerLock()?.catch?.(() => {});
         wasUiMode = uiMode;
