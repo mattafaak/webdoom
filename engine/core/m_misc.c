@@ -36,6 +36,8 @@ rcsid[] = "$Id: m_misc.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 #include <ctype.h>
 
 
+#include <stdint.h>   // task 3.1: intptr_t for 64-bit-safe default_t
+
 #include "doomdef.h"
 
 #include "z_zone.h"
@@ -208,7 +210,11 @@ typedef struct
 {
     char*	name;
     int*	location;
-    int		defaultvalue;
+    // task 3.1: intptr_t so string-pointer defaults (chatmacros, sndserver)
+    // compile and round-trip correctly on 64-bit native builds.
+    // On 32-bit WASM intptr_t == int, so the struct layout and all casts are
+    // identical to the original — zero impact on the wasm build.
+    intptr_t	defaultvalue;
     int		scantranslate;		// PC scan code hack
     int		untranslated;		// lousy hack
 } default_t;
@@ -267,16 +273,18 @@ default_t	defaults[] =
 
     {"usegamma",&usegamma, 0},
 
-    {"chatmacro0", (int *) &chat_macros[0], (int) HUSTR_CHATMACRO0 },
-    {"chatmacro1", (int *) &chat_macros[1], (int) HUSTR_CHATMACRO1 },
-    {"chatmacro2", (int *) &chat_macros[2], (int) HUSTR_CHATMACRO2 },
-    {"chatmacro3", (int *) &chat_macros[3], (int) HUSTR_CHATMACRO3 },
-    {"chatmacro4", (int *) &chat_macros[4], (int) HUSTR_CHATMACRO4 },
-    {"chatmacro5", (int *) &chat_macros[5], (int) HUSTR_CHATMACRO5 },
-    {"chatmacro6", (int *) &chat_macros[6], (int) HUSTR_CHATMACRO6 },
-    {"chatmacro7", (int *) &chat_macros[7], (int) HUSTR_CHATMACRO7 },
-    {"chatmacro8", (int *) &chat_macros[8], (int) HUSTR_CHATMACRO8 },
-    {"chatmacro9", (int *) &chat_macros[9], (int) HUSTR_CHATMACRO9 }
+    // task 3.1: cast to intptr_t (not int) so these compile on 64-bit native
+    // without truncating the pointer.  On 32-bit WASM intptr_t==int, identical.
+    {"chatmacro0", (int *) &chat_macros[0], (intptr_t) HUSTR_CHATMACRO0 },
+    {"chatmacro1", (int *) &chat_macros[1], (intptr_t) HUSTR_CHATMACRO1 },
+    {"chatmacro2", (int *) &chat_macros[2], (intptr_t) HUSTR_CHATMACRO2 },
+    {"chatmacro3", (int *) &chat_macros[3], (intptr_t) HUSTR_CHATMACRO3 },
+    {"chatmacro4", (int *) &chat_macros[4], (intptr_t) HUSTR_CHATMACRO4 },
+    {"chatmacro5", (int *) &chat_macros[5], (intptr_t) HUSTR_CHATMACRO5 },
+    {"chatmacro6", (int *) &chat_macros[6], (intptr_t) HUSTR_CHATMACRO6 },
+    {"chatmacro7", (int *) &chat_macros[7], (intptr_t) HUSTR_CHATMACRO7 },
+    {"chatmacro8", (int *) &chat_macros[8], (intptr_t) HUSTR_CHATMACRO8 },
+    {"chatmacro9", (int *) &chat_macros[9], (intptr_t) HUSTR_CHATMACRO9 }
 
 };
 
@@ -334,7 +342,18 @@ void M_LoadDefaults (void)
     // set everything to base values
     numdefaults = sizeof(defaults)/sizeof(defaults[0]);
     for (i=0 ; i<numdefaults ; i++)
-	*defaults[i].location = defaults[i].defaultvalue;
+    {
+	// task 3.1: string defaults store a pointer in defaultvalue (intptr_t).
+	// On 64-bit native the location field points to a char* (8 bytes), so
+	// we must write the full pointer width.  The range check mirrors the one
+	// in M_SaveDefaults: values outside [-0xfff, 0xfff] are string pointers.
+	if (defaults[i].defaultvalue > -0xfff
+	    && defaults[i].defaultvalue < 0xfff)
+	    *defaults[i].location = (int) defaults[i].defaultvalue;
+	else
+	    *(char **) defaults[i].location =
+		(char *)(intptr_t) defaults[i].defaultvalue;
+    }
 
     defaultfile = basedefault;
 
@@ -374,8 +393,8 @@ void M_LoadDefaults (void)
 		    if (!isstring)
 			*defaults[i].location = parm;
 		    else
-			*defaults[i].location =
-			    (int) newstring;
+			// task 3.1: char** cast writes full pointer on 64-bit
+			*(char **) defaults[i].location = newstring;
 		    break;
 		}
 	}

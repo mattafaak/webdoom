@@ -740,7 +740,12 @@ void P_SpawnMapThing (mapthing_t* mthing)
     }
 	
     // check for players specially
-    if (mthing->type <= 4)
+    // webdoom task 3.1: guard mthing->type >= 1 so type-0 things (present in
+    // some Plutonia maps) do not cause playeringame[-1] OOB read via P_SpawnPlayer.
+    // In vanilla builds the read lands in zero-initialised BSS and returns early;
+    // ASan catches it as a global-buffer-overflow.  type-0 things are invalid and
+    // are safely skipped here.
+    if (mthing->type >= 1 && mthing->type <= 4)
     {
 	// save spots for respawning in network games
 	playerstarts[mthing->type-1] = *mthing;

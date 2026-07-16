@@ -37,7 +37,11 @@ rcsid[] = "$Id: info.c,v 1.3 1997/01/26 07:45:00 b1 Exp $";
 
 #include "p_mobj.h"
 
-char *sprnames[NUMSPRITES] = {
+// webdoom task 3.1: NUMSPRITES+1 so the NULL sentinel at index NUMSPRITES is
+// zero-initialised by the C standard.  R_InitSpriteDefs scans for NULL to
+// count sprites; without this the scan reads one past the array (ASan global-
+// buffer-overflow) and relies on accidentally-zero BSS memory after the array.
+char *sprnames[NUMSPRITES+1] = {
     "TROO","SHTG","PUNG","PISG","PISF","SHTF","SHT2","CHGG","CHGF","MISG",
     "MISF","SAWG","PLSG","PLSF","BFGG","BFGF","BLUD","PUFF","BAL1","BAL2",
     "PLSS","PLSE","MISL","BFS1","BFE1","BFE2","TFOG","IFOG","PLAY","POSS",

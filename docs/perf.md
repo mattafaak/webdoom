@@ -613,6 +613,19 @@ three goldens without any real render change. Treat such a failure as a
 layout shift first; root-cause hunt assigned to task 3.1 (a native ASan
 demo run will pinpoint the exact OOB read).
 
+**Resolution (task 3.1)** — root cause identified and fixed. The OOB read
+is in `R_DrawColumn` / `R_DrawColumnLow`: the hardcoded `& 127` mask allowed
+the column sampler to read past the end of composite texture column buffers
+for textures shorter than 128 px (e.g. 64 px walls). Fix: added `dc_texheight`
+(default 128) set by each caller (`R_RenderSegLoop`, `R_DrawPlanes`) to the
+actual texture height so the mask becomes `& (dc_texheight - 1)`. Secondary
+fixes: `sprnames[NUMSPRITES+1]` NULL sentinel (R_InitSpriteDefs OOB scan),
+`finetangent` index clamped to `[0, FINEANGLES/2-1]` (r_segs.c:266
+off-by-one at 90-degree walls), and `P_SpawnMapThing` type-0 guard.
+BSS-probe acceptance test passed: master + 16-byte BSS probe passes all 13
+render goldens, confirming the layout sensitivity is eliminated. Render
+goldens regolded for all 13 demos.
+
 **Hypothesis for 4 MB / 8 MB render failures (recorded for task 3.1/3.2)**:
 The pixel divergences at small zone sizes are consistent with a PU_CACHE
 use-after-purge hazard.  When the zone is small enough to actually evict

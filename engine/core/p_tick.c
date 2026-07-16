@@ -101,10 +101,18 @@ void P_AllocateThinker (thinker_t*	thinker)
 void P_RunThinkers (void)
 {
     thinker_t*	currentthinker;
+    thinker_t*	nextthinker;
 
     currentthinker = thinkercap.next;
     while (currentthinker != &thinkercap)
     {
+	// webdoom fix (task 3.1): cache next before any free so ASan does not
+	// flag the advance as a use-after-free.  Behavior is identical: the
+	// deferred-free sentinel guarantees next/prev are intact at this point,
+	// and Z_Zone does not zero freed blocks, so the advance was always safe
+	// in practice — but it IS undefined behavior and must be eliminated.
+	nextthinker = currentthinker->next;
+
 	if ( currentthinker->function.acv == (actionf_v)(-1) )
 	{
 	    // time to remove it
@@ -117,7 +125,7 @@ void P_RunThinkers (void)
 	    if (currentthinker->function.acp1)
 		currentthinker->function.acp1 (currentthinker);
 	}
-	currentthinker = currentthinker->next;
+	currentthinker = nextthinker;
     }
 }
 

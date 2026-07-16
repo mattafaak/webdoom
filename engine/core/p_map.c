@@ -64,7 +64,8 @@ line_t*		ceilingline;
 
 // keep track of special lines as they are hit,
 // but don't process them until the move is proven valid
-#define MAXSPECIALCROSS		64	// webdoom: was 8; big PWAD maps overflowed
+// MAXSPECIALCROSS is now in p_local.h (task 3.1: C99 §6.2.7 fix — both
+// p_map.c and p_enemy.c must agree on the array extent).
 
 line_t*		spechit[MAXSPECIALCROSS];
 int		numspechit;

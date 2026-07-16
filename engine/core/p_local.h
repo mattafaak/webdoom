@@ -60,6 +60,12 @@
 // follow a player exlusively for 3 seconds
 #define	BASETHRESHOLD	 	100
 
+// Maximum special lines crossed in one P_TryMove.
+// webdoom raised from vanilla 8 to 64; shared here so p_map.c and p_enemy.c
+// agree on the array size (C99 §6.2.7 compatible-type rule).
+// See playsim.md §4.4 for the full audit.
+#define MAXSPECIALCROSS		64
+
 
 
 //

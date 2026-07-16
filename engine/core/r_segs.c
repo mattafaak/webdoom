@@ -263,6 +263,10 @@ void R_RenderSegLoop (void)
 	{
 	    // calculate texture offset
 	    angle = (rw_centerangle + xtoviewangle[rw_x])>>ANGLETOFINESHIFT;
+	    // webdoom task 3.1: mask to finetangent's valid range [0, FINEANGLES/2-1].
+	    // When rw_centerangle + xtoviewangle reaches exactly 90 deg the raw index
+	    // equals FINEANGLES/2 (4096), one past the table; mask keeps it in bounds.
+	    angle &= (FINEANGLES/2 - 1);
 	    texturecolumn = rw_offset-FixedMul(finetangent[angle],rw_distance);
 	    texturecolumn >>= FRACBITS;
 	    // calculate lighting
@@ -284,6 +288,9 @@ void R_RenderSegLoop (void)
 	    dc_yh = yh;
 	    dc_texturemid = rw_midtexturemid;
 	    dc_source = R_GetColumn(midtexture,texturecolumn);
+	    // task 3.1: pin the column-height mask to the actual texture height
+	    // so R_DrawColumn never reads past the allocated composite buffer.
+	    dc_texheight = textureheight[midtexture] >> FRACBITS;
 	    colfunc ();
 	    ceilingclip[rw_x] = viewheight;
 	    floorclip[rw_x] = -1;
@@ -306,6 +313,7 @@ void R_RenderSegLoop (void)
 		    dc_yh = mid;
 		    dc_texturemid = rw_toptexturemid;
 		    dc_source = R_GetColumn(toptexture,texturecolumn);
+		    dc_texheight = textureheight[toptexture] >> FRACBITS;
 		    colfunc ();
 		    ceilingclip[rw_x] = mid;
 		}
@@ -336,6 +344,7 @@ void R_RenderSegLoop (void)
 		    dc_texturemid = rw_bottomtexturemid;
 		    dc_source = R_GetColumn(bottomtexture,
 					    texturecolumn);
+		    dc_texheight = textureheight[bottomtexture] >> FRACBITS;
 		    colfunc ();
 		    floorclip[rw_x] = mid;
 		}

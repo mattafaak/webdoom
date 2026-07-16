@@ -433,6 +433,8 @@ void R_DrawPlanes (void)
 	    //  by INVUL inverse mapping.
 	    dc_colormap = colormaps;
 	    dc_texturemid = skytexturemid;
+	    // task 3.1: pin the column-height mask to the sky texture height.
+	    dc_texheight = textureheight[skytexture] >> FRACBITS;
 	    for (x=pl->minx ; x <= pl->maxx ; x++)
 	    {
 		dc_yl = pl->top[x];

@@ -102,10 +102,19 @@ int			dc_yh;
 fixed_t			dc_iscale; 
 fixed_t			dc_texturemid;
 
-// first pixel in a column (possibly virtual) 
-byte*			dc_source;		
+// first pixel in a column (possibly virtual)
+byte*			dc_source;
 
-// just for profiling 
+// Height (texels) of the source column buffer — set by the caller before
+// invoking R_DrawColumn/R_DrawColumnLow.  Used as a power-of-2 wrap mask
+// ((dc_texheight - 1) replaces the hard-coded & 127) so that the column
+// draw never reads past the allocated composite/lump column data.
+// All shipped DOOM textures have power-of-2 heights (8/16/32/64/128), so
+// the bitmask is always exact.  Default 128 preserves the vanilla & 127
+// for callers that do not need to override (e.g. sky draw in r_plane.c).
+int			dc_texheight = 128;
+
+// just for profiling
 int			dccount;
 
 //
@@ -149,22 +158,30 @@ void R_DrawColumn (void)
     fracstep = dc_iscale;
     frac = dc_texturemid + (dc_yl-centery)*fracstep;
 
-    // Hoist loop-invariant pointers into locals; compiler likely already does
-    // this at -O3 but explicit locals keep the intent clear for future readers.
+    // Hoist loop-invariant values into locals for the hot path.
     source   = dc_source;
     colormap = dc_colormap;
 
+    // webdoom task 3.1: use dc_texheight as the power-of-2 column mask.
+    // All DOOM wall textures have heights 8/16/32/64/128 so (height-1) is
+    // always a valid bitmask.  This eliminates out-of-bound reads into heap
+    // memory beyond the allocated composite column buffer (the root cause of
+    // the layout-dependent render hash changes identified in task 2.5 bisect).
+    // dc_texheight defaults to 128 so the mask is 127 when not overridden —
+    // matching vanilla behaviour for 128-px columns.
+    {
+    const unsigned mask = (unsigned)(dc_texheight - 1);
+
     // webdoom task 2.2: unrolled 4-wide inner loop.
     // Independent texture reads per iteration allow the CPU's load pipeline
-    // to overlap the four table lookups.  The & 127 wrap is preserved on every
-    // pixel — required for 128-texel wall texture columns.
+    // to overlap the four table lookups.
     // Tail handles the remaining 0-3 pixels with the original scalar loop.
     while (count >= 3)
     {
-        dest[0]                = colormap[source[((frac              )>>FRACBITS)&127]];
-        dest[SCREENWIDTH]      = colormap[source[((frac+fracstep  )>>FRACBITS)&127]];
-        dest[SCREENWIDTH*2]    = colormap[source[((frac+fracstep*2)>>FRACBITS)&127]];
-        dest[SCREENWIDTH*3]    = colormap[source[((frac+fracstep*3)>>FRACBITS)&127]];
+        dest[0]                = colormap[source[((frac              )>>FRACBITS)&mask]];
+        dest[SCREENWIDTH]      = colormap[source[((frac+fracstep  )>>FRACBITS)&mask]];
+        dest[SCREENWIDTH*2]    = colormap[source[((frac+fracstep*2)>>FRACBITS)&mask]];
+        dest[SCREENWIDTH*3]    = colormap[source[((frac+fracstep*3)>>FRACBITS)&mask]];
         dest  += SCREENWIDTH*4;
         frac  += fracstep*4;
         count -= 4;
@@ -175,9 +192,10 @@ void R_DrawColumn (void)
     // so count is -1 (no tail); 0 → 1 pixel; 1 → 2 pixels; 2 → 3 pixels.
     while (count-- >= 0)
     {
-        *dest = colormap[source[(frac>>FRACBITS)&127]];
+        *dest = colormap[source[(frac>>FRACBITS)&mask]];
         dest += SCREENWIDTH;
         frac += fracstep;
+    }
     }
 }
 
@@ -276,15 +294,18 @@ void R_DrawColumnLow (void)
     fracstep = dc_iscale; 
     frac = dc_texturemid + (dc_yl-centery)*fracstep;
     
-    do 
+    {
+    const unsigned mask = (unsigned)(dc_texheight - 1);
+    do
     {
 	// Hack. Does not work corretly.
-	*dest2 = *dest = dc_colormap[dc_source[(frac>>FRACBITS)&127]];
+	*dest2 = *dest = dc_colormap[dc_source[(frac>>FRACBITS)&mask]];
 	dest += SCREENWIDTH;
 	dest2 += SCREENWIDTH;
-	frac += fracstep; 
+	frac += fracstep;
 
     } while (count--);
+    }
 }
 
 

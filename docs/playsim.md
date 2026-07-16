@@ -90,7 +90,7 @@ This is the famous deferred-free: the thinker stays in the list with its `next`/
 intact until **P_RunThinkers** (p_tick.c:101) reaches it on the *next* traversal, then
 unlinks and frees it.
 
-`P_RunThinkers` contains a latent use-after-free (p_tick.c:108–120):
+`P_RunThinkers` contained a latent use-after-free (p_tick.c:108–120); **fixed in task 3.1** by caching `nextthinker = currentthinker->next` before the free, matching the documented safe pattern described below:
 
 ```c
 if (currentthinker->function.acv == (actionf_v)(-1)) {
