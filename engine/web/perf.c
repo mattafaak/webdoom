@@ -55,6 +55,34 @@ EMSCRIPTEN_KEEPALIVE double web_perf_frames (void)
     return (double) web_perf_frame_count;
 }
 
+// task 2.2: column/span call-count accumulators.
+// Always defined so JS getters are always valid (return 0 in normal builds).
+// Incremented only when r_draw.c is compiled with -DWEB_PERF_COL_STATS.
+long web_perf_col_calls = 0;
+long web_perf_span_calls = 0;
+long web_perf_col_pixels = 0;
+long web_perf_span_pixels = 0;
+
+EMSCRIPTEN_KEEPALIVE long web_perf_col_calls_get (void)
+{
+    return web_perf_col_calls;
+}
+
+EMSCRIPTEN_KEEPALIVE long web_perf_span_calls_get (void)
+{
+    return web_perf_span_calls;
+}
+
+EMSCRIPTEN_KEEPALIVE long web_perf_col_pixels_get (void)
+{
+    return web_perf_col_pixels;
+}
+
+EMSCRIPTEN_KEEPALIVE long web_perf_span_pixels_get (void)
+{
+    return web_perf_span_pixels;
+}
+
 // Reset all accumulators.  Call between demos so each demo's numbers are
 // independent.
 EMSCRIPTEN_KEEPALIVE void web_perf_reset (void)
@@ -66,6 +94,10 @@ EMSCRIPTEN_KEEPALIVE void web_perf_reset (void)
     web_perf_masked_us = 0;
     web_perf_frame_count = 0;
     web_perf_tic_count = 0;
+    web_perf_col_calls = 0;
+    web_perf_span_calls = 0;
+    web_perf_col_pixels = 0;
+    web_perf_span_pixels = 0;
 }
 
 // --- webdoom: Z_Zone memory stats (task 0.5 memory audit) ---

@@ -42,6 +42,19 @@ rcsid[] = "$Id: r_draw.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 // State.
 #include "doomstat.h"
 
+// webdoom task 2.2: call/pixel counters for R_DrawColumn / R_DrawSpan.
+// Compile with -DWEB_PERF_COL_STATS to enable; zero overhead otherwise.
+// perf.h lives in engine/web/ — include it only when the stats flag is set
+// so that an unflagged build of engine/core/ has no dependency on engine/web/.
+#ifdef WEB_PERF_COL_STATS
+#include "perf.h"
+#define PERF_COL_INC(count)  do { web_perf_col_calls++;  web_perf_col_pixels  += (count)+1; } while(0)
+#define PERF_SPAN_INC(count) do { web_perf_span_calls++; web_perf_span_pixels += (count)+1; } while(0)
+#else
+#define PERF_COL_INC(count)  ((void)0)
+#define PERF_SPAN_INC(count) ((void)0)
+#endif
+
 
 // ?
 #define MAXWIDTH			1120
@@ -102,50 +115,71 @@ int			dccount;
 // Thus a special case loop for very fast rendering can
 //  be used. It has also been used with Wolfenstein 3D.
 // 
-void R_DrawColumn (void) 
-{ 
-    int			count; 
-    byte*		dest; 
+void R_DrawColumn (void)
+{
+    int			count;
+    byte*		dest;
     fixed_t		frac;
-    fixed_t		fracstep;	 
- 
-    count = dc_yh - dc_yl; 
+    fixed_t		fracstep;
+    const byte*		source;
+    const lighttable_t*	colormap;
+
+    count = dc_yh - dc_yl;
 
     // Zero length, column does not exceed a pixel.
-    if (count < 0) 
-	return; 
-				 
-#ifdef RANGECHECK 
+    if (count < 0)
+	return;
+
+#ifdef RANGECHECK
     if ((unsigned)dc_x >= SCREENWIDTH
 	|| dc_yl < 0
-	|| dc_yh >= SCREENHEIGHT) 
-	I_Error ("R_DrawColumn: %i to %i at %i", dc_yl, dc_yh, dc_x); 
-#endif 
+	|| dc_yh >= SCREENHEIGHT)
+	I_Error ("R_DrawColumn: %i to %i at %i", dc_yl, dc_yh, dc_x);
+#endif
+
+    PERF_COL_INC(count);
 
     // Framebuffer destination address.
     // Use ylookup LUT to avoid multiply with ScreenWidth.
-    // Use columnofs LUT for subwindows? 
-    dest = ylookup[dc_yl] + columnofs[dc_x];  
+    // Use columnofs LUT for subwindows?
+    dest = ylookup[dc_yl] + columnofs[dc_x];
 
     // Determine scaling,
     //  which is the only mapping to be done.
-    fracstep = dc_iscale; 
-    frac = dc_texturemid + (dc_yl-centery)*fracstep; 
+    fracstep = dc_iscale;
+    frac = dc_texturemid + (dc_yl-centery)*fracstep;
 
-    // Inner loop that does the actual texture mapping,
-    //  e.g. a DDA-lile scaling.
-    // This is as fast as it gets.
-    do 
+    // Hoist loop-invariant pointers into locals; compiler likely already does
+    // this at -O3 but explicit locals keep the intent clear for future readers.
+    source   = dc_source;
+    colormap = dc_colormap;
+
+    // webdoom task 2.2: unrolled 4-wide inner loop.
+    // Independent texture reads per iteration allow the CPU's load pipeline
+    // to overlap the four table lookups.  The & 127 wrap is preserved on every
+    // pixel — required for 128-texel wall texture columns.
+    // Tail handles the remaining 0-3 pixels with the original scalar loop.
+    while (count >= 3)
     {
-	// Re-map color indices from wall texture column
-	//  using a lighting/special effects LUT.
-	*dest = dc_colormap[dc_source[(frac>>FRACBITS)&127]];
-	
-	dest += SCREENWIDTH; 
-	frac += fracstep;
-	
-    } while (count--); 
-} 
+        dest[0]                = colormap[source[((frac              )>>FRACBITS)&127]];
+        dest[SCREENWIDTH]      = colormap[source[((frac+fracstep  )>>FRACBITS)&127]];
+        dest[SCREENWIDTH*2]    = colormap[source[((frac+fracstep*2)>>FRACBITS)&127]];
+        dest[SCREENWIDTH*3]    = colormap[source[((frac+fracstep*3)>>FRACBITS)&127]];
+        dest  += SCREENWIDTH*4;
+        frac  += fracstep*4;
+        count -= 4;
+    }
+
+    // Scalar tail — handles 0, 1, 2, or 3 remaining pixels.
+    // count is in [-1, 2] here: if count was 3 before last iteration we subtracted 4
+    // so count is -1 (no tail); 0 → 1 pixel; 1 → 2 pixels; 2 → 3 pixels.
+    while (count-- >= 0)
+    {
+        *dest = colormap[source[(frac>>FRACBITS)&127]];
+        dest += SCREENWIDTH;
+        frac += fracstep;
+    }
+}
 
 
 
@@ -208,30 +242,31 @@ void R_DrawColumn (void)
 #endif
 
 
-void R_DrawColumnLow (void) 
-{ 
-    int			count; 
-    byte*		dest; 
+void R_DrawColumnLow (void)
+{
+    int			count;
+    byte*		dest;
     byte*		dest2;
     fixed_t		frac;
-    fixed_t		fracstep;	 
- 
-    count = dc_yh - dc_yl; 
+    fixed_t		fracstep;
+
+    count = dc_yh - dc_yl;
 
     // Zero length.
-    if (count < 0) 
-	return; 
-				 
-#ifdef RANGECHECK 
+    if (count < 0)
+	return;
+
+#ifdef RANGECHECK
     if ((unsigned)dc_x >= SCREENWIDTH
 	|| dc_yl < 0
 	|| dc_yh >= SCREENHEIGHT)
     {
-	
 	I_Error ("R_DrawColumn: %i to %i at %i", dc_yl, dc_yh, dc_x);
     }
-    //	dccount++; 
-#endif 
+#endif
+
+    PERF_COL_INC(count);
+
     // Blocky mode, need to multiply by 2.
     dc_x <<= 1;
     
@@ -517,36 +552,38 @@ int			dscount;
 
 //
 // Draws the actual span.
-void R_DrawSpan (void) 
-{ 
+void R_DrawSpan (void)
+{
     fixed_t		xfrac;
-    fixed_t		yfrac; 
-    byte*		dest; 
+    fixed_t		yfrac;
+    byte*		dest;
     int			count;
-    int			spot; 
-	 
-#ifdef RANGECHECK 
+    int			spot;
+
+#ifdef RANGECHECK
     if (ds_x2 < ds_x1
 	|| ds_x1<0
-	|| ds_x2>=SCREENWIDTH  
+	|| ds_x2>=SCREENWIDTH
 	|| (unsigned)ds_y>SCREENHEIGHT)
     {
 	I_Error( "R_DrawSpan: %i to %i at %i",
 		 ds_x1,ds_x2,ds_y);
     }
-//	dscount++; 
-#endif 
+//	dscount++;
+#endif
 
-    
-    xfrac = ds_xfrac; 
-    yfrac = ds_yfrac; 
-	 
+
+    xfrac = ds_xfrac;
+    yfrac = ds_yfrac;
+
     dest = ylookup[ds_y] + columnofs[ds_x1];
 
     // We do not check for zero spans here?
-    count = ds_x2 - ds_x1; 
+    count = ds_x2 - ds_x1;
 
-    do 
+    PERF_SPAN_INC(count);
+
+    do
     {
 	// Current texture index in u,v.
 	spot = ((yfrac>>(16-6))&(63*64)) + ((xfrac>>16)&63);
@@ -556,11 +593,11 @@ void R_DrawSpan (void)
 	*dest++ = ds_colormap[ds_source[spot]];
 
 	// Next step in u,v.
-	xfrac += ds_xstep; 
+	xfrac += ds_xstep;
 	yfrac += ds_ystep;
-	
-    } while (count--); 
-} 
+
+    } while (count--);
+}
 
 
 

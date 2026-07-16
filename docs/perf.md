@@ -476,6 +476,92 @@ L > 3 days.
 | **verdict** | **DO** on bare-metal axis. For browser: do it but frame the claim correctly — the win is CI throughput and bare-metal fps, not user-visible browser fps. |
 | **maps to** | Task 2.2 |
 
+##### Task 2.2 results (measured 2026-07-15, commit after 99f9e28)
+
+**Step 1 — Call counts (doom.wad demo1, 1710 frames, build with -DWEB_PERF_COL_STATS):**
+
+| function | calls/frame | avg px/call | px/frame |
+|----------|------------|------------|---------|
+| R_DrawColumn (all variants) | 714.8 | 47.9 | 34,203 |
+| R_DrawSpan | 147.8 | 168.2 | 24,854 |
+
+Avg column height 47.9 px → 4-wide unroll covers ~11 full iterations + 0–3 scalar tail.
+Avg span length 168.2 px → 4-wide span unroll would cover ~42 iterations per call.
+
+**Step 2 — Codegen finding:** emcc -O3 with global `dc_colormap`/`dc_source` pointers
+**reloads them from globals on every pixel** (C aliasing: compiler cannot prove no write
+through another pointer between iterations). Verified in LLVM IR (`llvm-dis` output):
+`%43 = load ptr, ptr @dc_colormap, align 4` appears inside the loop body. Hoisting
+these into `const` locals before the loop eliminates the reload entirely. The hoist is
+correct on all targets regardless of whether the unroll wins.
+
+**Step 3 — Strict A/B/C interleaved bench on wbox (3 reps each, same session):**
+
+Variant A = 035ceaa binary (true baseline, freshly built).
+Variant B = hoist + 4-wide unroll (task 2.2 candidate).
+Variant C = hoist-only (no unroll), isolated contribution of the pointer hoist.
+Each rep is one 3-demo sweep; interleave order: A B C A B C A B C.
+Noise bar = max spread across reps within a single variant.
+
+| variant | transform | bsp+segs avg | bsp spread (noise) | total render avg |
+|---------|-----------|-------------|-------------------|-----------------|
+| A | none (baseline) | 0.2652 ms | 0.0013 ms | 0.4927 ms |
+| C | hoist-only | 0.2667 ms | 0.0075 ms | 0.4932 ms |
+| B | hoist + unroll-4 | 0.2558 ms | 0.0034 ms | 0.4851 ms |
+
+Per-rep detail (bsp+segs avg across demo1/demo2/demo3):
+
+| rep | A | B | C |
+|-----|---|---|---|
+| 1 | 0.2649 | 0.2567 | 0.2647 |
+| 2 | 0.2660 | 0.2570 | 0.2715 |
+| 3 | 0.2647 | 0.2536 | 0.2640 |
+
+**Hoist-only verdict (C vs A):** C avg 0.2667 vs A avg 0.2652 = +0.6% — within noise.
+C spread (0.0075) is 5.8× larger than A spread (0.0013). No measurable win from hoist
+alone on the Bobcat. The hoist is retained: it provably removes two aliasing-blocked
+global reloads per pixel (confirmed in LLVM IR) and is universally correct across all
+targets, but it does not move numbers on wbox by itself.
+
+**Unroll-4 verdict (B vs A):** B avg 0.2558 vs A avg 0.2652 = **-0.0094 ms = -3.5%**.
+All 3 B reps are below all 3 A reps — the difference is 7× the A noise bar and is
+clearly separable from drift. On the Bobcat (in-order CPU), unrolling reduces the
+branch-taken + pointer-advance overhead from 1-per-pixel to 1-per-4-pixels; this is
+the dominant effect, not the ILP from independent texture reads. **KEEP unroll.**
+
+Total render B vs A: 0.4851 vs 0.4927 ms = **-1.5%**.
+
+*Killed:* **R_DrawSpan: 4-wide u32 packing (4 palette bytes into one i32.store)**
+- Pack four `ds_colormap[ds_source[spot]]` bytes into one `uint32_t` word and write with
+  a single unaligned store (valid in wasm; no hardware penalty on x86). Sequential
+  `dest++` writes mean alignment is only guaranteed every 4 pixels if ds_x1 ≡ 0 (mod 4).
+- Result on wbox (measured in earlier fleet run): planes +7.9% across demos
+  (demo1 +10.1%, demo2 +6.8%, demo3 +5.9%). Wider loop body adds code-size pressure
+  on Bobcat's 32 KB L1 icache; V8 JIT compiles the wider body less efficiently.
+- **KILLED** — wbox regression.
+
+*Assessed, not prototyped:* **wasm SIMD (v128 for R_DrawSpan 8-wide / R_DrawColumn)**
+- R_DrawSpan: the flat-texture reads (`ds_source[spot]`) require a *gather* — 8 independent
+  random byte addresses per SIMD lane. wasm v128 has no native gather; emulation via 8
+  separate `v128.load8_lane` instructions negates any throughput gain. The scalar u32-packing
+  already regressed on wbox; SIMD gather overhead would be worse.
+- R_DrawColumn: the bottleneck is the 320-byte-stride column write. No SIMD instruction
+  can batch non-contiguous vertical pixels into a contiguous store without transposing the
+  entire framebuffer — a larger architectural change outside 2.2 scope.
+- **ASSESSED, NOT WORTH IT**: gather emulation overhead eats the win for spans;
+  stride-320 writes can't be SIMD-batched without framebuffer transposition.
+
+**Final fleet results (wbox only from A/B interleave; other hosts from final fleet run):**
+
+| stage | A (035ceaa) | B (hoist+unroll) | delta | verdict |
+|-------|------------|-----------------|-------|---------|
+| bsp+segs | 0.2652 ms | 0.2558 ms | **-3.5%** | **win** |
+| planes | 0.1564 ms | 0.1587 ms | +1.5% | within noise |
+| **total render** | **0.4927 ms** | **0.4851 ms** | **-1.5%** | **win** |
+
+wbox total render drops from 1.72% of the 28.57 ms / 35 Hz budget to 1.70%. The
+improvement is in headless CI throughput and bare-metal fps, not user-visible browser fps.
+
 #### Q2 — Memory footprint reduction (tasks 2.5 + 2.6)
 
 | field | value |

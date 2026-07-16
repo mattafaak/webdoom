@@ -15,6 +15,16 @@ extern double web_perf_masked_us; // R_DrawMasked (sprites + midtextures)
 extern long web_perf_frame_count; // frames rendered (for per-frame averages)
 extern long web_perf_tic_count;   // G_Ticker calls (for per-tic averages)
 
+// task 2.2 call-count counters — always declared; incremented only when
+// r_draw.c is compiled with -DWEB_PERF_COL_STATS.  Exported via
+// web_perf_col_calls_get() / web_perf_span_calls_get() so bench scripts can
+// harvest them without modifying bench.mjs.
+// web_perf_col_pixels / web_perf_span_pixels count total pixels drawn.
+extern long web_perf_col_calls;   // R_DrawColumn + variants call count
+extern long web_perf_span_calls;  // R_DrawSpan call count
+extern long web_perf_col_pixels;  // total pixels drawn by column funcs
+extern long web_perf_span_pixels; // total pixels drawn by span func
+
 // High-resolution µs timestamp.  Wraps emscripten_get_now() * 1000.
 // Defined in perf.c so core files need not include <emscripten.h>.
 double web_perf_now (void);
