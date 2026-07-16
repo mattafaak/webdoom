@@ -42,8 +42,9 @@ extern byte*		dc_source;
 // height (in texels) of the current column's source buffer.
 // The column draw loop uses (dc_texheight - 1) as a bitmask instead of 127
 // so that textures shorter than 128 px do not read into heap memory beyond
-// the allocated column buffer (fixes the layout-dependent render hazard;
-// all shipped DOOM textures have power-of-2 heights so the mask is exact).
+// the allocated column buffer (fixes the layout-dependent render hazard).
+// In-bounds for any height; exact tiling only for power-of-2 heights —
+// non-pow2 heights (72/96) wrap inexactly (see r_draw.c note).
 // Default 128 → mask 127 preserves vanilla behaviour for 128-pixel columns.
 extern int		dc_texheight;		
 

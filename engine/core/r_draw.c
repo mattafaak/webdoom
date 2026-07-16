@@ -109,9 +109,13 @@ byte*			dc_source;
 // invoking R_DrawColumn/R_DrawColumnLow.  Used as a power-of-2 wrap mask
 // ((dc_texheight - 1) replaces the hard-coded & 127) so that the column
 // draw never reads past the allocated composite/lump column data.
-// All shipped DOOM textures have power-of-2 heights (8/16/32/64/128), so
-// the bitmask is always exact.  Default 128 preserves the vanilla & 127
-// for callers that do not need to override (e.g. sky draw in r_plane.c).
+// The mask keeps every read within [0, dc_texheight-1] for ANY height; for
+// power-of-2 heights (the common case) this is exact tiling, for non-pow2
+// heights (72/96 exist in the IWADs) the wrap is inexact but in-bounds —
+// wrong-but-deterministic, vs vanilla's layout-dependent heap read.  Exact
+// non-pow2 tiling would need a prboom-style modulo (future cleanup).
+// Default 128 preserves the vanilla & 127 for callers that do not need to
+// override (e.g. sky draw in r_plane.c).
 int			dc_texheight = 128;
 
 // just for profiling

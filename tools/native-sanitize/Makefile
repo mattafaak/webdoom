@@ -35,7 +35,10 @@ CFLAGS  := -m32 -O1 -g \
 
 # Suppressions rationale:
 #   alignment, bounds, pointer-overflow, object-size: vanilla pointer-casting idioms safe in practice.
-#   signed-integer-overflow: DOOM fixed-point math intentionally uses two's-complement wraparound
+#   signed-integer-overflow: DOOM fixed-point math intentionally uses two's-complement wraparound.
+#     Known intentional sites: angle_t products (ANG45*6 etc.), FixedMul/FixedDiv
+#     intermediate products, finetangent index arithmetic. NOTE: this suppression is
+#     global — new signed overflow elsewhere would be hidden; audit when touching math paths.
 #     (e.g. ANG45 * 6 = 3221225472, angle_t arithmetic, fixed_t multiply). These are defined
 #     behavior on every targeted platform even though C99 says they are UB.
 LDFLAGS := -m32 -fsanitize=address,undefined \

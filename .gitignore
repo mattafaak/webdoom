@@ -5,3 +5,10 @@ node_modules/
 *.wasm
 *.wasm.map
 .emscripten_cache/
+tools/native-sanitize/obj/
+tools/native-sanitize/out/
+tools/native-sanitize/nat-doom
+tools/native-sanitize/nat-doom-nosanity
+.claude/
+env.local
+out/

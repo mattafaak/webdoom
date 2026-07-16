@@ -93,6 +93,7 @@ unlinks and frees it.
 `P_RunThinkers` contained a latent use-after-free (p_tick.c:108–120); **fixed in task 3.1** by caching `nextthinker = currentthinker->next` before the free, matching the documented safe pattern described below:
 
 ```c
+// BEFORE the task-3.1 fix (historical — current code caches nextthinker first):
 if (currentthinker->function.acv == (actionf_v)(-1)) {
     // time to remove it
     currentthinker->next->prev = currentthinker->prev;  // line 111
@@ -340,10 +341,10 @@ expands to `spechit[8]`. These two declarations name the same object with differ
 array sizes — a violation of C99 §6.2.7 (compatible type requirement for declarations
 of the same object across translation units). The mismatch is benign in practice
 because C array parameters decay to pointers at the ABI boundary, and no compiler
-uses the declared extent for anything after link time. However, a UBSan sweep (task
-3.1) flagging `-fsanitize=undefined` may surface this as a diagnostic. The fix is to
-move the `#define MAXSPECIALCROSS 64` into `p_local.h` (or a shared header) so both
-TUs see the same array size in their `extern` declarations.
+uses the declared extent for anything after link time. **Fixed in task 3.1**: the
+`#define MAXSPECIALCROSS 64` now lives in `p_local.h`, and both TUs see the same
+array size in their `extern` declarations (behavior-identical — p_enemy.c's loop
+bound is `numspechit`, never the constant).
 
 ### 4.5 P_SlideMove — the 3-attempt hack
 
