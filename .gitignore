@@ -12,3 +12,5 @@ tools/native-sanitize/nat-doom-nosanity
 .claude/
 env.local
 out/
+tools/sprite-fix-screenshot.ppm
+tools/*.ppm
