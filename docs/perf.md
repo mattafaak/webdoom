@@ -658,6 +658,7 @@ concern. No further action in task 2.3. → Defer to task 3.2 (bounds hardening)
 | **expected win** | wbox sim = 0.0706 ms/tic = 0.25% of 35 Hz budget. Any speedup is invisible at the system level. Headless CI throughput may improve (timedemo runs faster), but that is a developer convenience, not a user win. |
 | **risk** | The frozen surface (playsim.md §16) covers all P_Random call ordering, thinker traversal, blockmap iteration order. Any change to iteration order, however minor, will desync golden demos. The correctness gate (13 sim goldens + 44,580-tic Chocolate cross-validation) will catch any divergence, but the investigation cost is high. |
 | **verdict** | **MEASURE-FIRST / LIKELY-SKIP**. Pursue only if Q0 reveals that the JS-side sim invocation overhead (not wasm sim time) is the bottleneck, or if a specific bare-metal target profile shows sim dominates. The frozen-surface risk is disproportionate to the 0.25% budget figure. |
+| **resolution (task 2.4 closed)** | **SKIPPED BY MEASUREMENT** — no sim change made; 13/13 golden gate trivially intact. Reopen only under the two conditions above (Q0 finding or a bare-metal profile where sim dominates); the future ESP32 project inherits this queue entry via bare-metal.md §7. |
 | **maps to** | Task 2.4 |
 
 #### Q5 — tank deep-dive (task 2.7)
