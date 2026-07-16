@@ -90,8 +90,9 @@ tools/run-tests.sh
   runs the demo suite to surface OOB reads invisible in wasm
 - **browser**: CDP-driven Chrome — title → menu → new game → movement,
   audio arms, service worker caches; plus two tabs through the lobby
-  into a co-op game (note: the sw-cache sub-check can exit-0 with a
-  skip on certain Chrome versions; it is not a guaranteed green)
+  into a co-op game. The sw-cache sub-check waits for the service
+  worker to take control, then asserts the WAD is cached (exits nonzero
+  on failure)
 
 ## License
 
