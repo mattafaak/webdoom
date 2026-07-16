@@ -87,7 +87,16 @@ function spGameScreen() {
         const m = singleMap(w);
         const args = m ? ['-warp', String(m), '-skill', '3'] : [];
         bootDoom({ wads: stackFor(w.file), args, onQuit: returnToMenu })
-            .catch(err => status(String(err)));
+            .catch(err => {
+                // WAD fetch / engine boot failed: reset so the user can retry
+                // without reloading the page.  main.js has already restored
+                // #landing visibility via restoreOnFailure(); here we re-arm
+                // the booted guard and bring the menu back to the root screen.
+                booted = false;
+                menu.show();
+                menu.reset(rootScreen());
+                status(String(err));
+            });
     };
     return {
         title: 'CHOOSE GAME',
@@ -386,8 +395,16 @@ function leaveLobby() {
 
 // --- boot ------------------------------------------------------------------------
 (async () => {
-    if ('serviceWorker' in navigator)
+    if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
+        // When a new service worker takes control mid-session, surface a
+        // non-intrusive reload prompt rather than silently serving a mixed
+        // old/new asset state. The prompt never interrupts an active match.
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            const el = document.getElementById('sw-update');
+            if (el) el.hidden = false;
+        });
+    }
     try {
         manifest = (await (await fetch('/api/wads')).json()).wads;
         font = await loadDoomFont();

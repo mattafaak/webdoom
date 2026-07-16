@@ -118,6 +118,25 @@ html, body {
 #settings button:hover { border-color: #d33; }
 #settings .row { display: flex; justify-content: space-between; margin-top: .8rem; }
 
+/* SW update toast — bottom-right corner, floats above the menu in absolute
+   position so it never becomes a second grid cell that shifts the layout */
+#sw-update {
+    position: absolute;
+    inset: auto 1rem 1rem auto;
+    background: rgba(0,0,0,.82);
+    padding: .35rem .75rem;
+    border-radius: 4px;
+    font-size: .85rem;
+    pointer-events: auto;
+}
+#sw-update button {
+    background: #222; color: #ddd;
+    border: 1px solid #555; border-radius: 3px;
+    padding: .1rem .5rem; cursor: pointer; font: inherit;
+    margin-left: .4rem;
+}
+#sw-update button:hover { border-color: #d33; }
+
 /* landing: hosts the DOOM-style drill-down menu */
 #landing {
     display: flex;

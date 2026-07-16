@@ -37,6 +37,13 @@ export function createAudio(doom) {
     };
     for (const evt of ['keydown', 'mousedown', 'touchstart'])
         window.addEventListener(evt, arm, { once: false, capture: true });
+    // Browsers suspend AudioContexts when a tab is hidden. Resume on reveal
+    // so audio is live again the moment the player returns without needing
+    // a fresh user gesture.
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && ctx && ctx.state === 'suspended')
+            ctx.resume().catch(() => {});
+    });
 
     function pump() {
         const deficit = Math.floor(TARGET_BACKLOG * ctx.sampleRate) - musicQueued;

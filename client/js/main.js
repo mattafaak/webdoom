@@ -54,6 +54,14 @@ async function fetchWad(file, sha) {
     return buf;
 }
 
+// Restore the landing page when loading fails so the user is not left on
+// a blank canvas with no way back.
+function restoreOnFailure(canvas) {
+    loading.hide();
+    canvas.hidden = true;
+    document.getElementById('landing').hidden = false;
+}
+
 // wads: [{file, sha}] — first entry is the IWAD, the rest are PWADs.
 // net: {slot, numplayers, jitterMs} or null for single player.
 // onQuit: called when the player quits in-game (Quit Game → Y).
@@ -63,10 +71,20 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
     canvas.hidden = false;
 
     loading.show('LOADING ENGINE…');
-    const { default: createDoom } = await import('/engine/doom.js');
-    const bytes = [];
-    for (const w of wads) bytes.push(await fetchWad(w.file, w.sha));
-    const persisted = await loadPersisted(wads[0].file);
+
+    // --- fetch phase: engine module + WADs (may fail on network error) --------
+    let createDoom, bytes, persisted;
+    try {
+        ({ default: createDoom } = await import('/engine/doom.js'));
+        bytes = [];
+        for (const w of wads) bytes.push(await fetchWad(w.file, w.sha));
+        persisted = await loadPersisted(wads[0].file);
+    } catch (err) {
+        // Restore landing so the user can read the error and retry.
+        restoreOnFailure(canvas);
+        throw err;
+    }
+    // --------------------------------------------------------------------------
 
     loading.set('BOOTING…', 1);
     const doom = await createDoom({

@@ -61,7 +61,9 @@ export function loadSettings() {
 }
 
 export function saveSettings(s) {
-    localStorage.setItem('webdoom.input', JSON.stringify(s));
+    try {
+        localStorage.setItem('webdoom.input', JSON.stringify(s));
+    } catch { /* quota exceeded or storage disabled — continue in-memory */ }
 }
 
 // weapon digit groups for cycle buttons (digit key → doom behavior)
@@ -190,6 +192,9 @@ export function createInput(doom, canvas, settings) {
 
     // --- gamepad ------------------------------------------------------------
     let padPrev = 0;
+    // Reset edge-detection state when the gamepad is disconnected so that
+    // held buttons re-trigger correctly on reconnect.
+    window.addEventListener('gamepaddisconnected', () => { padPrev = 0; });
     const curve = v => {
         const dz = settings.padDeadzone;
         const m = Math.abs(v);
