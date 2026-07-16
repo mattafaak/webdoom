@@ -64,7 +64,7 @@ of rounding misses by 313, and the plausible-looking `(31−L)/31` scale misses 
 2,373. The recipe is tightly determined — nearby recipes are not close.)
 
 The invulnerability map (map 32) is a grayscale inverse-luma ramp,
-`gray = 254 − ((76·r + 152·g + 34·b) >> 8)`, matching 242/256 (the residual 15 are
+`gray = 254 − ((76·r + 152·g + 34·b) >> 8)`, matching 241/256 (the residual 15 are
 gray-ramp tie-breaks). Note the weights sum to 262, slope ~1.023 — *not* the
 textbook 0.299/0.587/0.114, which is why standard luma formulas miss it by 92.
 

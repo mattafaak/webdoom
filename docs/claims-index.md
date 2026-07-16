@@ -48,7 +48,7 @@ verifiers; task 6.3 wires them into `verify-all.sh` and a CI drift-check.
 | ea-020 | engine-archaeology.md:128 | COLORMAP mismatches with (31−L)/31 scale recipe | 2,373 | measurement | tools/archaeology/colormap-crack.c | verified |
 | ea-021 | engine-archaeology.md:127 | COLORMAP mismatches with Manhattan distance | 1,200+ | measurement | tools/archaeology/colormap-crack.c | verified |
 | ea-022 | engine-archaeology.md:130 | COLORMAP map-0 identity entries | 249 / 256 | invariant | tools/archaeology/colormap-crack.c (map-0 identity check) | needs-verifier |
-| ea-023 | engine-archaeology.md:137 | invuln COLORMAP map-32 matching entries (doc value — see FINDING-1) | 242 / 256 | measurement | tools/archaeology/colormap-invuln-crack.c (reports 15 mismatches → 241/256 match) | verified |
+| ea-023 | engine-archaeology.md:137 | invuln COLORMAP map-32 matching entries (FINDING-1 RESOLVED: doc corrected 242→241) | 241 / 256 | invariant | tools/archaeology/colormap-invuln-crack.c (reports 15/256 mismatches → 241 match) | verified |
 | ea-024 | engine-archaeology.md:137 | invuln COLORMAP tie-break count in gray ramp | 15 | measurement | tools/archaeology/colormap-invuln-crack.c | verified |
 | ea-025 | engine-archaeology.md:139 | invuln luma weight sum (76 + 152 + 34) | 262 | derived | arithmetic: 76+152+34=262 | verified |
 | ea-026 | engine-archaeology.md:139 | invuln entries missed by standard ITU luma weights | 92 | measurement | tools/archaeology/colormap-invuln-crack.c | verified |
@@ -238,8 +238,15 @@ entries become tasks for 6.2; all become drift gates in 6.3.
 `tools/archaeology/colormap-invuln-crack.c` reports `15/256 mismatches`;
 256 − 15 = 241, not 242. The doc also states "residual 15 are nearest-colour
 tie-breaks", but 242 + 15 = 257 ≠ 256.  The correct value is **241/256**.
-This is an arithmetic error in `engine-archaeology.md:137`.  Fix in a future
-doc-patch task (not in scope for 6.1–6.3).
+This is an arithmetic error in `engine-archaeology.md:137`.
+
+**RESOLVED (lead, same cycle)** — ground truth reproduced directly:
+`colormap-invuln-crack.c PLAYPAL.lmp COLORMAP.lmp` →
+`gray = 254 - ((76*r+152*g+34*b)>>8) → 15/256 mismatches (wsum=262)`.
+Corrected to **241/256** in `engine-archaeology.md` AND in the public
+`docs/magic-data.md` writeup (which had inherited the error before it was
+published). The formula and the 15-tie-break characterization were correct;
+only the match count was off by one.
 
 **FINDING-2 (ps-033): doom-demo1 tic count — doc says 1,710, bench shows 1,709 frames.**
 `tools/bench-baseline.json` (perStage, all four hosts) records `"frames": 1709`

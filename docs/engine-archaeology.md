@@ -134,7 +134,8 @@ contains near-duplicate entries.
 **Invulnerability map (32) — characterized:** every entry resolves to a
 grayscale-ramp colour via inverse luma,
 `gray = 254 − ((76·r + 152·g + 34·b) >> 8)`, then nearest gray — matching
-242/256. The residual 15 are nearest-colour tie-breaks in the gray ramp.
+**241/256** (`colormap-invuln-crack.c` reports 15/256 mismatches; 241 + 15 =
+256). The residual 15 are nearest-colour tie-breaks in the gray ramp.
 Weights sum to 262 (slope ~1.023, not the textbook 0.299/0.587/0.114),
 which is why standard luma missed by 92. Cosmetic full-screen effect,
 never touches the sim, so it is kept as canon rather than regenerated.
