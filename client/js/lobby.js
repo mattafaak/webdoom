@@ -9,6 +9,7 @@ import { connectLobby, launchArgs } from './net.js';
 import { loadDoomFont } from './doomfont.js';
 import { createMenu } from './menu.js';
 import { createCountdown } from './countdown.js';
+import { createFire } from './fire.js';
 
 const $ = id => document.getElementById(id);
 const status = msg => { $('status').textContent = msg; };
@@ -21,6 +22,7 @@ const COLORS = ['Green', 'Indigo', 'Brown', 'Red'];
 let manifest = [];
 let font = null;
 let menu = null;
+let fire = null;   // PSX DOOM fire background instance
 let lobby = null;
 let roster = null;              // latest roster message (pre-game lobby)
 let ipSummary = null;          // latest 'inprogress' summary (game already live)
@@ -70,6 +72,8 @@ function returnToMenu() {
     if (lobby) { lobby.close(); lobby = null; }
     roster = null;
     ipSummary = null; ipSlot = -1;
+    fire?.resume();   // restart fire now that we are back on the launcher
+    fire?.flare();    // brief intensity lift on return to menu
     menu.show();
     menu.reset(rootScreen());
 }
@@ -83,6 +87,7 @@ function spGameScreen() {
     const boot = w => {
         if (booted) return;
         booted = true;
+        fire?.pause();    // stop fire while the game is running
         menu.hide();
         const m = singleMap(w);
         const args = m ? ['-warp', String(m), '-skill', '3'] : [];
@@ -93,6 +98,8 @@ function spGameScreen() {
                 // #landing visibility via restoreOnFailure(); here we re-arm
                 // the booted guard and bring the menu back to the root screen.
                 booted = false;
+                fire?.resume();
+                fire?.flare();
                 menu.show();
                 menu.reset(rootScreen());
                 status(String(err));
@@ -143,6 +150,7 @@ function enterMultiplayer() {
         .on('launch', async m => {
             if (booted) return;
             booted = true;
+            fire?.pause();    // stop fire for the duration of the game
             if (!m.join) countdown.show('GO');    // drop-ins get the catch-up bar, not a countdown
             // Sample RTT and size the buffer to a ROBUST jitter estimate:
             // the 75th-percentile spread above the fastest ping, not the mean
@@ -170,6 +178,8 @@ function enterMultiplayer() {
                 // Reset all state so the user can retry from the root menu.
                 booted = false;
                 countdown.reset();
+                fire?.resume();
+                fire?.flare();
                 menu.show();
                 menu.reset(rootScreen());
                 if (lobby) { lobby.close(); lobby = null; }
@@ -404,6 +414,7 @@ function leaveLobby() {
     roster = null;
     ipSummary = null; ipSlot = -1;
     countdown.reset();          // guard T25: dismiss countdown if user ESCs mid-countdown
+    fire?.flare();
     menu.reset(rootScreen());
 }
 
@@ -429,6 +440,19 @@ function leaveLobby() {
         status('cannot reach server');
         return;
     }
+
+    // PSX DOOM fire background. Inserted into #stage so it sits behind
+    // the menu and is invisible during gameplay (paused while game runs).
+    fire = createFire($('stage'));
+
+    // Mirror the audio.js visibilitychange pattern: pause fire when the tab
+    // is hidden (zero CPU cost), resume when it becomes visible again.
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) fire.pause();
+        else if (!booted) fire.resume();
+    });
+
     menu.reset(rootScreen());
+    fire.flare();   // initial flare as the launcher appears
     status('');
 })();

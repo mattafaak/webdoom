@@ -16,6 +16,8 @@ html, body {
     display: grid;
     place-items: center;
     position: relative;
+    isolation: isolate;  /* stacking context: fire canvas z-index:-1 stays
+                            behind menu but above the body's black background */
 }
 
 /* 4:3 aspect-corrected (320x200 pixels are tall), integer-friendly scale */
@@ -136,6 +138,25 @@ html, body {
     margin-left: .4rem;
 }
 #sw-update button:hover { border-color: #d33; }
+
+/* PSX DOOM fire background — absolutely fills #stage, behind all other
+   content (z-index -1 within the isolation:isolate stacking context of
+   #stage). image-rendering: pixelated gives the nearest-neighbour upscale
+   from the small (64×40) simulation canvas to the full viewport — chunky
+   by design. pointer-events: none so the fire never intercepts menu clicks.
+   Opacity 0.45, kept constant — dimming and flare are controlled entirely
+   through sourceHeat in the sim (not opacity or CSS class toggling), which
+   guarantees menu text contrast is never affected by visual transitions. */
+#fire-bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+    pointer-events: none;
+    z-index: -1;
+    opacity: 0.45;
+}
 
 /* landing: hosts the DOOM-style drill-down menu */
 #landing {
