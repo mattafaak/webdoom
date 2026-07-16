@@ -121,6 +121,11 @@ R_ClipSolidWallSegment
 	    // Post is entirely visible (above start),
 	    //  so insert a new clippost.
 	    R_StoreWallRange (first, last);
+	    // webdoom: clamp solidsegs — if the clip list is full, the wall
+	    //   is drawn but the solid-clip entry is dropped (fail-soft,
+	    //   demo-neutral: solidsegs is render-only, never read by the sim).
+	    if (newend - solidsegs >= MAXSEGS)
+		return;
 	    next = newend;
 	    newend++;
 	    

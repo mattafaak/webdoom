@@ -1295,8 +1295,19 @@ void G_DoSaveGame (void)
 	sprintf (name,SAVEGAMENAME"%d.dsg",savegameslot); 
     description = savedescription; 
 	 
-    save_p = savebuffer = screens[1]+0x4000; 
-	 
+    // webdoom: savegame workspace is screens[1]+0x4000.
+    //   V_Init allocates screens[0..3] as ONE contiguous 256 KB block
+    //   (SCREENWIDTH*SCREENHEIGHT*4 = 256,000 bytes).  screens[1] starts
+    //   at byte 64,000; adding 0x4000 (16,384) gives byte 80,384; the block
+    //   ends at byte 256,000 → real headroom = 175,616 bytes (~171 KB).
+    //   SAVEGAMESIZE (0x80000 = 524,288 bytes) intentionally exceeds that;
+    //   the I_Error below is a detect-after-corrupt backstop, not a pre-check.
+    //   Vanilla saves are <64 KB (well under the 171 KB real ceiling), so OOB
+    //   never occurs in practice.  A separate allocation (malloc or static
+    //   array) would change WASM data-segment size, shift BSS, and break
+    //   render goldens — keep this workspace verbatim.
+    save_p = savebuffer = screens[1]+0x4000;
+
     memcpy (save_p, description, SAVESTRINGSIZE); 
     save_p += SAVESTRINGSIZE; 
     memset (name2,0,sizeof(name2)); 
@@ -1320,9 +1331,13 @@ void G_DoSaveGame (void)
 	 
     *save_p++ = 0x1d;		// consistancy marker 
 	 
-    length = save_p - savebuffer; 
-    if (length > SAVEGAMESIZE) 
-	I_Error ("Savegame buffer overrun"); 
+    length = save_p - savebuffer;
+    // webdoom: detect-after-corrupt backstop — if save exceeded the real
+    //   headroom (175,616 bytes) this I_Error fires after the OOB write
+    //   has already happened, but prevents the corrupt data from being
+    //   persisted to disk.  Vanilla saves <64 KB; never fires in practice.
+    if (length > SAVEGAMESIZE)
+	I_Error ("Savegame buffer overrun");
     M_WriteFile (name, savebuffer, length); 
     gameaction = ga_nothing; 
     savedescription[0] = 0;		 

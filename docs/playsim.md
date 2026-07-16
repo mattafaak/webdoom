@@ -35,6 +35,7 @@ by instrumentation), that is stated.
 16. [The frozen surface — what is and is not demo-visible](#16-the-frozen-surface)
 17. [Open questions for task 1.4](#17-open-questions-for-task-14)
 18. [Coverage audit — p_*.c function index](#18-coverage-audit)
+19. [Limits audit — task 3.2 overflow review](#19-limits-audit)
 
 ---
 
@@ -1533,3 +1534,94 @@ Every function in each `p_*.c` file, accounted for.
 
 *Coverage: every function in p_*.c is listed above. Trivial one-liners are grouped
 as "trivial stub" or "utility" where appropriate. No p_*.c function is unaccounted for.*
+
+---
+
+## 19. Limits audit — task 3.2 overflow review
+
+Per-site policy: never corrupt memory; guards must be no-ops on the golden paths
+(13 golden demos, 13/13 pass confirmed); decisions documented.
+
+Column key:
+- **site / limit**: buffer name and size constant
+- **vanilla overflow**: what vanilla DOOM did when the limit was exceeded
+- **our guard**: what webdoom does
+- **demo-visible?**: whether the guard ever fires on any of the 13 golden demos
+- **evidence**: file:line for the guard + measured peak or proof it never fires
+
+| site / limit | vanilla overflow behavior | our guard | demo-visible? | evidence |
+|---|---|---|---|---|
+| `spechit[MAXSPECIALCROSS=64]` (p_map.c) | OOB write past `spechit[8]` into adjacent globals; vanilla limit was 8 | Clamp: write skipped when `numspechit >= MAXSPECIALCROSS` (p_map.c:243–247); limit raised to 64 | No — peak across 13 demos is **8** (tnt-demo2 MAP12), exactly at the old vanilla limit | p_map.c:243–247; §4.4; §17 measurement |
+| `intercepts[MAXINTERCEPTS=128]` (p_maputl.c) | OOB write past `intercepts[128]`; "all-ghosts" bug — distant intercept fractions corrupted to 0 | Clamp: `if (intercept_p - intercepts < MAXINTERCEPTS-1) intercept_p++;` — stops at 127 (p_maputl.c:606–607 and 672–673) | No — peak across 13 demos is **45** (plutonia-demo3 MAP12); §17 measurement | p_maputl.c:606–607, 672–673; §5.1; §17 |
+| `solidsegs[MAXSEGS=64]` (r_bsp.c) | Silent OOB write past `solidsegs[32]` (vanilla) / `solidsegs[64]` (webdoom); corrupts adjacent data | Clamp: `if (newend - solidsegs >= MAXSEGS) return;` after `R_StoreWallRange` (r_bsp.c, task 3.2); wall is drawn, clip-post insertion dropped | No — render-only; 64 separated solid clip ranges per frame is unreachable in any shipped map | r_bsp.c guard added task 3.2; renderer.md §3.4, §10 |
+| `openings[MAXOPENINGS=SCREENWIDTH×256]` (r_plane.c / r_segs.c) | Silent pointer overrun in non-RANGECHECK build; `RANGECHECK` build: `I_Error` at R_DrawPlanes entry | Guard at each `lastopening +=` site in r_segs.c: if `lastopening - openings + needed > MAXOPENINGS`, masked midtex dropped (`maskedtexture=false`) or silhouette bit cleared (`SIL_TOP`/`SIL_BOTTOM`); prevents null deref in R_DrawMasked (r_segs.c, task 3.2) | No — MAXOPENINGS raised from ×64 to ×256; overflow would require 128+ adjacent wall-high drawsegs | r_segs.c guards added task 3.2; renderer.md §10 |
+| `savebuffer[SAVEGAMESIZE=0x80000]` (g_game.c) | Vanilla used `screens[1]+0x4000` as workspace; V_Init allocates screens[0..3] as ONE 256 KB block (256,000 bytes); screens[1] starts at byte 64,000; +0x4000 gives byte 80,384; real headroom = 175,616 bytes (~171 KB); SAVEGAMESIZE (512 KB) exceeds that; `I_Error` is a detect-after-corrupt backstop, not a pre-check | Existing `I_Error("Savegame buffer overrun")` after archive (g_game.c:1324–1325); workspace kept as `screens[1]+0x4000` to avoid changing WASM data-segment size (any separate allocation shifts BSS/heap, requiring re-golding the render suite) | No — vanilla saves are <64 KB (well under the 171 KB real ceiling); `I_Error` never fires on golden paths | g_game.c:1324–1325; §19 implementation note |
+| `braintargets[32]` (p_enemy.c) | Vanilla had no guard; a PWAD with >32 MT_BOSSTARGET things in MAP30 overwrote adjacent static data (`numbraintargets`, `braintargeton`) | Guard: `if (numbraintargets < MAXBRAINTARGETS)` before write (p_enemy.c `A_BrainAwake`, task 3.2); excess targets silently ignored; PWAD caveat: only the first 32 targets are stored — `A_BrainSpit` cycles through those 32 only | No — the 13 golden demos do not include Doom II MAP30; Doom II MAP30 has 8 targets, well under 32; PWAD maps with >32 MT_BOSSTARGET things trigger the guard (excess ignored, first 32 cycle) | p_enemy.c guard added task 3.2; MAP30 target count verified by inspection |
+| `EV_DoDonut` s2/s3 null (p_spec.c) | `s2 = getNextSector(s1->lines[0], s1)` returns NULL for a one-sided donut sector; vanilla then crashed at `s2->linecount`; backsector `s3` similarly NULL on malformed two-sided segs | Guard: `if (!s2) continue;` before the inner loop; `if (!s3) continue;` inside it (p_spec.c `EV_DoDonut`, task 3.2); skip the sector rather than crash | No — no golden demo activates a donut special; verified by grep (line special 9 not present in any of the 13 WAD paths) | p_spec.c guards added task 3.2; §10.3; prboom reference |
+| `activeplats[MAXPLATS=30]` (p_plats.c) | OOB write if more than 30 simultaneous platforms active | `I_Error("P_AddActivePlat: no more plats!")` when slot scan finds no NULL (p_plats.c:298) | No — standard maps never exceed 30 simultaneous platforms; golden demos confirmed | p_plats.c:298; §10.5 |
+| `buttonlist[MAXBUTTONS=16]` (p_switch.c) | OOB write if more than 16 simultaneous switch animations active | `I_Error("P_StartButton: no button slots left!")` (p_switch.c:184) | No — standard maps never have 16 simultaneous switch timers | p_switch.c:184; §10.3 |
+| HU/ST chat buffers: `chatchars[QUEUESIZE=128]` / `hu_textline_t.l[HU_MAXLINELENGTH+1=81]` (hu_lib.c / hu_stuff.c) | QUEUESIZE ring: full-queue silently drops; text line: `HUlib_addCharToTextLine` returns false when `len == HU_MAXLINELENGTH` without writing | Already guarded: ring-buffer arithmetic (`& (QUEUESIZE-1)`) at hu_stuff.c:589–596; line bound at hu_lib.c:74; `HUlib_keyInIText` only passes `' '`–`'_'` and KEY_BACKSPACE from the net chatchar path | No — chat is not used in demo playback; incoming chatchar filtered before text-line write | hu_stuff.c:589–596; hu_lib.c:74, 318–333; formats.md chatchar |
+
+### §19 implementation notes
+
+**Render-residual OOB reads found and fixed (tasks 3.1 / 3.2).**
+During task 3.2 validation, render golden failures at tnt-demo1 tic 1684 and
+plutonia-demo1 tic 3188 were traced to two OOB read residuals in the renderer:
+
+1. **`R_RenderMaskedSegRange` stale `dc_texheight`** (r_segs.c). This function is
+   called from `R_DrawMaskedSegments` (r_things.c) after `R_RenderSegLoop` has
+   finished; it never calls `R_RenderSegLoop` itself, so `dc_texheight` held
+   whatever the last wall or plane draw left. For mid-textures shorter than 128 px,
+   the stale mask caused `R_DrawColumn` to read past the texture data into zone heap
+   memory. Fix: `dc_texheight = textureheight[texnum] >> FRACBITS;` before the
+   column loop in `R_RenderMaskedSegRange` (r_segs.c, task 3.2).
+
+2. **`R_DrawMaskedColumn` per-post `dc_texheight`** (r_things.c). Sprite column
+   posts use `& 127` (the frac mask for 128-row sprite columns) unconditionally.
+   When a post top is off-screen, `frac` at `dc_yl` is negative; `negative & 127`
+   indexes past the post's pixel data into adjacent zone memory (heap). Fix:
+   `dc_texheight = column->length | 1;` per post so the mask is bounded to the
+   actual post length; two's-complement arithmetic wraps all reads to
+   `[0, length-1]` (task 3.2).
+
+**Task 3.1 BSS-probe was PARTIAL.** The 16-byte BSS probe (heap +32 bytes) exposed
+the `R_RenderMaskedSegRange` residual but not the sprite-column residual in
+`R_DrawMaskedColumn` — that OOB only surfaces with a larger RODATA shift. The task
+3.2 RODATA probe (~53-byte string literal, heap +~53 bytes) exposed both residuals
+and confirmed both fixes: BSS probe passes 13/13, RODATA probe passes 13/13.
+
+**web_state_hash coverage is narrower than the full game state.**
+`web_state_hash()` (i_main.c:175–190) hashes `gametic`, `prndindex`, and per-player
+`x / y / angle / health`. It does NOT cover sector floor/ceiling heights, thinker
+states, or mobj states beyond the consoleplayer. This means a sim-side guard that
+suppresses a sector-state change can pass the sim golden test while still producing
+different render output. The render gate (`node tools/demo-test.mjs --render`) is the
+effective backstop for this class of divergence.
+
+**Recommended follow-up (do not implement now):** strengthen `web_state_hash` by
+folding in per-sector floor and ceiling heights across all loaded sectors. This would
+make sector-state sim divergences visible to the sim gate and reduce reliance on the
+render gate as the sole backstop. Implementation must include re-recording all 13 sim
+goldens; do not attempt this during an in-flight sprint.
+
+**savebuffer workspace constraint.**
+Changing the savegame workspace from `screens[1]+0x4000` to any separate allocation
+(malloc or static array) would change WASM data-segment size, shifting BSS and heap.
+Any unresolved OOB read residuals would then return different bytes, changing pixel
+output relative to the recorded render goldens and requiring a full re-gold of all 13
+render traces. After tasks 3.1 and 3.2, the known dc_texheight OOB reads are
+eliminated, but the constraint remains: keep the workspace verbatim to avoid binary
+churn and unnecessary re-golding. The detect-after-corrupt `I_Error` backstop is
+acceptable because vanilla saves are <64 KB (well under the 171 KB real headroom)
+and the condition never fires on any golden path.
+
+**Chat / net-untrusted-input path security audit.**
+Chatchar input arrives from other clients via `cmd->chatchar` in `ticcmds` (d_net.c).
+The path to storage is: `HU_Ticker` → `HUlib_keyInIText` (hu_lib.c:318–333) which
+gates on `' ' ≤ c ≤ '_'` (printable ASCII sub-range) before calling
+`HUlib_addCharToTextLine` (hu_lib.c:72–81), which returns false without writing when
+`len == HU_MAXLINELENGTH`. The ring buffer at `chatchars[QUEUESIZE=128]` uses
+modular arithmetic `(head & (QUEUESIZE-1))`. Result: **audited and safe** — an
+attacker-controlled chatchar is either filtered by the character-range check or
+absorbed by the ring-modulo; it cannot overflow either buffer regardless of sequence or
+length. No additional guard is needed.

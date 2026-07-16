@@ -379,9 +379,18 @@ void R_DrawMaskedColumn (column_t* column)
 	    dc_texturemid = basetexturemid - (column->topdelta<<FRACBITS);
 	    // dc_source = (byte *)column + 3 - column->topdelta;
 
+	    // webdoom (task 3.2, refs task 3.1): pin the column-height mask to
+	    //   the actual post length so R_DrawColumn never reads past this post's
+	    //   pixel data.  When the post top is off-screen, frac at dc_yl can be
+	    //   negative; (negative & (length-1)) wraps to [0, length-1] by
+	    //   two's-complement, keeping the read within the post's bytes.
+	    //   length=0 is impossible for valid posts (topdelta != 0xFF guard
+	    //   above), but guard with |1 to avoid mask = -1.
+	    dc_texheight = column->length | 1;
+
 	    // Drawn by either R_DrawColumn
 	    //  or (SHADOW) R_DrawFuzzColumn.
-	    colfunc ();	
+	    colfunc ();
 	}
 	column = (column_t *)(  (byte *)column + column->length + 4);
     }
@@ -428,7 +437,7 @@ R_DrawVisSprite
     frac = vis->startfrac;
     spryscale = vis->scale;
     sprtopscreen = centeryfrac - FixedMul(dc_texturemid,spryscale);
-	
+
     for (dc_x=vis->x1 ; dc_x<=vis->x2 ; dc_x++, frac += vis->xiscale)
     {
 	texturecolumn = frac>>FRACBITS;

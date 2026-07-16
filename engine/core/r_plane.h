@@ -32,6 +32,9 @@
 
 
 // Visplane related.
+// webdoom: MAXOPENINGS exported here so r_segs.c can guard writes.
+#define MAXOPENINGS	(SCREENWIDTH*256)	// webdoom: was *64
+extern  short		openings[MAXOPENINGS];
 extern  short*		lastopening;
 
 

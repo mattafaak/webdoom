@@ -77,8 +77,7 @@ visplane_t*		lastvisplane;
 visplane_t*		floorplane;
 visplane_t*		ceilingplane;
 
-// ?
-#define MAXOPENINGS	SCREENWIDTH*256	// webdoom: was *64
+// openings[] and MAXOPENINGS are declared in r_plane.h (exported for r_segs.c guard).
 short			openings[MAXOPENINGS];
 short*			lastopening;
 

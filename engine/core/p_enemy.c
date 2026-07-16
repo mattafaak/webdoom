@@ -1807,7 +1807,8 @@ A_CloseShotgun2
 
 
 
-mobj_t*		braintargets[32];
+#define MAXBRAINTARGETS	32	// webdoom: named for guard below
+mobj_t*		braintargets[MAXBRAINTARGETS];
 int		numbraintargets;
 int		braintargeton;
 
@@ -1832,8 +1833,15 @@ void A_BrainAwake (mobj_t* mo)
 
 	if (m->type == MT_BOSSTARGET )
 	{
-	    braintargets[numbraintargets] = m;
-	    numbraintargets++;
+	    // webdoom: guard — caps at MAXBRAINTARGETS (vanilla had no check;
+	    //   a PWAD with >32 Icon-of-Sin targets would corrupt adjacent data).
+	    //   Excess targets are silently ignored (fail-soft, demo-neutral —
+	    //   no golden demo uses the Icon of Sin; Doom II MAP30 only has 8).
+	    if (numbraintargets < MAXBRAINTARGETS)
+	    {
+		braintargets[numbraintargets] = m;
+		numbraintargets++;
+	    }
 	}
     }
 	

@@ -1182,12 +1182,21 @@ int EV_DoDonut(line_t*	line)
 			
 	rtn = 1;
 	s2 = getNextSector(s1->lines[0],s1);
+	// webdoom: guard — vanilla crashes if the donut sector has no
+	//   two-sided first line (s2 == NULL). Fail-soft: skip this sector,
+	//   matching prboom's approach.  No golden demo triggers this path.
+	if (!s2)
+	    continue;
 	for (i = 0;i < s2->linecount;i++)
 	{
 	    if ((!s2->lines[i]->flags & ML_TWOSIDED) ||
 		(s2->lines[i]->backsector == s1))
 		continue;
 	    s3 = s2->lines[i]->backsector;
+	    // webdoom: guard — backsector can be NULL on one-sided segs even
+	    //   when ML_TWOSIDED is set (malformed WAD). Fail-soft: skip.
+	    if (!s3)
+		continue;
 	    
 	    //	Spawn rising slime
 	    floor = Z_Malloc (sizeof(*floor), PU_LEVSPEC, 0);

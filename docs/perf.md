@@ -626,6 +626,23 @@ BSS-probe acceptance test passed: master + 16-byte BSS probe passes all 13
 render goldens, confirming the layout sensitivity is eliminated. Render
 goldens regolded for all 13 demos.
 
+**Resolution (task 3.2) — unpinning COMPLETE.** Two additional dc_texheight
+residuals were identified and fixed that the task 3.1 BSS-probe did not expose:
+
+1. `R_RenderMaskedSegRange` (r_segs.c) never called `R_RenderSegLoop`, so
+   `dc_texheight` was stale from the previous wall/plane draw; mid-textures
+   shorter than 128 px caused OOB reads into zone heap. Fix: set
+   `dc_texheight = textureheight[texnum] >> FRACBITS` before the column loop.
+
+2. `R_DrawMaskedColumn` (r_things.c) applied `& 127` to all sprite post reads;
+   when a post top is off-screen, negative `frac` indexed past the post data
+   into adjacent zone memory. Fix: `dc_texheight = column->length | 1` per post.
+
+Both probes now pass 13/13: BSS probe (heap +32 bytes) and RODATA probe
+(~53-byte string literal, heap +~53 bytes). All 13 render goldens regolded.
+The `dc_texheight` pinning is now complete across all call sites; WASM layout
+changes no longer cause spurious render-golden failures.
+
 **Hypothesis for 4 MB / 8 MB render failures (recorded for task 3.1/3.2)**:
 The pixel divergences at small zone sizes are consistent with a PU_CACHE
 use-after-purge hazard.  When the zone is small enough to actually evict

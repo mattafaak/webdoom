@@ -154,10 +154,18 @@ R_RenderMaskedSegRange
 	dc_texturemid = dc_texturemid - viewz;
     }
     dc_texturemid += curline->sidedef->rowoffset;
-			
+
+    // webdoom (task 3.2, refs task 3.1): pin the column-height mask for
+    //   masked mid-textures.  R_RenderMaskedSegRange is called from
+    //   R_DrawMaskedSegments (r_things.c) long after R_RenderSegLoop has
+    //   finished — dc_texheight is whatever the last wall or plane call left.
+    //   That stale value caused OOB reads for mid-textures shorter than 128 px.
+    //   texnum is already resolved via texturetranslation[] above (line ~120).
+    dc_texheight = textureheight[texnum] >> FRACBITS;
+
     if (fixedcolormap)
 	dc_colormap = fixedcolormap;
-    
+
     // draw the columns
     for (dc_x = x1 ; dc_x <= x2 ; dc_x++)
     {
@@ -617,8 +625,17 @@ R_StoreWallRange
 	{
 	    // masked midtexture
 	    maskedtexture = true;
-	    ds_p->maskedtexturecol = maskedtexturecol = lastopening - rw_x;
-	    lastopening += rw_stopx - rw_x;
+	    // webdoom: openings overflow guard — if full, drop the masked midtex
+	    //   rather than overrunning the array (fail-soft, demo-neutral).
+	    if (lastopening - openings + (rw_stopx - rw_x) <= MAXOPENINGS)
+	    {
+		ds_p->maskedtexturecol = maskedtexturecol = lastopening - rw_x;
+		lastopening += rw_stopx - rw_x;
+	    }
+	    else
+	    {
+		maskedtexture = false;
+	    }
 	}
     }
     
@@ -727,17 +744,42 @@ R_StoreWallRange
     if ( ((ds_p->silhouette & SIL_TOP) || maskedtexture)
 	 && !ds_p->sprtopclip)
     {
-	memcpy (lastopening, ceilingclip+start, 2*(rw_stopx-start));
-	ds_p->sprtopclip = lastopening - start;
-	lastopening += rw_stopx - start;
+	// webdoom: openings overflow guard — if full, clear the silhouette bit
+	//   rather than corrupt memory (fail-soft: sprites may not clip against
+	//   this wall, demo-neutral — silhouette is render-only).
+	if (lastopening - openings + (rw_stopx - start) <= MAXOPENINGS)
+	{
+	    memcpy (lastopening, ceilingclip+start, 2*(rw_stopx-start));
+	    ds_p->sprtopclip = lastopening - start;
+	    lastopening += rw_stopx - start;
+	}
+	else
+	{
+	    // webdoom: sprtopclip is NULL; clear maskedtexture so the
+	    //   re-activation block below (lines ~770-778) does not re-set
+	    //   SIL_TOP and leave r_things.c with a NULL clip pointer.
+	    maskedtexture = false;
+	    ds_p->silhouette &= ~SIL_TOP;
+	}
     }
-    
+
     if ( ((ds_p->silhouette & SIL_BOTTOM) || maskedtexture)
 	 && !ds_p->sprbottomclip)
     {
-	memcpy (lastopening, floorclip+start, 2*(rw_stopx-start));
-	ds_p->sprbottomclip = lastopening - start;
-	lastopening += rw_stopx - start;	
+	// webdoom: openings overflow guard (same policy as sprtopclip above).
+	if (lastopening - openings + (rw_stopx - start) <= MAXOPENINGS)
+	{
+	    memcpy (lastopening, floorclip+start, 2*(rw_stopx-start));
+	    ds_p->sprbottomclip = lastopening - start;
+	    lastopening += rw_stopx - start;
+	}
+	else
+	{
+	    // webdoom: same as sprtopclip guard above — kill maskedtexture
+	    //   so the SIL_BOTTOM re-activation below cannot NULL-deref.
+	    maskedtexture = false;
+	    ds_p->silhouette &= ~SIL_BOTTOM;
+	}
     }
 
     if (maskedtexture && !(ds_p->silhouette&SIL_TOP))
