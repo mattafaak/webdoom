@@ -17,16 +17,63 @@ const DROP_MS = 5000;       // remove the player after this
 const JOIN_MARGIN = 12;     // tics between a drop-in going live and spawning
 const JOIN_TIMEOUT_MS = +(process.env.WEBDOOM_JOIN_TIMEOUT || 30000);  // reclaim a stalled reservation
 
+// Resource caps — all sized well above legitimate LAN 4-player play at 35 Hz.
+// 4 players × 2 sockets each + 10 lobby observers = 18 legit; 50 gives 2.7× headroom.
+const MAX_CONNS = +(process.env.WEBDOOM_MAX_CONNS || 50);
+// 4 players × 35 Hz = 140 msg/s aggregate; per-conn cap at 300 gives a single client
+// 2× the full-table aggregate — plenty for legit play, kills flood attacks.
+const RATE_CAP_PER_SEC = +(process.env.WEBDOOM_RATE_CAP || 300);
+const RATE_WINDOW_MS = 1000;
+
 const defaultParams = () => ({
     wad: 'doom.wad', episode: 1, map: 1, skill: 3, mode: 'coop',
     nomonsters: false, fast: false, respawn: false, timer: 0,
 });
+
+// Attach a no-op error handler so protocol violations (e.g. maxPayload exceeded,
+// malformed frame) are absorbed rather than propagated as uncaught exceptions.
+// The ws library terminates the socket on its own after emitting 'error';
+// the 'close' event fires next and any normal cleanup runs from there.
+function safeWs(ws, log, tag) {
+    ws.on('error', err => {
+        log(`ws error [${tag}]: ${err?.message ?? err}`);
+        try { ws.terminate(); } catch {}
+    });
+    return ws;
+}
+
+// Per-connection rate guard. Returns true and increments the counter if the
+// message is within the rate cap; returns false (and terminates the socket) if
+// the client is flooding. State is attached directly to the ws object.
+//
+// Window model: TUMBLING (fixed-duration, non-overlapping). When the first
+// message arrives after the previous window closed, a fresh window starts at
+// that moment. This means a client can burst up to 2× RATE_CAP_PER_SEC across
+// a window boundary (tail of old window + head of new). That ~2× headroom is
+// intentional: legitimate 35 Hz play never hits 300 msg/s, while a flood attack
+// sustains far above it and is caught within the very next window.
+function rateOk(ws) {
+    const now = Date.now();
+    if (!ws._rateTs || now - ws._rateTs >= RATE_WINDOW_MS) {
+        ws._rateTs = now;
+        ws._rateCount = 0;
+    }
+    ws._rateCount++;
+    if (ws._rateCount > RATE_CAP_PER_SEC) {
+        // Flooding: terminate immediately, don't send a close frame (avoids
+        // being stuck in CLOSING while the attacker ignores the handshake).
+        try { ws.terminate(); } catch {}
+        return false;
+    }
+    return true;
+}
 
 export function createGame(log = console.log) {
     // --- lobby state -------------------------------------------------------
     const lobby = new Map();        // slot → {ws, name} (name null = color default)
     let params = defaultParams();
     let session = null;             // active relay session or null
+    let connCount = 0;              // total open ws connections (lobby + game)
 
     const displayName = slot => lobby.get(slot)?.name ?? COLORS[slot];
     const roster = () => ({
@@ -43,6 +90,8 @@ export function createGame(log = console.log) {
     };
 
     function lobbyConnect(ws) {
+        safeWs(ws, log, 'lobby');
+
         // Join in progress: a game is live. Show the newcomer a summary and
         // let them choose to drop in — no slot is reserved until they ask, so
         // merely looking never blocks a slot.
@@ -58,6 +107,7 @@ export function createGame(log = console.log) {
             ws.send(JSON.stringify(inProgress()));
             let mySlot = -1;
             ws.on('message', raw => {
+                if (!rateOk(ws)) return;
                 let m; try { m = JSON.parse(raw); } catch { return; }
                 if (m.t === 'ping') { ws.send(JSON.stringify({ t: 'pong', t0: m.t0 })); return; }
                 if (!session) { ws.send(JSON.stringify({ t: 'full', reason: 'game over' })); return; }
@@ -88,7 +138,9 @@ export function createGame(log = console.log) {
         while (lobby.has(slot)) slot++;
         if (slot >= MAXPLAYERS) {
             ws.send(JSON.stringify({ t: 'full', reason: 'lobby full' }));
-            ws.close();
+            // Use terminate() for the refused connection: avoids leaving the
+            // socket in CLOSING state if the client ignores the close frame.
+            try { ws.terminate(); } catch {}
             return;
         }
         lobby.set(slot, { ws, name: null });
@@ -97,6 +149,7 @@ export function createGame(log = console.log) {
         log(`lobby: ${COLORS[slot]} joined (${lobby.size} in lobby)`);
 
         ws.on('message', raw => {
+            if (!rateOk(ws)) return;
             let m;
             try { m = JSON.parse(raw); } catch { return; }
             if (m.t === 'ping') { ws.send(JSON.stringify({ t: 'pong', t0: m.t0 })); return; }
@@ -191,9 +244,29 @@ export function createGame(log = console.log) {
     }
 
     function relayConnect(ws, url) {
-        const slot = +new URL(url, 'http://x').searchParams.get('slot');
+        safeWs(ws, log, 'game');
+
+        // Validate slot: must be an integer 0–3, session must exist, slot must
+        // be unoccupied. Use terminate() for any rejection — avoids leaving
+        // the socket in CLOSING state if the client ignores the close frame,
+        // and makes the rejection visible immediately on the client side.
+        let slot;
+        try { slot = +new URL(url, 'http://x').searchParams.get('slot'); } catch {
+            try { ws.terminate(); } catch {}
+            return;
+        }
+        if (!Number.isFinite(slot) || slot < 0 || slot >= MAXPLAYERS || !Number.isInteger(slot)) {
+            try { ws.terminate(); } catch {}
+            return;
+        }
         const p = session?.players.find(p => p.slot === slot);
-        if (!p || p.ws) { ws.close(); return; }
+        if (!p || p.ws) {
+            // Slot occupied or no session: reject immediately with terminate()
+            // so the client sees an error/close without waiting for the close
+            // handshake, and the slot owner is unaffected.
+            try { ws.terminate(); } catch {}
+            return;
+        }
         p.ws = ws;
         p.joined = true;
         p.lastSeen = Date.now();
@@ -210,6 +283,7 @@ export function createGame(log = console.log) {
         }
 
         ws.on('message', buf => {
+            if (!rateOk(ws)) return;
             if (!session || buf.length !== 4 + CMD_SIZE) return;
             const tic = buf.readUInt32LE(0);
             p.sentAny = true;
@@ -330,13 +404,53 @@ export function createGame(log = console.log) {
     // only burns CPU and adds delay; pin it so a ws default flip can't
     // silently re-enable it.
     const lobbyWss = new WebSocketServer({ noServer: true, maxPayload: 1024, perMessageDeflate: false });
-    const gameWss = new WebSocketServer({ noServer: true, maxPayload: 64, perMessageDeflate: false });
-    lobbyWss.on('connection', lobbyConnect);
-    gameWss.on('connection', (ws, req) => relayConnect(ws, req.url));
+    const gameWss  = new WebSocketServer({ noServer: true, maxPayload: 64,   perMessageDeflate: false });
+
+    // Absorb server-level errors (e.g. bad handshake packets) so the process
+    // doesn't exit if a single malformed upgrade sneaks through.
+    lobbyWss.on('error', err => log(`lobbyWss error: ${err?.message ?? err}`));
+    gameWss.on('error',  err => log(`gameWss error: ${err?.message ?? err}`));
+
+    // Connection cap: connCount tracks every open socket across both endpoints.
+    // Managed here (at connection event level) so every accepted socket has
+    // exactly one increment and one decrement — regardless of what the handler
+    // does internally (lobby-full reject, slot-occupied reject, etc.).
+    lobbyWss.on('connection', ws => {
+        if (connCount >= MAX_CONNS) {
+            log(`conn cap hit (${connCount}/${MAX_CONNS}): rejecting lobby connection`);
+            // Absorb errors before terminate(): a frame racing in between the
+            // WebSocket handshake completing and terminate() firing would
+            // otherwise emit an unhandled 'error' and crash the process.
+            ws.on('error', () => {});
+            try { ws.terminate(); } catch {}
+            return;
+        }
+        connCount++;
+        ws.on('close', () => connCount--);
+        lobbyConnect(ws);
+    });
+
+    gameWss.on('connection', (ws, req) => {
+        if (connCount >= MAX_CONNS) {
+            log(`conn cap hit (${connCount}/${MAX_CONNS}): rejecting game connection`);
+            // Absorb errors before terminate() — same race as lobby cap above.
+            ws.on('error', () => {});
+            try { ws.terminate(); } catch {}
+            return;
+        }
+        connCount++;
+        ws.on('close', () => connCount--);
+        relayConnect(ws, req.url);
+    });
 
     return {
         upgrade(req, socket, head) {
-            const path = new URL(req.url, 'http://x').pathname;
+            // Guard against malformed upgrade URLs (e.g. raw control bytes that
+            // llhttp lets through but the WHATWG URL ctor rejects). Without the
+            // try/catch, a TypeError here is uncaught and crashes the process.
+            let path;
+            try { path = new URL(req.url, 'http://x').pathname; }
+            catch { socket.destroy(); return; }
             const wss = path === '/ws/lobby' ? lobbyWss : path === '/ws/game' ? gameWss : null;
             if (!wss) { socket.destroy(); return; }
             // Kill Nagle: ticcmds and bundles are tiny and time-critical, so

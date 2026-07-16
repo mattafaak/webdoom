@@ -29,6 +29,9 @@ echo "── drop-in edge cases + churn ─────────────�
 node tools/edge-test.mjs | tail -1
 node tools/churn-test.mjs | tail -1
 
+echo "── net fuzz + abuse (malformed/hostile clients) ────────"
+node tools/net-fuzz-test.mjs | tail -1
+
 echo "── browser (SP gate + 2-tab multiplayer) ───────────────"
 DOOM_PORT=8668 DOOM_HOST=127.0.0.1 node server/serve.js & SRV=$!
 trap "kill $SRV 2>/dev/null" EXIT
