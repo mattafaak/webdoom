@@ -28,12 +28,20 @@ self.addEventListener('fetch', e => {
     if (url.pathname.startsWith('/ws/')) return;
 
     if (url.pathname.startsWith('/wads/')) {
-        // hash in ?v makes the full URL immutable
+        // hash in ?v makes the full URL immutable; read body into ArrayBuffer
+        // first, then cache a synthetic Response — direct c.put(networkResponse)
+        // fails in headless Chrome without sandbox (NetworkError), but a
+        // Response constructed from an ArrayBuffer always succeeds.
         e.respondWith(caches.open(WADS).then(async c => {
             const hit = await c.match(e.request.url);
             if (hit) return hit;
             const res = await fetch(e.request);
-            if (res.ok) c.put(e.request.url, res.clone());
+            if (res.ok) {
+                const buf = await res.arrayBuffer();
+                const init = { status: res.status, statusText: res.statusText, headers: res.headers };
+                await c.put(e.request.url, new Response(buf.slice(0), init));
+                return new Response(buf, init);
+            }
             return res;
         }));
         return;

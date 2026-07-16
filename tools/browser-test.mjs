@@ -48,6 +48,21 @@ const evaluate = async expr =>
 await cdp('Runtime.enable');
 await cdp('Page.enable');
 
+// Wait for the service worker to activate and claim this page.
+// sw.js uses skipWaiting()+clients.claim() so this is typically <2s on a
+// local server, but the installation (c.addAll of ~14 shell files) is async.
+// If we let the boot loop start before the SW is controlling, the WAD fetch
+// goes directly to the server and is NOT intercepted/cached by the SW.
+for (let i = 0; i < 30; i++) {
+    const controlled = await evaluate(`!!navigator.serviceWorker.controller`);
+    if (controlled) break;
+    if (i === 29) {
+        console.error('FAIL: service worker did not take control within 15s');
+        cleanup(1);
+    }
+    await sleep(500);
+}
+
 // landing page → click PLAY → wait for the engine to run
 // (canvas unhidden + status empty)
 let booted = false;

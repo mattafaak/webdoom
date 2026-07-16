@@ -223,10 +223,13 @@ await runTest('lobby-menu-nav', async () => {
         );
 
         // T07: LANDING → MP-LOBBY (lobby ws connects; roster pushes lobbyScreen)
+        // Poll up to 12s (40 × 300ms): server processes the ws connection and
+        // sends roster before the client can render START GAME; under load this
+        // sometimes takes longer than the previous 6s window.
         await patchWS(tab);
         assert(await clickItem(tab, 'MULTIPLAYER'), 'MULTIPLAYER not found');
         let inLobby = false;
-        for (let i = 0; i < 20; i++) {
+        for (let i = 0; i < 40; i++) {
             if (await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`))
                 { inLobby = true; break; }
             await sleep(300);
