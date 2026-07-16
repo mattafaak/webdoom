@@ -27,7 +27,7 @@ source. 356 KB of wasm, zero client install, zero-config multiplayer.
 ## Quick start
 
 ```sh
-tools/fetch-wads.sh          # pull WAD library from TANK, build manifest
+WAD_SRC=host:~/doom-wads tools/fetch-wads.sh   # pull your WAD library, build manifest
 source tools/emsdk-env.sh    # pinned emcc on PATH
 make -C engine               # → build/doom.js + doom.wasm
 (cd server && npm i)

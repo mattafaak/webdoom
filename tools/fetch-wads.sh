@@ -1,5 +1,6 @@
 #!/bin/bash
-# Pull the Doom-engine WAD library from TANK, extract, and build the manifest.
+# Pull the Doom-engine WAD library from your WAD host (set WAD_SRC), extract,
+# and build the manifest.
 # Idempotent: rsync skips zips already present, unzip refreshes extraction.
 set -e
 cd "$(dirname "$0")/.."
