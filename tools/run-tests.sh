@@ -41,5 +41,6 @@ node tools/browser-net-test.mjs http://127.0.0.1:8668/ | tail -1
 node tools/browser-join-test.mjs http://127.0.0.1:8668/ | tail -1
 node tools/persist-test.mjs http://127.0.0.1:8668/ | tail -1
 node tools/browser-resilience-test.mjs http://127.0.0.1:8668/ | tail -2
+node tools/browser-lobby-test.mjs http://127.0.0.1:8668/ | tail -2
 
 echo "ALL SUITES PASS"

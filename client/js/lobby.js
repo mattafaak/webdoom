@@ -165,11 +165,24 @@ function enterMultiplayer() {
             }).then(() => {
                 countdown.dismiss();
                 lobby.close();
-            }).catch(err => status(String(err)));
+            }).catch(err => {
+                // Guard T16/T20: WAD fetch or engine boot failed in MP / drop-in path.
+                // Reset all state so the user can retry from the root menu.
+                booted = false;
+                countdown.reset();
+                menu.show();
+                menu.reset(rootScreen());
+                if (lobby) { lobby.close(); lobby = null; }
+                roster = null;
+                ipSummary = null; ipSlot = -1;
+                status(String(err));
+            });
         })
         .on('closed', () => {
             if (booted || !lobby) return;   // deliberate leave already reset
             lobby = null; roster = null;
+            ipSummary = null; ipSlot = -1;
+            countdown.reset();              // guard T23: dismiss countdown if ws lost mid-countdown
             status('lobby connection lost');
             menu.reset(rootScreen());
         });
@@ -390,6 +403,7 @@ function leaveLobby() {
     l?.close();
     roster = null;
     ipSummary = null; ipSlot = -1;
+    countdown.reset();          // guard T25: dismiss countdown if user ESCs mid-countdown
     menu.reset(rootScreen());
 }
 
