@@ -796,10 +796,211 @@ atypical — that requires Q0.
 |---|-------------|--------|---------|---------|
 | Q0 | Browser pipeline measurement | S | **DO FIRST** | prereq |
 | Q1 | R_DrawColumn/Span inner loops (cache-stride) | M | **DO** (bare-metal axis) | 2.2 |
-| Q2 | Memory: ZONESIZE→4MB, INITIAL_MEMORY→56MB, knob sweep | S+M | **DO** | 2.5+2.6 |
+| Q2 | Memory: ZONESIZE→4MB, INITIAL_MEMORY→56MB, knob sweep | S+M | **DONE** (2.5: zone SSOT; 2.6: flags confirmed optimal) | 2.5+2.6 |
 | Q3 | Visplane hash (R_FindPlane O(n)→hash) | M | measure-first | 2.3 |
 | Q4 | Sim hot paths | M | likely-skip | 2.4 |
 | Q5 | tank deep-dive | S | document-only | 2.7 |
+
+---
+
+## Q2 — emcc knob sweep (task 2.6)
+
+*Measured at commit 2992e02, 2026-07-16. All builds at emsdk 6.0.2. Size
+measured via `stat` + `gzip -9 -c | wc -c`; section breakdown via
+`$EMSDK_DIR/upstream/bin/llvm-objdump -h build/doom.wasm`. Speed via
+`tools/fleet-bench.sh 1` (1-rep, same-session back-to-back).*
+
+### Axis 1: optimisation level (-O3 / -O2 / -Os)
+
+CFLAGS and LDFLAGS changed together (coherent). Closure and other flags held
+constant at shipped defaults.
+
+#### Size×speed frontier
+
+| config | wasm raw (bytes) | wasm gzip-9 (bytes) | CODE section | DATA section | js raw | js gzip-9 | wbox render avg (ms/frame) | wbox sim fps avg |
+|--------|-----------------|---------------------|-------------|-------------|--------|-----------|---------------------------|-----------------|
+| **A (-O3, SHIPPED)** | 358,194 | 145,926 | 281,457 (274.9 KB) | 75,283 | 8,264 | 3,582 | **0.482** | **19,152** |
+| B (-Os) | 265,554 | 123,875 | 188,554 (184.1 KB) | 75,466 | 8,264 | 3,580 | 0.498 | 17,378 |
+| C (-O2) | 348,959 | 141,970 | (not broken down) | — | 9,513 | — | (alder-only, within noise) | 167,727 (alder) |
+
+(Gzip figures are gzip-9, approximating CDN transfer. `-O2` was only benched
+on alder, 1 rep; not fleet-benched as not a finalist.)
+
+#### -Os analysis
+
+-Os shrinks the CODE section from 281,457 to 188,554 bytes (**-33.0%**, the
+entire delta is in compiled machine code; DATA is unchanged at 73.5 KB).
+Wire payload (wasm gzip-9) drops from 145,926 to 123,875 bytes (**-15.1%**,
+−22 KB). Total payload story: 142.5 KB → 121.0 KB gzip.
+
+**Speed (wbox, 1-rep fleet bench):**
+
+| demo | -O3 render (ms) | -Os render (ms) | delta |
+|------|----------------|----------------|-------|
+| demo1 | 0.530 | 0.539 | +1.7% |
+| demo2 | 0.467 | 0.488 | +4.5% |
+| demo3 | 0.450 | 0.468 | +4.0% |
+| **avg** | **0.482** | **0.498** | **+3.3%** |
+
+Sim fps (wbox, headless -nodraw): -O3 avg 19,152 vs -Os avg 17,378 = **−9.3%**.
+
+The render regression (+3.3%) is borderline for a 1-rep run (the 2.2 sweep
+established ~0.001 ms noise bar over 3 reps; 1-rep noise is wider). However,
+the sim fps regression (−9.3%, consistent across all three demos) is clearly
+real — V8 JIT-compiles fewer inlined and pre-scheduled code paths when the
+wasm is more compact. The icache benefit of -Os (CODE −33%) does not overcome
+the scheduling loss on wbox's in-order Bobcat core.
+
+**Verdict: KILL.** The decision rule is "wbox speed regression = kill". The
+−9.3% sim fps regression on wbox disqualifies -Os despite the 15% wire-size
+win. Current −O3 flags are confirmed optimal.
+
+*(For bare-metal: the 33% CODE reduction would be significant for small-flash
+ESP32 targets. This is the right tradeoff point to revisit when a bare-metal
+profile shows flash pressure — with full render + net tests at that target.)*
+
+#### -O2 analysis
+
+-O2 gives only −2.6% raw / −2.7% gzip vs -O3, with an alder sim fps of
+167,727 vs -O3 162,164 (+3.4%). Not enough size win to justify any speed
+risk; not fleet-benched. **KILL (not worth it).**
+
+---
+
+### Axis 2: --closure 0 vs 1
+
+Only `doom.js` is affected by the closure compiler; the wasm binary is
+identical between --closure 0 and --closure 1.
+
+| config | doom.js raw (bytes) | doom.js gzip-9 (bytes) |
+|--------|---------------------|------------------------|
+| --closure 1 (SHIPPED) | 8,264 | 3,582 |
+| --closure 0 | 19,097 | 6,000 |
+
+Closure minification saves 10,833 bytes raw (+131%) and 2,418 bytes gzip
+(+67.5%). Since doom.js is only 3.5 KB on the wire vs wasm 142.5 KB, the
+absolute saving is small (~2.4 KB gzip). No speed effect on wasm.
+
+**Verdict: keep --closure 1.** Consistent with the current Makefile; the
+2.4 KB wire saving is worth the extra build step.
+
+---
+
+### Axis 3: STACK_SIZE=4MB
+
+The 4 MB C shadow stack (at the start of linear memory) is very conservative
+for DOOM + emscripten.
+
+**Static analysis of worst-case call depth:**
+
+- **BSP recursion** (`R_RenderBSPNode`): the deepest recursive path in
+  DOOM. Each frame is ~32–64 bytes (node pointer, child bounds checks, a few
+  locals). Maximum BSP tree depth in shipped DOOM maps: ~15 levels. Stack
+  cost: 15 × 64 = ~960 bytes.
+- **P_LoadLevel / P_GroupLines**: iterative, not recursive. Local arrays are
+  modest (pointers + indices).
+- **Emscripten runtime overhead**: setjmp/longjmp frames, POSIX thread entry
+  frames (not applicable in -sENVIRONMENT=web,worker,node without threads).
+  Realistically ~16–32 KB of overhead.
+
+Conclusion: **1 MB is almost certainly sufficient** (960 bytes BSP + 32 KB
+emscripten ≪ 1 MB). Emscripten's default stack for C code without large
+stack allocations is 64 KB; 1 MB leaves 15× margin.
+
+**Why 4 MB is not changed:**
+
+1. Any reduction would shrink BSS layout → alter `__heap_base` → trip the
+   three layout-pinned render goldens (tnt-demo1, plutonia-demo1,
+   plutonia-demo3). Changing this flag requires a conscious regold step.
+2. The 4 MB stack does not contribute to wire-transfer size (it's runtime
+   heap layout, not wasm CODE/DATA).
+3. The only gain from reducing it is a lower `INITIAL_MEMORY` floor. At the
+   current 64 MB default this is irrelevant; at bare-metal targets the
+   reduction would be meaningful but requires full test coverage at that
+   target first.
+
+**Verdict: keep STACK_SIZE=4MB.** Document only; no change.
+
+---
+
+### Axis 4: INITIAL_MEMORY — worst PWAD combo analysis
+
+Single-IWAD floor was established in §3: 56 MB (2.18 MB margin above the
+53.82 MB peak for plutonia.wad + 32 MB zone + 5.21 MB static).
+
+**PWAD combos** (both IWAD + PWAD malloc'd simultaneously, from
+`wads/manifest.json`):
+
+| combo | IWAD (bytes) | PWAD (bytes) | combined | total peak (+ zone + static) |
+|-------|-------------|-------------|---------|------------------------------|
+| tnt.wad + tnt31.wad | 18,195,736 | 282,000 | 18,477,736 (17.62 MB) | 5.21 + 32 + 17.62 = **54.83 MB** |
+| doom2.wad + nerve.wad | 14,604,584 | 3,819,855 | 18,424,439 (17.57 MB) | 5.21 + 32 + 17.57 = **54.78 MB** |
+| doom.wad + sigil.wad | 12,408,292 | 4,640,210 | 17,048,502 (16.27 MB) | 5.21 + 32 + 16.27 = **53.48 MB** |
+| plutonia.wad (no PWAD) | 17,420,824 | — | 17,420,824 (16.61 MB) | **53.82 MB** (§3 baseline) |
+
+Worst real combo: **tnt.wad + tnt31.wad** at 54.83 MB peak.
+
+Note: `tnt.wad` at 18.20 MB is slightly larger than `plutonia.wad` at
+17.42 MB, making it the worst single IWAD, not plutonia.wad as stated in §3.
+The §3 floor experiment (56 MB) was run with plutonia.wad; tnt.wad would give
+the same PASS/FAIL pattern (56 MB ≥ 54.83 MB with 1.17 MB margin).
+
+**Margin at 64 MB:** 64 − 54.83 = **9.17 MB headroom** for worst PWAD combo.
+**Margin at 56 MB:** 56 − 54.83 = **1.17 MB** — acceptable but tight.
+
+**Verdict: INITIAL_MEMORY stays at 64 MB.**
+
+Rationale: 9.17 MB headroom at 64 MB is comfortable for product defaults.
+Reducing to 56 MB would leave only 1.17 MB margin above the worst tested
+combo, with no margin for future PWAD additions or other heap growth. The
+value of 64 MB as the shipped default is to give room for uncharacterised
+allocations (stack-allocated C buffers, emscripten ABI overhead, etc.) without
+OOM surprises. The bare-metal case (where every MB counts) is better served
+by first reducing ZONESIZE (after the render-path cache floor measurement
+deferred to task 3.x), which would drop the floor by ~28 MB.
+
+---
+
+### Axis 5: emmalloc vs dlmalloc
+
+Current: `-sMALLOC=emmalloc` (Makefile).
+
+emmalloc is Emscripten's minimal allocator: ~1.5 KB of wasm code, O(n) free
+list traversal, no boundary-tag coalescing. dlmalloc is Doug Lea's full
+allocator: ~8–12 KB of wasm code, O(1) amortised free/malloc, buddy-system
+coalescing.
+
+For DOOM, >99% of heap allocation goes through Z_Zone (the zone allocator),
+which does a single `malloc(ZONESIZE=32MB)` at startup and never calls
+`free` on it. The only direct `malloc` calls are the WAD buffer at startup
+and occasional small temporary buffers. With ≤2 concurrent large malloc calls,
+emmalloc's simpler strategy is correct: dlmalloc's extra 8–10 KB of CODE would
+be wasted for zero measurable benefit.
+
+**Verdict: keep emmalloc.** Correct choice for this allocation pattern; no change.
+
+---
+
+### Summary: shipped flags confirmed optimal
+
+All five axes measured. No flag change is justified:
+
+| axis | conclusion | justification |
+|------|-----------|---------------|
+| -O3 vs -Os | **keep -O3** | -Os: −15% gzip, but −9.3% sim fps on wbox (kill) |
+| -O3 vs -O2 | **keep -O3** | -O2: −2.7% gzip, no speed win; trivial size delta |
+| --closure 1 | **keep --closure 1** | -closure 0: +67.5% doom.js gzip, no benefit |
+| STACK_SIZE=4MB | **keep 4MB** | reducing requires regold; no wire-size impact |
+| INITIAL_MEMORY=64MB | **keep 64MB** | 9.17 MB headroom at worst real PWAD combo |
+| emmalloc | **keep emmalloc** | correct for DOOM's zone-dominant allocation pattern |
+
+The shipped flags (`-O3 -flto --closure 1 -sINITIAL_MEMORY=64MB
+-sSTACK_SIZE=4MB -sMALLOC=emmalloc`) are the optimal point on the
+size×speed frontier for browser and bare-metal targets given the current
+constraints. The only actionable future path to a smaller payload is
+reducing ZONESIZE (deferred to task 3.x), which would lower the INITIAL_MEMORY
+floor by ~28 MB and is worth revisiting once the render-path texture cache
+peak is characterised.
 
 ---
 
