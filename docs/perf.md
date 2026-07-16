@@ -1043,15 +1043,24 @@ grid (cellular automaton, 37-entry DOOM fire ramp, nearest-neighbour
 upscaled to fill the canvas). It is decoupled from the game loop at ~16 Hz
 via `setInterval(62 ms)` and pauses automatically when the engine is running.
 
-**Measured cost (alder i9-12900K CI host, 200-tick batch avg)**: ~0.07–0.10 ms/tick.
-The batch benchmark amortises Chrome's 0.1 ms `performance.now()` resolution
-floor; individual tick readings have ~1× the resolution noise.
+**Measured CPU cost across the fleet** (node microbench of `_setSource +
+_simulate + _draw` pixel-fill — excludes the 2560-px `putImageData` blit,
+which is browser-composited and negligible; best-of-10 × 2000 ticks,
+2026-07-16):
 
-**Wbox budget check**: alder reads of ~0.07–0.10 ms/tick imply a wbox estimate
-of ~0.6–0.8 ms at the conservative 8× cross-host ratio — within the < 1 ms/tick
-budget the comment in `fire.js` specifies. The authoritative wbox number is
-measured on hardware; alder gross-regression guard is 0.5 ms (used in CI via
-`tools/browser-lobby-test.mjs`).
+| host | ms/tick |
+|------|---------|
+| alder (i9-12900K) | 0.0078 |
+| pi5 (Cortex-A76)  | 0.0222 |
+| **wbox (G-T56N)** | **0.0722** |
+
+**wbox is measured at 0.072 ms/tick — ~14× under the < 1 ms budget.** This is
+hardware, not extrapolation. The alder→wbox ratio here (9.3×) is consistent
+with the wasm fleet ratios in `bench-baseline.json`. In-browser tick cost is
+slightly higher (adds `putImageData`), but the sim is the dominant term and
+the budget holds with an order of magnitude to spare. The CI perf guard in
+`tools/browser-fire-test.mjs` (0.5 ms on alder) is only a gross-regression
+tripwire, not the budget itself.
 
 The noise-table pre-computation (8192 entries, generated once at init) replaced
 per-cell `Math.random()` calls in the hot loop, cutting cost ~4× vs the naive
