@@ -186,6 +186,384 @@ minification is low-priority relative to wasm code size (task 2.6).
 
 ---
 
+## The optimization queue
+
+*Task 2.1 output — evidence-ranked, per-host-aware, honest about gaps.*
+*This section feeds tasks 2.2–2.7. Every rank shows its arithmetic.*
+*Source commit: 16c3354. Measurement date: 2026-07-15.*
+
+---
+
+### A. Per-stage ranked costs per host
+
+Values are averages across doom.wad demo1/demo2/demo3 from
+`tools/golden/bench-baseline.json` (schemaVersion 2, all four hosts
+coherent at commit 16c3354). The stage order within each host is the
+rank order: #1 = most expensive.
+
+#### Absolute costs (ms/frame avg)
+
+| rank | stage | wbox | tank | pi5 | alder |
+|------|-------|------|------|-----|-------|
+| #1 | bsp+segs | **0.2625** | 0.0549 | 0.0715 | 0.0481 |
+| #2 | planes | **0.1566** | 0.0386 | 0.0494 | 0.0327 |
+| #3 | masked | **0.0637** | 0.0176 | 0.0209 | 0.0164 |
+| #4 | frame-setup | 0.0069 | 0.0012 | 0.0017 | 0.0008 |
+| — | **render total** | **0.4897** | **0.1123** | **0.1435** | **0.0979** |
+| — | sim (ms/tic) | 0.0706 | 0.0158 | 0.0173 | 0.0135 |
+
+Arithmetic: alder bsp average = (0.0451 + 0.0587 + 0.0404) / 3 = 0.0481.
+Same formula for all cells.
+
+#### Stage share of total render (%)
+
+| stage | wbox | tank | pi5 | alder |
+|-------|------|------|-----|-------|
+| bsp+segs | **53.6%** | **48.9%** | **49.8%** | **49.1%** |
+| planes | 32.0% | 34.4% | 34.4% | 33.4% |
+| masked | 13.0% | 15.7% | 14.6% | 16.7% |
+| frame-setup | 1.4% | 1.0% | 1.2% | 0.8% |
+
+Rank order is identical on all four hosts: bsp+segs > planes > masked >
+frame-setup. The proportions are stable (±3 pp) across the fleet.
+
+#### Cross-host ratios (wbox vs. each)
+
+| stage | wbox/alder | wbox/tank | wbox/pi5 |
+|-------|-----------|-----------|---------|
+| bsp+segs | 5.46× | 4.78× | 3.67× |
+| planes | 4.79× | 4.06× | 3.17× |
+| masked | 3.88× | 3.62× | 3.05× |
+| sim | 5.23× | 4.47× | 4.08× |
+
+wbox is ~5× slower than alder on bsp+segs. pi5 is the best ARM result
+and roughly half way between alder and wbox.
+
+---
+
+### B. The uncomfortable truth: wasm render vs. 35 Hz budget
+
+At 35 Hz the per-frame budget is 1000 / 35 = **28.57 ms**.
+
+| host | render total (ms) | % of 28.57 ms budget |
+|------|-------------------|----------------------|
+| wbox | 0.4897 | **1.71%** |
+| pi5 | 0.1435 | 0.50% |
+| tank | 0.1123 | 0.39% |
+| alder | 0.0979 | 0.34% |
+
+The wasm render loop is **under 2% of the 35 Hz budget on the weakest
+browser host (wbox)**. The remaining ~98% of each tic is spent elsewhere.
+
+Sim is even less: wbox 0.0706 ms/tic / 28.57 ms = 0.25% of budget.
+
+**What this means for browser play**: the wasm inner loops are not the
+user-visible bottleneck. The JS/browser pipeline — palette conversion and
+WebGL texture upload in `client/js/video.js`, rAF scheduling jitter,
+AudioWorklet mixing — is **UNMEASURED** by the wasm bench harness.
+These paths run on every frame and involve GPU synchronization, but
+their contribution to frame latency is unknown.
+
+A 50% speedup in wasm bsp+segs on wbox saves
+0.2625 ms × 50% = 0.13 ms/frame = 0.46% of budget.
+This is unmeasurable by the user at 35 Hz. The browser play
+experience is dominated by whatever the UNMEASURED JS/GPU side costs.
+
+**What this means for the bare-metal future (ESP32/Cortex-M)**:
+A 240 MHz LX7 without PSRAM optimization is projected to spend
+render / 0.24 ≈ 2 ms/frame on render alone (docs/bare-metal.md §7.3),
+out of a 28.57 ms budget. At that scale the wasm stage ranking IS the
+right optimization proxy and the queue matters. PSRAM latency on
+column-stride writes (`screens[0]`, SCREENWIDTH = 320 bytes/step) is
+the primary expected bottleneck; placing `screens[0]` in internal SRAM
+is the primary mitigation (bare-metal.md §7.3).
+
+**Conclusion for queue ordering**: the queue is shaped primarily by the
+bare-metal axis. Browser wins are labelled separately and conditioned
+on the browser-side measurement gap being filled first (Q0 below).
+
+---
+
+### C. Browser-side measurement gap
+
+**Defined**: a browser pipeline profile would measure, per rAF frame:
+
+- `video.js` blit path: `I_FinishUpdate` palette expansion (64,000
+  indexed-byte → RGBA lookups) + `texSubImage2D` WebGL call latency
+- WebGL state change count and GPU pipeline stall
+- rAF scheduling jitter (deviation from 16.67 ms target at 60 Hz)
+- AudioWorklet mixing budget (OPL synthesis at 140 Hz + PCM mixing)
+- Total JS time between consecutive rAF callbacks
+
+**Can `tools/browser-test.mjs` do this cheaply?** It uses Chrome
+DevTools Protocol (CDP) for UI automation (screenshots, key input,
+console error capture) but has no per-frame timing instrumentation.
+Getting accurate per-frame JS breakdowns requires either:
+
+1. Chrome Tracing API (`Tracing.start`/`Tracing.stop`) with
+   `devtools.timeline` category — produces a trace JSON that must be
+   parsed for `FunctionCall` events; non-trivial to extract per-function
+   frame breakdowns without a full trace-viewer pipeline.
+2. Instrumenting `video.js` with `performance.mark`/`performance.measure`
+   around the blit and WebGL calls, then reading via
+   `Performance.getMetrics` or `PerformanceObserver` — works but requires
+   adding measurement code to the client that must be reverted.
+3. Using the `Performance.getMetrics` CDP call for aggregate stats
+   (heap, scripting time, GPU time) — less precise but fast to add.
+
+**Cheap first step**: `cdp('Performance.getMetrics')` is already
+usable within browser-test.mjs's existing CDP infrastructure (the
+`cdp()` helper is defined at line 40). Adding it is literally 2 lines:
+call once before and once after the gameplay loop, diff the `TaskDuration`
+and `ScriptDuration` fields. This yields aggregate JS scripting time —
+not per-frame breakdowns, but a budget sanity-check that costs nothing
+to obtain and should be done before investing in full tracing.
+
+**Verdict**: do the 2-line `Performance.getMetrics` call immediately as
+a sanity check. Full per-frame tracing (option 1, Chrome Tracing API)
+or client-side `performance.mark` instrumentation (option 2) remains
+deferred — add as Q0 in the queue. The queue entries below apply
+unambiguously to the bare-metal axis; their browser applicability is
+flagged NEEDS-Q0 where the JS side might dominate.
+
+---
+
+### D. Within bsp+segs: attribution reasoning
+
+`bsp+segs` times `R_RenderBSPNode` (the BSP walk) and
+`R_StoreWallRange` → `R_RenderSegLoop` (wall column draws) together,
+because the draw calls are interleaved with the BSP recursion.
+
+The dominant sub-cost is **`R_DrawColumn`** calls from
+`R_RenderSegLoop`. Each visible wall fragment from x1 to x2 invokes
+the column-draw inner loop (renderer.md §7.2) for each column in the
+range:
+
+```
+for dc_x in [x1, x2]:
+    dest = ylookup[dc_yl] + columnofs[dc_x]
+    // inner loop: dc_yh - dc_yl + 1 iterations, each:
+    *dest = dc_colormap[dc_source[(frac >> FRACBITS) & 127]]
+    dest += SCREENWIDTH  // 320-byte stride → cache miss per pixel
+    frac += fracstep
+```
+
+The `dest += SCREENWIDTH` write is the **primary cache-miss source**:
+each pixel write is 320 bytes past the previous, one new cache line
+(64 bytes) per pixel on typical hardware. For a 200-row column at 1:1
+scale: 200 cache-line misses per column draw.
+
+**UNMEASURED: R_DrawColumn and R_DrawSpan call counts per frame**.
+The measurement procedure (to be run for task 2.2):
+1. Add `long web_perf_col_calls, web_perf_span_calls` counters to
+   `engine/web/perf.h` / `engine/web/perf.c` (with EMSCRIPTEN_KEEPALIVE
+   getters and reset in `web_perf_reset()`).
+2. Increment `web_perf_col_calls` at the top of `R_DrawColumn`;
+   increment `web_perf_span_calls` at the top of `R_DrawSpan`.
+3. Rebuild wasm; run `node tools/bench.mjs doom.wad 1` on each host.
+4. Record counts; compute avg column pixels (= sum of (dc_yh−dc_yl+1)
+   per call if a pixel counter is added, or derive from render time).
+5. **Revert all engine changes**; rebuild to pristine 16c3354;
+   verify 13/13 sim goldens + 13/13 render goldens before committing
+   anything but docs.
+
+Corrected call-count estimate from renderer.md §4.4/§6.7 (UNVERIFIED —
+measure per the §D procedure above before citing these numbers):
+- Walls (`R_RenderSegLoop`, renderer.md §4.4): ~30–50 drawsegs/frame,
+  each covering ~5–15 columns on average with 1 tier = **~250–450**
+  R_DrawColumn calls from wall draw alone.
+- Sprites (`R_DrawVisSprite` loop, renderer.md §6.7): width varies
+  widely (weapon psprite ~60 cols; small enemy ~10 cols; tall close
+  enemy ~100 cols); 5–15 visible sprites × 10–100 cols each ≈
+  **~250–2,000** calls.
+- Sky (renderer.md §9): one R_DrawColumn per column of the sky
+  visplane, up to 320 columns = **~100–300** calls.
+- Total realistic estimate: **~1,000–3,000 R_DrawColumn calls/frame**;
+  previously stated 15,000–25,000 was an arithmetic error (~10× high)
+  from conflating pixels-per-column with calls-per-column.
+
+**R_DrawSpan** (floor/ceiling spans) is cheaper per call than
+R_DrawColumn because its `dest++` writes are sequential (horizontal
+row) — cache-friendly. The `ds_source` flat-texture reads are random
+within a 4096-byte flat (likely L1-resident). This explains why planes
+is only 32% of render despite floor/ceiling covering more pixels than
+walls in typical open spaces.
+
+---
+
+### E. Sim: rank or dismiss
+
+wbox sim = 0.0706 ms/tic; at 35 Hz = 0.0706/28.57 = **0.25% of budget**.
+
+Headless sim throughput from v1 bench: wbox 21,107 tics/s
+= 35/21107 × 100 = **0.17% CPU** at 35 Hz. The render-pass measurement
+confirms: sim is negligible.
+
+**Risk vs. reward**: the sim is the frozen surface (playsim.md §16).
+Any change to:
+- `P_Random()` call sequence (ordering of any sim action)
+- thinker list traversal order
+- `P_BlockLinesIterator` / `P_BlockThingsIterator` iteration order
+- `P_TraverseIntercepts` sort order
+
+...would desync all 13 golden demos. The cross-validation against 44,580
+Chocolate Doom tics provides zero tolerance for any behavioral divergence.
+
+**Verdict for task 2.4**: measure-first / likely-skip. The 0.25%
+budget contribution makes any win unmeasurable at the system level.
+The risk of a hidden sim-behavior change is disproportionate to the
+reward. Only pursue 2.4 if Q0 (browser profile) reveals that the JS
+sim invocation overhead (not the wasm sim cost) is significant — an
+unlikely finding given the 0.25% wasm figure.
+
+---
+
+### F. Zone and memory knobs (2.5 / 2.6)
+
+These are **memory wins, not speed wins**. On browser hosts the current
+64 MB INITIAL_MEMORY loads instantly; on bare-metal every MB costs flash
+or PSRAM capacity.
+
+Findings from perf.md §2 and §3:
+
+- Peak non-purgeable zone usage across all 13 demo playthroughs:
+  **1.36 MB** (plutonia.wad demo3). The 32 MB zone is **23× oversized**.
+- INITIAL_MEMORY floor: **56 MB** (tested; 52 MB aborts at WAD malloc).
+- Reducing ZONESIZE to **4 MB** would put peak usage at 34% of zone —
+  comfortable headroom for purgeable cache. Projected INITIAL_MEMORY
+  with 4 MB zone + 16.61 MB WAD + 5.21 MB static = **25.82 MB** —
+  potentially halving the current 64 MB target.
+- `WEB_ZONE_POOL_SIZE` in `engine/web/perf.c` duplicates `ZONESIZE` in
+  `engine/web/i_system.c` with no compile-time guard — consolidate as
+  one shared define (web.h or _Static_assert) when 2.5/2.6 touches the
+  zone. (Plans.md §0.5 followup, now formally in the queue.)
+
+**Risk**: zone size reduction is safe iff all 13 demo passes complete.
+The four-client net hash test (net gate) must also pass (zone backs
+thinker allocations that multiply with player count). Test procedure:
+run `node tools/demo-test.mjs` (sim gate) + `node tools/demo-test.mjs
+--render` (render gate) for all four IWADs at the new ZONESIZE before
+committing any reduction.
+
+---
+
+### G. The ranked optimization queue
+
+Ordered by expected impact on the weakest capable target (wbox for
+browser, LX7/PSRAM for bare-metal). Effort: S < 1 day, M 1–3 days,
+L > 3 days.
+
+#### Q0 — Measure the browser pipeline (prerequisite)
+
+| field | value |
+|-------|-------|
+| **what** | Instrument `client/js/video.js` blit path (`I_FinishUpdate`: palette expand + texSubImage2D) and rAF frame budget with `performance.mark`/`performance.measure`; collect via CDP or DevTools trace across 100+ frames of E1M1 gameplay |
+| **expected win** | Not a win — a prerequisite. Without this data, all claims about browser-fps improvement from tasks 2.2–2.4 are unverifiable. |
+| **gates that protect it** | No gate needed — browser-only instrumentation, reverted before commit. |
+| **effort** | S |
+| **verdict** | **DO FIRST** before claiming any browser-fps improvement from wasm changes. |
+| **maps to** | Prerequisite for 2.2/2.3/2.4 browser-fps claims |
+
+#### Q1 — Column/span inner loops (task 2.2)
+
+| field | value |
+|-------|-------|
+| **what** | Tighten `R_DrawColumn` inner loop: reduce the 320-byte column-stride write pressure (consider transposed framebuffer approach or row-major rendering order for wasm targets); profile `R_DrawSpan` for comparison. Optionally prototype wasm SIMD (`v128` load/store) behind a compile flag. |
+| **expected win (bare-metal)** | bsp+segs = 53.6% of wbox render = 0.2625 ms/frame. If the R_DrawColumn inner loop accounts for ~70% of bsp+segs (plausible given wall-dominant scenes), that is 0.184 ms/frame attributable to column draw. A 30% improvement → 0.055 ms/frame savings on wbox = 11% total render reduction. On LX7 with `screens[0]` in SRAM, column-stride cache misses vanish; the win may be larger. |
+| **expected win (browser)** | NEEDS-Q0. Wasm render is 1.7% of budget on wbox; a 30% improvement saves 0.51% CPU. User-invisible without Q0 ruling out JS-side dominance. |
+| **gates** | Render gate (13/13 pixel-identical) + sim gate (unchanged, render-only) |
+| **effort** | M (SIMD prototype = L, behind build flag, optional) |
+| **verdict** | **DO** on bare-metal axis. For browser: do it but frame the claim correctly — the win is CI throughput and bare-metal fps, not user-visible browser fps. |
+| **maps to** | Task 2.2 |
+
+#### Q2 — Memory footprint reduction (tasks 2.5 + 2.6)
+
+| field | value |
+|-------|-------|
+| **what** | (a) Reduce ZONESIZE 32 MB → 4 MB (23× oversized vs. measured peak); (b) Reduce INITIAL_MEMORY 64 MB → 56 MB (proven safe floor); (c) Consolidate WEB_ZONE_POOL_SIZE / ZONESIZE into one shared define; (d) emcc knob sweep: -O3 vs. -Os for size×speed frontier. |
+| **expected win (browser)** | No fps change. Reduced wasm heap footprint (faster initial memory allocation in V8; potential JS heap GC pressure reduction — minor). Primary value is documentation of the knob space. |
+| **expected win (bare-metal)** | ZONESIZE 4 MB → INITIAL_MEMORY target of ~32 MB (vs. 64 MB now). This halves the PSRAM requirement for a shareware doom1.wad build (from 9.6 MB to ~5.4 MB PSRAM — see bare-metal.md §7.2). Critical for smaller ESP32 configurations. |
+| **gates** | Sim gate (13/13 demos) + render gate + 4-client net hash (zone backs thinker allocations; net test required) |
+| **effort** | 2.5 = S; 2.6 emcc sweep = M |
+| **verdict** | **DO** — low risk (well-measured headroom), high bare-metal value. Do 2.5 before 2.6 (zone reduction may change INITIAL_MEMORY floor). |
+| **maps to** | Tasks 2.5 (zone), 2.6 (knobs) |
+
+#### Q3 — Visplane management (task 2.3)
+
+| field | value |
+|-------|-------|
+| **what** | Replace `R_FindPlane` O(n) linear search with a small hash (key = height×picnum×lightlevel, table size ≤ 64 buckets covers typical DOOM maps). Evaluate `R_CheckPlane` split frequency to bound copy overhead. |
+| **expected win (bare-metal)** | planes = 32% of wbox render = 0.1566 ms/frame. `R_FindPlane` is O(n) over live visplane count; in open maps with many distinct (height, picnum, lightlevel) triples this is non-trivial. However, in the attract demos (corridors, tight geometry) the live count is small (~10–20 planes/frame), making the linear scan fast. Win is scene-dependent. Estimate 5–15% of planes stage = 0.008–0.023 ms/frame on wbox — modest. |
+| **expected win (browser)** | NEEDS-Q0. Same scaling argument as Q1. |
+| **gates** | Render gate (visplane management is render-only; sim unaffected) |
+| **effort** | M |
+| **verdict** | **MEASURE-FIRST**: instrument visplane count and R_FindPlane probe depth before sizing the win. The hash is straightforward but the gain on real DOOM maps may be small. Do after Q1 (larger guaranteed win). |
+| **maps to** | Task 2.3 |
+
+#### Q4 — Sim hot paths (task 2.4)
+
+| field | value |
+|-------|-------|
+| **what** | Profile blockmap iterators (`P_BlockLinesIterator`, `P_BlockThingsIterator`), `P_CheckSight`, `P_ApproxDistance` for sim speedup. |
+| **expected win** | wbox sim = 0.0706 ms/tic = 0.25% of 35 Hz budget. Any speedup is invisible at the system level. Headless CI throughput may improve (timedemo runs faster), but that is a developer convenience, not a user win. |
+| **risk** | The frozen surface (playsim.md §16) covers all P_Random call ordering, thinker traversal, blockmap iteration order. Any change to iteration order, however minor, will desync golden demos. The correctness gate (13 sim goldens + 44,580-tic Chocolate cross-validation) will catch any divergence, but the investigation cost is high. |
+| **verdict** | **MEASURE-FIRST / LIKELY-SKIP**. Pursue only if Q0 reveals that the JS-side sim invocation overhead (not wasm sim time) is the bottleneck, or if a specific bare-metal target profile shows sim dominates. The frozen-surface risk is disproportionate to the 0.25% budget figure. |
+| **maps to** | Task 2.4 |
+
+#### Q5 — tank deep-dive (task 2.7)
+
+| field | value |
+|-------|-------|
+| **what** | Investigate why tank (i5-8350U, Kaby Lake) was "least optimized" per Plans.md. The v1 microbench showed FixedDiv int64 is 2.86× slower than double on tank (2725 ms vs. 964 ms for 2×10⁸ iters). |
+| **what the data actually shows** | v2 perStage: tank render = 0.1123 ms/frame, alder = 0.0979 ms/frame, ratio = **1.15×**. Tank is only 15% slower than alder on render — very close. Tank sim = 0.0158 ms/tic vs. alder 0.0135 ms/tic = 1.17×. Neither is concerning at the 35 Hz scale. The headless gap: v2 simFpsNodraw averages are alder 180,370 tics/s vs. tank 95,463 tics/s = **1.89×** — consistent with general i9 vs. i5 CPU throughput, not a FixedDiv artifact. FixedDiv int64 is at most a minor contributor: the same ~2× gap existed pre-int64 (v1 before: alder 204,937 vs. tank 105,868 = 1.94×), so FixedDiv is not the cause. Note: v1 fps (f92fc05, pre-int64) and v2 simFpsNodraw (16c3354, post-int64) span the FixedDiv implementation change — same -nodraw method but different code; the stable ratio confirms the gap is architectural, not algorithmic. |
+| **expected win** | tank render is 0.4% of budget. Any speedup is imperceptible. |
+| **verdict** | **DOCUMENT, DON'T OPTIMIZE**. The 2.7 investigation reveals: tank render is not abnormally slow; the "least improved" observation from the v1 era was a headless-fps artifact from general i5-vs-i9 throughput difference, not a fixable algorithmic issue. With wasm render at 0.4% of budget on tank, there is nothing to fix. Update the task verdict: the tank bottleneck (for browser) is the UNMEASURED JS/browser side (same as every host), which Q0 will characterize. |
+| **maps to** | Task 2.7 |
+
+---
+
+### H. Plans.md task premise check
+
+Tasks whose premise the data now contradicts or sharpens:
+
+**2.2 (column/span tightening)**: Plans.md frames this as a browser-fps
+win. The data shows wasm render is 1.7% of budget on wbox; a 50%
+speedup saves 0.85% CPU — unmeasurable by users at 35 Hz. The correct
+framing is: **bare-metal fps** (PSRAM-latency reduction via
+column-stride mitigation) + **node-headless CI throughput** (timedemo
+runs faster). The work remains the right work; the claimed benefit
+needs reframing. The render gate ensures no regression.
+
+**2.4 (sim hot paths "as profiling dictates")**: profiling dictates
+nothing — sim is 0.25% of budget. The conditional premise is not met
+by the current data. Task 2.4 should be demoted to measure-first / likely-skip
+and only reopened if Q0 or a bare-metal profile reveals unexpected sim overhead.
+
+**2.7 (tank "least improved")**: the v2 perStage data resolves this.
+Tank render is 1.15× alder — essentially equivalent. The v1 fps ratio
+(~2×) reflects general i9-vs-i5 CPU throughput (alder 204,937 vs. tank
+105,868 at f92fc05; alder 180,370 vs. tank 95,463 simFpsNodraw at 16c3354
+= 1.89×); it is stable across the FixedDiv implementation change and is
+not a fixable algorithmic issue. With render-stage isolation, tank has no
+anomaly to investigate. The remaining question is whether tank's
+browser-side overhead (JS engine version, WebGL driver latency) is
+atypical — that requires Q0.
+
+---
+
+### I. Queue summary (ordered)
+
+| # | queue entry | effort | verdict | maps to |
+|---|-------------|--------|---------|---------|
+| Q0 | Browser pipeline measurement | S | **DO FIRST** | prereq |
+| Q1 | R_DrawColumn/Span inner loops (cache-stride) | M | **DO** (bare-metal axis) | 2.2 |
+| Q2 | Memory: ZONESIZE→4MB, INITIAL_MEMORY→56MB, knob sweep | S+M | **DO** | 2.5+2.6 |
+| Q3 | Visplane hash (R_FindPlane O(n)→hash) | M | measure-first | 2.3 |
+| Q4 | Sim hot paths | M | likely-skip | 2.4 |
+| Q5 | tank deep-dive | S | document-only | 2.7 |
+
+---
+
 ## Appendix: reproduction commands
 
 ```sh

@@ -1028,25 +1028,26 @@ remain tic-identical. Verified by inspection: none of the overflow paths touch
 
 ## 11. Per-stage performance mapping
 
-Stage timing is from `tools/golden/bench-baseline.json` (commit 15770d9,
-2026-07-15). Values are averages across the three doom.wad attract demos. Three
-of four fleet hosts have perStage data; tank-i5-8350U was offline at baseline
-time (its `perStage` entry is null).
+Stage timing is from `tools/golden/bench-baseline.json` (commit 16c3354,
+2026-07-15). Values are averages across the three doom.wad attract demos
+on all four fleet hosts (tank perStage data added at 16c3354 — all four
+hosts are now coherent; see `docs/perf.md §The optimization queue`).
 
-| stage | doc section | alder (ms/frame) | pi5 (ms/frame) | wbox (ms/frame) |
-|-------|-------------|-----------------|----------------|----------------|
-| frame-setup+clears | §2 | ~0.001 | ~0.002 | ~0.007 |
-| bsp+segs | §3, §4 | ~0.040 | ~0.074 | ~0.266 |
-| planes | §5 | ~0.027 | ~0.049 | ~0.159 |
-| masked | §6 | ~0.013 | ~0.021 | ~0.064 |
-| sim (per tic, not per frame) | (playsim doc) | ~0.011 | ~0.017 | ~0.074 |
+| stage | doc section | alder (ms/frame) | tank (ms/frame) | pi5 (ms/frame) | wbox (ms/frame) |
+|-------|-------------|-----------------|----------------|----------------|----------------|
+| frame-setup+clears | §2 | ~0.001 | ~0.001 | ~0.002 | ~0.007 |
+| bsp+segs | §3, §4 | ~0.048 | ~0.055 | ~0.072 | ~0.263 |
+| planes | §5 | ~0.033 | ~0.039 | ~0.049 | ~0.157 |
+| masked | §6 | ~0.016 | ~0.018 | ~0.021 | ~0.064 |
+| sim (per tic, not per frame) | (playsim doc) | ~0.014 | ~0.016 | ~0.017 | ~0.071 |
 
-BSP+segs dominates on all three hosts. On wbox, bsp+segs alone is 0.266 ms,
-planes 0.159 ms, masked 0.064 ms — sum 0.489 ms/frame render cost. At 35 Hz
-this is 17 ms budget; the render sum is 0.489 ms, leaving ~16.5 ms for the rest.
-wbox's sim is 0.074 ms/tic. pi5 is faster than wbox but shares the same rank
-ordering of stages: bsp+segs > planes > masked. The render is the bottleneck on
-both, dominated by cache-unfriendly column writes (§7.2).
+BSP+segs dominates on all four hosts. On wbox, bsp+segs alone is 0.263 ms,
+planes 0.157 ms, masked 0.064 ms — sum 0.490 ms/frame render cost. At 35 Hz
+(28.57 ms budget) the render sum is 0.490 ms = 1.7% of budget, leaving ~98%
+for the JS/browser pipeline (UNMEASURED; see perf.md §The optimization queue §B).
+wbox's sim is 0.071 ms/tic = 0.25% of budget. Tank render (0.118 ms/frame) is
+only 1.15× alder — the rank ordering is the same on all hosts:
+bsp+segs > planes > masked. Cache-unfriendly column writes (§7.2) dominate.
 
 Task 2.1 will rank optimization targets more precisely; task 2.2 targets
 column/span inner loops (§7); task 2.3 targets visplane management (§5.2).
