@@ -83,6 +83,28 @@ EMSCRIPTEN_KEEPALIVE long web_perf_span_pixels_get (void)
     return web_perf_span_pixels;
 }
 
+// task 2.3: R_FindPlane probe-depth counters.
+// Always defined so JS getters are always valid (return 0 in normal builds).
+// Incremented only when r_plane.c is compiled with -DWEB_PERF_PLANE_STATS.
+long web_perf_findplane_calls = 0;
+long web_perf_findplane_iters = 0;
+long web_perf_visplane_peak = 0;
+
+EMSCRIPTEN_KEEPALIVE long web_perf_findplane_calls_get (void)
+{
+    return web_perf_findplane_calls;
+}
+
+EMSCRIPTEN_KEEPALIVE long web_perf_findplane_iters_get (void)
+{
+    return web_perf_findplane_iters;
+}
+
+EMSCRIPTEN_KEEPALIVE long web_perf_visplane_peak_get (void)
+{
+    return web_perf_visplane_peak;
+}
+
 // Reset all accumulators.  Call between demos so each demo's numbers are
 // independent.
 EMSCRIPTEN_KEEPALIVE void web_perf_reset (void)
@@ -98,6 +120,9 @@ EMSCRIPTEN_KEEPALIVE void web_perf_reset (void)
     web_perf_span_calls = 0;
     web_perf_col_pixels = 0;
     web_perf_span_pixels = 0;
+    web_perf_findplane_calls = 0;
+    web_perf_findplane_iters = 0;
+    web_perf_visplane_peak = 0;
 }
 
 // --- webdoom: Z_Zone memory stats (task 0.5 memory audit) ---

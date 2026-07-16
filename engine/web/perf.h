@@ -25,6 +25,13 @@ extern long web_perf_span_calls;  // R_DrawSpan call count
 extern long web_perf_col_pixels;  // total pixels drawn by column funcs
 extern long web_perf_span_pixels; // total pixels drawn by span func
 
+// task 2.3: R_FindPlane probe-depth counters — always declared; incremented
+// only when r_plane.c is compiled with -DWEB_PERF_PLANE_STATS.  Exported via
+// web_perf_findplane_*_get() getters so bench scripts can harvest them.
+extern long web_perf_findplane_calls; // calls to R_FindPlane (all frames)
+extern long web_perf_findplane_iters; // linear-search comparison iterations
+extern long web_perf_visplane_peak;   // peak live visplanes seen in any frame
+
 // High-resolution µs timestamp.  Wraps emscripten_get_now() * 1000.
 // Defined in perf.c so core files need not include <emscripten.h>.
 double web_perf_now (void);

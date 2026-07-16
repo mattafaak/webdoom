@@ -39,6 +39,28 @@ rcsid[] = "$Id: r_plane.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 #include "r_local.h"
 #include "r_sky.h"
 
+// webdoom task 2.3: R_FindPlane probe-depth counters.
+// Compile with -DWEB_PERF_PLANE_STATS to enable; zero overhead otherwise.
+// perf.h lives in engine/web/ — include it only when the stats flag is set
+// so that an unflagged build of engine/core/ has no dependency on engine/web/.
+#ifdef WEB_PERF_PLANE_STATS
+#include "perf.h"
+// Increment call counter once per R_FindPlane entry.
+#define PERF_PLANE_CALL()  (web_perf_findplane_calls++)
+// Increment iteration counter once per loop comparison.
+#define PERF_PLANE_ITER()  (web_perf_findplane_iters++)
+// Sample peak visplane count for this frame (call before the array is reset).
+// Comparing with peak: track cumulative-total iters and peak per-frame above.
+// We instead track the max live-visplane count over all frames via this macro.
+#define PERF_PLANE_PEAK()  do { \
+    long _n = (long)(lastvisplane - visplanes); \
+    if (_n > web_perf_visplane_peak) web_perf_visplane_peak = _n; \
+} while (0)
+#else
+#define PERF_PLANE_CALL()  ((void)0)
+#define PERF_PLANE_ITER()  ((void)0)
+#define PERF_PLANE_PEAK()  ((void)0)
+#endif
 
 
 planefunction_t		floorfunc;
@@ -186,7 +208,11 @@ void R_ClearPlanes (void)
 {
     int		i;
     angle_t	angle;
-    
+
+    // webdoom task 2.3: record peak visplane count from the just-completed
+    // frame before the array is reset.  No-op in unflagged builds.
+    PERF_PLANE_PEAK();
+
     // opening / clipping determination
     for (i=0 ; i<viewwidth ; i++)
     {
@@ -221,15 +247,19 @@ R_FindPlane
   int		lightlevel )
 {
     visplane_t*	check;
-	
+
+    // webdoom task 2.3: count calls and per-comparison iterations.
+    PERF_PLANE_CALL();
+
     if (picnum == skyflatnum)
     {
 	height = 0;			// all skys map together
 	lightlevel = 0;
     }
-	
+
     for (check=visplanes; check<lastvisplane; check++)
     {
+	PERF_PLANE_ITER();
 	if (height == check->height
 	    && picnum == check->picnum
 	    && lightlevel == check->lightlevel)

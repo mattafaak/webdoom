@@ -586,6 +586,70 @@ improvement is in headless CI throughput and bare-metal fps, not user-visible br
 | **verdict** | **MEASURE-FIRST**: instrument visplane count and R_FindPlane probe depth before sizing the win. The hash is straightforward but the gain on real DOOM maps may be small. Do after Q1 (larger guaranteed win). |
 | **maps to** | Task 2.3 |
 
+##### Task 2.3 results (measured 2026-07-15, commit after task 2.2)
+
+**Step 1 — Instrumentation**: Added `WEB_PERF_PLANE_STATS` counter block to
+`engine/core/r_plane.c` (same pattern as `WEB_PERF_COL_STATS` in r_draw.c).
+Tracks: `web_perf_findplane_calls` (R_FindPlane invocations), `web_perf_findplane_iters`
+(linear-search comparison iterations), `web_perf_visplane_peak` (max live visplanes in
+any frame). Counters always declared in `perf.h`/`perf.c`; incremented only under
+`-DWEB_PERF_PLANE_STATS`. Getters exported as `_web_perf_findplane_*_get`.
+Measurement script: `tools/plane-measure.mjs`.
+
+**Step 2 — Measured counts** (wbox, 1 rep each, best-rep for doom.wad; built with
+`-DWEB_PERF_PLANE_STATS`):
+
+| case | frames | calls/frame | iters/frame | peak visplanes |
+|------|--------|-------------|-------------|----------------|
+| doom demo1 | 1709 | 33.1 | 205.2 | 33 |
+| doom demo2 | 2346 | 34.6 | 128.2 | 39 |
+| doom demo3 | 3862 | 30.3 | 103.3 | 28 |
+| tnt demo2 (heavy) | 3652 | 56.1 | **451.5** | 68 |
+| plutonia demo3 (heavy) | 5661 | 59.1 | 375.7 | 64 |
+
+**Step 3 — Ceiling analysis**:
+
+Worst case is tnt demo2 at 451.5 iterations/frame. Each iteration tests 3 int fields
+(`height`, `picnum`, `lightlevel`) and advances a pointer. Even at a generous 10 ns/iter:
+
+```
+ceiling = 451.5 iters/frame × 10 ns/iter = 4,515 ns/frame = 4.5 µs/frame
+planes stage baseline (wbox) = 156,600 ns/frame
+ceiling fraction = 4.5 / 156.6 = 2.9%
+```
+
+For the doom.wad attract demos (the primary bench baseline): 205.2 iters/frame max →
+ceiling 2.1 µs/frame = **1.3% of the planes stage**.
+
+Peak visplane count across all cases: **68** (tnt demo2). At 68 planes the linear scan
+averages ~6.6 comparisons per call before hitting a match or the end — far from the
+pathological worst case. The hash table would save at most a few comparisons per call.
+
+**Verdict: NO-GO — not worth implementing**.
+
+The hash is structurally sound (prboom-plus chained-hash R_FindPlane is well-understood),
+but the search cost is simply too small to produce a measurable win:
+
+- Ceiling 2.9% on the *heaviest* tested case (tnt demo2). For doom.wad demos: 1.3%.
+- The planes stage itself is 32% of wbox render (0.157 ms/frame). A 2.9% reduction
+  in planes = 0.0045 ms/frame total render change. The task 2.2 noise bar on wbox was
+  ~0.001 ms — the hash ceiling is ~4.5× the noise bar and would likely be buried in it
+  after the hash's own overhead (hash function compute + bucket pointer chase) is subtracted.
+- A hash replaces the linear scan but adds: one multiply + one modulo (or bitmask) for
+  the key, one pointer dereference per bucket chain entry. With chains averaging 1–2
+  entries, the win over a 6.6-comparison linear scan is marginal or negative.
+- The code complexity cost (chain management, bucket sizing, collision handling) is
+  disproportionate to the sub-2% ceiling.
+
+**Engine reverted to pristine** for the final commit (no r_plane.c behaviour change).
+Counter infrastructure (`WEB_PERF_PLANE_STATS` in `perf.h`/`perf.c`) is kept
+permanently — it is useful for future map-specific profiling and 3.x hardening work.
+
+**Openings management assessment**: `openings[]` (r_plane.c) was raised from
+`SCREENWIDTH×64` to `SCREENWIDTH×256` in webdoom. Overflow in a non-`RANGECHECK` build
+is silent (silent pointer overrun). This is a bounds-hardening concern, not a perf
+concern. No further action in task 2.3. → Defer to task 3.2 (bounds hardening).
+
 #### Q4 — Sim hot paths (task 2.4)
 
 | field | value |
