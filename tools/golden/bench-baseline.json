@@ -52,127 +52,167 @@
   "perStage": {
     "note": "Per-stage ms/frame from the render pass (doom.wad attract demos, best-of-3, no -nodraw). stages: frame-setup+clears, bsp+segs (R_RenderBSPNode, interleaved), planes (R_DrawPlanes), masked (R_DrawMasked). sim: G_Ticker ms/tic. Recorded by bench.mjs schemaVersion 2.",
     "alder-i9-12900K": {
-      "commit": "15770d9",
+      "commit": "16c3354",
       "date": "2026-07-15",
       "reps": 3,
-      "wasmBytes": 357787,
+      "wasmBytes": 357978,
       "demos": {
         "demo1": {
           "frames": 1709,
-          "frame_ms": 0.0005,
-          "bsp_ms": 0.0266,
-          "planes_ms": 0.0201,
-          "masked_ms": 0.0107,
-          "sum_ms": 0.0579,
-          "sim_ms_per_tic": 0.0103
+          "frame_ms": 0.0008,
+          "bsp_ms": 0.0451,
+          "planes_ms": 0.0331,
+          "masked_ms": 0.0188,
+          "sum_ms": 0.0978,
+          "sim_ms_per_tic": 0.0163
         },
         "demo2": {
           "frames": 2346,
           "frame_ms": 0.0009,
-          "bsp_ms": 0.0557,
-          "planes_ms": 0.0371,
-          "masked_ms": 0.0183,
-          "sum_ms": 0.112,
-          "sim_ms_per_tic": 0.0153
+          "bsp_ms": 0.0587,
+          "planes_ms": 0.041,
+          "masked_ms": 0.0181,
+          "sum_ms": 0.1188,
+          "sim_ms_per_tic": 0.0155
         },
         "demo3": {
           "frames": 3862,
-          "frame_ms": 0.0006,
-          "bsp_ms": 0.0382,
-          "planes_ms": 0.0227,
-          "masked_ms": 0.0104,
-          "sum_ms": 0.072,
-          "sim_ms_per_tic": 0.0078
+          "frame_ms": 0.0007,
+          "bsp_ms": 0.0404,
+          "planes_ms": 0.0239,
+          "masked_ms": 0.0122,
+          "sum_ms": 0.0772,
+          "sim_ms_per_tic": 0.0087
         }
       },
       "simFpsNodraw": {
-        "demo1": 128836.0,
-        "demo2": 182953.0,
-        "demo3": 231241.0,
-        "avg": 181010.0
+        "demo1": 148674.0,
+        "demo2": 156282.0,
+        "demo3": 236155.0,
+        "avg": 180370.0
       }
     },
     "wbox-amd-g-t56n": {
-      "commit": "15770d9",
+      "commit": "16c3354",
       "date": "2026-07-15",
       "reps": 3,
-      "wasmBytes": 357787,
+      "wasmBytes": 357978,
       "demos": {
         "demo1": {
           "frames": 1709,
           "frame_ms": 0.0067,
-          "bsp_ms": 0.2763,
-          "planes_ms": 0.1879,
-          "masked_ms": 0.0721,
-          "sum_ms": 0.543,
-          "sim_ms_per_tic": 0.099
+          "bsp_ms": 0.2683,
+          "planes_ms": 0.1823,
+          "masked_ms": 0.0743,
+          "sum_ms": 0.5316,
+          "sim_ms_per_tic": 0.0904
         },
         "demo2": {
           "frames": 2346,
-          "frame_ms": 0.0074,
-          "bsp_ms": 0.2623,
-          "planes_ms": 0.1522,
-          "masked_ms": 0.0584,
-          "sum_ms": 0.4803,
-          "sim_ms_per_tic": 0.0696
+          "frame_ms": 0.007,
+          "bsp_ms": 0.2592,
+          "planes_ms": 0.1505,
+          "masked_ms": 0.0576,
+          "sum_ms": 0.4743,
+          "sim_ms_per_tic": 0.0678
         },
         "demo3": {
           "frames": 3862,
-          "frame_ms": 0.0071,
-          "bsp_ms": 0.2581,
-          "planes_ms": 0.1366,
-          "masked_ms": 0.0602,
-          "sum_ms": 0.462,
-          "sim_ms_per_tic": 0.0534
+          "frame_ms": 0.007,
+          "bsp_ms": 0.26,
+          "planes_ms": 0.137,
+          "masked_ms": 0.0591,
+          "sum_ms": 0.4631,
+          "sim_ms_per_tic": 0.0535
         }
       },
       "simFpsNodraw": {
-        "demo1": 17168.0,
-        "demo2": 18958.0,
-        "demo3": 23397.0,
-        "avg": 19841.0
+        "demo1": 16603.0,
+        "demo2": 19420.0,
+        "demo3": 23319.0,
+        "avg": 19781.0
       }
     },
-    "tank-i5-8350U": null,
-    "pi5-aarch64": {
-      "commit": "15770d9",
+    "tank-i5-8350U": {
+      "commit": "16c3354",
       "date": "2026-07-15",
       "reps": 3,
-      "wasmBytes": 357787,
+      "wasmBytes": 357978,
       "demos": {
         "demo1": {
           "frames": 1709,
-          "frame_ms": 0.0019,
-          "bsp_ms": 0.0849,
-          "planes_ms": 0.0596,
-          "masked_ms": 0.0254,
-          "sum_ms": 0.1718,
-          "sim_ms_per_tic": 0.0245
+          "frame_ms": 0.0013,
+          "bsp_ms": 0.0582,
+          "planes_ms": 0.0487,
+          "masked_ms": 0.021,
+          "sum_ms": 0.1292,
+          "sim_ms_per_tic": 0.0211
+        },
+        "demo2": {
+          "frames": 2346,
+          "frame_ms": 0.0011,
+          "bsp_ms": 0.0539,
+          "planes_ms": 0.0355,
+          "masked_ms": 0.0164,
+          "sum_ms": 0.107,
+          "sim_ms_per_tic": 0.0151
+        },
+        "demo3": {
+          "frames": 3862,
+          "frame_ms": 0.0011,
+          "bsp_ms": 0.0527,
+          "planes_ms": 0.0315,
+          "masked_ms": 0.0154,
+          "sum_ms": 0.1007,
+          "sim_ms_per_tic": 0.0111
+        }
+      },
+      "simFpsNodraw": {
+        "demo1": 75610.0,
+        "demo2": 89142.0,
+        "demo3": 121638.0,
+        "avg": 95463.0
+      }
+    },
+    "pi5-aarch64": {
+      "commit": "16c3354",
+      "date": "2026-07-15",
+      "reps": 3,
+      "wasmBytes": 357978,
+      "demos": {
+        "demo1": {
+          "frames": 1709,
+          "frame_ms": 0.0018,
+          "bsp_ms": 0.0769,
+          "planes_ms": 0.0607,
+          "masked_ms": 0.0249,
+          "sum_ms": 0.1643,
+          "sim_ms_per_tic": 0.0247
         },
         "demo2": {
           "frames": 2346,
           "frame_ms": 0.0016,
-          "bsp_ms": 0.0687,
-          "planes_ms": 0.0461,
-          "masked_ms": 0.0189,
-          "sum_ms": 0.1353,
-          "sim_ms_per_tic": 0.0152
+          "bsp_ms": 0.0685,
+          "planes_ms": 0.0462,
+          "masked_ms": 0.0187,
+          "sum_ms": 0.135,
+          "sim_ms_per_tic": 0.0153
         },
         "demo3": {
           "frames": 3862,
           "frame_ms": 0.0017,
-          "bsp_ms": 0.0693,
+          "bsp_ms": 0.0691,
           "planes_ms": 0.0414,
           "masked_ms": 0.0191,
-          "sum_ms": 0.1316,
+          "sum_ms": 0.1312,
           "sim_ms_per_tic": 0.012
         }
       },
       "simFpsNodraw": {
-        "demo1": 66112.0,
-        "demo2": 73956.0,
-        "demo3": 93987.0,
-        "avg": 78018.0
+        "demo1": 66251.0,
+        "demo2": 71250.0,
+        "demo3": 94046.0,
+        "avg": 77182.0
       }
     }
   }
