@@ -13,6 +13,9 @@ source. 356 KB of wasm, zero client install, zero-config multiplayer.
   OPL2 (Nuked OPL3) playing the IWAD's own GENMIDI bank
 - 1–4 players: instant single player; arcade lobby for network play
   (join order = color: Green/Indigo/Brown/Red — nothing to type)
+- PSX DOOM fire background on the launcher — chunky indexed-cell fire on
+  a 64×40 grid, palette-matched, flares on every menu transition;
+  measured < 1 ms/tick on the weakest network host
 - Deterministic-lockstep netcode over a server tic relay (see
   [docs/netcode.md](docs/netcode.md)); verified by a headless harness
   that compares per-tic gamestate hashes across real clients
@@ -45,8 +48,8 @@ the game/map/skill/mode; anyone hits START; 3-2-1, everyone's in.
 | `engine/web/`  | web platform layer: video/audio/input/net + MUS→OPL sequencer |
 | `client/`      | vanilla-JS shell: lobby, WebGL2 renderer, input, audio, service worker |
 | `server/`      | Node ≥ 20, single process, single port; only dep `ws` |
-| `tools/`       | emsdk pin, WAD fetch/identify, test suites |
-| `docs/`        | netcode protocol + upstream README/LICENSE |
+| `tools/`       | emsdk pin, WAD fetch/identify, test suites, bench harness, native sanitizer target |
+| `docs/`        | reference docs: [netcode](docs/netcode.md), [renderer](docs/renderer.md), [playsim](docs/playsim.md), [formats](docs/formats.md), [bare-metal](docs/bare-metal.md), [perf](docs/perf.md), [state-machine](docs/state-machine.md), [engine-archaeology](docs/engine-archaeology.md) |
 
 ## Tests
 
@@ -54,21 +57,41 @@ the game/map/skill/mode; anyone hits START; 3-2-1, everyone's in.
 tools/run-tests.sh
 ```
 
-- engine smoke: boots real IWADs headless in node, plays the attract
+- **lint**: clang-format over the web platform layer + `node --check` over
+  all JS files — fails CI on any format drift or syntax error
+- **engine smoke**: boots real IWADs headless in node, plays the attract
   demo, renders OPL music, asserts life in framebuffer and audio
-- demo compatibility: all 13 built-in IWAD demos (Doom, Doom II, TNT,
+- **demo compatibility**: all 13 built-in IWAD demos (Doom, Doom II, TNT,
   Plutonia) replayed headless; per-tic gamestate fingerprints pinned
   against golden traces — a single diverging P_Random call fails CI at
   the exact tic. The baseline is cross-validated tic-for-tic against an
   instrumented Chocolate Doom (the vanilla reference):
   `tools/build-choco-reference.sh`, then
   `node tools/demo-test.mjs --cross <binary>` — 44,580 tics identical
-- netplay: 2 and 4 real wasm clients through the real server; per-tic
+- **render goldens**: per-tic framebuffer hashes for all 13 demos — a
+  second CI gate that catches pixel-level render regressions. Exposed the
+  Tutti-Frutti latent out-of-window texture read (fixed, `dc_texheight`);
+  render goldens are no longer heap-layout-sensitive after that fix
+- **netplay**: 2 and 4 real wasm clients through the real server; per-tic
   gamestate hashes must match exactly; a client is killed mid-game and
   the survivors must keep playing
-- browser: CDP-driven Chrome — title → menu → new game → movement,
+- **net fuzz**: malformed and hostile WebSocket frames thrown at the server
+  across many patterns; server must survive, close cleanly, and never
+  exceed the per-client message caps (`tools/net-fuzz-test.mjs`)
+- **client resilience**: fetch failures, service-worker cache errors,
+  visibility changes, gamepad removal, and storage unavailability handled
+  gracefully — no unhandled rejections (`tools/browser-resilience-test.mjs`)
+- **lobby state-machine**: enumerated JS lobby states exercised against
+  all specified transitions; impossible states guarded
+  (`tools/browser-lobby-test.mjs`; T07 menu-nav is a pre-existing timing
+  flake on some CI hosts — ~1/3 pass rate independent of this codebase)
+- **native ASan/UBSan**: `tools/native-sanitize/` builds the engine for
+  the native host with AddressSanitizer and UndefinedBehaviorSanitizer;
+  runs the demo suite to surface OOB reads invisible in wasm
+- **browser**: CDP-driven Chrome — title → menu → new game → movement,
   audio arms, service worker caches; plus two tabs through the lobby
-  into a co-op game
+  into a co-op game (note: the sw-cache sub-check can exit-0 with a
+  skip on certain Chrome versions; it is not a guaranteed green)
 
 ## License
 

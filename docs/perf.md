@@ -1034,6 +1034,37 @@ peak is characterised.
 
 ---
 
+## PSX fire launcher background — perf note
+
+*Added at commit f6d6c0a (launcher: PSX DOOM fire background), 2026-07-16.*
+
+The PSX fire effect (`client/js/fire.js`) runs in JS on a 64×40 indexed-byte
+grid (cellular automaton, 37-entry DOOM fire ramp, nearest-neighbour
+upscaled to fill the canvas). It is decoupled from the game loop at ~16 Hz
+via `setInterval(62 ms)` and pauses automatically when the engine is running.
+
+**Measured cost (alder i9-12900K CI host, 200-tick batch avg)**: ~0.07–0.10 ms/tick.
+The batch benchmark amortises Chrome's 0.1 ms `performance.now()` resolution
+floor; individual tick readings have ~1× the resolution noise.
+
+**Wbox budget check**: alder reads of ~0.07–0.10 ms/tick imply a wbox estimate
+of ~0.6–0.8 ms at the conservative 8× cross-host ratio — within the < 1 ms/tick
+budget the comment in `fire.js` specifies. The authoritative wbox number is
+measured on hardware; alder gross-regression guard is 0.5 ms (used in CI via
+`tools/browser-lobby-test.mjs`).
+
+The noise-table pre-computation (8192 entries, generated once at init) replaced
+per-cell `Math.random()` calls in the hot loop, cutting cost ~4× vs the naive
+implementation.
+
+**Why this matters for perf tracking**: the fire effect is the first
+intentionally expensive client-side JS background task added to webdoom. Its
+cost is JS-side (not wasm) and is the kind of load the UNMEASURED browser
+pipeline section (§C above) is meant to characterise. It stays well under the
+1 ms/tick ceiling; it provides a concrete data point on JS background overhead.
+
+---
+
 ## Appendix: reproduction commands
 
 ```sh
