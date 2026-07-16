@@ -106,16 +106,15 @@ fixed_t			dc_texturemid;
 byte*			dc_source;
 
 // Height (texels) of the source column buffer — set by the caller before
-// invoking R_DrawColumn/R_DrawColumnLow.  Used as a power-of-2 wrap mask
-// ((dc_texheight - 1) replaces the hard-coded & 127) so that the column
-// draw never reads past the allocated composite/lump column data.
-// The mask keeps every read within [0, dc_texheight-1] for ANY height; for
-// power-of-2 heights (the common case) this is exact tiling, for non-pow2
-// heights (72/96 exist in the IWADs) the wrap is inexact but in-bounds —
-// wrong-but-deterministic, vs vanilla's layout-dependent heap read.  Exact
-// non-pow2 tiling would need a prboom-style modulo (future cleanup).
+// invoking R_DrawColumn/R_DrawColumnLow.  The column draw dispatches on this:
+//   power-of-2 heights (walls: 8/16/32/64/128) → fast & mask path + 4-wide
+//     unroll (task 2.2), where mask = (dc_texheight - 1).
+//   non-power-of-2 heights (sprites — patch post lengths are almost never
+//     pow2) → prboom-style true modulo via heightmask = dc_texheight<<FRACBITS,
+//     normalising frac before the loop then subtracting on overshoot.
+// This gives correct tiling AND ASan-clean reads for both cases.
 // Default 128 preserves the vanilla & 127 for callers that do not need to
-// override (e.g. sky draw in r_plane.c).
+// override (e.g. sky draw in r_plane.c, which sets its own height).
 int			dc_texheight = 128;
 
 // just for profiling
@@ -166,40 +165,64 @@ void R_DrawColumn (void)
     source   = dc_source;
     colormap = dc_colormap;
 
-    // webdoom task 3.1: use dc_texheight as the power-of-2 column mask.
-    // All DOOM wall textures have heights 8/16/32/64/128 so (height-1) is
-    // always a valid bitmask.  This eliminates out-of-bound reads into heap
-    // memory beyond the allocated composite column buffer (the root cause of
-    // the layout-dependent render hash changes identified in task 2.5 bisect).
-    // dc_texheight defaults to 128 so the mask is 127 when not overridden —
-    // matching vanilla behaviour for 128-px columns.
+    // webdoom task 3.1: use dc_texheight as the column mask / wrap guard.
+    // task hotfix (sprite clone-stamp regression from 3.1/3.2):
+    //   For power-of-2 heights (walls: 8/16/32/64/128) the fast & mask path
+    //   is correct and kept — including task 2.2's 4-wide unroll.
+    //   For non-power-of-2 heights (sprites — patch post lengths are almost
+    //   never pow2) we must use a TRUE modulo: frac % (dc_texheight<<FRACBITS).
+    //   `frac & (length-1)` is NOT a modulo for non-pow2, causing the vertical
+    //   clone-stamp artifact on every sprite (barrels, enemies, player gun, etc).
+    //   prboom pattern: normalise frac into [0, heightmask) before the loop, then
+    //   subtract on overshoot inside.  frac can be negative when the post top is
+    //   above the screen, hence the normalisation step.
+    if (dc_texheight & (dc_texheight - 1))
     {
-    const unsigned mask = (unsigned)(dc_texheight - 1);
+        // Non-power-of-2 path (sprites and any non-pow2 wall patch).
+        // Scalar only — sprites are a small fraction of total pixels; correctness
+        // beats speed here.
+        const fixed_t heightmask = dc_texheight << FRACBITS;
+        if (frac < 0)
+            while ((frac += heightmask) < 0);
+        else
+            while (frac >= heightmask) frac -= heightmask;
 
-    // webdoom task 2.2: unrolled 4-wide inner loop.
-    // Independent texture reads per iteration allow the CPU's load pipeline
-    // to overlap the four table lookups.
-    // Tail handles the remaining 0-3 pixels with the original scalar loop.
-    while (count >= 3)
-    {
-        dest[0]                = colormap[source[((frac              )>>FRACBITS)&mask]];
-        dest[SCREENWIDTH]      = colormap[source[((frac+fracstep  )>>FRACBITS)&mask]];
-        dest[SCREENWIDTH*2]    = colormap[source[((frac+fracstep*2)>>FRACBITS)&mask]];
-        dest[SCREENWIDTH*3]    = colormap[source[((frac+fracstep*3)>>FRACBITS)&mask]];
-        dest  += SCREENWIDTH*4;
-        frac  += fracstep*4;
-        count -= 4;
+        while (count-- >= 0)
+        {
+            *dest = colormap[source[frac >> FRACBITS]];
+            dest += SCREENWIDTH;
+            if ((frac += fracstep) >= heightmask)
+                frac -= heightmask;
+        }
     }
+    else
+    {
+        // Power-of-2 fast path (walls — the bulk of pixels).
+        // webdoom task 2.2: unrolled 4-wide inner loop.
+        // Independent texture reads per iteration allow the CPU's load pipeline
+        // to overlap the four table lookups.
+        // Tail handles the remaining 0-3 pixels with the original scalar loop.
+        const unsigned mask = (unsigned)(dc_texheight - 1);
 
-    // Scalar tail — handles 0, 1, 2, or 3 remaining pixels.
-    // count is in [-1, 2] here: if count was 3 before last iteration we subtracted 4
-    // so count is -1 (no tail); 0 → 1 pixel; 1 → 2 pixels; 2 → 3 pixels.
-    while (count-- >= 0)
-    {
-        *dest = colormap[source[(frac>>FRACBITS)&mask]];
-        dest += SCREENWIDTH;
-        frac += fracstep;
-    }
+        while (count >= 3)
+        {
+            dest[0]                = colormap[source[((frac              )>>FRACBITS)&mask]];
+            dest[SCREENWIDTH]      = colormap[source[((frac+fracstep  )>>FRACBITS)&mask]];
+            dest[SCREENWIDTH*2]    = colormap[source[((frac+fracstep*2)>>FRACBITS)&mask]];
+            dest[SCREENWIDTH*3]    = colormap[source[((frac+fracstep*3)>>FRACBITS)&mask]];
+            dest  += SCREENWIDTH*4;
+            frac  += fracstep*4;
+            count -= 4;
+        }
+
+        // Scalar tail — handles 0, 1, 2, or 3 remaining pixels.
+        // count is in [-1, 2] here.
+        while (count-- >= 0)
+        {
+            *dest = colormap[source[(frac>>FRACBITS)&mask]];
+            dest += SCREENWIDTH;
+            frac += fracstep;
+        }
     }
 }
 
@@ -298,17 +321,35 @@ void R_DrawColumnLow (void)
     fracstep = dc_iscale; 
     frac = dc_texturemid + (dc_yl-centery)*fracstep;
     
+    // hotfix: same pow2/non-pow2 dispatch as R_DrawColumn.
+    if (dc_texheight & (dc_texheight - 1))
     {
-    const unsigned mask = (unsigned)(dc_texheight - 1);
-    do
-    {
-	// Hack. Does not work corretly.
-	*dest2 = *dest = dc_colormap[dc_source[(frac>>FRACBITS)&mask]];
-	dest += SCREENWIDTH;
-	dest2 += SCREENWIDTH;
-	frac += fracstep;
+        const fixed_t heightmask = dc_texheight << FRACBITS;
+        if (frac < 0)
+            while ((frac += heightmask) < 0);
+        else
+            while (frac >= heightmask) frac -= heightmask;
 
-    } while (count--);
+        do
+        {
+            *dest2 = *dest = dc_colormap[dc_source[frac >> FRACBITS]];
+            dest  += SCREENWIDTH;
+            dest2 += SCREENWIDTH;
+            if ((frac += fracstep) >= heightmask)
+                frac -= heightmask;
+        } while (count--);
+    }
+    else
+    {
+        const unsigned mask = (unsigned)(dc_texheight - 1);
+        do
+        {
+            // Hack. Does not work corretly.
+            *dest2 = *dest = dc_colormap[dc_source[(frac>>FRACBITS)&mask]];
+            dest  += SCREENWIDTH;
+            dest2 += SCREENWIDTH;
+            frac  += fracstep;
+        } while (count--);
     }
 }
 
@@ -492,18 +533,39 @@ void R_DrawTranslatedColumn (void)
     frac = dc_texturemid + (dc_yl-centery)*fracstep; 
 
     // Here we do an additional index re-mapping.
-    do 
+    // hotfix: apply same non-pow2/pow2 wrap as R_DrawColumn so translated
+    // player sprites don't clone-stamp and don't OOB-read.
+    if (dc_texheight & (dc_texheight - 1))
     {
-	// Translation tables are used
-	//  to map certain colorramps to other ones,
-	//  used with PLAY sprites.
-	// Thus the "green" ramp of the player 0 sprite
-	//  is mapped to gray, red, black/indigo. 
-	*dest = dc_colormap[dc_translation[dc_source[frac>>FRACBITS]]];
-	dest += SCREENWIDTH;
-	
-	frac += fracstep; 
-    } while (count--); 
+        const fixed_t heightmask = dc_texheight << FRACBITS;
+        if (frac < 0)
+            while ((frac += heightmask) < 0);
+        else
+            while (frac >= heightmask) frac -= heightmask;
+
+        do
+        {
+            *dest = dc_colormap[dc_translation[dc_source[frac >> FRACBITS]]];
+            dest += SCREENWIDTH;
+            if ((frac += fracstep) >= heightmask)
+                frac -= heightmask;
+        } while (count--);
+    }
+    else
+    {
+        const unsigned mask = (unsigned)(dc_texheight - 1);
+        do
+        {
+            // Translation tables are used
+            //  to map certain colorramps to other ones,
+            //  used with PLAY sprites.
+            // Thus the "green" ramp of the player 0 sprite
+            //  is mapped to gray, red, black/indigo.
+            *dest = dc_colormap[dc_translation[dc_source[(frac>>FRACBITS)&mask]]];
+            dest += SCREENWIDTH;
+            frac += fracstep;
+        } while (count--);
+    }
 } 
 
 

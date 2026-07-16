@@ -379,14 +379,16 @@ void R_DrawMaskedColumn (column_t* column)
 	    dc_texturemid = basetexturemid - (column->topdelta<<FRACBITS);
 	    // dc_source = (byte *)column + 3 - column->topdelta;
 
-	    // webdoom (task 3.2, refs task 3.1): pin the column-height mask to
-	    //   the actual post length so R_DrawColumn never reads past this post's
-	    //   pixel data.  When the post top is off-screen, frac at dc_yl can be
-	    //   negative; (negative & (length-1)) wraps to [0, length-1] by
-	    //   two's-complement, keeping the read within the post's bytes.
-	    //   length=0 is impossible for valid posts (topdelta != 0xFF guard
-	    //   above), but guard with |1 to avoid mask = -1.
-	    dc_texheight = column->length | 1;
+	    // webdoom (task 3.2 refs 3.1, corrected by hotfix): pin dc_texheight
+	    //   to the actual post length so R_DrawColumn uses the right wrap.
+	    //   The |1 guard was needed to avoid mask=-1 in the old `& mask` path
+	    //   when length happened to be a power of 2 minus 1 (or 0 — impossible
+	    //   for valid posts, but defensive).  With the new pow2/non-pow2
+	    //   dispatch in R_DrawColumn* the `& mask` path is only taken for
+	    //   power-of-2 heights (walls); sprites go through the true-modulo path
+	    //   which uses heightmask = length<<FRACBITS, so length=0 is guarded by
+	    //   the dc_yl<=dc_yh early-exit above (no pixels to draw).  Drop |1.
+	    dc_texheight = column->length;
 
 	    // Drawn by either R_DrawColumn
 	    //  or (SHADOW) R_DrawFuzzColumn.
