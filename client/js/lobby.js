@@ -73,7 +73,7 @@ function returnToMenu() {
     roster = null;
     ipSummary = null; ipSlot = -1;
     fire?.resume();   // restart fire now that we are back on the launcher
-    fire?.flare();    // brief intensity lift on return to menu
+    // flare is triggered by menu.reset() → onTransition('reset') below
     menu.show();
     menu.reset(rootScreen());
 }
@@ -99,7 +99,7 @@ function spGameScreen() {
                 // the booted guard and bring the menu back to the root screen.
                 booted = false;
                 fire?.resume();
-                fire?.flare();
+                // flare triggered by menu.reset() → onTransition('reset')
                 menu.show();
                 menu.reset(rootScreen());
                 status(String(err));
@@ -179,7 +179,7 @@ function enterMultiplayer() {
                 booted = false;
                 countdown.reset();
                 fire?.resume();
-                fire?.flare();
+                // flare triggered by menu.reset() → onTransition('reset')
                 menu.show();
                 menu.reset(rootScreen());
                 if (lobby) { lobby.close(); lobby = null; }
@@ -414,7 +414,7 @@ function leaveLobby() {
     roster = null;
     ipSummary = null; ipSlot = -1;
     countdown.reset();          // guard T25: dismiss countdown if user ESCs mid-countdown
-    fire?.flare();
+    // flare triggered by menu.reset() → onTransition('reset')
     menu.reset(rootScreen());
 }
 
@@ -433,7 +433,17 @@ function leaveLobby() {
     try {
         manifest = (await (await fetch('/api/wads')).json()).wads;
         font = await loadDoomFont();
-        menu = createMenu(font, $('landing'));
+        // onTransition: single hook for every real screen change in the launcher
+        // menu. Full-flare (peak 36) on return-to-root; subtle nav flare (peak 28)
+        // for push/back between sub-screens. fire is initialized below; the closure
+        // captures the module-scope variable by reference so it will be set by the
+        // time any transition fires. fire?.flare() is a no-op while paused (in-game).
+        menu = createMenu(font, $('landing'), {
+            onTransition(type) {
+                if (type === 'reset') fire?.flare();    // full arrival flare at root
+                else                  fire?.flare(28);  // subtle between-screen flare
+            },
+        });
         countdown = createCountdown(font, $('countdown'));
     } catch (err) {
         console.error(err);
@@ -452,7 +462,6 @@ function leaveLobby() {
         else if (!booted) fire.resume();
     });
 
-    menu.reset(rootScreen());
-    fire.flare();   // initial flare as the launcher appears
+    menu.reset(rootScreen());   // triggers onTransition('reset') → fire.flare()
     status('');
 })();

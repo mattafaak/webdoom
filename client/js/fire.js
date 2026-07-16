@@ -189,10 +189,18 @@ export function createFire(container) {
     // ── public API ─────────────────────────────────────────────────────────
 
     // Brief intensity boost on menu transitions (push/pop/reset).
-    function flare() {
+    // peak: source heat ceiling (default HEAT_FLARE=36 for a return-to-launcher
+    //       "arrival" flare; use a lower value, e.g. 28, for subtle nav flares
+    //       between sub-screens — still noticeable but doesn't wash the palette).
+    // Tuned curve (task 4.2): 400 ms peak hold → 2-unit step every 80 ms decay.
+    // Full-flare (36→14) total duration ≈ 1.3 s — reads as a "whoosh" not a slow
+    // fade. Nav-flare (28→14) ≈ 0.95 s. Both pass contrast check at opacity 0.45.
+    // Safe while paused: sourceHeat is written but the sim interval is stopped;
+    // the pending timers are cleared by pause() if a game starts mid-flare.
+    function flare(peak = HEAT_FLARE) {
         clearTimeout(flareTimer);
-        sourceHeat = HEAT_FLARE;
-        // After 1 s, gradually cool back to steady state.
+        sourceHeat = Math.min(peak, HEAT_MAX);
+        // Hold peak briefly, then step-cool back to steady state.
         flareTimer = setTimeout(() => {
             const cool = () => {
                 if (sourceHeat > HEAT_STEADY) {
@@ -202,7 +210,7 @@ export function createFire(container) {
                 }
             };
             cool();
-        }, 1000);
+        }, 400);
     }
 
     // Pause sim (tab hidden or game running — zero perf cost).

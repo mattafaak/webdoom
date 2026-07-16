@@ -148,6 +148,38 @@ await sleep(200);
 
 console.log('(d) PASS — SP button present and clickable; menu navigation works');
 
+// ── (f) Flare-peak contrast: menu text readable at peak flare ─────────────────
+// Trigger a full flare (peak=36, the brightest state) directly via the API,
+// then screenshot within ~80 ms while the fire is still at peak heat.
+// Readability check: the menu rows must still be present in the DOM and
+// non-empty (they are canvas-rendered text, so pixel-level luma analysis is
+// not practical here; structural presence + passing the CDP screenshot to the
+// caller for human vibe review is the agreed gate).
+await evaluate(`window._fireBg?.flare(36)`);
+await sleep(80);   // capture near peak — before any cooldown kicks in (hold is 400 ms)
+
+const menuRowsAtPeak = await evaluate(
+    `document.querySelectorAll('#dmenu .row').length`);
+if (!menuRowsAtPeak) fail('menu rows absent at flare peak — text not visible during flare');
+
+// Opacity sanity: the fire canvas must retain opacity ≤ 0.45 (contract from 4.1
+// spec — no CSS opacity changes during flare; brightness comes from sim only).
+const fireOpacity = await evaluate(`(() => {
+    const c = document.getElementById('fire-bg');
+    return c ? parseFloat(getComputedStyle(c).opacity) : null;
+})()`);
+if (fireOpacity !== null && fireOpacity > 0.46) {
+    fail(`fire opacity at peak is ${fireOpacity} — exceeds 0.45 contrast-safe ceiling`);
+}
+
+const { result: peakResult } = await cdp('Page.captureScreenshot', { format: 'png' });
+const peakShotPath = join(outdir, 'fire-flare-peak.png');
+writeFileSync(peakShotPath, Buffer.from(peakResult.data, 'base64'));
+console.log(`(f) PASS — menu has ${menuRowsAtPeak} rows at flare peak; opacity=${fireOpacity ?? 'n/a'}; screenshot: ${peakShotPath}`);
+
+// Let fire cool back to steady before remaining checks.
+await sleep(600);
+
 // ── (e) Perf probe ────────────────────────────────────────────────────────────
 // Use the batch benchmark (_benchMs) to bypass Chrome's 0.1ms precision floor.
 // 200 back-to-back ticks amortise the measurement error to ~0.0005ms.
@@ -187,7 +219,7 @@ await evaluate(`window._fireBg?.resume()`);
 const { result } = await cdp('Page.captureScreenshot', { format: 'png' });
 const shotPath = join(outdir, 'fire-bg-landing.png');
 writeFileSync(shotPath, Buffer.from(result.data, 'base64'));
-console.log(`screenshot: ${shotPath}`);
+console.log(`screenshot (steady state): ${shotPath}`);
 
 console.log('PASS — all fire background assertions passed');
 cleanup(0);

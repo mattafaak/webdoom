@@ -3,7 +3,15 @@
 // hover/click, and inline text entry for names. Screens are plain data:
 //   { title?: string|{patch}, header?: [{text, color}] roster line,
 //     items: [{ label, color?, action?, entry? }], onBack? }
-export function createMenu(font, host) {
+// opts.onTransition(type): optional callback fired on every real screen change.
+//   type: 'push' (descending), 'back' (popping/unwinding), 'reset' (full replace).
+//   Called AFTER the stack is mutated, BEFORE render(). Cursor-within-screen
+//   events (ArrowUp/Down, refresh) do NOT trigger this — only actual screen
+//   changes do, so it is safe to call fire.flare() here without over-triggering.
+//   fire.flare() while paused (in-game) is harmless: sim is stopped, and
+//   pause() clears any pending timers if a flare was in flight.
+export function createMenu(font, host, opts = {}) {
+    const { onTransition } = opts;
     const root = document.createElement('div');
     root.id = 'dmenu';
     host.appendChild(root);
@@ -150,10 +158,13 @@ export function createMenu(font, host) {
     function back() {
         if (stack.length <= 1) return;
         // a screen with onBack owns its exit (e.g. leaving the lobby
-        // resets to root); plain screens just pop one level
+        // resets to root); plain screens just pop one level.
+        // onBack handlers (leaveLobby) call menu.reset() themselves,
+        // which fires onTransition('reset') — no need to fire here too.
         if (screen().onBack) { screen().onBack(); return; }
         stack.pop();
         sel = screen().sel ?? 0;
+        onTransition?.('back');
         render();
     }
 
@@ -203,16 +214,23 @@ export function createMenu(font, host) {
 
     return {
         // replace the whole stack (initial/root screen)
-        reset(s) { stack.length = 0; stack.push(s); sel = 0; entry = null; render(); },
+        reset(s) { stack.length = 0; stack.push(s); sel = 0; entry = null; onTransition?.('reset'); render(); },
         // descend into a screen
-        push(s) { if (screen()) screen().sel = sel; stack.push(s); sel = 0; entry = null; render(); },
+        push(s) { if (screen()) screen().sel = sel; stack.push(s); sel = 0; entry = null; onTransition?.('push'); render(); },
         pop: back,
-        // re-render current screen after data changes (roster updates)
+        // re-render current screen after data changes (roster updates — NOT a
+        // screen transition; no flare, no onTransition)
         refresh(s) { if (s) stack[stack.length - 1] = s; if (sel >= screen().items.length) sel = 0; render(); },
         hide() { hidden = true; render(); },
         show() { hidden = false; render(); },
         // pop n screens without onBack side effects (picker flows)
-        unwind(n = 1) { while (n-- > 0 && stack.length > 1) stack.pop(); sel = screen().sel ?? 0; render(); },
+        unwind(n = 1) {
+            let changed = 0;
+            while (n-- > 0 && stack.length > 1) { stack.pop(); changed++; }
+            sel = screen().sel ?? 0;
+            if (changed) onTransition?.('back');
+            render();
+        },
         depth: () => stack.length,
         current: () => screen(),
     };
