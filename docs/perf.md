@@ -594,9 +594,24 @@ at a far higher rate than the 1.36 MB non-purgeable HWM suggests.
 
 Master (0bb3a9c) passes all 13 render goldens pixel-identical on a clean build.
 The task 2.5 candidate likewise passes 13/13 render on a clean build (confirmed
-by bisecting: the only change that shifted render output was a new BSS global,
-which exposed a latent alignment-sensitivity in the R_DrawColumn unroll from
-task 2.2; removing the new global restored 13/13).
+by bisecting: the only change that shifted render output was a new BSS global;
+removing the new global restored 13/13).
+
+**Lead follow-up experiments (post-review, on master)** — the initial bisect
+blamed the task 2.2 R_DrawColumn unroll; that attribution is WRONG. Two
+controlled experiments settle it: (1) master + a 16-byte BSS probe global
+(`__heap_base` 5,461,072 → 5,461,088) fails the SAME three render goldens at
+the SAME tics (tnt-demo1 tic 1684, plutonia-demo1 tic 5909, plutonia-demo3
+tic 1469); (2) the same probed build with `r_draw.c` reverted wholesale to
+pre-2.2 (035ceaa) STILL fails identically. The heap-layout sensitivity
+therefore predates task 2.2 and lives elsewhere in the engine — signature
+consistent with a vanilla-inherited out-of-window texture read
+(Tutti-Frutti/Medusa family) whose overrun bytes depend on heap layout.
+**Consequence: the render goldens are LAYOUT-PINNED** — any change that
+grows/shrinks BSS or shifts allocations will spuriously fail exactly these
+three goldens without any real render change. Treat such a failure as a
+layout shift first; root-cause hunt assigned to task 3.1 (a native ASan
+demo run will pinpoint the exact OOB read).
 
 **Hypothesis for 4 MB / 8 MB render failures (recorded for task 3.1/3.2)**:
 The pixel divergences at small zone sizes are consistent with a PU_CACHE
@@ -639,9 +654,10 @@ actual texture cache peak with `-nodraw` off before committing a reduction.
   proven.  All gates pass on a clean build: sim 13/13, render 13/13, net 2p+4p.
 - **Note on purge counter**: an instrumentation counter (`web_zone_purge_events`)
   was prototyped but removed.  Any new BSS global shifts the wasm `__heap_base`
-  by 16 bytes (alignment padding), which alters all zone allocation addresses and
-  exposes a latent alignment-sensitivity in the R_DrawColumn unroll (task 2.2),
-  causing render pixel divergences.  The purge measurement data above was obtained
+  by 16 bytes (alignment padding), which alters all allocation addresses and
+  trips the pre-existing heap-layout sensitivity described above (NOT a task
+  2.2 artifact — see the lead follow-up experiments), spuriously failing three
+  layout-pinned render goldens.  The purge measurement data above was obtained
   from a separate experimental build.  If a persistent purge counter is needed,
   it must be stored without adding to BSS (e.g., inside `memzone_t` header bytes
   that don't affect the first free block offset, or in JS-side tracking).
