@@ -1,0 +1,254 @@
+# Claims Index
+
+Every quantitative claim in the five core documentation files, mapped to a
+reproducing script or flagged `needs-verifier`.  Task 6.2 writes the missing
+verifiers; task 6.3 wires them into `verify-all.sh` and a CI drift-check.
+
+## Taxonomy
+
+| type | meaning |
+|------|---------|
+| `invariant` | Hard number from source code or fixed WAD data; must never change |
+| `measurement` | Obtained by running a tool on a specific host/commit; may drift |
+| `derived` | Arithmetic from other claims; verify the constituent claims first |
+
+## Status
+
+| status | meaning |
+|--------|---------|
+| `verified` | A committed script reproduces it; spot-checked this sprint |
+| `needs-verifier` | No script yet; task 6.2 must write one |
+| `unverifiable` | Cannot be automated (see reason) |
+
+---
+
+## Table
+
+| id | doc:line | claim (short) | value | type | reproducer | status |
+|----|----------|---------------|-------|------|------------|--------|
+| ea-001 | engine-archaeology.md:17 | finesine entries differing from round-nearest | 5,377 / 10,240 | invariant | tools/gen-tables.mjs (correction count = differing entries; needs baseline-without-fix mode) | needs-verifier |
+| ea-002 | engine-archaeology.md:20 | finesine entries where 1993 machine's last bit deviated (escapes) | 33 | invariant | tools/gen-tables.mjs (escape count column) | needs-verifier |
+| ea-003 | engine-archaeology.md:23 | entries covered by boot FNV checksum | 16,385 | invariant | tools/gen-tables.mjs (sum of SIZES constants) | needs-verifier |
+| ea-004 | engine-archaeology.md:41 | random in-domain pairs tested for FixedDiv correctness | 2 × 10⁹ | measurement | tools/archaeology/fixeddiv-microbench.c (iteration count, not built into bench path) | needs-verifier |
+| ea-005 | engine-archaeology.md:41 | adversarial boundary pairs tested for FixedDiv correctness | 1.8 × 10⁶ | measurement | tools/archaeology/fixeddiv-microbench.c | needs-verifier |
+| ea-006 | engine-archaeology.md:42 | FixedDiv mismatches vs reference | 0 | measurement | tools/archaeology/fixeddiv-microbench.c (correctness mode needed) | needs-verifier |
+| ea-007 | engine-archaeology.md:68 | rndtable mean value | 128.85 | invariant | tools/archaeology/prng-crack-full.c (add --stats mode) | needs-verifier |
+| ea-008 | engine-archaeology.md:68 | rndtable distinct values | 166 / 256 | invariant | tools/archaeology/prng-crack-full.c (add --stats mode) | needs-verifier |
+| ea-009 | engine-archaeology.md:68 | rndtable values that never appear | 90 | invariant | tools/archaeology/prng-crack-full.c (add --stats mode) | needs-verifier |
+| ea-010 | engine-archaeology.md:82 | gamma table level-0 residual mismatches | 5 / 256 | invariant | needs-verifier (no gamma verifier exists) | needs-verifier |
+| ea-011 | engine-archaeology.md:82 | gamma table level-1 residual mismatches | 34 / 256 | invariant | needs-verifier | needs-verifier |
+| ea-012 | engine-archaeology.md:82 | gamma table level-2 residual mismatches | 36 / 256 | invariant | needs-verifier | needs-verifier |
+| ea-013 | engine-archaeology.md:82 | gamma table level-3 residual mismatches | 41 / 256 | invariant | needs-verifier | needs-verifier |
+| ea-014 | engine-archaeology.md:82 | gamma table level-4 residual mismatches | 51 / 256 | invariant | needs-verifier | needs-verifier |
+| ea-015 | engine-archaeology.md:100 | P_AproxDistance max relative error (at 26.6°) | +11.8% | invariant | needs-verifier (no error-sweep script) | needs-verifier |
+| ea-016 | engine-archaeology.md:100 | P_AproxDistance relative error at 45° | +6.1% | invariant | needs-verifier | needs-verifier |
+| ea-017 | engine-archaeology.md:100 | P_AproxDistance relative error on cardinal axes | 0% | invariant | needs-verifier | needs-verifier |
+| ea-018 | engine-archaeology.md:127 | COLORMAP matches using Euclidean round-nearest | 0 mismatches / 8,192 | measurement | tools/archaeology/colormap-crack.c | verified |
+| ea-019 | engine-archaeology.md:127 | COLORMAP mismatches with truncation instead of round | 313 | measurement | tools/archaeology/colormap-crack.c | verified |
+| ea-020 | engine-archaeology.md:128 | COLORMAP mismatches with (31−L)/31 scale recipe | 2,373 | measurement | tools/archaeology/colormap-crack.c | verified |
+| ea-021 | engine-archaeology.md:127 | COLORMAP mismatches with Manhattan distance | 1,200+ | measurement | tools/archaeology/colormap-crack.c | verified |
+| ea-022 | engine-archaeology.md:130 | COLORMAP map-0 identity entries | 249 / 256 | invariant | tools/archaeology/colormap-crack.c (map-0 identity check) | needs-verifier |
+| ea-023 | engine-archaeology.md:137 | invuln COLORMAP map-32 matching entries (doc value — see FINDING-1) | 242 / 256 | measurement | tools/archaeology/colormap-invuln-crack.c (reports 15 mismatches → 241/256 match) | verified |
+| ea-024 | engine-archaeology.md:137 | invuln COLORMAP tie-break count in gray ramp | 15 | measurement | tools/archaeology/colormap-invuln-crack.c | verified |
+| ea-025 | engine-archaeology.md:139 | invuln luma weight sum (76 + 152 + 34) | 262 | derived | arithmetic: 76+152+34=262 | verified |
+| ea-026 | engine-archaeology.md:139 | invuln entries missed by standard ITU luma weights | 92 | measurement | tools/archaeology/colormap-invuln-crack.c | verified |
+| ea-027 | engine-archaeology.md:222 | checkcoord boundary-clamp test cases | 9 / 9 PASS | invariant | tools/archaeology/checkcoord-verify.mjs | verified |
+| ea-028 | engine-archaeology.md:222 | DISTMAP/MAXLIGHTZ world-unit range covered | 16 to 2,048 | invariant | tools/archaeology/zlight-distmap.mjs | verified |
+| ea-029 | engine-archaeology.md:775 | total ledger rows | 40 | measurement | tools/archaeology/ledger-count.mjs | verified |
+| ea-030 | engine-archaeology.md:775 | ledger recipe-class rows | 5 | derived | ledger-count.mjs category total | verified |
+| ea-031 | engine-archaeology.md:775 | ledger equivalence-class rows | 4 | derived | ledger-count.mjs category total | verified |
+| ea-032 | engine-archaeology.md:775 | ledger irreducible-class rows | 17 | derived | ledger-count.mjs category total | verified |
+| ea-033 | engine-archaeology.md:775 | ledger declarative-class rows | 14 | derived | ledger-count.mjs category total | verified |
+| ea-034 | engine-archaeology.md:§microbench | FixedDiv double path on i9-12900K (alder) | 419 ms / 2×10⁸ iters | measurement | tools/bench-baseline.json (v1.primitiveMicrobench) | verified |
+| ea-035 | engine-archaeology.md:§microbench | FixedDiv double path on Cortex-A76 (pi5) | 754 ms | measurement | tools/bench-baseline.json (v1.primitiveMicrobench) | verified |
+| ea-036 | engine-archaeology.md:§microbench | FixedDiv double path on AMD G-T56N (wbox) | 12,304 ms | measurement | tools/bench-baseline.json (v1.primitiveMicrobench) | verified |
+| ea-037 | engine-archaeology.md:§microbench | FixedDiv double path on i5-8350U (tank) | 964 ms | measurement | tools/bench-baseline.json (v1.primitiveMicrobench) | verified |
+| ea-038 | engine-archaeology.md:§microbench | FixedDiv int64 path on i9-12900K (alder) | 403 ms | measurement | tools/bench-baseline.json (v1.primitiveMicrobench) | verified |
+| ea-039 | engine-archaeology.md:§microbench | FixedDiv int64 path on Cortex-A76 (pi5) | 630 ms | measurement | tools/bench-baseline.json (v1.primitiveMicrobench) | verified |
+| ea-040 | engine-archaeology.md:§microbench | FixedDiv int64 path on AMD G-T56N (wbox) | 13,054 ms | measurement | tools/bench-baseline.json (v1.primitiveMicrobench) | verified |
+| ea-041 | engine-archaeology.md:§microbench | FixedDiv int64 path on i5-8350U (tank) | 2,725 ms | measurement | tools/bench-baseline.json (v1.primitiveMicrobench) | verified |
+| rdr-001 | renderer.md:267 | MAXSEGS (solidsegs) in vanilla DOOM | 32 | invariant | grep MAXSEGS engine/core/r_bsp.c | needs-verifier |
+| rdr-002 | renderer.md:267 | MAXSEGS (solidsegs) in webdoom | 64 | invariant | grep MAXSEGS engine/core/r_bsp.c | needs-verifier |
+| rdr-003 | renderer.md:416 | MAXOPENINGS in vanilla (SCREENWIDTH × 64) | 20,480 | invariant | grep MAXOPENINGS engine/core/r_plane.c | needs-verifier |
+| rdr-004 | renderer.md:405 | MAXOPENINGS in webdoom (SCREENWIDTH × 256) | 81,920 | invariant | grep MAXOPENINGS engine/core/r_plane.c | needs-verifier |
+| rdr-005 | renderer.md:549 | MAXVISPLANES in vanilla DOOM | 128 | invariant | grep MAXVISPLANES engine/core/r_plane.c | needs-verifier |
+| rdr-006 | renderer.md:554 | MAXVISPLANES in webdoom | 1,024 | invariant | grep MAXVISPLANES engine/core/r_plane.c | needs-verifier |
+| rdr-007 | renderer.md:1003 | MAXDRAWSEGS in vanilla DOOM | 256 | invariant | grep MAXDRAWSEGS engine/core/r_defs.h | needs-verifier |
+| rdr-008 | renderer.md:1003 | MAXDRAWSEGS in webdoom | 2,048 | invariant | grep MAXDRAWSEGS engine/core/r_defs.h | needs-verifier |
+| rdr-009 | renderer.md:1003 | MAXVISSPRITES in vanilla DOOM | 128 | invariant | grep MAXVISSPRITES engine/core/r_things.h | needs-verifier |
+| rdr-010 | renderer.md:1004 | MAXVISSPRITES in webdoom | 1,024 | invariant | grep MAXVISSPRITES engine/core/r_things.h | needs-verifier |
+| rdr-011 | renderer.md:983 | ANGLETOSKYSHIFT | 22 | invariant | grep ANGLETOSKYSHIFT engine/core/r_sky.h | needs-verifier |
+| rdr-012 | renderer.md:984 | sky texture repetitions around 360° (2³² / 2²²) | 4 | derived | arithmetic: 2^32/2^22=1024 fine-angle steps, 4 repeats of 256-col texture | verified |
+| ps-001 | playsim.md:312 | MAXSPECIALCROSS in vanilla DOOM | 8 | invariant | grep MAXSPECIALCROSS engine/core/p_local.h | needs-verifier |
+| ps-002 | playsim.md:307 | MAXSPECIALCROSS in webdoom | 64 | invariant | grep MAXSPECIALCROSS engine/core/p_local.h | needs-verifier |
+| ps-003 | playsim.md:329 | peak numspechit across all 13 golden demos | 8 (tnt-demo2 MAP12) | measurement | instrumented run (stat removed); no current script | needs-verifier |
+| ps-004 | playsim.md:392 | MAXINTERCEPTS | 128 | invariant | grep MAXINTERCEPTS engine/core/p_maputl.c | needs-verifier |
+| ps-005 | playsim.md:421 | peak intercept count across all 13 golden demos | 45 (plutonia-demo3 MAP12) | measurement | instrumented run (stat removed); no current script | needs-verifier |
+| ps-006 | playsim.md:152 | BACKUPTICS | 35 | invariant | grep BACKUPTICS engine/core/g_game.c | needs-verifier |
+| ps-007 | playsim.md:901 | SAVEGAMESIZE in vanilla (0x2C000) | 180,224 bytes | invariant | grep 0x2c000 (historical reference only; doc describes removed vanilla value) | needs-verifier |
+| ps-008 | playsim.md:898 | SAVEGAMESIZE in webdoom (0x80000) | 524,288 bytes | invariant | grep SAVEGAMESIZE engine/core/g_game.c | needs-verifier |
+| ps-009 | playsim.md:1005 | MAX_DEATHMATCH_STARTS | 10 | invariant | grep MAX_DEATHMATCH_STARTS engine/core/p_inter.c | needs-verifier |
+| ps-010 | playsim.md:692 | MAXHEALTH | 100 | invariant | grep MAXHEALTH engine/core/p_local.h | needs-verifier |
+| ps-011 | playsim.md:703 | BONUSADD | 6 | invariant | grep BONUSADD engine/core/p_inter.c | needs-verifier |
+| ps-012 | playsim.md:544 | FLOATSPEED | 4 × FRACUNIT | invariant | grep FLOATSPEED engine/core/p_mobj.c | needs-verifier |
+| ps-013 | playsim.md:756 | forwardmove table | {25, 50} map-units/tic | invariant | grep forwardmove engine/core/g_game.c | needs-verifier |
+| ps-014 | playsim.md:756 | sidemove table | {24, 40} map-units/tic | invariant | grep sidemove engine/core/g_game.c | needs-verifier |
+| ps-015 | playsim.md:757 | angleturn table | {640, 1280, 320} | invariant | grep angleturn engine/core/g_game.c | needs-verifier |
+| ps-016 | playsim.md:374 | STOPSPEED | 0x1000 | invariant | grep STOPSPEED engine/core/p_mobj.c | needs-verifier |
+| ps-017 | playsim.md:375 | FRICTION | 0xE800 | invariant | grep FRICTION engine/core/p_mobj.c | needs-verifier |
+| ps-018 | playsim.md:624 | diagonal full-speed magnitude | ~47,000 (≈ 0.717 × FRACUNIT) | derived | arithmetic from forwardmove[1]=50: sqrt(50²+50²)×65536≈4,643,892/65536≈70.8 — see note | needs-verifier |
+| ps-019 | playsim.md:265 | A_Chase max players checked per call | 2 | invariant | grep A_Chase engine/core/p_enemy.c | needs-verifier |
+| ps-020 | playsim.md:735 | GLOWSPEED (light level units per tic) | 8 | invariant | grep GLOWSPEED engine/core/p_spec.h | needs-verifier |
+| ps-021 | playsim.md:736 | STROBEBRIGHT (tics at max brightness) | 5 | invariant | grep STROBEBRIGHT engine/core/p_spec.h | needs-verifier |
+| ps-022 | playsim.md:737 | FASTDARK (tics at min brightness, fast strobe) | 15 | invariant | grep FASTDARK engine/core/p_spec.h | needs-verifier |
+| ps-023 | playsim.md:738 | SLOWDARK (tics at min brightness, slow strobe) | 35 | invariant | grep SLOWDARK engine/core/p_spec.h | needs-verifier |
+| ps-024 | playsim.md:566 | nightmare respawn minimum delay | 12 × 35 = 420 tics | derived | arithmetic: 12s × 35 Hz = 420 | verified |
+| ps-025 | playsim.md:1561 | MAXPLATS | 30 | invariant | grep MAXPLATS engine/core/p_plats.c | needs-verifier |
+| ps-026 | playsim.md:1562 | MAXBUTTONS | 16 | invariant | grep MAXBUTTONS engine/core/p_switch.c | needs-verifier |
+| ps-027 | playsim.md:1623 | QUEUESIZE (chat ring buffer) | 128 | invariant | grep QUEUESIZE engine/core/hu_stuff.c | needs-verifier |
+| ps-028 | playsim.md:1623 | HU_MAXLINELENGTH (text line limit incl. NUL) | 81 | invariant | grep HU_MAXLINELENGTH engine/core/hu_lib.c | needs-verifier |
+| ps-029 | playsim.md:1110 | teleport calls in doom-demo3 (E3M5) | 3 | measurement | instrumented demo run; no current script | needs-verifier |
+| ps-030 | playsim.md:1111 | teleport calls in doom2-demo3 (MAP26) | 5 | measurement | instrumented demo run; no current script | needs-verifier |
+| ps-031 | playsim.md:1112 | teleport calls in plutonia-demo1 (MAP17) | 23 | measurement | instrumented demo run; no current script | needs-verifier |
+| ps-032 | playsim.md:1113 | teleport calls in plutonia-demo3 (MAP12) | 1 | measurement | instrumented demo run; no current script | needs-verifier |
+| ps-033 | playsim.md:1115 | doom-demo1 total tics (E1M5) | 1,710 | measurement | bench.mjs reports 1,709 frames (see FINDING-2) | needs-verifier |
+| ps-034 | playsim.md:1116 | doom-demo4 total tics (E4M2) | 818 | measurement | no current script counts demo4 tics | needs-verifier |
+| ps-035 | playsim.md:1117 | total teleport calls across all 13 golden demos | 32 | derived | arithmetic: 3+5+23+1=32 (from ps-029..032) | needs-verifier |
+| fmt-001 | formats.md:1106 | doom.wad numlumps | 2,306 | invariant | Python: open("doom.wad","rb"); struct.unpack_from("<i",d,4) | needs-verifier |
+| fmt-002 | formats.md:340 | E1M1 sector count | 88 | invariant | WAD lump size reader (needs-verifier tool) | needs-verifier |
+| fmt-003 | formats.md:340 | E1M1 REJECT lump size | 968 bytes | derived | ceil(88×88/8) = 968 | verified |
+| fmt-004 | formats.md:375 | E1M1 BLOCKMAP origin X | −776 | invariant | WAD lump reader on E1M1 BLOCKMAP | needs-verifier |
+| fmt-005 | formats.md:375 | E1M1 BLOCKMAP origin Y | −4,872 | invariant | WAD lump reader on E1M1 BLOCKMAP | needs-verifier |
+| fmt-006 | formats.md:375 | E1M1 BLOCKMAP width (in 128-unit blocks) | 36 | invariant | WAD lump reader on E1M1 BLOCKMAP | needs-verifier |
+| fmt-007 | formats.md:375 | E1M1 BLOCKMAP height | 23 | invariant | WAD lump reader on E1M1 BLOCKMAP | needs-verifier |
+| fmt-008 | formats.md:375 | E1M1 BLOCKMAP offset-table entries | 828 | invariant | WAD lump reader on E1M1 BLOCKMAP | needs-verifier |
+| fmt-009 | formats.md:293 | E1M1 node count | 238 | invariant | WAD lump size / sizeof(mapnode_t) | needs-verifier |
+| fmt-010 | formats.md:293 | E1M1 child references using NF_SUBSECTOR | 239 / 476 | measurement | WAD node walker | needs-verifier |
+| fmt-011 | formats.md:737 | DSPISTOL DMX format_id | 3 | invariant | WAD lump reader DSPISTOL[0..1] | needs-verifier |
+| fmt-012 | formats.md:738 | DSPISTOL sample rate | 11,025 Hz | invariant | WAD lump reader DSPISTOL[2..3] | needs-verifier |
+| fmt-013 | formats.md:1116 | DSPISTOL num_samples field | 5,661 | invariant | WAD lump reader DSPISTOL[4..7] | needs-verifier |
+| fmt-014 | formats.md:1116 | DSPISTOL real sample count (num_samples − 32 pads) | 5,629 | derived | 5,661 − 32 = 5,629 | verified |
+| fmt-015 | formats.md:1116 | DSPISTOL lump size (8 header + num_samples) | 5,669 | derived | 8 + 5,661 = 5,669 | verified |
+| fmt-016 | formats.md:799 | D_E1M1 MUS scorelen | 17,237 | invariant | WAD lump reader D_E1M1[6..9] | needs-verifier |
+| fmt-017 | formats.md:799 | D_E1M1 MUS scorestart | 46 | invariant | WAD lump reader D_E1M1[10..11] | needs-verifier |
+| fmt-018 | formats.md:799 | D_E1M1 MUS channel count (primary) | 3 (sec_ch=0) | invariant | WAD lump reader D_E1M1[12..13] | needs-verifier |
+| fmt-019 | formats.md:799 | D_E1M1 MUS instrument count | 15 | invariant | WAD lump reader D_E1M1[14..15] | needs-verifier |
+| fmt-020 | formats.md:799 | D_E1M1 MUS total bytes (scorestart + scorelen) | 17,283 | derived | 46 + 17,237 = 17,283 | verified |
+| fmt-021 | formats.md:844 | MUS_RATE (engine tic rate for MUS playback) | 140 Hz | invariant | grep MUS_RATE engine/web/mus_opl.c | needs-verifier |
+| fmt-022 | formats.md:879 | GENMIDI lump size | 11,908 bytes | invariant | WAD lump reader GENMIDI size | needs-verifier |
+| fmt-023 | formats.md:863 | GENMIDI instrument count | 175 (128 melodic + 47 perc) | invariant | WAD lump reader GENMIDI[0..7] header | needs-verifier |
+| fmt-024 | formats.md:882 | genmidi_instr_t struct size | 36 bytes | invariant | sizeof check or grep in mus_opl.c | needs-verifier |
+| fmt-025 | formats.md:448 | PLAYPAL total size (14 palettes × 768 bytes) | 10,752 bytes | derived | 14 × 768 = 10,752 | verified |
+| fmt-026 | formats.md:464 | COLORMAP total size (34 tables × 256 bytes) | 8,704 bytes | derived | 34 × 256 = 8,704 | verified |
+| fmt-027 | formats.md:523 | ENDOOM size (80 × 25 × 2) | 4,000 bytes | derived | 80×25×2 = 4,000 | verified |
+| fmt-028 | formats.md:1126 | PNAMES entry count | 351 | invariant | WAD lump reader PNAMES[0..3] | needs-verifier |
+| fmt-029 | formats.md:1126 | PNAMES lump size (4 + 351 × 8) | 2,812 bytes | derived | 4 + 351×8 = 2,812 | verified |
+| fmt-030 | formats.md:1127 | TEXTURE1 texture count (doom.wad) | 125 | invariant | WAD lump reader TEXTURE1[0..3] | needs-verifier |
+| fmt-031 | formats.md:554 | demo header total size | 13 bytes | invariant | grep demo header layout in formats.md §4 | needs-verifier |
+| fmt-032 | formats.md:720 | save slot count | 6 (doomsav0–doomsav5) | invariant | grep doomsav engine/core/g_game.c | needs-verifier |
+| fmt-033 | formats.md:764 | DMX lead-in / lead-out pad size | 16 bytes each | invariant | grep SAMPLEPADDING or DMX source | needs-verifier |
+| fmt-034 | formats.md:804 | MUS percussion channel | 15 | invariant | grep MUS_PERCUSSION or see mus_opl.c | needs-verifier |
+| perf-001 | perf.md:32 | wasm binary total size (commit 6de6256) | 357,978 bytes | measurement | wc -c build/doom.wasm (commit-pinned) | needs-verifier |
+| perf-002 | perf.md:29 | wasm CODE section size (commit 6de6256) | 281,277 bytes | measurement | llvm-objdump -h doom.wasm or wasm-objdump | needs-verifier |
+| perf-003 | perf.md:30 | wasm DATA section size (commit 6de6256) | 75,283 bytes | measurement | llvm-objdump -h doom.wasm | needs-verifier |
+| perf-004 | perf.md:32 | wasm gzip-9 compressed size (commit 6de6256) | 145,990 bytes | measurement | gzip -9kc doom.wasm | wc -c | needs-verifier |
+| perf-005 | perf.md:39 | doom.js gzip-9 compressed size | 3,514 bytes | measurement | gzip -9kc doom.js | wc -c | needs-verifier |
+| perf-006 | perf.md:40 | wasm compression ratio (raw / gzip) | 2.45× | derived | 357,978 / 145,990 ≈ 2.45 | verified |
+| perf-007 | perf.md:83 | peak zone HWM across all 13 golden demos | 1.36 MB (plutonia demo3) | measurement | tools/zone-measure.mjs | verified |
+| perf-008 | perf.md:52 | ZONESIZE (hardcoded zone pool) | 32 MB | invariant | grep ZONESIZE engine/web/i_system.c | needs-verifier |
+| perf-009 | perf.md:114 | __heap_base (static data end, heap start) | 5,461,072 bytes | measurement | wasm-objdump -x doom.wasm (globals section) | needs-verifier |
+| perf-010 | perf.md:115 | zone pool malloc size | 33,554,432 bytes | derived | 32 × 1024 × 1024 = 33,554,432 | verified |
+| perf-011 | perf.md:122 | plutonia.wad file size (worst single IWAD) | 17,420,824 bytes | measurement | wc -c plutonia.wad | needs-verifier |
+| perf-012 | perf.md:117 | peak heap address worst-case single IWAD | ~53.82 MB | derived | 5,461,072 + 33,554,432 + 17,420,824 = 56,436,328 B ≈ 53.82 MB | verified |
+| perf-013 | perf.md:118 | headroom vs 64 MB (single IWAD) | ~10.18 MB | derived | 64 MB − 53.82 MB ≈ 10.18 MB | verified |
+| perf-014 | perf.md:131 | INITIAL_MEMORY floor (tested pass/fail boundary) | 56 MB | measurement | emcc -sINITIAL_MEMORY sweep test | needs-verifier |
+| perf-015 | perf.md:174 | all deliverables total gzip-9 wire size | 177.7 KB | measurement | gzip -9 each asset, sum | needs-verifier |
+| perf-016 | perf.md:176 | JS + CSS + HTML gzip-9 total | 35.1 KB | measurement | gzip -9 JS+CSS+HTML assets, sum | needs-verifier |
+| perf-017 | perf.md:208 | bsp+segs avg ms/frame — wbox (3-demo avg) | 0.2625 ms | measurement | tools/bench.mjs + bench-baseline.json | verified |
+| perf-018 | perf.md:208 | bsp+segs avg ms/frame — tank | 0.0549 ms | measurement | tools/bench.mjs + bench-baseline.json | verified |
+| perf-019 | perf.md:208 | bsp+segs avg ms/frame — pi5 | 0.0715 ms | measurement | tools/bench.mjs + bench-baseline.json | verified |
+| perf-020 | perf.md:208 | bsp+segs avg ms/frame — alder | 0.0481 ms | measurement | tools/bench.mjs + bench-baseline.json | verified |
+| perf-021 | perf.md:209 | planes avg ms/frame — wbox | 0.1566 ms | measurement | tools/bench.mjs + bench-baseline.json | verified |
+| perf-022 | perf.md:210 | masked avg ms/frame — wbox | 0.0637 ms | measurement | tools/bench.mjs + bench-baseline.json | verified |
+| perf-023 | perf.md:211 | frame-setup avg ms/frame — wbox | 0.0069 ms | measurement | tools/bench.mjs + bench-baseline.json | verified |
+| perf-024 | perf.md:212 | render total avg ms/frame — wbox | 0.4897 ms | derived | sum of perf-017/021/022/023 | verified |
+| perf-025 | perf.md:213 | sim avg ms/tic — wbox | 0.0706 ms | measurement | tools/bench.mjs + bench-baseline.json | verified |
+| perf-026 | perf.md:250 | wbox render fraction of 35 Hz budget | 1.71% | derived | 0.4897 / 28.571 × 100 | verified |
+| perf-027 | perf.md:258 | wbox sim fraction of 35 Hz budget | 0.25% | derived | 0.0706 / 28.571 × 100 | verified |
+| perf-028 | perf.md:222 | bsp+segs share of wbox render total | 53.6% | derived | 0.2625 / 0.4897 × 100 | verified |
+| perf-029 | perf.md:223 | planes share of wbox render total | 32.0% | derived | 0.1566 / 0.4897 × 100 | verified |
+| perf-030 | perf.md:224 | masked share of wbox render total | 13.0% | derived | 0.0637 / 0.4897 × 100 | verified |
+| perf-031 | perf.md:225 | frame-setup share of wbox render total | 1.4% | derived | 0.0069 / 0.4897 × 100 | verified |
+| perf-032 | perf.md:234 | wbox/alder bsp+segs speed ratio | 5.46× | derived | 0.2625 / 0.0481 ≈ 5.46 | verified |
+| perf-033 | perf.md:409 | total Chocolate Doom tics cross-validated | 44,580 | measurement | external cross-validation run (no current script in repo) | needs-verifier |
+| perf-034 | perf.md:485 | R_DrawColumn calls/frame avg (doom demo1) | 714.8 | measurement | instrumented build (stats removed); no current script | needs-verifier |
+| perf-035 | perf.md:485 | R_DrawColumn avg pixels/call | 47.9 | measurement | instrumented build (stats removed); no current script | needs-verifier |
+| perf-036 | perf.md:485 | R_DrawColumn total pixels/frame | 34,203 | derived | 714.8 × 47.9 ≈ 34,203 | needs-verifier |
+| perf-037 | perf.md:486 | R_DrawSpan calls/frame avg | 147.8 | measurement | instrumented build (stats removed); no current script | needs-verifier |
+| perf-038 | perf.md:486 | R_DrawSpan avg pixels/call | 168.2 | measurement | instrumented build (stats removed); no current script | needs-verifier |
+| perf-039 | perf.md:486 | R_DrawSpan total pixels/frame | 24,854 | derived | 147.8 × 168.2 ≈ 24,854 | needs-verifier |
+| perf-040 | perf.md:526 | task-2.2 unroll-4: bsp+segs improvement (wbox) | −3.5% | measurement | historical experiment (specific commit comparison) | needs-verifier |
+| perf-041 | perf.md:532 | task-2.2 unroll-4: render total improvement (wbox) | −1.5% | measurement | historical experiment (specific commit comparison) | needs-verifier |
+| perf-042 | perf.md:861 | -Os CODE section size reduction vs -O3 | −33.0% | measurement | emcc -Os build + wasm-objdump | needs-verifier |
+| perf-043 | perf.md:863 | -Os gzip-9 wire size reduction | −15.1% | measurement | emcc -Os build + gzip measurement | needs-verifier |
+| perf-044 | perf.md:885 | -Os sim fps regression on wbox | −9.3% | measurement | bench.mjs on -Os build vs -O3 build | needs-verifier |
+| perf-045 | perf.md:722 | visplane R_FindPlane calls/frame — doom demo1 avg | 33.1 | measurement | instrumented build (stats removed); no current script | needs-verifier |
+| perf-046 | perf.md:722 | visplane R_FindPlane iters/frame — doom demo1 avg | 205.2 | measurement | instrumented build (stats removed); no current script | needs-verifier |
+| perf-047 | perf.md:722 | visplane peak count — doom demo1 | 33 | measurement | instrumented build (stats removed); no current script | needs-verifier |
+| perf-048 | perf.md:725 | visplane R_FindPlane calls/frame — tnt demo2 avg | 56.1 | measurement | instrumented build (stats removed); no current script | needs-verifier |
+| perf-049 | perf.md:725 | visplane R_FindPlane iters/frame — tnt demo2 avg | 451.5 | measurement | instrumented build (stats removed); no current script | needs-verifier |
+| perf-050 | perf.md:725 | visplane peak count — tnt demo2 (worst recorded) | 68 | measurement | instrumented build (stats removed); no current script | needs-verifier |
+| perf-051 | perf.md:1055 | PSX fire ms/tick — wbox (G-T56N) | 0.072 ms | measurement | fire.js bench or instrumented JS timing | needs-verifier |
+| perf-052 | perf.md:1053 | PSX fire ms/tick — alder | 0.0078 ms | measurement | fire.js bench or instrumented JS timing | needs-verifier |
+| perf-053 | perf.md:1054 | PSX fire ms/tick — pi5 | 0.0222 ms | measurement | fire.js bench or instrumented JS timing | needs-verifier |
+| perf-054 | perf.md:1057 | PSX fire headroom vs 1 ms budget (wbox) | ~14× | derived | 1.0 / 0.072 ≈ 13.9 ≈ 14 | verified |
+| perf-055 | perf.md:§v1-fps | wbox v1 fps after int64 change | 21,107 tics/s | measurement | bench-baseline.json (v1.frameThroughput.wbox-amd-g-t56n.after) | verified |
+| perf-056 | perf.md:§v1-fps | alder v1 fps (pre-int64, f92fc05) | 204,937 tics/s | measurement | bench-baseline.json (v1.frameThroughput.alder.before) | verified |
+| perf-057 | perf.md:§v1-fps | tank v1 fps (pre-int64) | 105,868 tics/s | measurement | bench-baseline.json (v1.frameThroughput.tank.before) | verified |
+| perf-058 | perf.md:§v1-fps | pi5 v1 fps (pre-int64) | 79,377 tics/s | measurement | bench-baseline.json (v1.frameThroughput.pi5.before) | verified |
+| perf-059 | perf.md:966 | worst PWAD combo peak heap (tnt.wad + tnt31.wad) | 54.83 MB | measurement | wc -c both WADs + arithmetic | needs-verifier |
+| perf-060 | perf.md:978 | headroom vs 64 MB for worst PWAD combo | 9.17 MB | derived | 64 − 54.83 = 9.17 MB | verified |
+
+---
+
+## Summary
+
+**Total claims: 182**
+
+| type | count |
+|------|-------|
+| invariant | 78 |
+| measurement | 71 |
+| derived | 33 |
+
+| status | count |
+|--------|-------|
+| verified | 60 |
+| needs-verifier | 122 |
+| unverifiable | 0 |
+
+Verification coverage: 60 / 182 = **33%** by count. All 122 `needs-verifier`
+entries become tasks for 6.2; all become drift gates in 6.3.
+
+---
+
+## Findings
+
+**FINDING-1 (ea-023): invuln COLORMAP match count — doc says 242/256, script says 241/256.**
+`tools/archaeology/colormap-invuln-crack.c` reports `15/256 mismatches`;
+256 − 15 = 241, not 242. The doc also states "residual 15 are nearest-colour
+tie-breaks", but 242 + 15 = 257 ≠ 256.  The correct value is **241/256**.
+This is an arithmetic error in `engine-archaeology.md:137`.  Fix in a future
+doc-patch task (not in scope for 6.1–6.3).
+
+**FINDING-2 (ps-033): doom-demo1 tic count — doc says 1,710, bench shows 1,709 frames.**
+`tools/bench-baseline.json` (perStage, all four hosts) records `"frames": 1709`
+for demo1.  `playsim.md:1115` claims 1,710 tics.  The discrepancy is one tic;
+likely an off-by-one in how bench.mjs counts rendered frames vs total sim tics.
+Confirm with a dedicated tic-count script (task 6.2).
+
+**NOTE (ps-018): diagonal speed 47,000 is stated as a fixed constant but is
+not obviously derived from the sim constants alone.** The doc's derivation at
+`playsim.md:624` claims ~0.717 × FRACUNIT ≈ 46,998 ≈ 47,000; this is based on
+`sqrt(50² + 40²) × 65536 / FRACUNIT` (strafe+run combination). Task 6.2 should
+write a verifier that checks the measured ticcmd speed against this formula.
