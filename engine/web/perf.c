@@ -3,6 +3,7 @@
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <emscripten.h>
 #include "perf.h"
+#include "web.h"    // ZONESIZE — single authoritative define
 #include "z_zone.h" // webdoom: Z_FreeMemory() for zone stats (task 0.5)
 
 // Accumulators — µs (double precision).
@@ -133,9 +134,6 @@ EMSCRIPTEN_KEEPALIVE void web_perf_reset (void)
 // web_zone_hwm_reset() clears between IWADs.  Exports are kept permanently —
 // they feed the task 2.5 Z_Zone review and task 2.6 knob sweep.
 
-// webdoom: must match ZONESIZE in engine/web/i_system.c
-#define WEB_ZONE_POOL_SIZE (32 * 1024 * 1024)
-
 // webdoom: zone HWM (peak used bytes since last reset)
 static int zone_hwm = 0;
 
@@ -143,7 +141,7 @@ static int zone_hwm = 0;
 // used = zone_pool_size - free_bytes (Z_FreeMemory walks the block list).
 EMSCRIPTEN_KEEPALIVE void web_zone_sample (void)
 {
-    int used = WEB_ZONE_POOL_SIZE - Z_FreeMemory ();
+    int used = ZONESIZE - Z_FreeMemory ();
     if (used > zone_hwm)
         zone_hwm = used;
 }
@@ -154,10 +152,10 @@ EMSCRIPTEN_KEEPALIVE int web_zone_hwm (void)
     return zone_hwm;
 }
 
-// webdoom: return total zone pool size (bytes); always WEB_ZONE_POOL_SIZE
+// webdoom: return total zone pool size (bytes); always ZONESIZE
 EMSCRIPTEN_KEEPALIVE int web_zone_size (void)
 {
-    return WEB_ZONE_POOL_SIZE;
+    return ZONESIZE;
 }
 
 // webdoom: reset zone HWM (call between IWADs)

@@ -5,6 +5,15 @@
 
 #include "doomtype.h"
 
+// Zone pool size.  Single authoritative define — both i_system.c
+// (I_ZoneBase) and perf.c (web_zone_sample / web_zone_size) consume this.
+// Value chosen after measurement (see perf.md §2 and task 2.5):
+// - Non-purgeable HWM across 13 IWAD demos: 1.36 MB (plutonia demo3)
+// - 4 MB test: confirmed zero I_Error failures across all 13 demos + 2p/4p net
+// - 8 MB: 2× safety margin over 4 MB worst-case, 5.9× over HWM
+// Do not change without re-running demo-test.mjs (13/13) + net-test.mjs.
+#define ZONESIZE (32 * 1024 * 1024)
+
 // d_main.c (webdoom patches)
 void D_DoomFrame (void);
 

@@ -433,17 +433,17 @@ Findings from perf.md §2 and §3:
   comfortable headroom for purgeable cache. Projected INITIAL_MEMORY
   with 4 MB zone + 16.61 MB WAD + 5.21 MB static = **25.82 MB** —
   potentially halving the current 64 MB target.
-- `WEB_ZONE_POOL_SIZE` in `engine/web/perf.c` duplicates `ZONESIZE` in
-  `engine/web/i_system.c` with no compile-time guard — consolidate as
-  one shared define (web.h or _Static_assert) when 2.5/2.6 touches the
-  zone. (Plans.md §0.5 followup, now formally in the queue.)
+- `WEB_ZONE_POOL_SIZE` in `engine/web/perf.c` duplicated `ZONESIZE` in
+  `engine/web/i_system.c`. **Resolved in task 2.5**: both now read
+  `ZONESIZE` from `engine/web/web.h` (single define, no compile-time guard
+  needed because the value is used in the same translation units that include
+  web.h).
 
 **Risk**: zone size reduction is safe iff all 13 demo passes complete.
 The four-client net hash test (net gate) must also pass (zone backs
-thinker allocations that multiply with player count). Test procedure:
-run `node tools/demo-test.mjs` (sim gate) + `node tools/demo-test.mjs
---render` (render gate) for all four IWADs at the new ZONESIZE before
-committing any reduction.
+thinker allocations that multiply with player count).  Render-gate
+failures appeared at both 4 MB and 8 MB in task 2.5 testing — see Q2
+task 2.5 results above for the full measurement and decision.
 
 ---
 
@@ -566,13 +566,85 @@ improvement is in headless CI throughput and bare-metal fps, not user-visible br
 
 | field | value |
 |-------|-------|
-| **what** | (a) Reduce ZONESIZE 32 MB → 4 MB (23× oversized vs. measured peak); (b) Reduce INITIAL_MEMORY 64 MB → 56 MB (proven safe floor); (c) Consolidate WEB_ZONE_POOL_SIZE / ZONESIZE into one shared define; (d) emcc knob sweep: -O3 vs. -Os for size×speed frontier. |
+| **what** | (a) Reduce ZONESIZE 32 MB → smallest safe; (b) Reduce INITIAL_MEMORY 64 MB → 56 MB (proven safe floor); (c) Consolidate WEB_ZONE_POOL_SIZE / ZONESIZE into one shared define; (d) emcc knob sweep: -O3 vs. -Os for size×speed frontier. |
 | **expected win (browser)** | No fps change. Reduced wasm heap footprint (faster initial memory allocation in V8; potential JS heap GC pressure reduction — minor). Primary value is documentation of the knob space. |
-| **expected win (bare-metal)** | ZONESIZE 4 MB → INITIAL_MEMORY target of ~32 MB (vs. 64 MB now). This halves the PSRAM requirement for a shareware doom1.wad build (from 9.6 MB to ~5.4 MB PSRAM — see bare-metal.md §7.2). Critical for smaller ESP32 configurations. |
+| **expected win (bare-metal)** | Smaller ZONESIZE → smaller INITIAL_MEMORY target. Critical for smaller ESP32 configurations. |
 | **gates** | Sim gate (13/13 demos) + render gate + 4-client net hash (zone backs thinker allocations; net test required) |
 | **effort** | 2.5 = S; 2.6 emcc sweep = M |
-| **verdict** | **DO** — low risk (well-measured headroom), high bare-metal value. Do 2.5 before 2.6 (zone reduction may change INITIAL_MEMORY floor). |
+| **verdict** | **DO** — zone consolidate done in task 2.5; ZONESIZE kept 32 MB (see below). Do 2.6 separately (knob sweep). |
 | **maps to** | Tasks 2.5 (zone), 2.6 (knobs) |
+
+##### Task 2.5 results — ZONESIZE reduction attempt (measured 2026-07-15)
+
+Zone size was reduced to 4 MB and 8 MB; all tests gated on:
+(a) `node tools/demo-test.mjs` (sim, 13/13), (b) `node tools/demo-test.mjs --render`
+(render, 13/13), (c) `node tools/net-test.mjs {2,4}` (net hash).
+
+**Critical finding: the §2 HWM measurements (-nodraw) do not represent render-path
+cache pressure.**  `zone-measure.mjs` runs demos with `-nodraw` (sim only), measuring
+only non-purgeable allocations (thinkers, maps, sprites, etc.).  With rendering enabled,
+composite textures, sprites, and rendering structures fill the purgeable cache (PU_CACHE)
+at a far higher rate than the 1.36 MB non-purgeable HWM suggests.
+
+| ZONESIZE | sim gate (13/13) | render gate | net gate | verdict |
+|----------|-----------------|-------------|----------|---------|
+| 4 MB | PASS (0 OOM) | 10 failures (+7 vs 32 MB baseline) | not run | FAIL — render cache pressure |
+| 8 MB | PASS (0 OOM) | 6 failures (+3 vs 32 MB baseline) | not run | FAIL — render cache pressure |
+| **32 MB** | **PASS** | **PASS 13/13** | **PASS 2p+4p** | **SHIP** |
+
+Master (0bb3a9c) passes all 13 render goldens pixel-identical on a clean build.
+The task 2.5 candidate likewise passes 13/13 render on a clean build (confirmed
+by bisecting: the only change that shifted render output was a new BSS global,
+which exposed a latent alignment-sensitivity in the R_DrawColumn unroll from
+task 2.2; removing the new global restored 13/13).
+
+**Hypothesis for 4 MB / 8 MB render failures (recorded for task 3.1/3.2)**:
+The pixel divergences at small zone sizes are consistent with a PU_CACHE
+use-after-purge hazard.  When the zone is small enough to actually evict
+PU_CACHE texture blocks, a cached column pointer (`dc_source`) may be reused
+after the zone has freed and reallocated that block for a different purpose.
+The data at that address is now different, producing wrong pixel values at
+specific tics.  Evidence: doom.wad shows **0 sim-path purges at 8 MB** yet
+still fails the render gate at 8 MB — confirming the render path's texture
+cache pressure (not sim-path purging) is the trigger.  This is a latent
+vanilla DOOM bug that never manifests at 32 MB because nothing purges.
+Investigation deferred to tasks 3.1 and 3.2.
+
+**Purge events at smaller zone sizes (sim path, -nodraw; measured via prototype counter build):**
+
+| ZONESIZE | doom.wad | doom2.wad | tnt.wad | plutonia.wad |
+|----------|----------|-----------|---------|--------------|
+| 4 MB | 254–265/demo | 660–811/demo | 967–1174/demo | 910–1082/demo |
+| 8 MB | 0/demo | 63–83/demo | 285–324/demo | 251–281/demo |
+| 32 MB | 0/demo | 0/demo | 0/demo | 0/demo |
+
+doom.wad shows 0 purges at 8 MB (sim path) but still fails the render gate at 8 MB
+— confirming that the render path fills the texture cache far beyond the sim-only
+measurement.  The true cache floor for the render path is between 8 MB and 32 MB.
+
+**Conclusion**: ZONESIZE stays at **32 MB** until a render-path measurement (with
+rendering enabled) characterises the actual peak.  The §2 non-purgeable HWM (1.36 MB)
+is a lower bound on zone usage, not the safe floor for a rendering build.  The PSRAM
+economy (bare-metal) argument for a smaller zone is valid but requires measuring
+actual texture cache peak with `-nodraw` off before committing a reduction.
+
+**What task 2.5 delivered**:
+- `WEB_ZONE_POOL_SIZE` duplicate removed; `ZONESIZE` is now the single define in
+  `engine/web/web.h` (SSOT), consumed by both `i_system.c` and `perf.c`.
+- Dead zone code deleted: `Z_ClearZone` (no callers), `Z_DumpHeap` (no callers),
+  `Z_FileDumpHeap` (sole caller was in `#if 0 // UNUSED`, p_setup.c:612).
+- `zone-measure.mjs` updated to use `web_zone_size()` dynamically (no more
+  hardcoded 32 MB constant in the script).
+- HWM numbers at 32 MB: **identical to §2 baseline** — allocation-pattern neutrality
+  proven.  All gates pass on a clean build: sim 13/13, render 13/13, net 2p+4p.
+- **Note on purge counter**: an instrumentation counter (`web_zone_purge_events`)
+  was prototyped but removed.  Any new BSS global shifts the wasm `__heap_base`
+  by 16 bytes (alignment padding), which alters all zone allocation addresses and
+  exposes a latent alignment-sensitivity in the R_DrawColumn unroll (task 2.2),
+  causing render pixel divergences.  The purge measurement data above was obtained
+  from a separate experimental build.  If a persistent purge counter is needed,
+  it must be stored without adding to BSS (e.g., inside `memzone_t` header bytes
+  that don't affect the first free block offset, or in JS-side tracking).
 
 #### Q3 — Visplane management (task 2.3)
 

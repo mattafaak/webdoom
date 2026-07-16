@@ -38,6 +38,7 @@ for (const [wad, engineName, demos] of MATRIX) {
     const wadBytes = readFileSync(path);
 
     let iwadHwm = 0; // peak across all demos for this IWAD
+    let iwadZoneSize = 0; // zone pool size (same for all demos; captured once)
 
     for (const demo of demos) {
         // Fresh engine instance per demo (matches demo-test.mjs pattern).
@@ -87,16 +88,20 @@ for (const [wad, engineName, demos] of MATRIX) {
 
         const hwm = doom._web_zone_hwm();
         const zoneSize = doom._web_zone_size();
+        if (iwadZoneSize === 0) iwadZoneSize = zoneSize; // same for all demos
         const pct = ((hwm / zoneSize) * 100).toFixed(1);
+        // purge events: purgeable blocks evicted by Z_Malloc to satisfy allocations
+        const purges = typeof doom._web_zone_purge_events_get === 'function'
+            ? doom._web_zone_purge_events_get() : '?';
         console.log(
             `  ${(wad + ' ' + demo).padEnd(22)} HWM ${(hwm / 1048576).toFixed(2)} MB` +
-            ` / ${(zoneSize / 1048576).toFixed(0)} MB zone  (${pct}%)`,
+            ` / ${(zoneSize / 1048576).toFixed(0)} MB zone  (${pct}%)  purges=${purges}`,
         );
         if (hwm > iwadHwm) iwadHwm = hwm;
     }
 
     if (iwadHwm > 0) {
-        results.push({ wad, hwm: iwadHwm, wadBytes: wadBytes.length });
+        results.push({ wad, hwm: iwadHwm, wadBytes: wadBytes.length, zoneSizeBytes: iwadZoneSize });
     }
 }
 
@@ -107,10 +112,12 @@ if (results.length === 0) {
 
 // Summary table
 console.log('\n=== Zone high-water marks (per-IWAD peak across all demos) ===');
-const ZONE_MB = 32;
 const worst = results.reduce((a, b) => (b.hwm > a.hwm ? b : a));
+// zone size comes from the wasm export (reflects current ZONESIZE in web.h)
+const ZONE_BYTES = results[0]?.zoneSizeBytes ?? (8 * 1024 * 1024);
+const ZONE_MB = ZONE_BYTES / 1048576;
 for (const r of results) {
-    const pct = ((r.hwm / (ZONE_MB * 1048576)) * 100).toFixed(1);
+    const pct = ((r.hwm / ZONE_BYTES) * 100).toFixed(1);
     const flag = r.wad === worst.wad ? '  ← worst' : '';
     console.log(`  ${r.wad.padEnd(14)} ${(r.hwm / 1048576).toFixed(2)} MB  (${pct}%)${flag}`);
 }
@@ -124,15 +131,14 @@ if (heapBaseOnce !== null) {
     //   + zone      (one malloc(ZONESIZE) from I_ZoneBase in i_system.c)
     //   + wad_copy  (one malloc(wad.length) from zone-measure registration)
     // Note: the WAD copy in production is done the same way (doom._malloc in JS).
-    const zoneBytes = ZONE_MB * 1048576;
-    const peakAddr = hb + zoneBytes + worst.wadBytes;
+    const peakAddr = hb + ZONE_BYTES + worst.wadBytes;
     const headroom = INITIAL_MB * 1048576 - peakAddr;
 
     console.log('\n=== Heap headroom (INITIAL_MEMORY=64 MB, ALLOW_MEMORY_GROWTH=0) ===');
     console.log(`  __heap_base       : ${hb} B  (${(hb / 1048576).toFixed(2)} MB)`);
     console.log(`    of which stack  : 4 MB  (STACK_SIZE in engine/Makefile)`);
     console.log(`    of which static : ${((hb - 4 * 1048576) / 1024).toFixed(0)} KB  (DATA + BSS)`);
-    console.log(`  Zone pool         : ${ZONE_MB} MB  (ZONESIZE in engine/web/i_system.c)`);
+    console.log(`  Zone pool         : ${ZONE_MB} MB  (ZONESIZE in engine/web/web.h)`);
     console.log(`  Worst WAD malloc  : ${(worst.wadBytes / 1048576).toFixed(2)} MB  (${worst.wad})`);
     console.log(`  Peak heap address : ~${(peakAddr / 1048576).toFixed(2)} MB`);
     console.log(`  Headroom vs 64 MB : ~${(headroom / 1048576).toFixed(2)} MB`);

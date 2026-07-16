@@ -13,11 +13,10 @@
 #include "d_net.h"
 #include "g_game.h"
 #include "i_system.h"
+#include "web.h"
 
-// 32 MB zone: vanilla's 6 MB starves limit-raised rendering and big PWADs.
-#define ZONESIZE (32 * 1024 * 1024)
-
-int mb_used = 32;
+// ZONESIZE is defined in web.h (single source of truth).
+int mb_used = ZONESIZE / (1024 * 1024);
 
 void I_Tactile (int on, int off, int total)
 {
