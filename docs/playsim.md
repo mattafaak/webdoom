@@ -305,7 +305,8 @@ checked, these values represent:
    non-dropoff things.
 6. If all checks pass: `P_UnsetThingPosition`, updates `thing->x/y/floorz/ceilingz`,
    `P_SetThingPosition`.
-7. Processes `spechit[]` in reverse order (p_map.c:506–518).
+7. Processes `spechit[]` in reverse order (the `while (numspechit--)` loop in
+   `P_TryMove`, p_map.c).
 
 ### 4.4 spechit[] — the overflow behavior
 
