@@ -19,10 +19,12 @@ const record = process.argv.includes('--record');
 const renderMode = process.argv.includes('--render');
 const crossIdx = process.argv.indexOf('--cross');
 const chocoBin = crossIdx >= 0 ? process.argv[crossIdx + 1] : null;
+const buildDirIdx = process.argv.indexOf('--build-dir');
+const buildDir = buildDirIdx >= 0 ? process.argv[buildDirIdx + 1] : 'build';
 const goldenDir = join(root, 'tools/golden');
 mkdirSync(goldenDir, { recursive: true });
 
-const createDoom = (await import(join(root, 'build/doom.js'))).default;
+const createDoom = (await import(join(root, buildDir, 'doom.js'))).default;
 
 // engine filename → demos (doom.wad is retail: it also carries DEMO4)
 const MATRIX = [

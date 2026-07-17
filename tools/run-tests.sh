@@ -14,6 +14,20 @@ echo "── engine smoke (doom, doom2) ─────────────�
 node tools/smoke-test.mjs doom.wad 700 | tail -2
 node tools/smoke-test.mjs doom2.wad 1100 | tail -2
 
+# ── invariant build (primary sim-safety gate) ────────────────────────────────
+# The invariant build compiles with -DWEBDOOM_INVARIANTS into a *separate*
+# artifact dir (build-invariants/) so the shipping build/ artifact is NEVER
+# touched.  This gate is stronger than the golden-trace gate below:
+#   • An assert names the broken invariant at the call site (e.g. p_tick.c:85).
+#   • A golden diff is a downstream symptom — it fires only after the full demo
+#     runs and gives no indication of *which* invariant was violated.
+# See docs/playsim.md §16.2 for the proof: both injection experiments showed
+# the assert naming the exact source location vs. a hash mismatch with no cause.
+echo "── invariant build (sim-safety gate) ───────────────────"
+source tools/emsdk-env.sh
+(cd engine && make -j8 EXTRA_CFLAGS=-DWEBDOOM_INVARIANTS BUILD=../build-invariants OUT=../build-invariants/doom.js 2>&1 | tail -3)
+node tools/demo-test.mjs --build-dir build-invariants | tail -2
+
 echo "── demo compatibility (golden traces) ──────────────────"
 node tools/demo-test.mjs | tail -2
 

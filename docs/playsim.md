@@ -39,7 +39,7 @@ commands. Unverifiable claims are marked *(not machine-verified)* inline.
 13. [Save / load — p_saveg.c](#13-save--load)
 14. [Player — p_user.c](#14-player)
 15. [Quirk catalog](#15-quirk-catalog)
-16. [The frozen surface — what is and is not demo-visible](#16-the-frozen-surface)
+16. [The frozen surface — what is and is not demo-visible](#16-the-frozen-surface) (§16.1 assert mapping; §16.2 standing CI gate; §16.3 proof that asserts fire)
 17. [Open questions for task 1.4](#17-open-questions-for-task-14)
 18. [Coverage audit — p_*.c function index](#18-coverage-audit)
 19. [Limits audit — task 3.2 overflow review](#19-limits-audit)
@@ -1298,7 +1298,14 @@ in the 8.1 worker draft — no `DOOM_ASSERT` exists in `P_BlockLinesIterator`, `
 or `P_PathTraverse`.  Row 17 is not assertable for the reasons given; the structural guarantee is real
 but a runtime assert would fire on valid vanilla game behavior.
 
-### §16.2 The asserts have been proven to fire
+### §16.2 Standing gate in run-tests.sh
+
+The invariant build (`-DWEBDOOM_INVARIANTS`, output in `build-invariants/`) is the
+**primary sim-safety gate** in `tools/run-tests.sh`.  It runs all 13 built-in attract
+demos before the golden-trace gate.  An assert names the broken invariant at the call
+site; a golden diff is a downstream symptom with no causal attribution (see proof below).
+
+### §16.3 The asserts have been proven to fire
 
 **Clean run (13/13, no assert).**  With the invariant flag on (`-DWEBDOOM_INVARIANTS`,
 365635 B wasm), all 13 built-in attract demos play to completion with zero assertion
