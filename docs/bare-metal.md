@@ -69,7 +69,7 @@ int I_GetTimeFrac(void);
 
 **Contract**: returns the fractional portion of the current tic as a
 `fixed_t` in [0, FRACUNIT]. Used exclusively by the renderer's interpolation
-path (`r_main.c:835`). A port that does not implement render interpolation
+path (`r_main.c:845–851`). A port that does not implement render interpolation
 can return `FRACUNIT` (= 65536) always — this locks the renderer to
 end-of-tic positions (vanilla behaviour). **MAY stub**.
 
@@ -672,7 +672,7 @@ COLORMAP and PLAYPAL are loaded `PU_STATIC` and never purged. Their combined
 `zlight[16][128]` and `scalelight[16][48]` are 2D pointer arrays into
 `colormaps` (= COLORMAP lump data). They contain no data values of their
 own — only pointers — and are rebuilt at `R_InitLightTables` /
-`R_ExecuteSetViewSize` (r_main.c:618, r_main.c:750). They occupy:
+`R_ExecuteSetViewSize` (r_main.c:626, r_main.c:683). They occupy:
 
 - `zlight`: 16 × 128 × sizeof(pointer) = 2,048 × 4 = 8 KiB (pointer table)
 - `scalelight`: 16 × 48 × sizeof(pointer) = 768 × 4 = 3 KiB
@@ -796,7 +796,7 @@ divide.
 
 **Software divide cost**: on ARM with `-mcpu=cortex-m4`, `__aeabi_ldivmod`
 is ~40–80 cycles. `FixedDiv` is called in the renderer inner loop (scale
-calculation, r_main.c:457–506) and in `P_PathTraverse`. The archaeology §7
+calculation in `R_ScaleFromGlobalAngle`, r_main.c:465–506) and in `P_PathTraverse`. The archaeology §7
 wasm measurements show `int64` divide is faster than `double` on Pi5 (+20%)
 but 65% slower on Kaby Lake; on Bobcat (old x86), `double` is +6% faster.
 On Cortex-M without FPU: both forms require software emulation; `double`
@@ -1002,7 +1002,7 @@ halves horizontal resolution, renderer.md §7.2).
 **2. FixedDiv software 64-bit divide** (significant)
 
 No hardware 64-bit divide on LX7. `__aeabi_ldivmod` (or equivalent) is
-called in every wall-scale computation (`r_main.c:457–506`), sprite
+called in every wall-scale computation (`R_ScaleFromGlobalAngle`, r_main.c:465–506), sprite
 projection, and `P_PathTraverse` trace. At ~40–80 cycles per software divide
 and ~200 divide calls per frame (estimated), this is ~8,000–16,000 cycles per
 frame = ~60–120 µs at 240 MHz. Manageable but measurable. See §5.3 for the

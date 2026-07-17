@@ -55,7 +55,7 @@ masked               → web_perf_masked_us
   R_DrawMasked        (sort sprites, draw back-to-front + weapon psprites)
 ```
 
-`NetUpdate()` is called between each stage (r_main.c:977,987,996,1009) —
+`NetUpdate()` is called between each stage (r_main.c:992,1002,1011,1024) —
 the network tick pump runs inside the render loop to keep latency low.
 
 The five `web_perf_*_us` accumulators (declared in engine/web/perf.c) are read
@@ -225,7 +225,7 @@ void R_RenderBSPNode(int bspnum) {
 }
 ```
 
-(r_bsp.c:552-578). The root call is `R_RenderBSPNode(numnodes-1)` (r_main.c:983).
+(r_bsp.c:552-578). The root call is `R_RenderBSPNode(numnodes-1)` (r_main.c:997).
 
 **Traversal order**: front-to-back relative to the viewpoint. The recursion
 visits the front child before the back child at every node, so subsectors arrive
@@ -886,7 +886,7 @@ spot written to two adjacent pixels `*dest++` twice.
 ### 7.6 Column-draw function dispatch
 
 `colfunc`, `fuzzcolfunc`, `transcolfunc`, `spanfunc` are global function
-pointers (r_main.c:129-133) set in `R_ExecuteSetViewSize` (r_main.c:707-719).
+pointers (r_main.c:137-141) set in `R_ExecuteSetViewSize` (r_main.c:716-725).
 High-detail: `{R_DrawColumn, R_DrawFuzzColumn, R_DrawTranslatedColumn, R_DrawSpan}`.
 Low-detail: `{R_DrawColumnLow, R_DrawFuzzColumn, R_DrawTranslatedColumn, R_DrawSpanLow}`.
 `R_DrawFuzzColumn` and `R_DrawTranslatedColumn` are the same in both modes (only

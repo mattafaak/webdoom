@@ -401,7 +401,7 @@ not the folklore.
 *Cross-reference: renderer.md §2.3 documents the structural recipe. This section
 closes the open question about why the specific constants were chosen.*
 
-`R_InitLightTables` (r_main.c:618) and `R_ExecuteSetViewSize` (r_main.c:750)
+`R_InitLightTables` (r_main.c:626) and `R_ExecuteSetViewSize` (r_main.c:683)
 build the `zlight` and `scalelight` pointer arrays from two constants:
 
 ```

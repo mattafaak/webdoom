@@ -56,29 +56,29 @@ Every simulation tic is driven by `G_Ticker` (g_game.c:605), which:
 2. Copies the current tic's `ticcmd_t` from `netcmds[i][buf]` into each active
    player's `cmd` field (g_game.c:664).
 3. In netgame, checks the consistency checksum (g_game.c:690) — see §1.3.
-4. Falls through to `P_Ticker` (p_tick.c:130).
+4. Falls through to `P_Ticker` (p_tick.c:181).
 
-`P_Ticker` (p_tick.c:130) is the sim tick proper:
+`P_Ticker` (p_tick.c:181) is the sim tick proper:
 
 ```
 for each player: P_PlayerThink    (p_user.c / p_pspr.c)
-P_RunThinkers   (p_tick.c:101)
+P_RunThinkers   (p_tick.c:130)
 P_UpdateSpecials (p_spec.c)
 P_RespawnSpecials (p_spec.c)
 leveltime++
 ```
 
 webdoom addition: at the top of `P_Ticker`, before players are processed, previous-tic
-sector heights are snapshotted for render interpolation (p_tick.c:149–153). This is
+sector heights are snapshotted for render interpolation (p_tick.c:199–204). This is
 render-local state; it does not influence the sim.
 
 ### 1.2 Thinker list
 
-`thinkercap` (p_tick.c:47) is a sentinel node whose `next`/`prev` form a circular
+`thinkercap` (p_tick.c:53) is a sentinel node whose `next`/`prev` form a circular
 doubly-linked list of all active thinkers. Every mobj, ceiling, door, floor, platform,
 and light effect is a thinker.
 
-**P_AddThinker** (p_tick.c:65) inserts at the tail:
+**P_AddThinker** (p_tick.c:71) inserts at the tail:
 
 ```c
 thinkercap.prev->next = thinker;
@@ -87,7 +87,7 @@ thinker->prev = thinkercap.prev;
 thinkercap.prev = thinker;
 ```
 
-**P_RemoveThinker** (p_tick.c:80) does *not* free immediately. It marks the thinker
+**P_RemoveThinker** (p_tick.c:109) does *not* free immediately. It marks the thinker
 with a sentinel function pointer:
 
 ```c
@@ -95,10 +95,10 @@ thinker->function.acv = (actionf_v)(-1);
 ```
 
 This is the famous deferred-free: the thinker stays in the list with its `next`/`prev`
-intact until **P_RunThinkers** (p_tick.c:101) reaches it on the *next* traversal, then
+intact until **P_RunThinkers** (p_tick.c:130) reaches it on the *next* traversal, then
 unlinks and frees it.
 
-`P_RunThinkers` contained a latent use-after-free (p_tick.c:108–120); **fixed in task 3.1** by caching `nextthinker = currentthinker->next` before the free, matching the documented safe pattern described below:
+`P_RunThinkers` contained a latent use-after-free (p_tick.c:150–172); **fixed in task 3.1** by caching `nextthinker = currentthinker->next` before the free, matching the documented safe pattern described below:
 
 ```c
 // BEFORE the task-3.1 fix (historical — current code caches nextthinker first):
@@ -246,8 +246,8 @@ edge" quirk: objects or traces that straddle the map boundary may not collide wi
 lines in the outermost blocks. Vanilla maps leave a margin, so this rarely manifests,
 but custom maps that pack geometry to the boundary expose it.
 
-The `P_CheckPosition` call for line-block iteration (p_map.c:435–443) does **not** add
-`MAXRADIUS` to the search bounds (unlike the thing-block pass at p_map.c:424–427).
+The line-block phase (`P_BlockLinesIterator`, p_map.c:453–461) does **not** add
+`MAXRADIUS` to the search bounds (unlike the thing-block pass at p_map.c:442–450).
 This is a deliberate asymmetry: thing bounding boxes can straddle blocks, so
 `MAXRADIUS` expansion ensures things in adjacent blocks are checked; lines already know
 which blocks they are in via the map builder's blockmap.
@@ -266,7 +266,7 @@ if it caused duplicate spechit entries or duplicate intercepts.
 
 ### 4.1 P_CheckPosition
 
-`P_CheckPosition` (p_map.c:378) is the pure-query half of the movement system. It:
+`P_CheckPosition` (p_map.c:397) is the pure-query half of the movement system. It:
 
 1. Sets `tmthing`, `tmflags`, `tmx`, `tmy`, `tmbbox` to the proposed position.
 2. Sets `tmfloorz`, `tmdropoffz` from the destination subsector's floor,
@@ -282,8 +282,8 @@ Returns true if the position is valid (no solid obstruction).
 
 ### 4.2 tmfloorz / tmceilingz capture
 
-`PIT_CheckLine` (p_map.c:189) adjusts the captured `tmfloorz`, `tmceilingz`, and
-`tmdropoffz` as it contacts each two-sided line (p_map.c:227–237). After all lines are
+`PIT_CheckLine` (p_map.c:203) adjusts the captured `tmfloorz`, `tmceilingz`, and
+`tmdropoffz` as it contacts each two-sided line (p_map.c:247–252). After all lines are
 checked, these values represent:
 
 - `tmfloorz`: highest floor contacted (the floor the thing would stand on)
@@ -292,7 +292,7 @@ checked, these values represent:
 
 ### 4.3 P_TryMove
 
-`P_TryMove` (p_map.c:454) is the mutating move:
+`P_TryMove` (p_map.c:481) is the mutating move:
 
 1. Calls `P_CheckPosition`. If blocked, returns false.
 2. Checks `tmceilingz - tmfloorz < thing->height` — won't fit.
@@ -358,10 +358,10 @@ bound is `numspechit`, never the constant).
 
 ### 4.5 P_SlideMove — the 3-attempt hack
 
-`P_SlideMove` (p_map.c:699) is called when a player's `P_XYMovement` is blocked.
+`P_SlideMove` (p_map.c:749) is called when a player's `P_XYMovement` is blocked.
 It fires three `P_PathTraverse` rays (leading corners and one cross-corner) to find the
 closest slide wall. The `hitcount` counter limits the retry loop to 3 iterations
-(p_map.c:713):
+(p_map.c:763):
 
 ```c
 if (++hitcount == 3)
@@ -375,7 +375,7 @@ slide retry count would affect player position.
 
 ### 4.6 P_XYMovement — friction
 
-`P_XYMovement` (p_mobj.c:114) applies friction at the end of every horizontal movement
+`P_XYMovement` (p_mobj.c:125) applies friction at the end of every horizontal movement
 pass (when the thing is on the floor):
 
 ```c
@@ -385,10 +385,10 @@ pass (when the thing is on the floor):
 ```
 
 If momentum components are both below `STOPSPEED` **and** the player has zero input
-commands, momentum is zeroed (p_mobj.c:221–235). Otherwise `FRICTION` is applied each
-tic (p_mobj.c:238–239). Monsters stop instantly when their move completes (momentum is
+commands, momentum is zeroed (p_mobj.c:232–246). Otherwise `FRICTION` is applied each
+tic (p_mobj.c:249–250). Monsters stop instantly when their move completes (momentum is
 zeroed in `P_Move` at p_enemy.c:334 when on the floor). Missiles and MF_SKULLFLY
-objects are exempt from friction (p_mobj.c:201–202).
+objects are exempt from friction (p_mobj.c:212–213).
 
 ---
 
@@ -397,10 +397,10 @@ objects are exempt from friction (p_mobj.c:201–202).
 ### 5.1 intercepts[] array
 
 ```c
-// p_local.h:154
+// p_local.h:195
 #define MAXINTERCEPTS  128
 
-// p_maputl.c:544
+// p_maputl.c:550
 intercept_t  intercepts[MAXINTERCEPTS];
 intercept_t* intercept_p;
 ```
@@ -416,7 +416,7 @@ processed with zero fractions — the "all-ghosts" bug family where shots pass t
 enemies because the intercept fraction came back 0 (before the enemy's intercept entry)
 rather than the correct value.
 
-**webdoom overflow behaviour** (p_maputl.c:606–607):
+**webdoom overflow behaviour** (p_maputl.c:612–613):
 ```c
 if (intercept_p - intercepts < MAXINTERCEPTS-1)
     intercept_p++;   // webdoom: clamp, vanilla overran on long traces
@@ -434,26 +434,26 @@ reached by these demos. (Measurement: `EMSCRIPTEN_KEEPALIVE` counter in both
 goldens confirmed; details in §17.) *(not machine-verified: instrumented build
 required; stat removed — no current CI script)*
 
-Same guard applies to `PIT_AddThingIntercepts` (p_maputl.c:672–673).
+Same guard applies to `PIT_AddThingIntercepts` (p_maputl.c:689–690).
 
 ### 5.2 P_PathTraverse
 
-`P_PathTraverse` (p_maputl.c:744) is the DDA-based blockmap traversal:
+`P_PathTraverse` (p_maputl.c:787) is the DDA-based blockmap traversal:
 
-1. Nudges the start point off block boundaries by 1 unit (p_maputl.c:779–783) to avoid
+1. Nudges the start point off block boundaries by 1 unit (p_maputl.c:823–826) to avoid
    ambiguous side-tests when the trace starts exactly on a block edge. This nudge is
    demo-visible: its fixed value `FRACUNIT` (1 map unit) is canonical.
 2. Sets up `trace` (the divline from start to end).
-3. Iterates blocks via a DDA stepping loop capped at 64 iterations (p_maputl.c:848) —
+3. Iterates blocks via a DDA stepping loop capped at 64 iterations (p_maputl.c:891) —
    round-off guard to prevent infinite loops near map edges.
 4. For each block: if `PT_ADDLINES`, calls `PIT_AddLineIntercepts`; if `PT_ADDTHINGS`,
    calls `PIT_AddThingIntercepts`.
 5. Calls `P_TraverseIntercepts` with the caller's traverser function.
 
-`P_TraverseIntercepts` (p_maputl.c:684) implements an O(n²) selection sort: for each
+`P_TraverseIntercepts` (p_maputl.c:708) implements an O(n²) selection sort: for each
 traversal step it scans all accumulated intercepts to find the nearest unprocessed one.
 This is correct but slow for very long traces. After processing, it stamps the
-intercept's `frac` with `MAXINT` to mark it done (p_maputl.c:728).
+intercept's `frac` with `MAXINT` to mark it done (p_maputl.c:771).
 
 ### 5.3 Users of P_PathTraverse
 
@@ -469,33 +469,33 @@ intercept's `frac` with `MAXINT` to mark it done (p_maputl.c:728).
 
 ## 6. Line-of-sight
 
-`P_CheckSight` (p_sight.c:300) uses a completely separate code path from
+`P_CheckSight` (p_sight.c:304) uses a completely separate code path from
 `P_PathTraverse`. It does a recursive BSP walk rather than a DDA blockmap walk.
 
 ### 6.1 REJECT table fast-out
 
-First check (p_sight.c:313–326): the REJECT lump is a bit matrix, one bit per
+First check (p_sight.c:318–332): the REJECT lump is a bit matrix, one bit per
 sector-pair. If `rejectmatrix[byte] & bit` is set, the two sectors are pre-rejected
 and the function returns false immediately. This bypasses the BSP walk entirely for
 most enemy-enemy and enemy-player pairs in typical maps.
 
 `sightcounts[0]` counts REJECT hits; `sightcounts[1]` counts BSP walks
-(p_sight.c:47, used only when `RANGECHECK` is enabled).
+(p_sight.c:52, used only when RANGECHECK is enabled).
 
 ### 6.2 BSP walk — P_CrossBSPNode / P_CrossSubsector
 
-`sightzstart` (p_sight.c:334): the looker's eye height, set to
+`sightzstart` (p_sight.c:339): the looker's eye height, set to
 `t1->z + t1->height - (t1->height >> 2)` — three-quarters up the mobj's height.
 
-`topslope` / `bottomslope` (p_sight.c:335–336): slope window from the eye to the top
+`topslope` / `bottomslope` (p_sight.c:353–354): slope window from the eye to the top
 and bottom of the target. These are compressed as tics progress through `P_CrossSubsector`.
 
-`P_CrossBSPNode` (p_sight.c:257) recurses in BSP order, starting from the node
-containing the looker. It uses `P_DivlineSide` (p_sight.c:54) — a distinct function
-from `P_PointOnLineSide` — which returns 2 for exactly-on-the-line (p_sight.c:96–98).
-Exact-on-line is treated as front side (p_sight.c:274–275).
+`P_CrossBSPNode` (p_sight.c:262) recurses in BSP order, starting from the node
+containing the looker. It uses `P_DivlineSide` (p_sight.c:60) — a distinct function
+from `P_DivlineSide` — which returns 2 for exactly-on-the-line.
+Exact-on-line is treated as front side (p_sight.c:279–280).
 
-`P_CrossSubsector` (p_sight.c:135) checks segs in order. For each crossed two-sided
+`P_CrossSubsector` (p_sight.c:140) checks segs in order. For each crossed two-sided
 line it tightens `topslope`/`bottomslope`. If `topslope <= bottomslope`, sight is
 blocked.
 
@@ -521,11 +521,11 @@ sight version uses `>>8` right-shifts internally. This is not a shared implement
 
 ### 7.1 P_ZMovement
 
-`P_ZMovement` (p_mobj.c:246) runs after `P_XYMovement` in `P_MobjThinker`:
+`P_ZMovement` (p_mobj.c:257) runs after `P_XYMovement` in `P_MobjThinker`:
 
 1. **Step-up smoothing**: if the player's z is below their floorz (stepped up), adjust
    `viewheight` and `deltaviewheight` to animate the camera upward
-   (p_mobj.c:252–255).
+   (p_mobj.c:265–268).
 2. **Apply momz**: `mo->z += mo->momz`.
 3. **Floater approach**: if MF_FLOAT and has a target, converge z toward target's
    midpoint at `FLOATSPEED = 4*FRACUNIT` per tic (p_mobj.c:263–280).
@@ -545,8 +545,8 @@ sight version uses `>>8` right-shifts internally. This is not a shared implement
 
 ### 7.2 Lost soul bounce
 
-The lost soul (MF_SKULLFLY) has its z-momentum negated at both floor (p_mobj.c:293)
-and ceiling (p_mobj.c:337) impacts. Unlike a physical bounce this is not energy-
+The lost soul (MF_SKULLFLY) has its z-momentum negated at both floor (p_mobj.c:305)
+and ceiling (p_mobj.c:350) impacts. Unlike a physical bounce this is not energy-
 conserving: `momz` changes sign but its magnitude is unchanged (no damping).
 
 ### 7.3 Floater logic (Cacodemon, Pain Elemental, etc.)
@@ -559,17 +559,17 @@ move that `P_Move` has verified) or MF_SKULLFLY. The `floatok` flag from the las
 
 ### 7.4 Mobj spawn
 
-`P_SpawnMobj` (p_mobj.c:485) allocates from zone memory (PU_LEVEL tag), zeroes all
+`P_SpawnMobj` (p_mobj.c:497) allocates from zone memory (PU_LEVEL tag), zeroes all
 fields, fills from `mobjinfo[type]`, sets `P_SetThingPosition`, and links into the
 thinker list. The `lastlook` field for monster AI scanning is initialised to
-`P_Random() % MAXPLAYERS` (p_mobj.c:512) — this is a demo-visible `P_Random` call.
+`P_Random() % MAXPLAYERS` (p_mobj.c:523) — this is a demo-visible `P_Random` call.
 
 The `oldx/oldy/oldz/oldangle` fields (webdoom additions for render interpolation) are
 snapped to the spawn position so the renderer has a clean baseline (p_mobj.c:536–539).
 
 ### 7.5 Nightmare respawn
 
-`P_NightmareRespawn` (p_mobj.c:357) is called from `P_MobjThinker` (p_mobj.c:473–477)
+`P_NightmareRespawn` (p_mobj.c:357) is called from `P_MobjThinker` (p_mobj.c:478–487)
 when:
 - `mobj->flags & MF_COUNTKILL` (killable monster)
 - `respawnmonsters` is true (Nightmare or `-respawn`)
@@ -961,7 +961,7 @@ chase state.
 
 ### 14.1 P_PlayerThink
 
-`P_PlayerThink` (p_user.c:239) is called once per tic per active player:
+`P_PlayerThink` (p_user.c:255) is called once per tic per active player:
 
 1. Applies `CF_NOCLIP` cheat to mobj flags.
 2. Handles `MF_JUSTATTACKED` (chainsaw auto-forward).
@@ -1126,7 +1126,7 @@ doom-demo1 plays E1M5 (Phobos Lab, 1710 tics) but routes zero teleport calls;
 doom-demo4 plays E4M2 (818 tics) — also zero. The Z-snap at p_telept.c:106 is
 exercised by every one of the 32 teleport events across those 4 demos. The golden
 harness at `tools/golden/` validates those demos per-tic via `web_state_hash()`
-(i_main.c:175–190), so any change to the Z-snap or the surrounding logic would
+(web/i_main.c:175–190), so any change to the Z-snap or the surrounding logic would
 desync them.
 
 Reproduce (teleport call counts): `node tools/archaeology/runtime-stat-verify.mjs`
@@ -1608,7 +1608,7 @@ Column key:
 
 | site / limit | vanilla overflow behavior | our guard | demo-visible? | evidence |
 |---|---|---|---|---|
-| `spechit[MAXSPECIALCROSS=64]` (p_map.c) | OOB write past `spechit[8]` into adjacent globals; vanilla limit was 8 | Clamp: write skipped when `numspechit >= MAXSPECIALCROSS` (p_map.c:243–247); limit raised to 64 | No — peak across 13 demos is **8** (tnt-demo2 MAP12), exactly at the old vanilla limit | p_map.c:243–247; §4.4; §17 measurement |
+| `spechit[MAXSPECIALCROSS=64]` (p_map.c) | OOB write past `spechit[8]` into adjacent globals; vanilla limit was 8 | Clamp: write skipped when `numspechit >= MAXSPECIALCROSS` (p_map.c:256–260); limit raised to 64 | No — peak across 13 demos is **8** (tnt-demo2 MAP12), exactly at the old vanilla limit | p_map.c:256–260; §4.4; §17 measurement |
 | `intercepts[MAXINTERCEPTS=128]` (p_maputl.c) | OOB write past `intercepts[128]`; "all-ghosts" bug — distant intercept fractions corrupted to 0 | Clamp: `if (intercept_p - intercepts < MAXINTERCEPTS-1) intercept_p++;` — stops at 127 (p_maputl.c:606–607 and 672–673) | No — peak across 13 demos is **45** (plutonia-demo3 MAP12); §17 measurement | p_maputl.c:606–607, 672–673; §5.1; §17 |
 | `solidsegs[MAXSEGS=64]` (r_bsp.c) | Silent OOB write past `solidsegs[32]` (vanilla) / `solidsegs[64]` (webdoom); corrupts adjacent data | Clamp: `if (newend - solidsegs >= MAXSEGS) return;` after `R_StoreWallRange` (r_bsp.c, task 3.2); wall is drawn, clip-post insertion dropped | No — render-only; 64 separated solid clip ranges per frame is unreachable in any shipped map | r_bsp.c guard added task 3.2; renderer.md §3.4, §10 |
 | `openings[MAXOPENINGS=SCREENWIDTH×256]` (r_plane.c / r_segs.c) | Silent pointer overrun in non-RANGECHECK build; `RANGECHECK` build: `I_Error` at R_DrawPlanes entry | Guard at each `lastopening +=` site in r_segs.c: if `lastopening - openings + needed > MAXOPENINGS`, masked midtex dropped (`maskedtexture=false`) or silhouette bit cleared (`SIL_TOP`/`SIL_BOTTOM`); prevents null deref in R_DrawMasked (r_segs.c, task 3.2) | No — MAXOPENINGS raised from ×64 to ×256; overflow would require 128+ adjacent wall-high drawsegs | r_segs.c guards added task 3.2; renderer.md §10 |
@@ -1648,7 +1648,7 @@ the `R_RenderMaskedSegRange` residual but not the sprite-column residual in
 and confirmed both fixes: BSS probe passes 13/13, RODATA probe passes 13/13.
 
 **web_state_hash coverage is narrower than the full game state.**
-`web_state_hash()` (i_main.c:175–190) hashes `gametic`, `prndindex`, and per-player
+`web_state_hash()` (web/i_main.c:175–190) hashes `gametic`, `prndindex`, and per-player
 `x / y / angle / health`. It does NOT cover sector floor/ceiling heights, thinker
 states, or mobj states beyond the consoleplayer. This means a sim-side guard that
 suppresses a sector-state change can pass the sim golden test while still producing

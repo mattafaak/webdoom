@@ -145,6 +145,12 @@ capture_run "recipe-crack / zlight-distmap (1 claim: ea-028)" \
 capture_run "recipe-crack / ledger-count (5 claims: ea-029..033)" \
     node tools/archaeology/ledger-count.mjs
 
+# 8.1c (FINDING-10): file:line citations rot when code shifts — 844c3d6 moved
+# lines under ~120 of them. This bounds-checks all engine/core citations and
+# verifies doc-named identifiers actually sit near the cited lines.
+capture_run "doc-citations (483 file:line refs; bounds + identifier adjacency)" \
+    node tools/archaeology/check-citations.mjs
+
 # ── COLORMAP crackers (task 6.3) ───────────────────────────────────────────────
 # These cover the flagship claims — ea-018 (the 0/8192 universal recipe quoted in
 # the public writeup) and ea-023 (the 241/256 figure that shipped WRONG until the
