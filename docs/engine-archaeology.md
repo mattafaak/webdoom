@@ -276,19 +276,46 @@ map 32 is the invulnerability-powerup inverse; map 33 is all-black
 search over the palette — the single most-consulted table in the whole
 renderer, and nobody's recorded its exact recipe.
 
-**Light levels (maps 0–31) — exact recipe, proven universal:**
+**Light levels (maps 0–31) — exact for the id palette; NOT universal:**
 
 ```
 colormap[L][i] = argmin_j || palette[j] − round(palette[i] · (32−L)/32) ||²
 ```
 
 i.e. darken each palette colour by the linear factor `(32−L)/32`, round
-to nearest, and take the **Euclidean**-nearest palette index. Verified
-**0 / 8,192 mismatches on doom.wad, doom2.wad, AND plutonia.wad** — three
-independently-authored palettes, same recipe, so this is the tool's
-actual algorithm, not an overfit. (Manhattan and luma-weighted metrics
-miss by 1,200+; truncation instead of rounding misses by 313; the
-`(31−L)/31` scale misses by 2,373. The recipe is tightly determined.)
+to nearest, and take the **Euclidean**-nearest palette index. Against
+`doom.wad` this reproduces COLORMAP **exactly: 0 / 8,192 mismatches, all
+32 levels exact**. It is tightly determined for that palette: Manhattan
+and luma-weighted metrics miss by 1,200+; truncation instead of rounding
+misses by 313; the `(31−L)/31` scale misses by 2,373.
+
+⚠️ **This doc previously claimed the recipe was "proven universal,"
+verified across "doom.wad, doom2.wad AND plutonia.wad — three
+independently-authored palettes... not an overfit." Both halves were
+wrong** (FINDING-5, see claims-index.md):
+
+- **The three palettes are one palette.** `doom2`, `plutonia`, `tnt` and
+  `chex` ship PLAYPAL **and** COLORMAP byte-identical to `doom.wad`. The
+  "0/8,192 on three WADs" figure is true and carries **no** information
+  beyond one WAD, so the anti-overfit inference had nothing behind it.
+- **The one genuinely independent palette falsifies universality.**
+  `hacx.wad` (748 of 768 palette bytes differ) misses **3,517 / 8,192
+  (43%)**, reproducing **0 of 32** levels — under every metric/scale
+  variant tried. HACX's COLORMAP is not junk and is not built from
+  another palette: map 0 is 255/256 identity and map 31 is 255/256
+  near-black *in HACX's own palette*.
+
+**What survives — and it is the more interesting result.** Fitting the
+best scale per light level against HACX's own colormap **independently
+recovers the `(32−L)/32` curve** (max deviation 0.008 across all 32
+levels): .994/.878/.750/.624/.496/.375/.249/.124 vs the recipe's
+1.000/.875/.750/.625/.500/.375/.250/.125. So the **darkening curve is
+id's and it generalizes**; the **nearest-colour index matching does not**
+(~91–147 of 256 entries per level still miss at the best-fit scale).
+Whatever produced HACX's COLORMAP used the same curve and a different
+matcher — tie-breaking, a restricted search range, or dense near-duplicate
+clusters in its palette. **Open question**: not root-caused; the evidence
+above is the whole of what is established.
 
 Notable: map 0 is *not* pure identity (249/256) — a handful of palette
 colours have a nearer neighbour than themselves, because the DOOM palette

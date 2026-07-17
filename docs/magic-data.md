@@ -55,18 +55,45 @@ colormap[L][i] = argmin_j ‖ palette[j] − round(palette[i] · (32−L)/32) �
 Darken each palette colour by the linear factor `(32−L)/32`, round to nearest,
 and take the **Euclidean-nearest** palette index. That's it.
 
-The reason I'll call this *cracked* rather than *guessed*: **0 mismatches out of
-8,192 across `doom.wad`, `doom2.wad`, AND `plutonia.wad`** — three
-independently-authored palettes, same recipe, zero error. That's the fingerprint
-of the tool's actual algorithm, not an overfit to one WAD. (For contrast:
-Manhattan distance misses by 1,200+, luma-weighted misses too, truncation instead
-of rounding misses by 313, and the plausible-looking `(31−L)/31` scale misses by
-2,373. The recipe is tightly determined — nearby recipes are not close.)
+Against `doom.wad` this reproduces COLORMAP **exactly — 0 mismatches out of 8,192,
+all 32 levels**. And it's tightly determined: Manhattan distance misses by 1,200+,
+luma-weighted misses too, truncation instead of rounding misses by 313, and the
+plausible-looking `(31−L)/31` scale misses by 2,373. Nearby recipes are not close.
+
+**Correction (2026-07-17).** An earlier version of this page said the recipe was
+verified "across `doom.wad`, `doom2.wad`, AND `plutonia.wad` — three
+independently-authored palettes... not an overfit to one WAD." That was wrong
+twice over, and the mistake is worth showing rather than quietly deleting:
+
+- **Those three aren't three palettes.** `doom2`, `plutonia`, `tnt` and `chex`
+  ship PLAYPAL *and* COLORMAP **byte-identical** to `doom.wad`. Running the
+  recipe against them re-runs the identical computation on identical input. The
+  number was true; the evidence behind it was one WAD, not three. So the
+  "not an overfit" argument had nothing supporting it.
+- **The recipe is not universal.** `hacx.wad` — the one genuinely independent
+  palette I have (748 of its 768 palette bytes differ) — misses **3,517 / 8,192
+  (43%)**, reproducing **none** of its 32 levels. HACX's COLORMAP isn't broken
+  either: map 0 is 255/256 identity and map 31 is 255/256 near-black *in HACX's
+  own palette*. It's a properly built colormap the recipe simply can't produce.
+
+Here's the part I like better than the claim I lost. Fit the best darkening scale
+per light level against HACX's *own* colormap, and out falls **`(32−L)/32`** —
+0.994, 0.878, 0.750, 0.624, 0.496, 0.375, 0.249, 0.124, within 0.008 of the recipe
+across all 32 levels. Recovered independently, from a palette id never touched.
+
+So the curve is real and it generalizes; the **nearest-colour matching is id's
+alone**. Whoever built HACX's COLORMAP used the same curve and a different matcher
+— tie-breaking, a restricted search range, something. I haven't cracked that, and
+I'd rather say so than dress up a guess.
+
+The lesson generalizes past DOOM: "verified against three sources" is worth
+exactly as much as the sources are independent. Mine weren't, and every number I
+published was correct anyway. Hash your inputs.
 
 The invulnerability map (map 32) is a grayscale inverse-luma ramp,
 `gray = 254 − ((76·r + 152·g + 34·b) >> 8)`, matching 241/256 (the residual 15 are
 gray-ramp tie-breaks). Note the weights sum to 262, slope ~1.023 — *not* the
-textbook 0.299/0.587/0.114, which is why standard luma formulas miss it by 92.
+textbook 0.299/0.587/0.114, which is why standard luma formulas miss it by 91.
 
 Reproduce it yourself:
 [`colormap-crack.c`](https://github.com/mattafaak/webdoom/blob/master/tools/archaeology/colormap-crack.c),

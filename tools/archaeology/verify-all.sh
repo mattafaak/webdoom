@@ -170,6 +170,12 @@ for (let i = 0; i < nl; i++) {
         tools/archaeology/colormap-crack.c -- "$PLAYPAL_TMP" "$COLORMAP_TMP"
     compile_and_run "recipe-crack / colormap-invuln-crack (4 claims: ea-023..026)" \
         tools/archaeology/colormap-invuln-crack.c -- "$PLAYPAL_TMP" "$COLORMAP_TMP"
+    # FINDING-5 (task 7.3): the recipe is id's, NOT universal. This guards the
+    # corrected claim — that doom2/plutonia/tnt/chex are byte-identical copies
+    # (so they were never independent evidence), and that HACX falsifies
+    # universality at 3517/8192 while still corroborating the (32-L)/32 curve.
+    compile_and_run "recipe-crack / colormap-cross-palette (2 claims: ea-048..049)" \
+        tools/archaeology/colormap-cross-palette.c -- wads/lib
 else
     echo ""
     echo "SKIP  colormap crackers: $WAD_PATH not found (ea-018..021, ea-023..026)"
@@ -213,7 +219,7 @@ fi
 
 # ── Coverage summary ───────────────────────────────────────────────────────────
 echo ""
-FAST_CLAIMS=105  # source-constant(40) + wad-data(23) + recipe-crack(38) + derived-check(4)
+FAST_CLAIMS=107  # source-constant(40) + wad-data(23) + recipe-crack(38) + derived-check(4)
                  # recipe-crack(38) = finesine(3) + gamma(5) + rndtable(3) +
                  # fixeddiv-proof(3) + fixedmul-proof(2) + aprox-dist(5) +
                  # angle-roundtrip(2) + colormap(4) + colormap-invuln(4) +

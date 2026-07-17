@@ -248,6 +248,51 @@ Verification coverage: 172 / 188 = **91%** by count (16 claims unverifiable — 
 
 ## Findings
 
+**FINDING-5 (ea-018): the COLORMAP recipe was published as "proven universal" on
+evidence that is vacuous — and the claim is false.**
+`engine-archaeology.md` §6 and the **public** `docs/magic-data.md` both said the
+recipe was verified "0/8,192 mismatches on doom.wad, doom2.wad, AND plutonia.wad
+— three independently-authored palettes, same recipe, so this is the tool's actual
+algorithm, **not an overfit**." Two independent defects:
+
+1. **The three palettes are one palette.** `doom2`, `plutonia`, `tnt` and `chex`
+   ship PLAYPAL **and** COLORMAP byte-identical to `doom.wad` (verified byte-exact;
+   `ea-049` = 4 identical). Running the recipe against them re-executes the
+   identical computation on identical input. The 0/8,192 figure is TRUE and
+   regenerated green on every gate run — it simply carried no information beyond
+   one WAD, so the "not an overfit" inference had nothing behind it.
+2. **Universality is falsified.** `hacx.wad` — the only genuinely distinct palette
+   in `wads/lib/` (748/768 palette bytes differ) — misses **3,517/8,192 (43%)**
+   (`ea-048`), reproducing **0 of 32** levels under every metric/scale variant.
+   Not explicable as a bad colormap: HACX map 0 is 255/256 identity and map 31 is
+   255/256 near-black **in HACX's own palette** (a palette-dependent test).
+
+**RESOLVED (task 7.3)** — §6 rewritten: the recipe is exact **for the id palette**
+and tightly determined there (the near-miss table stands); the byte-identity is
+stated; HACX's falsification is stated. The public `magic-data.md` carries the
+correction in place rather than a quiet deletion (same precedent as FINDING-1).
+**What survives is stronger than what was lost**: fitting the best scale per light
+level against HACX's *own* colormap independently recovers `(32−L)/32` to within
+0.008 across all 32 levels. The **curve** is id's and generalizes; the
+**nearest-colour matcher** does not (~91–147 of 256 entries/level miss at the
+best-fit scale). The matcher divergence is **not root-caused** — recorded as an
+open question, not guessed at. Guarded by `colormap-cross-palette.c` (ea-048/049).
+
+**Why no gate caught this:** the verifiers check that a **number regenerates**,
+never that the **inputs were distinct**. Every figure here was correct. See also
+FINDING-6 ("the entire platform surface is in three files" — it is five). A claim
+whose force comes from *N independent sources* needs those sources hashed, not
+counted. Recorded in `Plans.md` as the general lesson.
+
+**FINDING-4 straggler (ea-026): the public writeup still said 92 after the fix
+landed internally.** `engine-archaeology.md` was corrected to **91** by FINDING-4,
+and `claims.json` records `expected: "91"`, but `docs/magic-data.md` still read
+"standard luma formulas miss it by 92" until task 7.3. **Root cause:**
+`doc-drift.mjs` builds its doc index from `claims-index.md`, whose locators all
+point at `engine-archaeology.md` — **`magic-data.md` is not in the drift-check's
+scope at all**, so the one document that is actually published is the one document
+the gate cannot see. Corrected to 91. The scope gap itself remains open.
+
 **FINDING-1 (ea-023): invuln COLORMAP match count — doc says 242/256, script says 241/256.**
 `tools/archaeology/colormap-invuln-crack.c` reports `15/256 mismatches`;
 256 − 15 = 241, not 242. The doc also states "residual 15 are nearest-colour

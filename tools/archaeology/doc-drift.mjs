@@ -150,13 +150,25 @@ const DOC_HINTS = {
     //    result quoted in the public docs/magic-data.md writeup; ea-023 is the
     //    figure that shipped WRONG (242→241) until 6.1's inventory caught it.
     //    These are exactly the numbers that most need drift protection.
+    // ea-018/019 re-anchored by task 7.3: §6's prose was rewritten when
+    // FINDING-5 retired the false "proven universal" claim. Both regexes now
+    // use \s+ rather than a literal space so a re-wrap cannot break them again
+    // (the old ea-019 pattern died purely on a line break).
     'ea-018': { doc_file: 'engine-archaeology.md',
-                needle: 'mismatches on doom.wad',
-                extract_re: /\*\*([\d,]+)\s*\/\s*8,192\s+mismatches\s+on\s+doom\.wad/ },
+                needle: '8,192 mismatches',
+                extract_re: /\*\*exactly:\s*([\d,]+)\s*\/\s*8,192\s+mismatches/ },
 
     'ea-019': { doc_file: 'engine-archaeology.md',
                 needle: 'truncation instead of rounding',
-                extract_re: /truncation instead of rounding misses by ([\d,]+)/ },
+                extract_re: /truncation instead of rounding\s+misses by ([\d,]+)/ },
+
+    // FINDING-5 claims (task 7.3): the corrected, honest evidence.
+    'ea-048': { doc_file: 'engine-archaeology.md',
+                needle: 'of 768 palette bytes differ',
+                extract_re: /misses \*\*([\d,]+)\s*\/\s*8,192/ },
+
+    'ea-049': { soft: true,
+                reason: "doc states the byte-identity qualitatively (doom2/plutonia/tnt/chex ship PLAYPAL and COLORMAP byte-identical); the count of 4 is the script's, checked two-way against the manifest" },
 
     'ea-020': { doc_file: 'engine-archaeology.md',
                 needle: 'scale misses by',
