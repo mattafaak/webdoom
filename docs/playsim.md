@@ -1298,6 +1298,89 @@ in the 8.1 worker draft — no `DOOM_ASSERT` exists in `P_BlockLinesIterator`, `
 or `P_PathTraverse`.  Row 17 is not assertable for the reasons given; the structural guarantee is real
 but a runtime assert would fire on valid vanilla game behavior.
 
+### §16.2 The asserts have been proven to fire
+
+**Clean run (13/13, no assert).**  With the invariant flag on (`-DWEBDOOM_INVARIANTS`,
+365635 B wasm), all 13 built-in attract demos play to completion with zero assertion
+output and every tic fingerprint bit-identical to the goldens:
+
+```
+PASS doom-demo1: 1710 gametics bit-identical
+PASS doom-demo2: 2347 gametics bit-identical
+PASS doom-demo3: 3863 gametics bit-identical
+PASS doom-demo4:  818 gametics bit-identical
+PASS doom2-demo1: 1205 gametics bit-identical
+PASS doom2-demo2: 2001 gametics bit-identical
+PASS doom2-demo3: 4471 gametics bit-identical
+PASS tnt-demo1: 4531 gametics bit-identical
+PASS tnt-demo2: 3653 gametics bit-identical
+PASS tnt-demo3: 3433 gametics bit-identical
+PASS plutonia-demo1: 7403 gametics bit-identical
+PASS plutonia-demo2: 3483 gametics bit-identical
+PASS plutonia-demo3: 5662 gametics bit-identical
+PASS — all demos bit-identical to golden
+```
+
+**Behavioral injection — `P_AddThinker` insertion order (row 4).**  The four
+lines of `P_AddThinker` in `engine/core/p_tick.c` were changed from
+tail-insertion (`thinkercap.prev->next = thinker … thinkercap.prev = thinker`)
+to head-insertion (`thinkercap.next->prev = thinker … thinkercap.next = thinker`),
+reversing every new-thinker's position in the circular list.  Building with
+`-DWEBDOOM_INVARIANTS` and running a single demo produces an immediate abort at
+the first `P_AddThinker` call — tic 1, not a desync thousands of tics later:
+
+```
+RuntimeError: Aborted(Assertion failed: thinkercap.prev == thinker
+  && "P_AddThinker: new thinker not at tail -- insertion order broken",
+  at: core/p_tick.c,85,P_AddThinker).
+  Build with -sASSERTIONS for more info.
+```
+
+The cause is named at the call site (`core/p_tick.c:85`, function
+`P_AddThinker`).  Under the plain build the same change would produce no
+immediate output — the desync would surface only as a golden hash mismatch
+after the demo finishes, with no indication of which invariant was broken or
+where.
+
+The source change was reverted (`git checkout -- engine/core/p_tick.c`);
+`git status --short engine/` returned empty.
+
+**Compile-time injection — `MAXSPECIALCROSS` constant (row 18).**  The
+`#define MAXSPECIALCROSS 64` in `engine/core/p_local.h` was changed to `32`.
+The build fails immediately with no object file produced:
+
+```
+core/p_local.h:84:16: error: static assertion failed due to requirement
+  '32 == 64': MAXSPECIALCROSS changed -- playsim.md S16 invariant: must be 64
+   84 | _Static_assert(MAXSPECIALCROSS == 64,
+      |                ^~~~~~~~~~~~~~~~~~~~
+core/p_local.h:67:26: note: expanded from macro 'MAXSPECIALCROSS'
+   67 | #define MAXSPECIALCROSS         32
+```
+
+The `_Static_assert` at `core/p_local.h:84` kills the translation unit before
+any linking occurs.  The plain build has no `_Static_assert` in scope (the
+flag-off path never opens `doomassert.h`), so the same constant change would
+compile silently and only be caught if the changed binary produced a golden
+diff.
+
+The source change was reverted (`git checkout -- engine/core/p_local.h`);
+`git status --short engine/` returned empty.
+
+**Chocolate Doom cross-check status.**  The `tools/build-choco-reference.sh`
+script builds Chocolate Doom from source (clones the upstream repo, applies
+`tools/choco-trace.patch` to emit per-tic fingerprints, then cmake + make).
+The SDL2/SDL2\_mixer/SDL2\_net development packages were not installed on this
+build host (`dpkg -l libsdl2-dev` → no match), so the build would fail at
+the cmake configure step.  The cross-check was skipped on this run.  To enable
+it: `apt install libsdl2-dev libsdl2-mixer-dev libsdl2-net-dev && bash
+tools/build-choco-reference.sh && node tools/demo-test.mjs --cross
+/tmp/webdoom-choco/build/src/chocolate-doom`.
+
+**Final state.**  After all injections were reverted, the flag-off build was
+restored: `rm -rf build/obj && make -j8` → `doom.wasm` 359 574 B,
+md5 `e7772ad691f36cfd29843792ef88ff18`.
+
 ### What is free to change (render-side)
 
 All of the following are documented in `docs/renderer.md`:
