@@ -76,6 +76,7 @@ JS_FILES=(
     client/sw.js
     server/*.js
     tools/*.mjs
+    tools/fuzz/*.mjs
 )
 
 if [ "$FIX" = "1" ]; then
