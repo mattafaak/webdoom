@@ -28,6 +28,12 @@ source tools/emsdk-env.sh
 (cd engine && make -j8 EXTRA_CFLAGS=-DWEBDOOM_INVARIANTS BUILD=../build-invariants OUT=../build-invariants/doom.js 2>&1 | tail -3)
 node tools/demo-test.mjs --build-dir build-invariants | tail -2
 
+echo "── differential fuzz (fast tier: 20 seeds, parallel 8) ─"
+# Fast CI tier: ~1 min. Fails the suite immediately on any divergence (set -eo pipefail).
+# Full / release tier: node tools/fuzz/run-fuzz.mjs --seeds 1000 --parallel 8  (~30 min)
+# Drift-proof test: FUZZ_FORCE_DIVERGE=1 node tools/fuzz/run-fuzz.mjs --seeds 1 --parallel 1
+node tools/fuzz/run-fuzz.mjs --seeds 20 --parallel 8
+
 echo "── demo compatibility (golden traces) ──────────────────"
 node tools/demo-test.mjs | tail -2
 

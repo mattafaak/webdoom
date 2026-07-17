@@ -20,14 +20,28 @@
 //   - doom.wad E1M1 would also work; doom2.wad avoids episode logic.
 //
 // Usage:
-//   node tools/fuzz/run-fuzz.mjs [--seeds N] [--build-dir DIR]
-//   Exit code: 0 = all seeds identical or wasm-only mode; 1 = any divergence.
+//   node tools/fuzz/run-fuzz.mjs [--seeds N] [--parallel J] [--build-dir DIR]
+//
+//   --parallel J   Concurrency level (default: min(8, ceil(cpuCount/3))).
+//                  Each seed gets a fresh wasm module instance (no shared heap)
+//                  and an independent nat-doom child process. Results for seed N
+//                  are identical whether run sequentially or in parallel.
+//
+// Tiers:
+//   Fast / CI tier (run-tests.sh):  --seeds 20  --parallel 8   (~1 min)
+//   Full / release tier:            --seeds 1000 --parallel 8  (~30 min)
+//
+// Exit code: 0 = all seeds identical or wasm-only mode; 1 = any divergence.
+//
+// Test-only flag: FUZZ_FORCE_DIVERGE=1 injects a fake divergence on seed 0.
+//   Use only to verify that CI correctly fails on divergence. Never set in
+//   production.
 
 import { readFileSync, writeFileSync, mkdirSync, rmSync, symlinkSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
+import { spawnSync, spawn } from 'node:child_process';
+import { tmpdir, cpus } from 'node:os';
 import { createHash } from 'node:crypto';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -35,11 +49,14 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 // ── args ─────────────────────────────────────────────────────────────────────
 let numSeeds = 10;
 let buildDir = 'build';
+let parallelism = Math.min(8, Math.max(1, Math.ceil(cpus().length / 3)));
 for (let i = 2; i < process.argv.length; i++) {
     if (process.argv[i] === '--seeds' && process.argv[i + 1]) {
         numSeeds = Number(process.argv[++i]);
     } else if (process.argv[i] === '--build-dir' && process.argv[i + 1]) {
         buildDir = process.argv[++i];
+    } else if (process.argv[i] === '--parallel' && process.argv[i + 1]) {
+        parallelism = Number(process.argv[++i]);
     }
 }
 
@@ -65,6 +82,9 @@ if (!natAvailable) {
 }
 
 // ── webdoom per-tic trace ─────────────────────────────────────────────────────
+// Each call to createDoom() returns a fresh, independent Emscripten module with
+// its own heap (HEAPU8), malloc arena, and global state. No mutable state is
+// shared between concurrent wasm instances, so parallel seeds are deterministic.
 async function runWasm(pwadBytes) {
     const iwadBytes = readFileSync(IWAD_PATH);
     let done = null;
@@ -121,16 +141,28 @@ async function runWasm(pwadBytes) {
 }
 
 // ── nat-doom per-tic trace ────────────────────────────────────────────────────
-function runNative(pwadBytes) {
-    // Build an isolated temp WAD dir with: IWAD symlink + PWAD file.
-    const tmpDir = join(tmpdir(), `webdoom-fuzz-${process.pid}-${Date.now()}`);
-    mkdirSync(tmpDir, { recursive: true });
-    try {
-        symlinkSync(IWAD_PATH, join(tmpDir, IWAD_NAME));
-        writeFileSync(join(tmpDir, PWAD_NAME), pwadBytes);
+// Async: uses spawn (not spawnSync) so multiple nat-doom processes can run in
+// parallel when --parallel > 1. Each seed gets an isolated tmpdir keyed by
+// seed number, so concurrent runs never collide on the filesystem.
+function runNative(pwadBytes, seed) {
+    return new Promise((resolve, reject) => {
+        const tmpDir = join(tmpdir(), `webdoom-fuzz-${process.pid}-${seed}`);
+        mkdirSync(tmpDir, { recursive: true });
+
+        const cleanup = () => {
+            try { rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+        };
+
+        try {
+            symlinkSync(IWAD_PATH, join(tmpDir, IWAD_NAME));
+            writeFileSync(join(tmpDir, PWAD_NAME), pwadBytes);
+        } catch (e) {
+            cleanup();
+            return reject(e);
+        }
 
         const simOut = join(tmpDir, 'sim.json');
-        const result = spawnSync(
+        const child = spawn(
             NAT_DOOM,
             ['-waddir', tmpDir, '-file', PWAD_NAME, '-timedemo', LUMP_NAME, '-sim', simOut],
             {
@@ -139,25 +171,43 @@ function runNative(pwadBytes) {
                     ASAN_OPTIONS: 'halt_on_error=1:print_stats=0',
                     UBSAN_OPTIONS: 'halt_on_error=1:print_stacktrace=1',
                 },
-                maxBuffer: 64 * 1024 * 1024,
-                timeout: 60000,
             }
         );
 
-        if (result.status !== 0) {
-            const stderr = result.stderr?.toString() ?? '';
-            throw new Error(`nat-doom exited ${result.status}: ${stderr.slice(0, 200)}`);
-        }
+        const stderrChunks = [];
+        child.stderr.on('data', (d) => stderrChunks.push(d));
 
-        if (!existsSync(simOut)) {
-            throw new Error('nat-doom did not write sim.json');
-        }
+        const timer = setTimeout(() => {
+            child.kill('SIGKILL');
+            cleanup();
+            reject(new Error('nat-doom timed out (60s)'));
+        }, 60000);
 
-        const sim = JSON.parse(readFileSync(simOut, 'utf8'));
-        return { tics: sim.tics, trace: sim.trace };
-    } finally {
-        try { rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
-    }
+        child.on('close', (code) => {
+            clearTimeout(timer);
+            try {
+                if (code !== 0) {
+                    const stderr = Buffer.concat(stderrChunks).toString().slice(0, 200);
+                    return reject(new Error(`nat-doom exited ${code}: ${stderr}`));
+                }
+                if (!existsSync(simOut)) {
+                    return reject(new Error('nat-doom did not write sim.json'));
+                }
+                const sim = JSON.parse(readFileSync(simOut, 'utf8'));
+                resolve({ tics: sim.tics, trace: sim.trace });
+            } catch (e) {
+                reject(e);
+            } finally {
+                cleanup();
+            }
+        });
+
+        child.on('error', (err) => {
+            clearTimeout(timer);
+            cleanup();
+            reject(err);
+        });
+    });
 }
 
 // ── comparison ────────────────────────────────────────────────────────────────
@@ -194,30 +244,21 @@ function checkReproducibility(seed) {
     return ha;
 }
 
-// ── main ──────────────────────────────────────────────────────────────────────
-console.log(`webdoom fuzzer: ${numSeeds} seeds, wasm vs ${natAvailable ? 'native (differential)' : 'wasm-only self-consistency'}`);
-console.log(`IWAD: ${IWAD_NAME} / MAP01 (episode=1, map=1), 700 tics per seed\n`);
+// ── per-seed runner ───────────────────────────────────────────────────────────
+async function runSeed(seed) {
+    // FUZZ_FORCE_DIVERGE=1 — test-only: inject a fake divergence on seed 0
+    // to verify CI correctly fails on divergence. Never set in production.
+    if (process.env.FUZZ_FORCE_DIVERGE === '1' && seed === 0) {
+        return `seed ${seed}: DIVERGED at tic 0 (wasm=00000001 native=fffffffe) [FORCED — test-only]`;
+    }
 
-// Reproducibility: verify seed 0 twice
-const reproSha = checkReproducibility(0);
-console.log(`reproducibility: seed 0 sha256=${reproSha.slice(0, 16)}... (identical both runs)\n`);
-
-const results = [];
-let anyDivergence = false;
-
-for (let seed = 0; seed < numSeeds; seed++) {
-    process.stdout.write(`seed ${seed}: `);
     const pwadBytes = genDemo(seed);
 
     let wasmResult;
     try {
         wasmResult = await runWasm(pwadBytes);
     } catch (e) {
-        const msg = `seed ${seed}: WASM ERROR — ${e.message}`;
-        console.log('WASM ERROR —', e.message);
-        results.push(msg);
-        anyDivergence = true;
-        continue;
+        return `seed ${seed}: WASM ERROR — ${e.message}`;
     }
 
     if (!natAvailable) {
@@ -226,55 +267,69 @@ for (let seed = 0; seed < numSeeds; seed++) {
         try {
             wasmResult2 = await runWasm(pwadBytes);
         } catch (e) {
-            const msg = `seed ${seed}: WASM2 ERROR — ${e.message}`;
-            console.log('WASM2 ERROR —', e.message);
-            results.push(msg);
-            anyDivergence = true;
-            continue;
+            return `seed ${seed}: WASM2 ERROR — ${e.message}`;
         }
         const cmp = compareTraces(
             { trace: wasmResult.trace },
             { trace: wasmResult2.trace }
         );
         if (cmp.diverged) {
-            const msg = `seed ${seed}: SELF-INCONSISTENT at tic ${cmp.tic} (run1=${cmp.wasm} run2=${cmp.native})`;
-            console.log(msg);
-            results.push(msg);
-            anyDivergence = true;
-        } else {
-            const msg = `seed ${seed}: ${wasmResult.tics} tics, wasm self-consistent (native blocked)`;
-            console.log(msg);
-            results.push(msg);
+            return `seed ${seed}: SELF-INCONSISTENT at tic ${cmp.tic} (run1=${cmp.wasm} run2=${cmp.native})`;
         }
-        continue;
+        return `seed ${seed}: ${wasmResult.tics} tics, wasm self-consistent (native blocked)`;
     }
 
     let nativeResult;
     try {
-        nativeResult = runNative(pwadBytes);
+        nativeResult = await runNative(pwadBytes, seed);
     } catch (e) {
-        const msg = `seed ${seed}: NATIVE ERROR — ${e.message}`;
-        console.log('NATIVE ERROR —', e.message);
-        results.push(msg);
-        anyDivergence = true;
-        continue;
+        return `seed ${seed}: NATIVE ERROR — ${e.message}`;
     }
 
     const cmp = compareTraces(wasmResult, nativeResult);
     if (cmp.diverged) {
-        const msg = `seed ${seed}: DIVERGED at tic ${cmp.tic} (wasm=${cmp.wasm} native=${cmp.native})`;
-        console.log(msg);
-        results.push(msg);
-        anyDivergence = true;
-    } else {
-        const msg = `seed ${seed}: ${wasmResult.tics} tics, hashes identical`;
-        console.log(msg);
-        results.push(msg);
+        return `seed ${seed}: DIVERGED at tic ${cmp.tic} (wasm=${cmp.wasm} native=${cmp.native})`;
     }
+    return `seed ${seed}: ${wasmResult.tics} tics, hashes identical`;
 }
 
+// ── parallel seed pool ────────────────────────────────────────────────────────
+// Runs up to `parallelism` seeds concurrently. Results are stored by seed index
+// so the summary is always printed in seed order regardless of completion order.
+// With parallelism=1 this is equivalent to sequential execution.
+async function runPool() {
+    const results = new Array(numSeeds);
+    let next = 0;
+
+    async function worker() {
+        while (true) {
+            const seed = next++;
+            if (seed >= numSeeds) break;
+            const line = await runSeed(seed);
+            console.log(' ', line);
+            results[seed] = line;
+        }
+    }
+
+    const workers = Array.from({ length: Math.min(parallelism, numSeeds) }, worker);
+    await Promise.all(workers);
+    return results;
+}
+
+// ── main ──────────────────────────────────────────────────────────────────────
+const modeLabel = natAvailable ? 'native (differential)' : 'wasm-only self-consistency';
+console.log(`webdoom fuzzer: ${numSeeds} seeds, parallel=${parallelism}, wasm vs ${modeLabel}`);
+console.log(`IWAD: ${IWAD_NAME} / MAP01 (episode=1, map=1), 700 tics per seed\n`);
+
+// Reproducibility: verify seed 0 twice
+const reproSha = checkReproducibility(0);
+console.log(`reproducibility: seed 0 sha256=${reproSha.slice(0, 16)}... (identical both runs)\n`);
+
+console.log('── per-seed results (in completion order) ───────────────────────');
+const results = await runPool();
+
 // ── summary ───────────────────────────────────────────────────────────────────
-console.log('\n── summary ──────────────────────────────────────────────────────');
+console.log('\n── summary (seed order) ─────────────────────────────────────────');
 for (const r of results) {
     console.log(' ', r);
 }
