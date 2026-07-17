@@ -51,31 +51,31 @@ function sweepBestFit(lv) {
 }
 
 // ── Expected mismatch counts (engine-archaeology.md §4) ───────────────────────
-// ea-010..ea-013 are correct per 0.001-step sweep.
-// ea-014 (level-4=51) is FINDING-3: actual=34, claimed=51.
+// All five levels are the true minima of a 0.001-step γ sweep.
+// FINDING-3 (RESOLVED, task 6.2): the doc's level-4 row claimed γ~2.01 → 51,
+// which matches no γ near 2.01 (2.010→42, 2.011→34, 2.015→50 — the fit is a
+// sharp cliff). Levels 0-3's counts already matched their true minima, so only
+// the level-4 row was wrong; the doc is now corrected to γ≈2.011 → 34/256 and
+// every level is checked here as a first-class assertion (no exemptions).
 
 const claimIds  = ['ea-010', 'ea-011', 'ea-012', 'ea-013', 'ea-014'];
-const claimedMM = [       5,       34,       36,       41,       51];
+const claimedMM = [       5,       34,       36,       41,       34];
 
 let failures = 0;
 for (let lv = 0; lv < 5; lv++) {
     const { gamma, mismatches } = sweepBestFit(lv);
     const exp  = claimedMM[lv];
     const pass = (mismatches === exp);
-    if (!pass && lv < 4) failures++;  // ea-014 is a known finding, non-fatal
+    if (!pass) failures++;
 
-    const flag = lv === 4 ? '(FINDING-3)' : '';
-    console.log(`${pass ? 'PASS' : 'FAIL'}  ${claimIds[lv]}  gamma level-${lv} γ≈${gamma.toFixed(3)} residual mismatches=${mismatches}/256 expected=${exp} ${flag}`);
+    console.log(`${pass ? 'PASS' : 'FAIL'}  ${claimIds[lv]}  gamma level-${lv} γ≈${gamma.toFixed(3)} residual mismatches=${mismatches}/256 expected=${exp}`);
     if (!pass) {
         console.log(`      actual best-fit γ=${gamma.toFixed(4)} gives ${mismatches}, doc claims ${exp}`);
     }
 }
 
-console.log('\ngamma-crack: ea-010..ea-013 → 4/4 checked');
+console.log(`\ngamma-crack: ${5 - failures}/5 passed (failures=${failures})`);
 if (failures > 0) {
-    console.log('ERROR: unexpected mismatch in ea-010..ea-013');
+    console.log('ERROR: gamma table fit disagrees with engine-archaeology.md §4');
     process.exit(1);
 }
-console.log('FINDING-3: ea-014 level-4 doc claims 51/256 mismatches; actual best-fit gives 34/256.');
-console.log('The doc was likely computed with coarser γ resolution. No doc change needed here —');
-console.log('record as FINDING-3 in claims-index.md Findings section.');
