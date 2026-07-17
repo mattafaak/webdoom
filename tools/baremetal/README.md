@@ -23,3 +23,20 @@ exactly the platform bare-metal.md claims DOOM needs. The libc surface
 IMPORTS.md enumerated (memcpy/memset/str*/sin/tan/atan/…) comes from newlib
 (arm-none-eabi's default C library); the I/O syscall stubs (_write→UART,
 _sbrk→arena, _exit→halt) are the platform primitives.
+
+## Rung-2 status (task 11.1b)
+**Achieved & committed:** the ELF boots with NO OS under `qemu-system-arm -M
+virt`, streams the full DOOM startup over the PL011 UART, and generates the
+finesine/finetangent tables on ARM newlib's libm that PASS tables.c's FNV-1a
+canon checksum (outcome A — the archaeology 1 robustness claim validated on a
+different architecture). `engine/core` is unmodified.
+
+**Documented gap (per-tic demo hash comparison):** startup reaches `R_Init`,
+then `R_InitData` (texture/flat/sprite composition over the full 11.8 MiB
+commercial WAD) does not progress under QEMU's TCG interpreter — 300 s with
+zero progress dots. It is NOT zone-starvation: raising the arena 6 to 16 MiB
+did not help (over-large BSS instead regressed the boot). Likely a silent
+bare-metal fault in texture composition (no exception vectors installed, so a
+data abort loops silently) or intractable TCG slowness. Distinguishing needs a
+GDB stub (`qemu -s -S` + `arm-none-eabi-gdb`) — future work. The boot + canon
+trig validation is the load-bearing rung-2 result and stands independently.
