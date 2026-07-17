@@ -17,6 +17,11 @@ SECTIONS {
     *(COMMON)
   } > RAM
   . = ALIGN(8);
-  . = . + 0x10000;        /* 64 KiB stack */
-  _stack_top = .;
+  _heap_end = .;          /* end of .bss — everything above here to stack_top is free */
+  /* Stack at the TOP of RAM, far from .bss, growing down. Megabytes of slack
+     between _heap_end and _stack_top, so a deep stack cannot collide with the
+     zone arena / heap in .bss (the rung-1 layout put a 64 KiB stack directly
+     above .bss; a stack smash there zeroed SP and ran the CPU off into low
+     memory — the R_InitData fault this classifies). */
+  _stack_top = ORIGIN(RAM) + LENGTH(RAM);
 }

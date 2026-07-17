@@ -32,11 +32,24 @@ canon checksum (outcome A — the archaeology 1 robustness claim validated on a
 different architecture). `engine/core` is unmodified.
 
 **Documented gap (per-tic demo hash comparison):** startup reaches `R_Init`,
-then `R_InitData` (texture/flat/sprite composition over the full 11.8 MiB
-commercial WAD) does not progress under QEMU's TCG interpreter — 300 s with
-zero progress dots. It is NOT zone-starvation: raising the arena 6 to 16 MiB
-did not help (over-large BSS instead regressed the boot). Likely a silent
-bare-metal fault in texture composition (no exception vectors installed, so a
-data abort loops silently) or intractable TCG slowness. Distinguishing needs a
-GDB stub (`qemu -s -S` + `arm-none-eabi-gdb`) — future work. The boot + canon
-trig validation is the load-bearing rung-2 result and stands independently.
+then `R_InitData` (texture composition over the full 11.8 MiB commercial WAD)
+never progresses. **Classified via the QEMU gdbstub (`qemu -s` + system `gdb`,
+arch arm):** it is a **runaway fault, not slowness** — the CPU is parked at
+PC ~0x800000 (far below the 0x40000000 code region), `sp = 0x0`, executing
+zero-filled memory (`andeq r0,r0,r0`), PC climbing monotonically. Something in
+texture composition smashed the stack (SP zeroed) and a return jumped into the
+weeds; with no exception vectors installed, the abort runs away silently
+instead of trapping.
+Ruled out: **stack depth/collision** — relocating the stack from a 64 KiB slot
+above `.bss` to the top of RAM (~7 MiB headroom, the current layout) did NOT
+help, so it is not a gradual stack overflow. `sp = 0` is therefore an
+*overwrite*, pointing to a **wild-pointer write** during `R_InitTextures` /
+`R_GenerateComposite` — a bare-metal/ARM-specific memory bug (candidate causes:
+the baked-WAD pointer/offset handling in files.c, or an unaligned WAD-structure
+access that x86 tolerates and this ARMv7-A config does not).
+Fully pinning the write needs breakpoint-level debugging (break in
+R_InitTextures, watchpoint the stack canary, single-step to the faulting
+access) + installing an exception vector table so the abort reports over UART
+instead of running away. That is the rung-2 completion path; left as future
+work. The boot + canon trig validation is the load-bearing rung-2 result and
+stands independently.
