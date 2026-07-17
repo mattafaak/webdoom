@@ -629,6 +629,55 @@ const DOC_HINTS = {
 };
 
 // ── Extract doc figure for a claim ───────────────────────────────────────────
+// ── Public-doc guard (task 6.5 / FINDING-9) ───────────────────────────────────
+// docs/magic-data.md is the PUBLISHED writeup. It was outside this checker's
+// scope entirely: the doc index above is built from claims-index.md, whose
+// locators all point at engine-archaeology.md. So the one document readers
+// actually see was the one document the gate could not see — and two wrong
+// figures shipped through that hole:
+//   FINDING-1  invuln 242 (should be 241) — published, caught by luck
+//   FINDING-4  luma 92 (should be 91) — sat wrong for a whole phase AFTER the
+//              internal doc and claims.json were both corrected to 91
+// This map re-checks the same manifest value against the public doc's own
+// prose. A mismatch is a HARD failure: a wrong number in the published doc is
+// strictly worse than a wrong number in an internal one.
+//
+// Keyed by the same claim id, so there is exactly one source of truth per
+// figure (claims.json's `expected`) and both docs are checked against it.
+const PUBLIC_HINTS = {
+    'ea-018': { needle: '0 mismatches out of',
+                extract_re: /reproduces COLORMAP \*\*exactly — ([\d,]+) mismatches out of 8,192/ },
+    'ea-019': { needle: 'truncation instead of rounding',
+                extract_re: /truncation instead of rounding\s+misses by ([\d,]+)/ },
+    'ea-020': { needle: 'scale misses by',
+                extract_re: /\(31−L\)\/31` scale misses by ([\d,]+)/ },
+    'ea-023': { needle: 'matching',
+                extract_re: /matching ([\d,]+)\/256/ },
+    'ea-025': { needle: 'weights sum to',
+                extract_re: /weights sum to ([\d,]+)/ },
+    'ea-026': { needle: 'standard luma formulas miss it by',
+                extract_re: /standard luma formulas miss it by ([\d,]+)/ },
+    'ea-048': { needle: 'palette bytes differ',
+                extract_re: /misses \*\*([\d,]+)\s*\/\s*8,192/ },
+};
+const PUBLIC_DOC = 'magic-data.md';
+
+// Returns null when the claim has no public figure; otherwise {ok, got, want}.
+function checkPublicDoc(claimId, manifestExpected) {
+    const hint = PUBLIC_HINTS[claimId];
+    if (!hint) return null;
+    const lines = loadDoc(PUBLIC_DOC);
+    if (!lines) return { ok: false, got: null, want: normalize(manifestExpected),
+                         err: `public doc not found: ${PUBLIC_DOC}` };
+    const text = lines.join('\n');
+    const m = text.match(hint.extract_re);
+    if (!m) return { ok: false, got: null, want: normalize(manifestExpected),
+                     err: `figure not found in ${PUBLIC_DOC} (pattern drifted — re-anchor it)` };
+    const got = normalize(m[1]);
+    const want = normalize(manifestExpected);
+    return { ok: got === want, got, want };
+}
+
 function extractDocFigure(claimId, expected) {
     const hint = DOC_HINTS[claimId] || {};
 
@@ -740,6 +789,12 @@ let pass = 0, fail = 0, soft = 0;
 const failDetails = [];
 const softDetails = [];
 
+// Public-doc guard (task 6.5 / FINDING-9). Kept in its own counters so the
+// three-way summary's "(of N checked)" total stays consistent; both `fail`
+// and `publicFail` gate the exit code below.
+let publicChecked = 0, publicPass = 0, publicFail = 0;
+const publicFailDetails = [];
+
 for (const [id, entry] of Object.entries(manifest.claims)) {
     if (entry.status === 'unverifiable') continue;
     if (!activeFamilies.has(entry.family)) continue;
@@ -762,6 +817,27 @@ for (const [id, entry] of Object.entries(manifest.claims)) {
         failDetails.push({ id, type: result.type, msg: result.message });
         console.log(`FAIL  ${id}  [${result.type}] ${result.message}`);
     }
+
+    // Public-doc guard (task 6.5): the same manifest value must also hold in
+    // the PUBLISHED writeup. Independent of the verdict above — a claim can be
+    // soft internally and still have a hard, checkable figure in public.
+    const pub = checkPublicDoc(id, expected);
+    if (pub !== null) {
+        publicChecked++;
+        if (pub.ok) {
+            publicPass++;
+            if (!jsonOnly) console.log(`PASS  ${id}  [public: ${PUBLIC_DOC}]`);
+        } else {
+            // Counted separately from `fail` so the three-way summary's
+            // "(of N checked)" stays consistent; both gate the exit code.
+            publicFail++;
+            const msg = pub.err
+                ? pub.err
+                : `PUBLISHED doc says '${pub.got}', manifest/script say '${pub.want}'`;
+            publicFailDetails.push({ id, msg });
+            console.log(`FAIL  ${id}  [PUBLIC_DOC_ERROR] ${msg}`);
+        }
+    }
 }
 
 const total = pass + fail + soft;
@@ -779,4 +855,13 @@ if (softDetails.length > 0 && !jsonOnly) {
     }
 }
 
-if (fail > 0) process.exit(1);
+// Public-doc guard summary (task 6.5 / FINDING-9)
+console.log(`public-doc (${PUBLIC_DOC}): ${publicPass}/${publicChecked} figures match the manifest`);
+if (publicFailDetails.length > 0) {
+    console.log('\nPUBLISHED doc is WRONG — these figures are live on GitHub:');
+    for (const f of publicFailDetails) {
+        console.log(`  ${f.id}: ${f.msg}`);
+    }
+}
+
+if (fail > 0 || publicFail > 0) process.exit(1);
