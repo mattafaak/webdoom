@@ -1,0 +1,4 @@
+obj/
+*.elf
+*.o
+wad.o
