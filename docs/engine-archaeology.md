@@ -81,7 +81,7 @@ exhaustive negative result, not an absence of evidence.
 | 1 | ~1.15 | 34 |
 | 2 | ~1.34 | 36 |
 | 3 | ~1.61 | 41 |
-| 4 | ~2.01 | 51 |
+| 4 | ~2.011 | 34 |
 
 The curves are unmistakably power functions, and the black floors are
 exact powers of two (min values **2, 4, 8, 16** for levels 1–4 — the

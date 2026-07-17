@@ -32,6 +32,16 @@ extern long web_perf_findplane_calls; // calls to R_FindPlane (all frames)
 extern long web_perf_findplane_iters; // linear-search comparison iterations
 extern long web_perf_visplane_peak;   // peak live visplanes seen in any frame
 
+// task 6.2: teleport counter — always declared; incremented only when
+// p_telept.c is compiled with -DWEB_PERF_TELEPORT_STATS.  Byte-unaffected in
+// the default build because the variable is zeroed and the getter just returns
+// it.
+extern long web_perf_teleport_calls; // successful player teleports per demo
+
+// task 6.2: numspechit peak tracker — always declared; updated only when
+// p_map.c is compiled with -DWEB_PERF_SPECHIT_STATS.
+extern long web_perf_spechit_peak; // peak numspechit observed in any tic
+
 // High-resolution µs timestamp.  Wraps emscripten_get_now() * 1000.
 // Defined in perf.c so core files need not include <emscripten.h>.
 double web_perf_now (void);

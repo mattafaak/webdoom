@@ -42,6 +42,13 @@ rcsid[] = "$Id: p_map.c,v 1.5 1997/02/03 22:45:11 b1 Exp $";
 // Data.
 #include "sounds.h"
 
+// webdoom task 6.2: numspechit peak tracker.
+// Included only when compiled with -DWEB_PERF_SPECHIT_STATS.
+// Zero-cost in the default build: the #ifdef branches are dead code.
+#ifdef WEB_PERF_SPECHIT_STATS
+#include "perf.h"
+#endif
+
 
 fixed_t		tmbbox[4];
 mobj_t*		tmthing;
@@ -245,6 +252,10 @@ boolean PIT_CheckLine (line_t* ld)
 	{
 	    spechit[numspechit] = ld;
 	    numspechit++;
+#ifdef WEB_PERF_SPECHIT_STATS
+	    if (numspechit > web_perf_spechit_peak)
+		web_perf_spechit_peak = numspechit;
+#endif
 	}
     }
 

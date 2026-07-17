@@ -39,6 +39,13 @@ rcsid[] = "$Id: p_telept.c,v 1.3 1997/01/28 22:08:29 b1 Exp $";
 // State.
 #include "r_state.h"
 
+// webdoom task 6.2: teleport counter for runtime-stat verification.
+// Incremented only when compiled with -DWEB_PERF_TELEPORT_STATS.
+// Zero-cost in the default build: the #ifdef branch is dead code.
+#ifdef WEB_PERF_TELEPORT_STATS
+#include "perf.h"
+#endif
+
 
 
 //
@@ -119,7 +126,7 @@ EV_Teleport
 		
 		// don't move for a bit
 		if (thing->player)
-		    thing->reactiontime = 18;	
+		    thing->reactiontime = 18;
 
 		thing->angle = m->angle;
 		thing->momx = thing->momy = thing->momz = 0;
@@ -129,6 +136,11 @@ EV_Teleport
 		thing->oldy = thing->y;
 		thing->oldz = thing->z;
 		thing->oldangle = thing->angle;
+#ifdef WEB_PERF_TELEPORT_STATS
+		// Count all successful teleports (player + monsters).
+		// The doc's "teleport calls" figure is EV_Teleport return-1 count.
+		web_perf_teleport_calls++;
+#endif
 		return 1;
 	    }	
 	}

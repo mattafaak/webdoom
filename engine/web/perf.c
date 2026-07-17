@@ -106,6 +106,23 @@ EMSCRIPTEN_KEEPALIVE long web_perf_visplane_peak_get (void)
     return web_perf_visplane_peak;
 }
 
+// task 6.2: teleport + spechit counters.
+// Always defined so JS getters are always valid (return 0 in normal builds).
+// Incremented only when compiled with -DWEB_PERF_TELEPORT_STATS /
+// -DWEB_PERF_SPECHIT_STATS respectively.
+long web_perf_teleport_calls = 0;
+long web_perf_spechit_peak = 0;
+
+EMSCRIPTEN_KEEPALIVE long web_perf_teleport_calls_get (void)
+{
+    return web_perf_teleport_calls;
+}
+
+EMSCRIPTEN_KEEPALIVE long web_perf_spechit_peak_get (void)
+{
+    return web_perf_spechit_peak;
+}
+
 // Reset all accumulators.  Call between demos so each demo's numbers are
 // independent.
 EMSCRIPTEN_KEEPALIVE void web_perf_reset (void)
@@ -124,6 +141,8 @@ EMSCRIPTEN_KEEPALIVE void web_perf_reset (void)
     web_perf_findplane_calls = 0;
     web_perf_findplane_iters = 0;
     web_perf_visplane_peak = 0;
+    web_perf_teleport_calls = 0;
+    web_perf_spechit_peak = 0;
 }
 
 // --- webdoom: Z_Zone memory stats (task 0.5 memory audit) ---
