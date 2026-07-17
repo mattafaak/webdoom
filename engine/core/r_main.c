@@ -492,9 +492,17 @@ fixed_t R_ScaleFromGlobalAngle (angle_t visangle)
     anglea = ANG90 + (visangle-viewangle);
     angleb = ANG90 + (visangle-rw_normalangle);
 
-    // both sines are allways positive
-    sinea = finesine[anglea>>ANGLETOFINESHIFT];	
-    sineb = finesine[angleb>>ANGLETOFINESHIFT];
+    // Vanilla's comment here ("both sines are allways positive") is wrong:
+    // anglea/angleb are SIGNED, and when visangle-viewangle < -ANG90 the
+    // signed >>ANGLETOFINESHIFT yields a NEGATIVE finesine index — an
+    // out-of-bounds READ of whatever precedes the table (found by the
+    // differential fuzzer: 52/1000 synthetic demos crash ASan here; no
+    // golden demo reaches it). Casting to angle_t first wraps mod 2^32, so
+    // the index stays in [0,8191] ⊂ finesine[10240] and is bit-identical
+    // to vanilla whenever the value is non-negative (every normal view).
+    // Render-only either way — playsim.md §16: the renderer is free.
+    sinea = finesine[(angle_t)anglea>>ANGLETOFINESHIFT];
+    sineb = finesine[(angle_t)angleb>>ANGLETOFINESHIFT];
     num = FixedMul(projection,sineb)<<detailshift;
     den = FixedMul(rw_distance,sinea);
 

@@ -57,6 +57,15 @@ for (let i = 2; i < process.argv.length; i++) {
         buildDir = process.argv[++i];
     } else if (process.argv[i] === '--parallel' && process.argv[i + 1]) {
         parallelism = Number(process.argv[++i]);
+    } else if (process.argv[i] === '--require-native') {
+        // handled below via argv.includes
+    } else {
+        // An unrecognized flag silently running the DEFAULT config once made a
+        // targeted re-verification look green while testing nothing (lead,
+        // 2026-07-17). Unknown args are an error, not a shrug.
+        console.error(`FATAL: unknown argument '${process.argv[i]}'`);
+        console.error('usage: run-fuzz.mjs [--seeds N] [--parallel J] [--build-dir DIR] [--require-native]');
+        process.exit(2);
     }
 }
 
