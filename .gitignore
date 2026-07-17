@@ -10,6 +10,8 @@ tools/native-sanitize/obj/
 tools/native-sanitize/out/
 tools/native-sanitize/nat-doom
 tools/native-sanitize/nat-doom-nosanity
+tools/native-sanitize/nat-doom-cov
+tools/native-sanitize/cov-obj/
 .claude/
 env.local
 out/

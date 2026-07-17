@@ -1,0 +1,5014 @@
+{
+  "totals": {
+    "functions_total": 711,
+    "functions_hit": 427,
+    "function_pct": 60.1,
+    "branches_total": 6810,
+    "branches_hit": 3312,
+    "branch_pct": 48.6
+  },
+  "by_file": {
+    "d_net.c": {
+      "functions_total": 9,
+      "functions_hit": 2,
+      "branches_total": 26,
+      "branches_hit": 12,
+      "function_pct": 22.2,
+      "branch_pct": 46.2
+    },
+    "engine/core/am_map.c": {
+      "functions_total": 34,
+      "functions_hit": 1,
+      "branches_total": 349,
+      "branches_hit": 1,
+      "function_pct": 2.9,
+      "branch_pct": 0.3
+    },
+    "engine/core/d_main.c": {
+      "functions_total": 15,
+      "functions_hit": 9,
+      "branches_total": 255,
+      "branches_hit": 89,
+      "function_pct": 60.0,
+      "branch_pct": 34.9
+    },
+    "engine/core/f_finale.c": {
+      "functions_total": 12,
+      "functions_hit": 0,
+      "branches_total": 154,
+      "branches_hit": 0,
+      "function_pct": 0.0,
+      "branch_pct": 0.0
+    },
+    "engine/core/f_wipe.c": {
+      "functions_total": 10,
+      "functions_hit": 6,
+      "branches_total": 42,
+      "branches_hit": 25,
+      "function_pct": 60.0,
+      "branch_pct": 59.5
+    },
+    "engine/core/g_game.c": {
+      "functions_total": 32,
+      "functions_hit": 10,
+      "branches_total": 410,
+      "branches_hit": 114,
+      "function_pct": 31.2,
+      "branch_pct": 27.8
+    },
+    "engine/core/hu_lib.c": {
+      "functions_total": 20,
+      "functions_hit": 13,
+      "branches_total": 76,
+      "branches_hit": 37,
+      "function_pct": 65.0,
+      "branch_pct": 48.7
+    },
+    "engine/core/hu_stuff.c": {
+      "functions_total": 10,
+      "functions_hit": 7,
+      "branches_total": 112,
+      "branches_hit": 21,
+      "function_pct": 70.0,
+      "branch_pct": 18.8
+    },
+    "engine/core/m_argv.c": {
+      "functions_total": 1,
+      "functions_hit": 1,
+      "branches_total": 4,
+      "branches_hit": 4,
+      "function_pct": 100.0,
+      "branch_pct": 100.0
+    },
+    "engine/core/m_bbox.c": {
+      "functions_total": 2,
+      "functions_hit": 2,
+      "branches_total": 8,
+      "branches_hit": 8,
+      "function_pct": 100.0,
+      "branch_pct": 100.0
+    },
+    "engine/core/m_cheat.c": {
+      "functions_total": 2,
+      "functions_hit": 0,
+      "branches_total": 22,
+      "branches_hit": 0,
+      "function_pct": 0.0,
+      "branch_pct": 0.0
+    },
+    "engine/core/m_menu.c": {
+      "functions_total": 54,
+      "functions_hit": 3,
+      "branches_total": 304,
+      "branches_hit": 7,
+      "function_pct": 5.6,
+      "branch_pct": 2.3
+    },
+    "engine/core/m_misc.c": {
+      "functions_total": 7,
+      "functions_hit": 1,
+      "branches_total": 54,
+      "branches_hit": 5,
+      "function_pct": 14.3,
+      "branch_pct": 9.3
+    },
+    "engine/core/m_random.c": {
+      "functions_total": 3,
+      "functions_hit": 3,
+      "branches_total": 0,
+      "branches_hit": 0,
+      "function_pct": 100.0,
+      "branch_pct": 0.0
+    },
+    "engine/core/m_swap.c": {
+      "functions_total": 2,
+      "functions_hit": 0,
+      "branches_total": 0,
+      "branches_hit": 0,
+      "function_pct": 0.0,
+      "branch_pct": 0.0
+    },
+    "engine/core/p_ceilng.c": {
+      "functions_total": 6,
+      "functions_hit": 0,
+      "branches_total": 65,
+      "branches_hit": 0,
+      "function_pct": 0.0,
+      "branch_pct": 0.0
+    },
+    "engine/core/p_doors.c": {
+      "functions_total": 6,
+      "functions_hit": 4,
+      "branches_total": 100,
+      "branches_hit": 55,
+      "function_pct": 66.7,
+      "branch_pct": 55.0
+    },
+    "engine/core/p_enemy.c": {
+      "functions_total": 64,
+      "functions_hit": 48,
+      "branches_total": 465,
+      "branches_hit": 289,
+      "function_pct": 75.0,
+      "branch_pct": 62.2
+    },
+    "engine/core/p_floor.c": {
+      "functions_total": 4,
+      "functions_hit": 4,
+      "branches_total": 107,
+      "branches_hit": 58,
+      "function_pct": 100.0,
+      "branch_pct": 54.2
+    },
+    "engine/core/p_inter.c": {
+      "functions_total": 9,
+      "functions_hit": 9,
+      "branches_total": 316,
+      "branches_hit": 212,
+      "function_pct": 100.0,
+      "branch_pct": 67.1
+    },
+    "engine/core/p_lights.c": {
+      "functions_total": 11,
+      "functions_hit": 8,
+      "branches_total": 45,
+      "branches_hit": 21,
+      "function_pct": 72.7,
+      "branch_pct": 46.7
+    },
+    "engine/core/p_map.c": {
+      "functions_total": 20,
+      "functions_hit": 20,
+      "branches_total": 300,
+      "branches_hit": 267,
+      "function_pct": 100.0,
+      "branch_pct": 89.0
+    },
+    "engine/core/p_maputl.c": {
+      "functions_total": 15,
+      "functions_hit": 15,
+      "branches_total": 187,
+      "branches_hit": 153,
+      "function_pct": 100.0,
+      "branch_pct": 81.8
+    },
+    "engine/core/p_mobj.c": {
+      "functions_total": 16,
+      "functions_hit": 15,
+      "branches_total": 264,
+      "branches_hit": 203,
+      "function_pct": 93.8,
+      "branch_pct": 76.9
+    },
+    "engine/core/p_plats.c": {
+      "functions_total": 6,
+      "functions_hit": 4,
+      "branches_total": 67,
+      "branches_hit": 30,
+      "function_pct": 66.7,
+      "branch_pct": 44.8
+    },
+    "engine/core/p_pspr.c": {
+      "functions_total": 30,
+      "functions_hit": 25,
+      "branches_total": 134,
+      "branches_hit": 104,
+      "function_pct": 83.3,
+      "branch_pct": 77.6
+    },
+    "engine/core/p_saveg.c": {
+      "functions_total": 8,
+      "functions_hit": 0,
+      "branches_total": 84,
+      "branches_hit": 0,
+      "function_pct": 0.0,
+      "branch_pct": 0.0
+    },
+    "engine/core/p_setup.c": {
+      "functions_total": 12,
+      "functions_hit": 12,
+      "branches_total": 80,
+      "branches_hit": 71,
+      "function_pct": 100.0,
+      "branch_pct": 88.8
+    },
+    "engine/core/p_sight.c": {
+      "functions_total": 5,
+      "functions_hit": 5,
+      "branches_total": 68,
+      "branches_hit": 62,
+      "function_pct": 100.0,
+      "branch_pct": 91.2
+    },
+    "engine/core/p_spec.c": {
+      "functions_total": 18,
+      "functions_hit": 13,
+      "branches_total": 237,
+      "branches_hit": 127,
+      "function_pct": 72.2,
+      "branch_pct": 53.6
+    },
+    "engine/core/p_switch.c": {
+      "functions_total": 4,
+      "functions_hit": 4,
+      "branches_total": 191,
+      "branches_hit": 66,
+      "function_pct": 100.0,
+      "branch_pct": 34.6
+    },
+    "engine/core/p_telept.c": {
+      "functions_total": 1,
+      "functions_hit": 1,
+      "branches_total": 22,
+      "branches_hit": 21,
+      "function_pct": 100.0,
+      "branch_pct": 95.5
+    },
+    "engine/core/p_tick.c": {
+      "functions_total": 6,
+      "functions_hit": 5,
+      "branches_total": 22,
+      "branches_hit": 14,
+      "function_pct": 83.3,
+      "branch_pct": 63.6
+    },
+    "engine/core/p_user.c": {
+      "functions_total": 5,
+      "functions_hit": 5,
+      "branches_total": 128,
+      "branches_hit": 102,
+      "function_pct": 100.0,
+      "branch_pct": 79.7
+    },
+    "engine/core/r_bsp.c": {
+      "functions_total": 8,
+      "functions_hit": 8,
+      "branches_total": 104,
+      "branches_hit": 99,
+      "function_pct": 100.0,
+      "branch_pct": 95.2
+    },
+    "engine/core/r_data.c": {
+      "functions_total": 13,
+      "functions_hit": 13,
+      "branches_total": 104,
+      "branches_hit": 70,
+      "function_pct": 100.0,
+      "branch_pct": 67.3
+    },
+    "engine/core/r_draw.c": {
+      "functions_total": 11,
+      "functions_hit": 6,
+      "branches_total": 134,
+      "branches_hit": 49,
+      "function_pct": 54.5,
+      "branch_pct": 36.6
+    },
+    "engine/core/r_main.c": {
+      "functions_total": 22,
+      "functions_hit": 19,
+      "branches_total": 144,
+      "branches_hit": 116,
+      "function_pct": 86.4,
+      "branch_pct": 80.6
+    },
+    "engine/core/r_plane.c": {
+      "functions_total": 7,
+      "functions_hit": 7,
+      "branches_total": 70,
+      "branches_hit": 60,
+      "function_pct": 100.0,
+      "branch_pct": 85.7
+    },
+    "engine/core/r_segs.c": {
+      "functions_total": 3,
+      "functions_hit": 3,
+      "branches_total": 174,
+      "branches_hit": 165,
+      "function_pct": 100.0,
+      "branch_pct": 94.8
+    },
+    "engine/core/r_sky.c": {
+      "functions_total": 1,
+      "functions_hit": 1,
+      "branches_total": 0,
+      "branches_hit": 0,
+      "function_pct": 100.0,
+      "branch_pct": 0.0
+    },
+    "engine/core/r_things.c": {
+      "functions_total": 14,
+      "functions_hit": 14,
+      "branches_total": 215,
+      "branches_hit": 186,
+      "function_pct": 100.0,
+      "branch_pct": 86.5
+    },
+    "engine/core/s_sound.c": {
+      "functions_total": 16,
+      "functions_hit": 13,
+      "branches_total": 136,
+      "branches_hit": 88,
+      "function_pct": 81.2,
+      "branch_pct": 64.7
+    },
+    "engine/core/st_lib.c": {
+      "functions_total": 10,
+      "functions_hit": 10,
+      "branches_total": 46,
+      "branches_hit": 31,
+      "function_pct": 100.0,
+      "branch_pct": 67.4
+    },
+    "engine/core/st_stuff.c": {
+      "functions_total": 20,
+      "functions_hit": 17,
+      "branches_total": 237,
+      "branches_hit": 111,
+      "function_pct": 85.0,
+      "branch_pct": 46.8
+    },
+    "engine/core/tables.c": {
+      "functions_total": 4,
+      "functions_hit": 4,
+      "branches_total": 24,
+      "branches_hit": 22,
+      "function_pct": 100.0,
+      "branch_pct": 91.7
+    },
+    "engine/core/v_video.c": {
+      "functions_total": 8,
+      "functions_hit": 6,
+      "branches_total": 82,
+      "branches_hit": 33,
+      "function_pct": 75.0,
+      "branch_pct": 40.2
+    },
+    "engine/core/w_wad.c": {
+      "functions_total": 15,
+      "functions_hit": 10,
+      "branches_total": 68,
+      "branches_hit": 28,
+      "function_pct": 66.7,
+      "branch_pct": 41.2
+    },
+    "engine/core/wi_stuff.c": {
+      "functions_total": 35,
+      "functions_hit": 0,
+      "branches_total": 444,
+      "branches_hit": 0,
+      "function_pct": 0.0,
+      "branch_pct": 0.0
+    },
+    "engine/core/z_zone.c": {
+      "functions_total": 7,
+      "functions_hit": 6,
+      "branches_total": 60,
+      "branches_hit": 38,
+      "function_pct": 85.7,
+      "branch_pct": 63.3
+    },
+    "files.c": {
+      "functions_total": 9,
+      "functions_hit": 7,
+      "branches_total": 24,
+      "branches_hit": 13,
+      "function_pct": 77.8,
+      "branch_pct": 54.2
+    },
+    "i_main.c": {
+      "functions_total": 3,
+      "functions_hit": 2,
+      "branches_total": 38,
+      "branches_hit": 19,
+      "function_pct": 66.7,
+      "branch_pct": 50.0
+    },
+    "i_sound.c": {
+      "functions_total": 24,
+      "functions_hit": 10,
+      "branches_total": 0,
+      "branches_hit": 0,
+      "function_pct": 41.7,
+      "branch_pct": 0.0
+    },
+    "i_system.c": {
+      "functions_total": 13,
+      "functions_hit": 9,
+      "branches_total": 4,
+      "branches_hit": 2,
+      "function_pct": 69.2,
+      "branch_pct": 50.0
+    },
+    "i_video.c": {
+      "functions_total": 8,
+      "functions_hit": 6,
+      "branches_total": 4,
+      "branches_hit": 4,
+      "function_pct": 75.0,
+      "branch_pct": 100.0
+    },
+    "perf.c": {
+      "functions_total": 1,
+      "functions_hit": 1,
+      "branches_total": 0,
+      "branches_hit": 0,
+      "function_pct": 100.0,
+      "branch_pct": 0.0
+    }
+  },
+  "functions": {
+    "AM_getIslope": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 12,
+      "branches_hit": 0
+    },
+    "AM_activateNewScale": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "AM_saveScaleAndLoc": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "AM_restoreScaleAndLoc": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "AM_addMark": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "AM_findMinMaxBoundaries": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 16,
+      "branches_hit": 0
+    },
+    "AM_changeWindowLoc": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 12,
+      "branches_hit": 0
+    },
+    "AM_initVariables": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "AM_loadPics": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "AM_unloadPics": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "AM_clearMarks": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "AM_LevelInit": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "AM_Stop": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "AM_Start": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "AM_minOutWindowScale": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "AM_maxOutWindowScale": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "AM_Responder": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 55,
+      "branches_hit": 0
+    },
+    "AM_changeWindowScale": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "AM_doFollowPlayer": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "AM_updateLightLev": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "AM_Ticker": {
+      "file": "engine/core/am_map.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 1
+    },
+    "AM_clearFB": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "AM_clipMline": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 72,
+      "branches_hit": 0
+    },
+    "AM_drawFline": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 30,
+      "branches_hit": 0
+    },
+    "AM_drawMline": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "AM_drawGrid": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "AM_drawWalls": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 28,
+      "branches_hit": 0
+    },
+    "AM_rotate": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "AM_drawLineCharacter": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 10,
+      "branches_hit": 0
+    },
+    "AM_drawPlayers": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 16,
+      "branches_hit": 0
+    },
+    "AM_drawThings": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "AM_drawMarks": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 14,
+      "branches_hit": 0
+    },
+    "AM_drawCrosshair": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "AM_Drawer": {
+      "file": "engine/core/am_map.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "D_PostEvent": {
+      "file": "engine/core/d_main.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "D_ProcessEvents": {
+      "file": "engine/core/d_main.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 4
+    },
+    "D_WipeFrame": {
+      "file": "engine/core/d_main.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 2
+    },
+    "D_Display": {
+      "file": "engine/core/d_main.c",
+      "hit": true,
+      "branches_total": 67,
+      "branches_hit": 32
+    },
+    "D_DoomLoop": {
+      "file": "engine/core/d_main.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 2
+    },
+    "D_DoomFrame": {
+      "file": "engine/core/d_main.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 3
+    },
+    "D_PageTicker": {
+      "file": "engine/core/d_main.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "D_PageDrawer": {
+      "file": "engine/core/d_main.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "D_AdvanceDemo": {
+      "file": "engine/core/d_main.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "D_DoAdvanceDemo": {
+      "file": "engine/core/d_main.c",
+      "hit": false,
+      "branches_total": 18,
+      "branches_hit": 0
+    },
+    "D_StartTitle": {
+      "file": "engine/core/d_main.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "D_AddFile": {
+      "file": "engine/core/d_main.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "IdentifyVersion": {
+      "file": "engine/core/d_main.c",
+      "hit": true,
+      "branches_total": 14,
+      "branches_hit": 8
+    },
+    "FindResponseFile": {
+      "file": "engine/core/d_main.c",
+      "hit": true,
+      "branches_total": 22,
+      "branches_hit": 3
+    },
+    "D_DoomMain": {
+      "file": "engine/core/d_main.c",
+      "hit": true,
+      "branches_total": 108,
+      "branches_hit": 33
+    },
+    "now_ns": {
+      "file": "d_net.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_GetTimeFrac": {
+      "file": "d_net.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "run_tic": {
+      "file": "d_net.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "NetUpdate": {
+      "file": "d_net.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 8
+    },
+    "TryRunTics": {
+      "file": "d_net.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "D_CheckNetGame": {
+      "file": "d_net.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "D_QuitNetGame": {
+      "file": "d_net.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "web_net_setup": {
+      "file": "d_net.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "D_NetCmdFabricated": {
+      "file": "d_net.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "F_StartFinale": {
+      "file": "engine/core/f_finale.c",
+      "hit": false,
+      "branches_total": 15,
+      "branches_hit": 0
+    },
+    "F_Responder": {
+      "file": "engine/core/f_finale.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "F_Ticker": {
+      "file": "engine/core/f_finale.c",
+      "hit": false,
+      "branches_total": 22,
+      "branches_hit": 0
+    },
+    "F_TextWrite": {
+      "file": "engine/core/f_finale.c",
+      "hit": false,
+      "branches_total": 18,
+      "branches_hit": 0
+    },
+    "F_StartCast": {
+      "file": "engine/core/f_finale.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "F_CastTicker": {
+      "file": "engine/core/f_finale.c",
+      "hit": false,
+      "branches_total": 46,
+      "branches_hit": 0
+    },
+    "F_CastResponder": {
+      "file": "engine/core/f_finale.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "F_CastPrint": {
+      "file": "engine/core/f_finale.c",
+      "hit": false,
+      "branches_total": 16,
+      "branches_hit": 0
+    },
+    "F_CastDrawer": {
+      "file": "engine/core/f_finale.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "F_DrawPatchCol": {
+      "file": "engine/core/f_finale.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "F_BunnyScroll": {
+      "file": "engine/core/f_finale.c",
+      "hit": false,
+      "branches_total": 12,
+      "branches_hit": 0
+    },
+    "F_Drawer": {
+      "file": "engine/core/f_finale.c",
+      "hit": false,
+      "branches_total": 11,
+      "branches_hit": 0
+    },
+    "wipe_shittyColMajorXform": {
+      "file": "engine/core/f_wipe.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "wipe_initColorXForm": {
+      "file": "engine/core/f_wipe.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "wipe_doColorXForm": {
+      "file": "engine/core/f_wipe.c",
+      "hit": false,
+      "branches_total": 12,
+      "branches_hit": 0
+    },
+    "wipe_exitColorXForm": {
+      "file": "engine/core/f_wipe.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "wipe_initMelt": {
+      "file": "engine/core/f_wipe.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 5
+    },
+    "wipe_doMelt": {
+      "file": "engine/core/f_wipe.c",
+      "hit": true,
+      "branches_total": 16,
+      "branches_hit": 13
+    },
+    "wipe_exitMelt": {
+      "file": "engine/core/f_wipe.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "wipe_StartScreen": {
+      "file": "engine/core/f_wipe.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "wipe_EndScreen": {
+      "file": "engine/core/f_wipe.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "wipe_ScreenWipe": {
+      "file": "engine/core/f_wipe.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "nat_basename": {
+      "file": "files.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "nat_register_file": {
+      "file": "files.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "nat_load_from_disk": {
+      "file": "files.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 4
+    },
+    "W_WebFile": {
+      "file": "files.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 6
+    },
+    "W_WebFileExists": {
+      "file": "files.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "small_path": {
+      "file": "files.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "Web_FileLen": {
+      "file": "files.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "Web_FileCopy": {
+      "file": "files.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "Web_FileWrite": {
+      "file": "files.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "G_CmdChecksum": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "G_BuildTiccmd": {
+      "file": "engine/core/g_game.c",
+      "hit": true,
+      "branches_total": 86,
+      "branches_hit": 38
+    },
+    "G_DoLoadLevel": {
+      "file": "engine/core/g_game.c",
+      "hit": true,
+      "branches_total": 18,
+      "branches_hit": 15
+    },
+    "G_Responder": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 57,
+      "branches_hit": 0
+    },
+    "G_Ticker": {
+      "file": "engine/core/g_game.c",
+      "hit": true,
+      "branches_total": 68,
+      "branches_hit": 25
+    },
+    "G_InitPlayer": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "G_PlayerFinishLevel": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "G_PlayerReborn": {
+      "file": "engine/core/g_game.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "G_CheckSpot": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 14,
+      "branches_hit": 0
+    },
+    "G_DeathMatchSpawnPlayer": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "G_DoReborn": {
+      "file": "engine/core/g_game.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 1
+    },
+    "G_ScreenShot": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "G_ExitLevel": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "G_SecretExitLevel": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "G_DoCompleted": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 47,
+      "branches_hit": 0
+    },
+    "G_WorldDone": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 9,
+      "branches_hit": 0
+    },
+    "G_DoWorldDone": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "G_LoadGame": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "G_DoLoadGame": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "G_SaveGame": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "G_DoSaveGame": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "G_DeferedInitNew": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "G_DoNewGame": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "G_InitNew": {
+      "file": "engine/core/g_game.c",
+      "hit": true,
+      "branches_total": 45,
+      "branches_hit": 26
+    },
+    "G_ReadDemoTiccmd": {
+      "file": "engine/core/g_game.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "G_WriteDemoTiccmd": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "G_RecordDemo": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "G_BeginRecording": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "G_DeferedPlayDemo": {
+      "file": "engine/core/g_game.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "G_DoPlayDemo": {
+      "file": "engine/core/g_game.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 4
+    },
+    "G_TimeDemo": {
+      "file": "engine/core/g_game.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "G_CheckDemoStatus": {
+      "file": "engine/core/g_game.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 1
+    },
+    "HUlib_init": {
+      "file": "engine/core/hu_lib.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "HUlib_clearTextLine": {
+      "file": "engine/core/hu_lib.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "HUlib_initTextLine": {
+      "file": "engine/core/hu_lib.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "HUlib_addCharToTextLine": {
+      "file": "engine/core/hu_lib.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "HUlib_delCharFromTextLine": {
+      "file": "engine/core/hu_lib.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "HUlib_drawTextLine": {
+      "file": "engine/core/hu_lib.c",
+      "hit": true,
+      "branches_total": 16,
+      "branches_hit": 9
+    },
+    "HUlib_eraseTextLine": {
+      "file": "engine/core/hu_lib.c",
+      "hit": true,
+      "branches_total": 14,
+      "branches_hit": 4
+    },
+    "HUlib_initSText": {
+      "file": "engine/core/hu_lib.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "HUlib_addLineToSText": {
+      "file": "engine/core/hu_lib.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "HUlib_addMessageToSText": {
+      "file": "engine/core/hu_lib.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 3
+    },
+    "HUlib_drawSText": {
+      "file": "engine/core/hu_lib.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 5
+    },
+    "HUlib_eraseSText": {
+      "file": "engine/core/hu_lib.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 6
+    },
+    "HUlib_initIText": {
+      "file": "engine/core/hu_lib.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "HUlib_delCharFromIText": {
+      "file": "engine/core/hu_lib.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "HUlib_eraseLineFromIText": {
+      "file": "engine/core/hu_lib.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "HUlib_resetIText": {
+      "file": "engine/core/hu_lib.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "HUlib_addPrefixToIText": {
+      "file": "engine/core/hu_lib.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "HUlib_keyInIText": {
+      "file": "engine/core/hu_lib.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "HUlib_drawIText": {
+      "file": "engine/core/hu_lib.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "HUlib_eraseIText": {
+      "file": "engine/core/hu_lib.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "ForeignTranslation": {
+      "file": "engine/core/hu_stuff.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "HU_Init": {
+      "file": "engine/core/hu_stuff.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "HU_Stop": {
+      "file": "engine/core/hu_stuff.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "HU_Start": {
+      "file": "engine/core/hu_stuff.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 8
+    },
+    "HU_Drawer": {
+      "file": "engine/core/hu_stuff.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "HU_Erase": {
+      "file": "engine/core/hu_stuff.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "HU_Ticker": {
+      "file": "engine/core/hu_stuff.c",
+      "hit": true,
+      "branches_total": 38,
+      "branches_hit": 9
+    },
+    "HU_queueChatChar": {
+      "file": "engine/core/hu_stuff.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "HU_dequeueChatChar": {
+      "file": "engine/core/hu_stuff.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "HU_Responder": {
+      "file": "engine/core/hu_stuff.c",
+      "hit": false,
+      "branches_total": 56,
+      "branches_hit": 0
+    },
+    "nat_state_hash": {
+      "file": "i_main.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 5
+    },
+    "write_trace": {
+      "file": "i_main.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "main": {
+      "file": "i_main.c",
+      "hit": true,
+      "branches_total": 26,
+      "branches_hit": 14
+    },
+    "mus_init": {
+      "file": "i_sound.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "mus_play": {
+      "file": "i_sound.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "mus_stop": {
+      "file": "i_sound.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "mus_pause": {
+      "file": "i_sound.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "mus_setvolume": {
+      "file": "i_sound.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_InitSound": {
+      "file": "i_sound.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_UpdateSound": {
+      "file": "i_sound.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_SubmitSound": {
+      "file": "i_sound.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_ShutdownSound": {
+      "file": "i_sound.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_SetChannels": {
+      "file": "i_sound.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_GetSfxLumpNum": {
+      "file": "i_sound.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_StartSound": {
+      "file": "i_sound.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_StopSound": {
+      "file": "i_sound.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_SoundIsPlaying": {
+      "file": "i_sound.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_UpdateSoundParams": {
+      "file": "i_sound.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_InitMusic": {
+      "file": "i_sound.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_ShutdownMusic": {
+      "file": "i_sound.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_SetMusicVolume": {
+      "file": "i_sound.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_PauseSong": {
+      "file": "i_sound.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_ResumeSong": {
+      "file": "i_sound.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_RegisterSong": {
+      "file": "i_sound.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_PlaySong": {
+      "file": "i_sound.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_StopSong": {
+      "file": "i_sound.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_UnRegisterSong": {
+      "file": "i_sound.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_ZoneBase": {
+      "file": "i_system.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_Tactile": {
+      "file": "i_system.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_BaseTiccmd": {
+      "file": "i_system.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_GetTime": {
+      "file": "i_system.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_Init": {
+      "file": "i_system.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_Quit": {
+      "file": "i_system.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_WaitVBL": {
+      "file": "i_system.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_BeginRead": {
+      "file": "i_system.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_EndRead": {
+      "file": "i_system.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_AllocLow": {
+      "file": "i_system.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_StartFrame": {
+      "file": "i_system.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_StartTic": {
+      "file": "i_system.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_Error": {
+      "file": "i_system.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 2
+    },
+    "I_InitGraphics": {
+      "file": "i_video.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_ShutdownGraphics": {
+      "file": "i_video.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_SetPalette": {
+      "file": "i_video.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "I_UpdateNoBlit": {
+      "file": "i_video.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_FinishUpdate": {
+      "file": "i_video.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "I_ReadScreen": {
+      "file": "i_video.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "nat_palette_version": {
+      "file": "i_video.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "nat_render_hash": {
+      "file": "i_video.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "M_CheckParm": {
+      "file": "engine/core/m_argv.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "M_ClearBox": {
+      "file": "engine/core/m_bbox.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_AddToBox": {
+      "file": "engine/core/m_bbox.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 8
+    },
+    "cht_CheckCheat": {
+      "file": "engine/core/m_cheat.c",
+      "hit": false,
+      "branches_total": 14,
+      "branches_hit": 0
+    },
+    "cht_GetParam": {
+      "file": "engine/core/m_cheat.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "M_ReadSaveStrings": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "M_DrawLoad": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "M_DrawSaveLoadBorder": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "M_LoadSelect": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "M_LoadGame": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "M_DrawSave": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "M_DoSave": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "M_SaveSelect": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "M_SaveGame": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "M_QuickSaveResponse": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "M_QuickSave": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "M_QuickLoadResponse": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "M_QuickLoad": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "M_DrawReadThis1": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 3,
+      "branches_hit": 0
+    },
+    "M_DrawReadThis2": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 3,
+      "branches_hit": 0
+    },
+    "M_DrawSound": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_Sound": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_SfxVol": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 7,
+      "branches_hit": 0
+    },
+    "M_MusicVol": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 7,
+      "branches_hit": 0
+    },
+    "M_DrawMainMenu": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_DrawNewGame": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_NewGame": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "M_DrawEpisode": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_VerifyNightmare": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "M_ChooseSkill": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "M_Episode": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "M_DrawOptions": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_Options": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_ChangeMessages": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "M_EndGameResponse": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "M_EndGame": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "M_ReadThis": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_ReadThis2": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_FinishReadThis": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_QuitResponse": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "M_QuitDOOM": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "M_ChangeSensitivity": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 7,
+      "branches_hit": 0
+    },
+    "M_ChangeDetail": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_SizeDisplay": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 7,
+      "branches_hit": 0
+    },
+    "M_DrawThermo": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "M_DrawEmptyCell": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_DrawSelCell": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_StartMessage": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_StopMessage": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_StringWidth": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "M_StringHeight": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "M_WriteText": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 10,
+      "branches_hit": 0
+    },
+    "M_Responder": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 146,
+      "branches_hit": 0
+    },
+    "M_StartControlPanel": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "M_Drawer": {
+      "file": "engine/core/m_menu.c",
+      "hit": true,
+      "branches_total": 18,
+      "branches_hit": 2
+    },
+    "M_ClearMenus": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_SetupNextMenu": {
+      "file": "engine/core/m_menu.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_Ticker": {
+      "file": "engine/core/m_menu.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "M_Init": {
+      "file": "engine/core/m_menu.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 3
+    },
+    "M_DrawText": {
+      "file": "engine/core/m_misc.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "M_WriteFile": {
+      "file": "engine/core/m_misc.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_ReadFile": {
+      "file": "engine/core/m_misc.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "M_SaveDefaults": {
+      "file": "engine/core/m_misc.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "M_LoadDefaults": {
+      "file": "engine/core/m_misc.c",
+      "hit": true,
+      "branches_total": 26,
+      "branches_hit": 5
+    },
+    "WritePCXfile": {
+      "file": "engine/core/m_misc.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "M_ScreenShot": {
+      "file": "engine/core/m_misc.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "P_Random": {
+      "file": "engine/core/m_random.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_Random": {
+      "file": "engine/core/m_random.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "M_ClearRandom": {
+      "file": "engine/core/m_random.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "SwapSHORT": {
+      "file": "engine/core/m_swap.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "SwapLONG": {
+      "file": "engine/core/m_swap.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "T_MoveCeiling": {
+      "file": "engine/core/p_ceilng.c",
+      "hit": false,
+      "branches_total": 28,
+      "branches_hit": 0
+    },
+    "EV_DoCeiling": {
+      "file": "engine/core/p_ceilng.c",
+      "hit": false,
+      "branches_total": 13,
+      "branches_hit": 0
+    },
+    "P_AddActiveCeiling": {
+      "file": "engine/core/p_ceilng.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "P_RemoveActiveCeiling": {
+      "file": "engine/core/p_ceilng.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "P_ActivateInStasisCeiling": {
+      "file": "engine/core/p_ceilng.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "EV_CeilingCrushStop": {
+      "file": "engine/core/p_ceilng.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "T_VerticalDoor": {
+      "file": "engine/core/p_doors.c",
+      "hit": true,
+      "branches_total": 30,
+      "branches_hit": 18
+    },
+    "EV_DoLockedDoor": {
+      "file": "engine/core/p_doors.c",
+      "hit": true,
+      "branches_total": 18,
+      "branches_hit": 4
+    },
+    "EV_DoDoor": {
+      "file": "engine/core/p_doors.c",
+      "hit": true,
+      "branches_total": 14,
+      "branches_hit": 10
+    },
+    "EV_VerticalDoor": {
+      "file": "engine/core/p_doors.c",
+      "hit": true,
+      "branches_total": 38,
+      "branches_hit": 23
+    },
+    "P_SpawnDoorCloseIn30": {
+      "file": "engine/core/p_doors.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "P_SpawnDoorRaiseIn5Mins": {
+      "file": "engine/core/p_doors.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "P_RecursiveSound": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 16,
+      "branches_hit": 16
+    },
+    "P_NoiseAlert": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "P_CheckMeleeRange": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 4
+    },
+    "P_CheckMissileRange": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 24,
+      "branches_hit": 23
+    },
+    "P_Move": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 20,
+      "branches_hit": 19
+    },
+    "P_TryWalk": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "P_NewChaseDir": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 56,
+      "branches_hit": 55
+    },
+    "P_LookForPlayers": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 16,
+      "branches_hit": 16
+    },
+    "A_KeenDie": {
+      "file": "engine/core/p_enemy.c",
+      "hit": false,
+      "branches_total": 10,
+      "branches_hit": 0
+    },
+    "A_Look": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 17,
+      "branches_hit": 17
+    },
+    "A_Chase": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 58,
+      "branches_hit": 46
+    },
+    "A_FaceTarget": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "A_PosAttack": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "A_SPosAttack": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "A_CPosAttack": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "A_CPosRefire": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 7
+    },
+    "A_SpidRefire": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 5
+    },
+    "A_BspiAttack": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "A_TroopAttack": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "A_SargAttack": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "A_HeadAttack": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "A_CyberAttack": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "A_BruisAttack": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "A_SkelMissile": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "A_Tracer": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 18,
+      "branches_hit": 12
+    },
+    "A_SkelWhoosh": {
+      "file": "engine/core/p_enemy.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "A_SkelFist": {
+      "file": "engine/core/p_enemy.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "PIT_VileCheck": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 10
+    },
+    "A_VileChase": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 8
+    },
+    "A_VileStart": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_StartFire": {
+      "file": "engine/core/p_enemy.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_FireCrackle": {
+      "file": "engine/core/p_enemy.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_Fire": {
+      "file": "engine/core/p_enemy.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "A_VileTarget": {
+      "file": "engine/core/p_enemy.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "A_VileAttack": {
+      "file": "engine/core/p_enemy.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "A_FatRaise": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_FatAttack1": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_FatAttack2": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_FatAttack3": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_SkullAttack": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 2
+    },
+    "A_PainShootSkull": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 9
+    },
+    "A_PainAttack": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "A_PainDie": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_Scream": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 4
+    },
+    "A_XScream": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_Pain": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "A_Fall": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_Explode": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_BossDeath": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 64,
+      "branches_hit": 5
+    },
+    "A_Hoof": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_Metal": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_BabyMetal": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_OpenShotgun2": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_LoadShotgun2": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_CloseShotgun2": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_BrainAwake": {
+      "file": "engine/core/p_enemy.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "A_BrainPain": {
+      "file": "engine/core/p_enemy.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_BrainScream": {
+      "file": "engine/core/p_enemy.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "A_BrainExplode": {
+      "file": "engine/core/p_enemy.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "A_BrainDie": {
+      "file": "engine/core/p_enemy.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_BrainSpit": {
+      "file": "engine/core/p_enemy.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "A_SpawnSound": {
+      "file": "engine/core/p_enemy.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_SpawnFly": {
+      "file": "engine/core/p_enemy.c",
+      "hit": false,
+      "branches_total": 24,
+      "branches_hit": 0
+    },
+    "A_PlayerScream": {
+      "file": "engine/core/p_enemy.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "T_MovePlane": {
+      "file": "engine/core/p_floor.c",
+      "hit": true,
+      "branches_total": 35,
+      "branches_hit": 26
+    },
+    "T_MoveFloor": {
+      "file": "engine/core/p_floor.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 9
+    },
+    "EV_DoFloor": {
+      "file": "engine/core/p_floor.c",
+      "hit": true,
+      "branches_total": 41,
+      "branches_hit": 8
+    },
+    "EV_BuildStairs": {
+      "file": "engine/core/p_floor.c",
+      "hit": true,
+      "branches_total": 19,
+      "branches_hit": 15
+    },
+    "P_GiveAmmo": {
+      "file": "engine/core/p_inter.c",
+      "hit": true,
+      "branches_total": 35,
+      "branches_hit": 23
+    },
+    "P_GiveWeapon": {
+      "file": "engine/core/p_inter.c",
+      "hit": true,
+      "branches_total": 18,
+      "branches_hit": 7
+    },
+    "P_GiveBody": {
+      "file": "engine/core/p_inter.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "P_GiveArmor": {
+      "file": "engine/core/p_inter.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "P_GiveCard": {
+      "file": "engine/core/p_inter.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "P_GivePower": {
+      "file": "engine/core/p_inter.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 4
+    },
+    "P_TouchSpecialThing": {
+      "file": "engine/core/p_inter.c",
+      "hit": true,
+      "branches_total": 145,
+      "branches_hit": 86
+    },
+    "P_KillMobj": {
+      "file": "engine/core/p_inter.c",
+      "hit": true,
+      "branches_total": 32,
+      "branches_hit": 26
+    },
+    "P_DamageMobj": {
+      "file": "engine/core/p_inter.c",
+      "hit": true,
+      "branches_total": 70,
+      "branches_hit": 60
+    },
+    "T_FireFlicker": {
+      "file": "engine/core/p_lights.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "P_SpawnFireFlicker": {
+      "file": "engine/core/p_lights.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "T_LightFlash": {
+      "file": "engine/core/p_lights.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "P_SpawnLightFlash": {
+      "file": "engine/core/p_lights.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "T_StrobeFlash": {
+      "file": "engine/core/p_lights.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "P_SpawnStrobeFlash": {
+      "file": "engine/core/p_lights.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "EV_StartLightStrobing": {
+      "file": "engine/core/p_lights.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "EV_TurnTagLightsOff": {
+      "file": "engine/core/p_lights.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "EV_LightTurnOn": {
+      "file": "engine/core/p_lights.c",
+      "hit": false,
+      "branches_total": 10,
+      "branches_hit": 0
+    },
+    "T_Glow": {
+      "file": "engine/core/p_lights.c",
+      "hit": true,
+      "branches_total": 7,
+      "branches_hit": 6
+    },
+    "P_SpawnGlowingLight": {
+      "file": "engine/core/p_lights.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "PIT_StompThing": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 9
+    },
+    "P_TeleportMove": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 6
+    },
+    "PIT_CheckLine": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 30,
+      "branches_hit": 29
+    },
+    "PIT_CheckThing": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 38,
+      "branches_hit": 34
+    },
+    "P_CheckPosition": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 14,
+      "branches_hit": 13
+    },
+    "P_TryMove": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 26,
+      "branches_hit": 21
+    },
+    "P_ThingHeightClip": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 5
+    },
+    "P_HitSlideLine": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 8
+    },
+    "PTR_SlideTraverse": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 14,
+      "branches_hit": 13
+    },
+    "P_SlideMove": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 20,
+      "branches_hit": 18
+    },
+    "PTR_AimTraverse": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 36,
+      "branches_hit": 32
+    },
+    "PTR_ShootTraverse": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 54,
+      "branches_hit": 48
+    },
+    "P_AimLineAttack": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "P_LineAttack": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "PTR_UseTraverse": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 5
+    },
+    "P_UseLines": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "PIT_RadiusAttack": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 8
+    },
+    "P_RadiusAttack": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "PIT_ChangeSector": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 8
+    },
+    "P_ChangeSector": {
+      "file": "engine/core/p_map.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "P_AproxDistance": {
+      "file": "engine/core/p_maputl.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "P_PointOnLineSide": {
+      "file": "engine/core/p_maputl.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 12
+    },
+    "P_BoxOnLineSide": {
+      "file": "engine/core/p_maputl.c",
+      "hit": true,
+      "branches_total": 11,
+      "branches_hit": 10
+    },
+    "P_PointOnDivlineSide": {
+      "file": "engine/core/p_maputl.c",
+      "hit": true,
+      "branches_total": 16,
+      "branches_hit": 10
+    },
+    "P_MakeDivline": {
+      "file": "engine/core/p_maputl.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "P_InterceptVector": {
+      "file": "engine/core/p_maputl.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 6
+    },
+    "P_LineOpening": {
+      "file": "engine/core/p_maputl.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "P_UnsetThingPosition": {
+      "file": "engine/core/p_maputl.c",
+      "hit": true,
+      "branches_total": 20,
+      "branches_hit": 15
+    },
+    "P_SetThingPosition": {
+      "file": "engine/core/p_maputl.c",
+      "hit": true,
+      "branches_total": 16,
+      "branches_hit": 12
+    },
+    "P_BlockLinesIterator": {
+      "file": "engine/core/p_maputl.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 12
+    },
+    "P_BlockThingsIterator": {
+      "file": "engine/core/p_maputl.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 10
+    },
+    "PIT_AddLineIntercepts": {
+      "file": "engine/core/p_maputl.c",
+      "hit": true,
+      "branches_total": 20,
+      "branches_hit": 14
+    },
+    "PIT_AddThingIntercepts": {
+      "file": "engine/core/p_maputl.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 7
+    },
+    "P_TraverseIntercepts": {
+      "file": "engine/core/p_maputl.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 10
+    },
+    "P_PathTraverse": {
+      "file": "engine/core/p_maputl.c",
+      "hit": true,
+      "branches_total": 38,
+      "branches_hit": 29
+    },
+    "P_SetMobjState": {
+      "file": "engine/core/p_mobj.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 6
+    },
+    "P_ExplodeMissile": {
+      "file": "engine/core/p_mobj.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 2
+    },
+    "P_XYMovement": {
+      "file": "engine/core/p_mobj.c",
+      "hit": true,
+      "branches_total": 62,
+      "branches_hit": 58
+    },
+    "P_ZMovement": {
+      "file": "engine/core/p_mobj.c",
+      "hit": true,
+      "branches_total": 48,
+      "branches_hit": 45
+    },
+    "P_NightmareRespawn": {
+      "file": "engine/core/p_mobj.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "P_MobjThinker": {
+      "file": "engine/core/p_mobj.c",
+      "hit": true,
+      "branches_total": 28,
+      "branches_hit": 20
+    },
+    "P_SpawnMobj": {
+      "file": "engine/core/p_mobj.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 5
+    },
+    "P_RemoveMobj": {
+      "file": "engine/core/p_mobj.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 9
+    },
+    "P_RespawnSpecials": {
+      "file": "engine/core/p_mobj.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 1
+    },
+    "P_SpawnPlayer": {
+      "file": "engine/core/p_mobj.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 6
+    },
+    "P_SpawnMapThing": {
+      "file": "engine/core/p_mobj.c",
+      "hit": true,
+      "branches_total": 44,
+      "branches_hit": 31
+    },
+    "P_SpawnPuff": {
+      "file": "engine/core/p_mobj.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "P_SpawnBlood": {
+      "file": "engine/core/p_mobj.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 5
+    },
+    "P_CheckMissileSpawn": {
+      "file": "engine/core/p_mobj.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "P_SpawnMissile": {
+      "file": "engine/core/p_mobj.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "P_SpawnPlayerMissile": {
+      "file": "engine/core/p_mobj.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 6
+    },
+    "T_PlatRaise": {
+      "file": "engine/core/p_plats.c",
+      "hit": true,
+      "branches_total": 23,
+      "branches_hit": 15
+    },
+    "EV_DoPlat": {
+      "file": "engine/core/p_plats.c",
+      "hit": true,
+      "branches_total": 20,
+      "branches_hit": 9
+    },
+    "P_ActivateInStasis": {
+      "file": "engine/core/p_plats.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "EV_StopPlat": {
+      "file": "engine/core/p_plats.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "P_AddActivePlat": {
+      "file": "engine/core/p_plats.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "P_RemoveActivePlat": {
+      "file": "engine/core/p_plats.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "P_SetPsprite": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 8
+    },
+    "P_CalcSwing": {
+      "file": "engine/core/p_pspr.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "P_BringUpWeapon": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "P_CheckAmmo": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 44,
+      "branches_hit": 27
+    },
+    "P_FireWeapon": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "P_DropWeapon": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_WeaponReady": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 18,
+      "branches_hit": 17
+    },
+    "A_ReFire": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 5
+    },
+    "A_CheckReload": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_Lower": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 5
+    },
+    "A_Raise": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "A_GunFlash": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_Punch": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "A_Saw": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 8
+    },
+    "A_FireMissile": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_FireBFG": {
+      "file": "engine/core/p_pspr.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_FirePlasma": {
+      "file": "engine/core/p_pspr.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "P_BulletSlope": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "P_GunShot": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "A_FirePistol": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_FireShotgun": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "A_FireShotgun2": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "A_FireCGun": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "A_Light0": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_Light1": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_Light2": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "A_BFGSpray": {
+      "file": "engine/core/p_pspr.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "A_BFGsound": {
+      "file": "engine/core/p_pspr.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "P_SetupPsprites": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "P_MovePsprites": {
+      "file": "engine/core/p_pspr.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 9
+    },
+    "P_ArchivePlayers": {
+      "file": "engine/core/p_saveg.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "P_UnArchivePlayers": {
+      "file": "engine/core/p_saveg.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "P_ArchiveWorld": {
+      "file": "engine/core/p_saveg.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "P_UnArchiveWorld": {
+      "file": "engine/core/p_saveg.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "P_ArchiveThinkers": {
+      "file": "engine/core/p_saveg.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "P_UnArchiveThinkers": {
+      "file": "engine/core/p_saveg.c",
+      "hit": false,
+      "branches_total": 9,
+      "branches_hit": 0
+    },
+    "P_ArchiveSpecials": {
+      "file": "engine/core/p_saveg.c",
+      "hit": false,
+      "branches_total": 24,
+      "branches_hit": 0
+    },
+    "P_UnArchiveSpecials": {
+      "file": "engine/core/p_saveg.c",
+      "hit": false,
+      "branches_total": 13,
+      "branches_hit": 0
+    },
+    "P_LoadVertexes": {
+      "file": "engine/core/p_setup.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "P_LoadSegs": {
+      "file": "engine/core/p_setup.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "P_LoadSubsectors": {
+      "file": "engine/core/p_setup.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "P_LoadSectors": {
+      "file": "engine/core/p_setup.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "P_LoadNodes": {
+      "file": "engine/core/p_setup.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 6
+    },
+    "P_LoadThings": {
+      "file": "engine/core/p_setup.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 5
+    },
+    "P_LoadLineDefs": {
+      "file": "engine/core/p_setup.c",
+      "hit": true,
+      "branches_total": 18,
+      "branches_hit": 16
+    },
+    "P_LoadSideDefs": {
+      "file": "engine/core/p_setup.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "P_LoadBlockMap": {
+      "file": "engine/core/p_setup.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "P_GroupLines": {
+      "file": "engine/core/p_setup.c",
+      "hit": true,
+      "branches_total": 22,
+      "branches_hit": 21
+    },
+    "P_SetupLevel": {
+      "file": "engine/core/p_setup.c",
+      "hit": true,
+      "branches_total": 14,
+      "branches_hit": 9
+    },
+    "P_Init": {
+      "file": "engine/core/p_setup.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "P_DivlineSide": {
+      "file": "engine/core/p_sight.c",
+      "hit": true,
+      "branches_total": 16,
+      "branches_hit": 16
+    },
+    "P_InterceptVector2": {
+      "file": "engine/core/p_sight.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 4
+    },
+    "P_CrossSubsector": {
+      "file": "engine/core/p_sight.c",
+      "hit": true,
+      "branches_total": 32,
+      "branches_hit": 31
+    },
+    "P_CrossBSPNode": {
+      "file": "engine/core/p_sight.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 9
+    },
+    "P_CheckSight": {
+      "file": "engine/core/p_sight.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "P_InitPicAnims": {
+      "file": "engine/core/p_spec.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 9
+    },
+    "getSide": {
+      "file": "engine/core/p_spec.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "getSector": {
+      "file": "engine/core/p_spec.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "twoSided": {
+      "file": "engine/core/p_spec.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "getNextSector": {
+      "file": "engine/core/p_spec.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "P_FindLowestFloorSurrounding": {
+      "file": "engine/core/p_spec.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "P_FindHighestFloorSurrounding": {
+      "file": "engine/core/p_spec.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "P_FindNextHighestFloor": {
+      "file": "engine/core/p_spec.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 11
+    },
+    "P_FindLowestCeilingSurrounding": {
+      "file": "engine/core/p_spec.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "P_FindHighestCeilingSurrounding": {
+      "file": "engine/core/p_spec.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "P_FindSectorFromLineTag": {
+      "file": "engine/core/p_spec.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "P_FindMinSurroundingLight": {
+      "file": "engine/core/p_spec.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "P_CrossSpecialLine": {
+      "file": "engine/core/p_spec.c",
+      "hit": true,
+      "branches_total": 83,
+      "branches_hit": 22
+    },
+    "P_ShootSpecialLine": {
+      "file": "engine/core/p_spec.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 4
+    },
+    "P_PlayerInSpecialSector": {
+      "file": "engine/core/p_spec.c",
+      "hit": true,
+      "branches_total": 26,
+      "branches_hit": 12
+    },
+    "P_UpdateSpecials": {
+      "file": "engine/core/p_spec.c",
+      "hit": true,
+      "branches_total": 24,
+      "branches_hit": 19
+    },
+    "EV_DoDonut": {
+      "file": "engine/core/p_spec.c",
+      "hit": false,
+      "branches_total": 12,
+      "branches_hit": 0
+    },
+    "P_SpawnSpecials": {
+      "file": "engine/core/p_spec.c",
+      "hit": true,
+      "branches_total": 34,
+      "branches_hit": 26
+    },
+    "P_InitSwitchList": {
+      "file": "engine/core/p_switch.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 9
+    },
+    "P_StartButton": {
+      "file": "engine/core/p_switch.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 5
+    },
+    "P_ChangeSwitchTexture": {
+      "file": "engine/core/p_switch.c",
+      "hit": true,
+      "branches_total": 18,
+      "branches_hit": 17
+    },
+    "P_UseSpecialLine": {
+      "file": "engine/core/p_switch.c",
+      "hit": true,
+      "branches_total": 151,
+      "branches_hit": 35
+    },
+    "EV_Teleport": {
+      "file": "engine/core/p_telept.c",
+      "hit": true,
+      "branches_total": 22,
+      "branches_hit": 21
+    },
+    "P_InitThinkers": {
+      "file": "engine/core/p_tick.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "P_AddThinker": {
+      "file": "engine/core/p_tick.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "P_RemoveThinker": {
+      "file": "engine/core/p_tick.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "P_AllocateThinker": {
+      "file": "engine/core/p_tick.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "P_RunThinkers": {
+      "file": "engine/core/p_tick.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 5
+    },
+    "P_Ticker": {
+      "file": "engine/core/p_tick.c",
+      "hit": true,
+      "branches_total": 16,
+      "branches_hit": 9
+    },
+    "P_Thrust": {
+      "file": "engine/core/p_user.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "P_CalcHeight": {
+      "file": "engine/core/p_user.c",
+      "hit": true,
+      "branches_total": 26,
+      "branches_hit": 23
+    },
+    "P_MovePlayer": {
+      "file": "engine/core/p_user.c",
+      "hit": true,
+      "branches_total": 14,
+      "branches_hit": 14
+    },
+    "P_DeathThink": {
+      "file": "engine/core/p_user.c",
+      "hit": true,
+      "branches_total": 18,
+      "branches_hit": 13
+    },
+    "P_PlayerThink": {
+      "file": "engine/core/p_user.c",
+      "hit": true,
+      "branches_total": 70,
+      "branches_hit": 52
+    },
+    "web_perf_now": {
+      "file": "perf.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_ClearDrawSegs": {
+      "file": "engine/core/r_bsp.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_ClipSolidWallSegment": {
+      "file": "engine/core/r_bsp.c",
+      "hit": true,
+      "branches_total": 20,
+      "branches_hit": 19
+    },
+    "R_ClipPassWallSegment": {
+      "file": "engine/core/r_bsp.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 12
+    },
+    "R_ClearClipSegs": {
+      "file": "engine/core/r_bsp.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_AddLine": {
+      "file": "engine/core/r_bsp.c",
+      "hit": true,
+      "branches_total": 30,
+      "branches_hit": 29
+    },
+    "R_CheckBBox": {
+      "file": "engine/core/r_bsp.c",
+      "hit": true,
+      "branches_total": 26,
+      "branches_hit": 25
+    },
+    "R_Subsector": {
+      "file": "engine/core/r_bsp.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 9
+    },
+    "R_RenderBSPNode": {
+      "file": "engine/core/r_bsp.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 5
+    },
+    "R_DrawColumnInCache": {
+      "file": "engine/core/r_data.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 8
+    },
+    "R_GenerateComposite": {
+      "file": "engine/core/r_data.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 7
+    },
+    "R_GenerateLookup": {
+      "file": "engine/core/r_data.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 10
+    },
+    "R_GetColumn": {
+      "file": "engine/core/r_data.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "R_InitTextures": {
+      "file": "engine/core/r_data.c",
+      "hit": true,
+      "branches_total": 28,
+      "branches_hit": 26
+    },
+    "R_InitFlats": {
+      "file": "engine/core/r_data.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "R_InitSpriteLumps": {
+      "file": "engine/core/r_data.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "R_InitColormaps": {
+      "file": "engine/core/r_data.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_InitData": {
+      "file": "engine/core/r_data.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_FlatNumForName": {
+      "file": "engine/core/r_data.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "R_CheckTextureNumForName": {
+      "file": "engine/core/r_data.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 6
+    },
+    "R_TextureNumForName": {
+      "file": "engine/core/r_data.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "R_PrecacheLevel": {
+      "file": "engine/core/r_data.c",
+      "hit": true,
+      "branches_total": 28,
+      "branches_hit": 1
+    },
+    "R_DrawColumn": {
+      "file": "engine/core/r_draw.c",
+      "hit": true,
+      "branches_total": 24,
+      "branches_hit": 20
+    },
+    "R_DrawColumnLow": {
+      "file": "engine/core/r_draw.c",
+      "hit": false,
+      "branches_total": 22,
+      "branches_hit": 0
+    },
+    "R_DrawFuzzColumn": {
+      "file": "engine/core/r_draw.c",
+      "hit": true,
+      "branches_total": 16,
+      "branches_hit": 13
+    },
+    "R_DrawTranslatedColumn": {
+      "file": "engine/core/r_draw.c",
+      "hit": false,
+      "branches_total": 22,
+      "branches_hit": 0
+    },
+    "R_InitTranslationTables": {
+      "file": "engine/core/r_draw.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "R_DrawSpan": {
+      "file": "engine/core/r_draw.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 6
+    },
+    "R_DrawSpanLow": {
+      "file": "engine/core/r_draw.c",
+      "hit": false,
+      "branches_total": 10,
+      "branches_hit": 0
+    },
+    "R_InitBuffer": {
+      "file": "engine/core/r_draw.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 5
+    },
+    "R_FillBackScreen": {
+      "file": "engine/core/r_draw.c",
+      "hit": true,
+      "branches_total": 16,
+      "branches_hit": 1
+    },
+    "R_VideoErase": {
+      "file": "engine/core/r_draw.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_DrawViewBorder": {
+      "file": "engine/core/r_draw.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "R_AddPointToBox": {
+      "file": "engine/core/r_main.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "R_PointOnSide": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 16,
+      "branches_hit": 16
+    },
+    "R_PointOnSegSide": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 16,
+      "branches_hit": 16
+    },
+    "R_PointToAngle": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 16,
+      "branches_hit": 16
+    },
+    "R_PointToAngle2": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_PointToDist": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 4
+    },
+    "R_InitPointToAngle": {
+      "file": "engine/core/r_main.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_ScaleFromGlobalAngle": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 6
+    },
+    "R_InitTables": {
+      "file": "engine/core/r_main.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_InitTextureMapping": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 24,
+      "branches_hit": 23
+    },
+    "R_InitLightTables": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 5
+    },
+    "R_SetViewSize": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_ExecuteSetViewSize": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 18,
+      "branches_hit": 14
+    },
+    "R_Init": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_PointInSubsector": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "R_LerpFixed": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_LerpAngle": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_SetupFrame": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 5
+    },
+    "R_ForceReshear": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_ShearView": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 7
+    },
+    "R_InterpolateSectors": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 1
+    },
+    "R_RenderPlayerView": {
+      "file": "engine/core/r_main.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_InitPlanes": {
+      "file": "engine/core/r_plane.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_MapPlane": {
+      "file": "engine/core/r_plane.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 9
+    },
+    "R_ClearPlanes": {
+      "file": "engine/core/r_plane.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 4
+    },
+    "R_FindPlane": {
+      "file": "engine/core/r_plane.c",
+      "hit": true,
+      "branches_total": 14,
+      "branches_hit": 13
+    },
+    "R_CheckPlane": {
+      "file": "engine/core/r_plane.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 10
+    },
+    "R_MakeSpans": {
+      "file": "engine/core/r_plane.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 8
+    },
+    "R_DrawPlanes": {
+      "file": "engine/core/r_plane.c",
+      "hit": true,
+      "branches_total": 20,
+      "branches_hit": 16
+    },
+    "R_RenderMaskedSegRange": {
+      "file": "engine/core/r_segs.c",
+      "hit": true,
+      "branches_total": 18,
+      "branches_hit": 15
+    },
+    "R_RenderSegLoop": {
+      "file": "engine/core/r_segs.c",
+      "hit": true,
+      "branches_total": 40,
+      "branches_hit": 40
+    },
+    "R_StoreWallRange": {
+      "file": "engine/core/r_segs.c",
+      "hit": true,
+      "branches_total": 116,
+      "branches_hit": 110
+    },
+    "R_InitSkyMap": {
+      "file": "engine/core/r_sky.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_InstallSpriteLump": {
+      "file": "engine/core/r_things.c",
+      "hit": true,
+      "branches_total": 16,
+      "branches_hit": 11
+    },
+    "R_InitSpriteDefs": {
+      "file": "engine/core/r_things.c",
+      "hit": true,
+      "branches_total": 25,
+      "branches_hit": 22
+    },
+    "R_InitSprites": {
+      "file": "engine/core/r_things.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "R_ClearSprites": {
+      "file": "engine/core/r_things.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "R_NewVisSprite": {
+      "file": "engine/core/r_things.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "R_DrawMaskedColumn": {
+      "file": "engine/core/r_things.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 8
+    },
+    "R_DrawVisSprite": {
+      "file": "engine/core/r_things.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 7
+    },
+    "R_ProjectSprite": {
+      "file": "engine/core/r_things.c",
+      "hit": true,
+      "branches_total": 38,
+      "branches_hit": 34
+    },
+    "R_AddSprites": {
+      "file": "engine/core/r_things.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 7
+    },
+    "R_DrawPSprite": {
+      "file": "engine/core/r_things.c",
+      "hit": true,
+      "branches_total": 26,
+      "branches_hit": 17
+    },
+    "R_DrawPlayerSprites": {
+      "file": "engine/core/r_things.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 7
+    },
+    "R_SortVisSprites": {
+      "file": "engine/core/r_things.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 10
+    },
+    "R_DrawSprite": {
+      "file": "engine/core/r_things.c",
+      "hit": true,
+      "branches_total": 52,
+      "branches_hit": 51
+    },
+    "R_DrawMasked": {
+      "file": "engine/core/r_things.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 9
+    },
+    "S_Init": {
+      "file": "engine/core/s_sound.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "S_Start": {
+      "file": "engine/core/s_sound.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 7
+    },
+    "S_StartSoundAtVolume": {
+      "file": "engine/core/s_sound.c",
+      "hit": true,
+      "branches_total": 36,
+      "branches_hit": 25
+    },
+    "S_StartSound": {
+      "file": "engine/core/s_sound.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "S_StopSound": {
+      "file": "engine/core/s_sound.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 6
+    },
+    "S_PauseSound": {
+      "file": "engine/core/s_sound.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "S_ResumeSound": {
+      "file": "engine/core/s_sound.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "S_UpdateSounds": {
+      "file": "engine/core/s_sound.c",
+      "hit": true,
+      "branches_total": 18,
+      "branches_hit": 5
+    },
+    "S_SetMusicVolume": {
+      "file": "engine/core/s_sound.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "S_SetSfxVolume": {
+      "file": "engine/core/s_sound.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "S_StartMusic": {
+      "file": "engine/core/s_sound.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "S_ChangeMusic": {
+      "file": "engine/core/s_sound.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 5
+    },
+    "S_StopMusic": {
+      "file": "engine/core/s_sound.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 1
+    },
+    "S_StopChannel": {
+      "file": "engine/core/s_sound.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 8
+    },
+    "S_AdjustSoundParams": {
+      "file": "engine/core/s_sound.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 10
+    },
+    "S_getChannel": {
+      "file": "engine/core/s_sound.c",
+      "hit": true,
+      "branches_total": 16,
+      "branches_hit": 15
+    },
+    "STlib_init": {
+      "file": "engine/core/st_lib.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "STlib_initNum": {
+      "file": "engine/core/st_lib.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "STlib_drawNum": {
+      "file": "engine/core/st_lib.c",
+      "hit": true,
+      "branches_total": 18,
+      "branches_hit": 10
+    },
+    "STlib_updateNum": {
+      "file": "engine/core/st_lib.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "STlib_initPercent": {
+      "file": "engine/core/st_lib.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "STlib_updatePercent": {
+      "file": "engine/core/st_lib.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 3
+    },
+    "STlib_initMultIcon": {
+      "file": "engine/core/st_lib.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "STlib_updateMultIcon": {
+      "file": "engine/core/st_lib.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 10
+    },
+    "STlib_initBinIcon": {
+      "file": "engine/core/st_lib.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "STlib_updateBinIcon": {
+      "file": "engine/core/st_lib.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 6
+    },
+    "ST_refreshBackground": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 2
+    },
+    "ST_Responder": {
+      "file": "engine/core/st_stuff.c",
+      "hit": false,
+      "branches_total": 79,
+      "branches_hit": 0
+    },
+    "ST_calcPainOffset": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "ST_updateFaceWidget": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 52,
+      "branches_hit": 48
+    },
+    "ST_updateWidgets": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 22,
+      "branches_hit": 16
+    },
+    "ST_Ticker": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "ST_doPaletteStuff": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 12
+    },
+    "ST_drawWidgets": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 14,
+      "branches_hit": 9
+    },
+    "ST_doRefresh": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "ST_diffDraw": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "ST_Drawer": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 3
+    },
+    "ST_loadGraphics": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 10
+    },
+    "ST_loadData": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "ST_unloadGraphics": {
+      "file": "engine/core/st_stuff.c",
+      "hit": false,
+      "branches_total": 26,
+      "branches_hit": 0
+    },
+    "ST_unloadData": {
+      "file": "engine/core/st_stuff.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "ST_initData": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 4,
+      "branches_hit": 4
+    },
+    "ST_createWidgets": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "ST_Start": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "ST_Stop": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "ST_Init": {
+      "file": "engine/core/st_stuff.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "SlopeDiv": {
+      "file": "engine/core/tables.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "T_ApplyFix": {
+      "file": "engine/core/tables.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 7
+    },
+    "T_Checksum": {
+      "file": "engine/core/tables.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 6
+    },
+    "T_GenerateTables": {
+      "file": "engine/core/tables.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 7
+    },
+    "V_MarkRect": {
+      "file": "engine/core/v_video.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "V_CopyRect": {
+      "file": "engine/core/v_video.c",
+      "hit": true,
+      "branches_total": 20,
+      "branches_hit": 11
+    },
+    "V_DrawPatch": {
+      "file": "engine/core/v_video.c",
+      "hit": true,
+      "branches_total": 18,
+      "branches_hit": 13
+    },
+    "V_DrawPatchFlipped": {
+      "file": "engine/core/v_video.c",
+      "hit": false,
+      "branches_total": 18,
+      "branches_hit": 0
+    },
+    "V_DrawPatchDirect": {
+      "file": "engine/core/v_video.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "V_DrawBlock": {
+      "file": "engine/core/v_video.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 7
+    },
+    "V_GetBlock": {
+      "file": "engine/core/v_video.c",
+      "hit": false,
+      "branches_total": 12,
+      "branches_hit": 0
+    },
+    "V_Init": {
+      "file": "engine/core/v_video.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "w_strupr": {
+      "file": "engine/core/w_wad.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 2
+    },
+    "filelength": {
+      "file": "engine/core/w_wad.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "ExtractFileBase": {
+      "file": "engine/core/w_wad.c",
+      "hit": false,
+      "branches_total": 12,
+      "branches_hit": 0
+    },
+    "W_AddFile": {
+      "file": "engine/core/w_wad.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 9
+    },
+    "W_Reload": {
+      "file": "engine/core/w_wad.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "W_InitMultipleFiles": {
+      "file": "engine/core/w_wad.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 4
+    },
+    "W_InitFile": {
+      "file": "engine/core/w_wad.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "W_NumLumps": {
+      "file": "engine/core/w_wad.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "W_CheckNumForName": {
+      "file": "engine/core/w_wad.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 6
+    },
+    "W_GetNumForName": {
+      "file": "engine/core/w_wad.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "W_LumpLength": {
+      "file": "engine/core/w_wad.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "W_ReadLump": {
+      "file": "engine/core/w_wad.c",
+      "hit": true,
+      "branches_total": 2,
+      "branches_hit": 1
+    },
+    "W_CacheLumpNum": {
+      "file": "engine/core/w_wad.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 4
+    },
+    "W_CacheLumpName": {
+      "file": "engine/core/w_wad.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "W_Profile": {
+      "file": "engine/core/w_wad.c",
+      "hit": false,
+      "branches_total": 16,
+      "branches_hit": 0
+    },
+    "WI_slamBackground": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "WI_Responder": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "WI_drawLF": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "WI_drawEL": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "WI_drawOnLnode": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "WI_initAnimatedBack": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 12,
+      "branches_hit": 0
+    },
+    "WI_updateAnimatedBack": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 24,
+      "branches_hit": 0
+    },
+    "WI_drawAnimatedBack": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "WI_drawNum": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 12,
+      "branches_hit": 0
+    },
+    "WI_drawPercent": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "WI_drawTime": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 10,
+      "branches_hit": 0
+    },
+    "WI_End": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "WI_initNoState": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "WI_updateNoState": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "WI_initShowNextLoc": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "WI_updateShowNextLoc": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "WI_drawShowNextLoc": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 16,
+      "branches_hit": 0
+    },
+    "WI_drawNoState": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "WI_fragSum": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    },
+    "WI_initDeathmatchStats": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "WI_updateDeathmatchStats": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 48,
+      "branches_hit": 0
+    },
+    "WI_drawDeathmatchStats": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 14,
+      "branches_hit": 0
+    },
+    "WI_initNetgameStats": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "WI_updateNetgameStats": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 66,
+      "branches_hit": 0
+    },
+    "WI_drawNetgameStats": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 18,
+      "branches_hit": 0
+    },
+    "WI_initStats": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "WI_updateStats": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 38,
+      "branches_hit": 0
+    },
+    "WI_drawStats": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 2,
+      "branches_hit": 0
+    },
+    "WI_checkForAccelerate": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 12,
+      "branches_hit": 0
+    },
+    "WI_Ticker": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 12,
+      "branches_hit": 0
+    },
+    "WI_loadData": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 32,
+      "branches_hit": 0
+    },
+    "WI_unloadData": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 72,
+      "branches_hit": 0
+    },
+    "WI_Drawer": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 8,
+      "branches_hit": 0
+    },
+    "WI_initVariables": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 10,
+      "branches_hit": 0
+    },
+    "WI_Start": {
+      "file": "engine/core/wi_stuff.c",
+      "hit": false,
+      "branches_total": 4,
+      "branches_hit": 0
+    },
+    "Z_Init": {
+      "file": "engine/core/z_zone.c",
+      "hit": true,
+      "branches_total": 0,
+      "branches_hit": 0
+    },
+    "Z_Free": {
+      "file": "engine/core/z_zone.c",
+      "hit": true,
+      "branches_total": 12,
+      "branches_hit": 10
+    },
+    "Z_Malloc": {
+      "file": "engine/core/z_zone.c",
+      "hit": true,
+      "branches_total": 18,
+      "branches_hit": 9
+    },
+    "Z_FreeTags": {
+      "file": "engine/core/z_zone.c",
+      "hit": true,
+      "branches_total": 8,
+      "branches_hit": 8
+    },
+    "Z_CheckHeap": {
+      "file": "engine/core/z_zone.c",
+      "hit": true,
+      "branches_total": 10,
+      "branches_hit": 7
+    },
+    "Z_ChangeTag2": {
+      "file": "engine/core/z_zone.c",
+      "hit": true,
+      "branches_total": 6,
+      "branches_hit": 4
+    },
+    "Z_FreeMemory": {
+      "file": "engine/core/z_zone.c",
+      "hit": false,
+      "branches_total": 6,
+      "branches_hit": 0
+    }
+  },
+  "never_executed": [
+    "AM_Drawer",
+    "AM_LevelInit",
+    "AM_Responder",
+    "AM_Start",
+    "AM_Stop",
+    "AM_activateNewScale",
+    "AM_addMark",
+    "AM_changeWindowLoc",
+    "AM_changeWindowScale",
+    "AM_clearFB",
+    "AM_clearMarks",
+    "AM_clipMline",
+    "AM_doFollowPlayer",
+    "AM_drawCrosshair",
+    "AM_drawFline",
+    "AM_drawGrid",
+    "AM_drawLineCharacter",
+    "AM_drawMarks",
+    "AM_drawMline",
+    "AM_drawPlayers",
+    "AM_drawThings",
+    "AM_drawWalls",
+    "AM_findMinMaxBoundaries",
+    "AM_getIslope",
+    "AM_initVariables",
+    "AM_loadPics",
+    "AM_maxOutWindowScale",
+    "AM_minOutWindowScale",
+    "AM_restoreScaleAndLoc",
+    "AM_rotate",
+    "AM_saveScaleAndLoc",
+    "AM_unloadPics",
+    "AM_updateLightLev",
+    "A_BFGSpray",
+    "A_BFGsound",
+    "A_BrainAwake",
+    "A_BrainDie",
+    "A_BrainExplode",
+    "A_BrainPain",
+    "A_BrainScream",
+    "A_BrainSpit",
+    "A_Fire",
+    "A_FireBFG",
+    "A_FireCrackle",
+    "A_FirePlasma",
+    "A_KeenDie",
+    "A_SkelFist",
+    "A_SkelWhoosh",
+    "A_SpawnFly",
+    "A_SpawnSound",
+    "A_StartFire",
+    "A_VileAttack",
+    "A_VileTarget",
+    "D_AdvanceDemo",
+    "D_DoAdvanceDemo",
+    "D_NetCmdFabricated",
+    "D_PageDrawer",
+    "D_PageTicker",
+    "D_PostEvent",
+    "D_QuitNetGame",
+    "D_StartTitle",
+    "EV_CeilingCrushStop",
+    "EV_DoCeiling",
+    "EV_DoDonut",
+    "EV_LightTurnOn",
+    "EV_StartLightStrobing",
+    "EV_StopPlat",
+    "EV_TurnTagLightsOff",
+    "ExtractFileBase",
+    "F_BunnyScroll",
+    "F_CastDrawer",
+    "F_CastPrint",
+    "F_CastResponder",
+    "F_CastTicker",
+    "F_DrawPatchCol",
+    "F_Drawer",
+    "F_Responder",
+    "F_StartCast",
+    "F_StartFinale",
+    "F_TextWrite",
+    "F_Ticker",
+    "ForeignTranslation",
+    "G_BeginRecording",
+    "G_CheckSpot",
+    "G_CmdChecksum",
+    "G_DeathMatchSpawnPlayer",
+    "G_DeferedInitNew",
+    "G_DeferedPlayDemo",
+    "G_DoCompleted",
+    "G_DoLoadGame",
+    "G_DoNewGame",
+    "G_DoSaveGame",
+    "G_DoWorldDone",
+    "G_ExitLevel",
+    "G_InitPlayer",
+    "G_LoadGame",
+    "G_PlayerFinishLevel",
+    "G_RecordDemo",
+    "G_Responder",
+    "G_SaveGame",
+    "G_ScreenShot",
+    "G_SecretExitLevel",
+    "G_WorldDone",
+    "G_WriteDemoTiccmd",
+    "HU_Responder",
+    "HU_queueChatChar",
+    "HUlib_addPrefixToIText",
+    "HUlib_delCharFromIText",
+    "HUlib_delCharFromTextLine",
+    "HUlib_eraseLineFromIText",
+    "HUlib_init",
+    "HUlib_keyInIText",
+    "HUlib_resetIText",
+    "I_BeginRead",
+    "I_EndRead",
+    "I_GetTimeFrac",
+    "I_InitMusic",
+    "I_PauseSong",
+    "I_Quit",
+    "I_ResumeSong",
+    "I_ShutdownGraphics",
+    "I_ShutdownMusic",
+    "I_ShutdownSound",
+    "I_StopSong",
+    "I_StopSound",
+    "I_UnRegisterSong",
+    "I_UpdateSoundParams",
+    "I_WaitVBL",
+    "M_ChangeDetail",
+    "M_ChangeMessages",
+    "M_ChangeSensitivity",
+    "M_ChooseSkill",
+    "M_ClearMenus",
+    "M_DoSave",
+    "M_DrawEmptyCell",
+    "M_DrawEpisode",
+    "M_DrawLoad",
+    "M_DrawMainMenu",
+    "M_DrawNewGame",
+    "M_DrawOptions",
+    "M_DrawReadThis1",
+    "M_DrawReadThis2",
+    "M_DrawSave",
+    "M_DrawSaveLoadBorder",
+    "M_DrawSelCell",
+    "M_DrawSound",
+    "M_DrawText",
+    "M_DrawThermo",
+    "M_EndGame",
+    "M_EndGameResponse",
+    "M_Episode",
+    "M_FinishReadThis",
+    "M_LoadGame",
+    "M_LoadSelect",
+    "M_MusicVol",
+    "M_NewGame",
+    "M_Options",
+    "M_QuickLoad",
+    "M_QuickLoadResponse",
+    "M_QuickSave",
+    "M_QuickSaveResponse",
+    "M_QuitDOOM",
+    "M_QuitResponse",
+    "M_ReadFile",
+    "M_ReadSaveStrings",
+    "M_ReadThis",
+    "M_ReadThis2",
+    "M_Responder",
+    "M_SaveDefaults",
+    "M_SaveGame",
+    "M_SaveSelect",
+    "M_ScreenShot",
+    "M_SetupNextMenu",
+    "M_SfxVol",
+    "M_SizeDisplay",
+    "M_Sound",
+    "M_StartControlPanel",
+    "M_StartMessage",
+    "M_StopMessage",
+    "M_StringHeight",
+    "M_StringWidth",
+    "M_VerifyNightmare",
+    "M_WriteFile",
+    "M_WriteText",
+    "P_ActivateInStasis",
+    "P_ActivateInStasisCeiling",
+    "P_AddActiveCeiling",
+    "P_AllocateThinker",
+    "P_ArchivePlayers",
+    "P_ArchiveSpecials",
+    "P_ArchiveThinkers",
+    "P_ArchiveWorld",
+    "P_CalcSwing",
+    "P_FindHighestCeilingSurrounding",
+    "P_NightmareRespawn",
+    "P_RemoveActiveCeiling",
+    "P_SpawnDoorCloseIn30",
+    "P_SpawnDoorRaiseIn5Mins",
+    "P_UnArchivePlayers",
+    "P_UnArchiveSpecials",
+    "P_UnArchiveThinkers",
+    "P_UnArchiveWorld",
+    "R_AddPointToBox",
+    "R_DrawColumnLow",
+    "R_DrawSpanLow",
+    "R_DrawTranslatedColumn",
+    "R_DrawViewBorder",
+    "R_InitPointToAngle",
+    "R_InitTables",
+    "R_VideoErase",
+    "ST_Responder",
+    "ST_unloadData",
+    "ST_unloadGraphics",
+    "S_PauseSound",
+    "S_ResumeSound",
+    "S_StartMusic",
+    "SwapLONG",
+    "SwapSHORT",
+    "T_MoveCeiling",
+    "TryRunTics",
+    "V_DrawPatchFlipped",
+    "V_GetBlock",
+    "WI_Drawer",
+    "WI_End",
+    "WI_Responder",
+    "WI_Start",
+    "WI_Ticker",
+    "WI_checkForAccelerate",
+    "WI_drawAnimatedBack",
+    "WI_drawDeathmatchStats",
+    "WI_drawEL",
+    "WI_drawLF",
+    "WI_drawNetgameStats",
+    "WI_drawNoState",
+    "WI_drawNum",
+    "WI_drawOnLnode",
+    "WI_drawPercent",
+    "WI_drawShowNextLoc",
+    "WI_drawStats",
+    "WI_drawTime",
+    "WI_fragSum",
+    "WI_initAnimatedBack",
+    "WI_initDeathmatchStats",
+    "WI_initNetgameStats",
+    "WI_initNoState",
+    "WI_initShowNextLoc",
+    "WI_initStats",
+    "WI_initVariables",
+    "WI_loadData",
+    "WI_slamBackground",
+    "WI_unloadData",
+    "WI_updateAnimatedBack",
+    "WI_updateDeathmatchStats",
+    "WI_updateNetgameStats",
+    "WI_updateNoState",
+    "WI_updateShowNextLoc",
+    "WI_updateStats",
+    "W_InitFile",
+    "W_NumLumps",
+    "W_Profile",
+    "Web_FileCopy",
+    "Web_FileWrite",
+    "WritePCXfile",
+    "Z_FreeMemory",
+    "cht_CheckCheat",
+    "cht_GetParam",
+    "filelength",
+    "getSector",
+    "getSide",
+    "mus_init",
+    "mus_pause",
+    "mus_play",
+    "mus_setvolume",
+    "mus_stop",
+    "nat_palette_version",
+    "now_ns",
+    "run_tic",
+    "twoSided",
+    "web_net_setup",
+    "wipe_doColorXForm",
+    "wipe_exitColorXForm",
+    "wipe_exitMelt",
+    "wipe_initColorXForm",
+    "write_trace"
+  ]
+}

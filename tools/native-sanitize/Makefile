@@ -106,4 +106,49 @@ check-render: $(OUT)
 clean:
 	rm -rf obj $(OUT) $(OUT_DIR)
 
-.PHONY: all check check-sim check-render clean
+# ── coverage build (nat-doom-cov) ─────────────────────────────────────────────
+# Same sources as nat-doom but with --coverage -O1 and NO sanitizers.
+# -O1 matches the default optimisation level so inlining decisions stay the same.
+# Sanitizers and gcov both instrument the binary; combining them adds noise and
+# slows runs significantly — keep coverage clean.
+# .gcno/.gcda files land in cov-obj/ which is gitignored.
+
+COV_CFLAGS := -m32 -O1 -g \
+              --coverage \
+              -std=gnu89 -DNORMALUNIX \
+              -Dalloca=__builtin_alloca \
+              -fno-strict-aliasing \
+              -Wall \
+              -Wno-unused-variable \
+              -Wno-unused-but-set-variable \
+              -Wno-dangling-else \
+              -Wno-parentheses \
+              -Wno-missing-braces \
+              -Wno-unused-value \
+              -Wno-pointer-sign \
+              -I../../engine/core \
+              -I.
+
+COV_LDFLAGS := -m32 --coverage -lm
+
+COV_OBJ := $(patsubst $(CORE_DIR)/%.c,cov-obj/core/%.o,$(filter $(CORE_DIR)/%,$(SRC))) \
+           $(patsubst %.c,cov-obj/plat/%.o,$(PLAT_SRC))
+
+nat-doom-cov: $(COV_OBJ)
+	$(CC) $(COV_LDFLAGS) $^ -o $@
+	@echo "built $@"
+
+cov-obj/core/%.o: $(CORE_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(COV_CFLAGS) -MMD -MP -c $< -o $@
+
+cov-obj/plat/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(COV_CFLAGS) -MMD -MP -c $< -o $@
+
+-include $(COV_OBJ:.o=.d)
+
+cov-clean:
+	rm -rf cov-obj nat-doom-cov
+
+.PHONY: all check check-sim check-render clean cov-clean
