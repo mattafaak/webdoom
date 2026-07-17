@@ -137,8 +137,12 @@ grayscale-ramp colour via inverse luma,
 **241/256** (`colormap-invuln-crack.c` reports 15/256 mismatches; 241 + 15 =
 256). The residual 15 are nearest-colour tie-breaks in the gray ramp.
 Weights sum to 262 (slope ~1.023, not the textbook 0.299/0.587/0.114),
-which is why standard luma missed by 92. Cosmetic full-screen effect,
-never touches the sim, so it is kept as canon rather than regenerated.
+which is why standard luma missed by 91 — scored with the textbook ITU BT.601
+weights rounded to 8-bit fixed point (**77/150/29**, sum 256) at the same
+`A = 254`. (Pinning the weight set matters: nearby roundings score 88–93, so
+"standard luma" alone is not a reproducible claim. FINDING-4, task 6.3.)
+Cosmetic full-screen effect, never touches the sim, so it is kept as canon
+rather than regenerated.
 
 **Map 33:** all zeros. (Trivially the blackout.)
 

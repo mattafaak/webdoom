@@ -63,16 +63,23 @@ catch(e) { console.log(JSON.stringify(a)); }
 }
 
 # Compile a C script, run it, capture CLAIMS_JSON (same as capture_run).
-# Args: label src_file [extra gcc flags...]
+# compile_and_run <label> <src> [gcc-flags...] [-- binary-args...]
+# Args before `--` go to gcc; args after `--` are passed to the compiled binary
+# (the colormap crackers take PLAYPAL/COLORMAP lump paths that way).
 compile_and_run() {
     local label="$1"
     local src="$2"
     shift 2
+    local gccflags=() binargs=() seen_sep=0
+    for a in "$@"; do
+        if [ "$a" = "--" ] && [ "$seen_sep" = "0" ]; then seen_sep=1; continue; fi
+        if [ "$seen_sep" = "1" ]; then binargs+=("$a"); else gccflags+=("$a"); fi
+    done
     local bin
     bin="$(mktemp /tmp/verify-c-XXXXXX)"
     echo ""
     echo "── $label ──────────────────────────────────────────────────"
-    if ! gcc -O2 -lm "$@" "$src" -o "$bin" 2>&1; then
+    if ! gcc -O2 -lm ${gccflags[@]+"${gccflags[@]}"} "$src" -o "$bin" 2>&1; then
         echo "FAIL  compile error: $src"
         FAMILIES_FAILED=$((FAMILIES_FAILED + 1))
         return
@@ -80,7 +87,7 @@ compile_and_run() {
     local outfile
     outfile="$(mktemp /tmp/verify-family-XXXXXX.out)"
     local rc=0
-    "$bin" > "$outfile" 2>&1 || rc=$?
+    "$bin" ${binargs[@]+"${binargs[@]}"} > "$outfile" 2>&1 || rc=$?
     cat "$outfile"
     local jline
     jline=$(grep -o 'CLAIMS_JSON {.*}' "$outfile" | head -1 | sed 's/^CLAIMS_JSON //' || true)
@@ -120,6 +127,45 @@ compile_and_run "recipe-crack / aprox-distance-crack (3 claims: ea-015..017)" \
 capture_run "derived-check (4 claims: perf-036, perf-039, ps-018, ps-022)" \
     node tools/archaeology/derived-check.mjs
 
+capture_run "recipe-crack / checkcoord-verify (1 claim: ea-027)" \
+    node tools/archaeology/checkcoord-verify.mjs
+
+capture_run "recipe-crack / zlight-distmap (1 claim: ea-028)" \
+    node tools/archaeology/zlight-distmap.mjs
+
+capture_run "recipe-crack / ledger-count (5 claims: ea-029..033)" \
+    node tools/archaeology/ledger-count.mjs
+
+# ── COLORMAP crackers (task 6.3) ───────────────────────────────────────────────
+# These cover the flagship claims — ea-018 (the 0/8192 universal recipe quoted in
+# the public writeup) and ea-023 (the 241/256 figure that shipped WRONG until the
+# 6.1 inventory caught it). They were the LAST claims left unprotected, which is
+# exactly backwards, so they belong in the default gate.
+# They need PLAYPAL + COLORMAP as raw lumps, extracted from the IWAD.
+WAD_PATH="wads/lib/doom.wad"
+if [ -f "$WAD_PATH" ]; then
+    PLAYPAL_TMP="$(mktemp /tmp/PLAYPAL-XXXXXX.lmp)"
+    COLORMAP_TMP="$(mktemp /tmp/COLORMAP-XXXXXX.lmp)"
+    trap 'rm -f "$SCRIPT_VALUES_FILE" "$PLAYPAL_TMP" "$COLORMAP_TMP"' EXIT
+    node -e "
+const {readFileSync, writeFileSync} = require('fs');
+const wad = readFileSync('$WAD_PATH');
+const nl = wad.readUInt32LE(4), dofs = wad.readUInt32LE(8);
+for (let i = 0; i < nl; i++) {
+  const e = dofs + i*16, ofs = wad.readUInt32LE(e), sz = wad.readUInt32LE(e+4);
+  const n = wad.toString('ascii', e+8, e+16).replace(/\0.*\$/, '');
+  if (n === 'PLAYPAL')  writeFileSync('$PLAYPAL_TMP',  wad.subarray(ofs, ofs+sz));
+  if (n === 'COLORMAP') writeFileSync('$COLORMAP_TMP', wad.subarray(ofs, ofs+sz));
+}"
+    compile_and_run "recipe-crack / colormap-crack (4 claims: ea-018..021)" \
+        tools/archaeology/colormap-crack.c -- "$PLAYPAL_TMP" "$COLORMAP_TMP"
+    compile_and_run "recipe-crack / colormap-invuln-crack (4 claims: ea-023..026)" \
+        tools/archaeology/colormap-invuln-crack.c -- "$PLAYPAL_TMP" "$COLORMAP_TMP"
+else
+    echo ""
+    echo "SKIP  colormap crackers: $WAD_PATH not found (ea-018..021, ea-023..026)"
+fi
+
 # ── Full families (--full only) ────────────────────────────────────────────────
 if [ "$FULL" = "1" ]; then
     echo ""
@@ -158,7 +204,10 @@ fi
 
 # ── Coverage summary ───────────────────────────────────────────────────────────
 echo ""
-FAST_CLAIMS=81   # source-constant(40) + wad-data(23) + recipe-crack(14) + derived-check(4)
+FAST_CLAIMS=96   # source-constant(40) + wad-data(23) + recipe-crack(29) + derived-check(4)
+                 # recipe-crack(29) = finesine(3) + gamma(5) + rndtable(3) +
+                 # aprox-dist(3) + colormap(4) + colormap-invuln(4) +
+                 # checkcoord(1) + zlight(1) + ledger(5)
 FULL_CLAIMS=25   # + runtime-stat(15) + measurement-stamp(10)
 UNVERIFIABLE=16
 

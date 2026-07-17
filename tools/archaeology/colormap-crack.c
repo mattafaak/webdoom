@@ -34,6 +34,10 @@ int main (int argc, char** argv)
     fread (cm, 1, 34 * 256, fp);
     fclose (fp);
     const char* mn[] = {"euclid", "manhat", "luma  "};
+    // webdoom task 6.3: capture the [metric][scale-variant] grid so the
+    // CLAIMS_JSON footer can report the specific cells the archaeology doc
+    // cites.  euclid/sv2 (round) is the cracked recipe → ea-018.
+    int grid[3][4];
     for (int metric = 0; metric < 3; metric++)
     {
         // scale variants: try (32-L)/32, and with round vs trunc
@@ -76,10 +80,29 @@ int main (int argc, char** argv)
                 if (!bad)
                     exact_levels++;
             }
+            grid[metric][sv] = total;
             printf (
                 "metric=%s scale=%d: %d/8192 mismatches, %d/32 exact levels\n",
                 mn[metric], sv, total, exact_levels);
         }
+    }
+
+    // CLAIMS_JSON footer (task 6.3) — the cells engine-archaeology.md §6 cites:
+    //   ea-018 euclid + round        → the cracked recipe (expect 0/8192)
+    //   ea-019 euclid + truncation   → 313
+    //   ea-020 euclid + (31-L)/31    → 2373
+    //   ea-021 manhattan + round     → 1208 (doc states "1,200+", a soft bound)
+    printf ("CLAIMS_JSON "
+            "{\"ea-018\":\"%d\",\"ea-019\":\"%d\",\"ea-020\":\"%d\",\"ea-021\":"
+            "\"%d\"}\n",
+            grid[0][2], grid[0][0], grid[0][1], grid[1][2]);
+    // The recipe claim is the load-bearing one: fail loudly if it ever drifts.
+    if (grid[0][2] != 0)
+    {
+        printf ("ERROR: euclid+round recipe no longer reproduces COLORMAP "
+                "(%d/8192 mismatches, expected 0)\n",
+                grid[0][2]);
+        return 1;
     }
     return 0;
 }

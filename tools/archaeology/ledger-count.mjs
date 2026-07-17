@@ -49,3 +49,13 @@ if (sum !== total) {
   process.exit(1);
 }
 console.log('OK: counts consistent.');
+
+// CLAIMS_JSON footer (task 6.3) — engine-archaeology.md §14 verdict ledger:
+//   ea-029 total rows, ea-030..ea-033 the per-verdict category totals.
+console.log(`CLAIMS_JSON ${JSON.stringify({
+  'ea-029': String(total),
+  'ea-030': String(counts.recipe),
+  'ea-031': String(counts.equivalence),
+  'ea-032': String(counts.irreducible),
+  'ea-033': String(counts.declarative),
+})}`);

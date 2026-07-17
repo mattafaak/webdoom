@@ -131,6 +131,62 @@ const DOC_HINTS = {
                 needle: '128.85',
                 extract_re: /mean\s+([\d.]+)\s*\(not/ },
 
+    // ── COLORMAP §6 (task 6.3): the flagship claims. ea-018 is the headline
+    //    result quoted in the public docs/magic-data.md writeup; ea-023 is the
+    //    figure that shipped WRONG (242→241) until 6.1's inventory caught it.
+    //    These are exactly the numbers that most need drift protection.
+    'ea-018': { doc_file: 'engine-archaeology.md',
+                needle: 'mismatches on doom.wad',
+                extract_re: /\*\*([\d,]+)\s*\/\s*8,192\s+mismatches\s+on\s+doom\.wad/ },
+
+    'ea-019': { doc_file: 'engine-archaeology.md',
+                needle: 'truncation instead of rounding',
+                extract_re: /truncation instead of rounding misses by ([\d,]+)/ },
+
+    'ea-020': { doc_file: 'engine-archaeology.md',
+                needle: 'scale misses by',
+                extract_re: /scale misses by ([\d,]+)/ },
+
+    // ea-021: the doc states "Manhattan ... miss by 1,200+" — a LOWER BOUND, not
+    // an exact figure, so there is nothing to extract and compare. The script's
+    // actual (1208) is still checked against the manifest two-way; only the doc
+    // parse is skipped. Tightening the doc to an exact number would over-claim
+    // precision the original sentence deliberately didn't assert.
+    'ea-021': { soft: true,
+                reason: "doc states '1,200+' (a lower bound), not an exact figure" },
+
+    // ea-023: anchored on "matching **N/256**" so it can't accidentally bind to
+    // another N/256 figure in the window (e.g. the "15/256 mismatches" clause
+    // in the same sentence). This is the claim that shipped wrong (242→241).
+    'ea-023': { doc_file: 'engine-archaeology.md',
+                needle: 'then nearest gray — matching',
+                extract_re: /matching\s*\*\*([\d]+)\/256\*\*/ },
+
+    // ea-026: FINDING-4 (task 6.3) — the doc originally said "standard luma
+    // missed by 92" without pinning the weight set; nearby ITU roundings score
+    // 88 (77/151/28), 91 (77/150/29) and 93 (76/150/30), so 92 matched none of
+    // them and the claim was not reproducible. The doc now pins 77/150/29 @
+    // A=254 → 91, which the cracker reproduces exactly.
+    'ea-026': { doc_file: 'engine-archaeology.md',
+                needle: 'standard luma missed by',
+                extract_re: /standard luma missed by\s*([\d]+)/ },
+
+    'ea-024': { doc_file: 'engine-archaeology.md',
+                needle: 'residual 15 are nearest-colour',
+                extract_re: /residual ([\d]+) are nearest-colour/ },
+
+    'ea-025': { doc_file: 'engine-archaeology.md',
+                needle: 'Weights sum to',
+                extract_re: /Weights sum to ([\d]+)/ },
+
+    'ea-027': { doc_file: 'engine-archaeology.md',
+                needle: 'ALL 9 CASES',
+                extract_re: /ALL ([\d]+) CASES/ },
+
+    'ea-029': { doc_file: 'engine-archaeology.md',
+                needle: 'Total ledger rows',
+                extract_re: /Total ledger rows:\s*\*?\*?([\d]+)/ },
+
     'ea-008': { doc_file: 'engine-archaeology.md',
                 needle: '166 of 256 values distinct',
                 extract_re: /only\s+([\d]+)\s+of\s+256\s+values\s+distinct/ },
