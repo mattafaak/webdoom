@@ -66,6 +66,41 @@
 // See playsim.md §4.4 for the full audit.
 #define MAXSPECIALCROSS		64
 
+// webdoom task 8.1: frozen-surface compile-time invariant asserts.
+// These _Static_assert checks verify that the constants that are "frozen"
+// per playsim.md §16 have not been accidentally changed.  They fire at
+// compile time (no runtime overhead) when WEBDOOM_INVARIANTS is defined.
+// All constants are in #define form; _Static_assert evaluates them at
+// compile time against their canonical values from §16 and the source.
+//
+// Standard C99/C11 _Static_assert is used (ISO C, no web/platform dependency).
+// The FRACUNIT constant is defined in m_fixed.h which is included via r_local.h
+// (already included above through the __R_LOCAL__ guard chain).
+//
+// Include inside the #ifdef to keep the normal build unchanged.
+#ifdef WEBDOOM_INVARIANTS
+
+// §16: MAXSPECIALCROSS = 64 (webdoom value; vanilla was 8)
+_Static_assert(MAXSPECIALCROSS == 64,
+    "MAXSPECIALCROSS changed -- playsim.md S16 invariant: must be 64");
+
+// §16: MAPBLOCKUNITS = 128 (blockmap cell size in map units)
+_Static_assert(MAPBLOCKUNITS == 128,
+    "MAPBLOCKUNITS changed -- playsim.md S16 invariant: blockmap cell must be 128 units");
+
+// §16: GRAVITY = FRACUNIT (one unit per tic squared)
+_Static_assert(GRAVITY == FRACUNIT,
+    "GRAVITY changed -- playsim.md S16 invariant: must equal FRACUNIT");
+
+// §16: FLOATSPEED = 4*FRACUNIT (floater vertical approach rate)
+_Static_assert(FLOATSPEED == 4*FRACUNIT,
+    "FLOATSPEED changed -- playsim.md S16 invariant: must be 4*FRACUNIT");
+
+// §16: STOPSPEED = 0x1000 and FRICTION = 0xe800 are in p_mobj.c as local
+// defines; they are verified there (see p_mobj.c WEBDOOM_INVARIANTS block).
+
+#endif /* WEBDOOM_INVARIANTS */
+
 
 
 //
@@ -158,6 +193,12 @@ typedef struct
 } intercept_t;
 
 #define MAXINTERCEPTS	128
+
+#ifdef WEBDOOM_INVARIANTS
+// §16: MAXINTERCEPTS = 128 (intercept buffer size; vanilla was also 128)
+_Static_assert(MAXINTERCEPTS == 128,
+    "MAXINTERCEPTS changed -- playsim.md S16 invariant: must be 128");
+#endif
 
 extern intercept_t	intercepts[MAXINTERCEPTS];
 extern intercept_t*	intercept_p;

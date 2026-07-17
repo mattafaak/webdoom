@@ -42,6 +42,14 @@ static const char rcsid[] = "$Id: r_main.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 #include "r_sky.h"
 #include "perf.h"	// webdoom: per-stage timing
 
+// webdoom task 8.1: frozen-surface invariant asserts.
+// doomassert.h declares doom_in_render_path (defined in m_random.c) which
+// P_Random checks to catch sim/render contamination.
+// Include inside the #ifdef to stay zero-cost when the flag is off.
+#ifdef WEBDOOM_INVARIANTS
+#include "doomassert.h"
+#endif
+
 
 
 
@@ -959,6 +967,13 @@ void R_RenderPlayerView (player_t* player)
     // webdoom: per-stage timing (accumulates into web_perf_*_us globals)
     double t0, t1;
 
+#ifdef WEBDOOM_INVARIANTS
+    // §16 invariant guard: mark render path entry so P_Random can detect
+    // sim/render contamination.  doom_in_render_path == 1 inside this
+    // function; P_Random aborts if it is called while this is set.
+    doom_in_render_path = 1;
+#endif
+
     // --- frame setup + buffer clears ---
     t0 = web_perf_now ();
     R_SetupFrame (player);
@@ -1007,4 +1022,10 @@ void R_RenderPlayerView (player_t* player)
 
     // Check for new console commands.
     NetUpdate ();
+
+#ifdef WEBDOOM_INVARIANTS
+    // Render path complete; clear flag so the next sim tic's P_Random
+    // calls do not false-fire.
+    doom_in_render_path = 0;
+#endif
 }

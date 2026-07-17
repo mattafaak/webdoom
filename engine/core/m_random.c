@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -22,6 +22,14 @@
 //-----------------------------------------------------------------------------
 
 static const char rcsid[] = "$Id: m_random.c,v 1.1 1997/02/03 22:45:11 b1 Exp $";
+
+// webdoom task 8.1: frozen-surface invariant asserts.
+// Include doomassert.h INSIDE the #ifdef so the normal build sees zero
+// additional preprocessor work (task 2.2 precedent: includes go inside the
+// flag block, not at file scope).
+#ifdef WEBDOOM_INVARIANTS
+#include "doomassert.h"
+#endif
 
 
 //
@@ -53,10 +61,48 @@ unsigned char rndtable[256] = {
 int	rndindex = 0;
 int	prndindex = 0;
 
+// webdoom task 8.1: shadow variables for invariant asserts.
+// Defined only when WEBDOOM_INVARIANTS is on; zero overhead otherwise.
+#ifdef WEBDOOM_INVARIANTS
+// doom_in_render_path: set to 1 by R_RenderPlayerView entry, 0 on exit.
+// P_Random asserts this is 0 -- any call from render code is a desync hazard.
+int doom_in_render_path = 0;
+// doom_prnd_expected: the prndindex value expected at the START of the next
+// P_Random call (before the +1 advance).  Initialized to 0 to match the
+// static initial value of prndindex.  Updated after each advance.
+// Fire condition: prndindex != doom_prnd_expected means something modified
+// prndindex between P_Random calls (or between M_ClearRandom and the
+// first P_Random call without going through P_Random).
+int doom_prnd_expected = 0;
+#endif
+
 // Which one is deterministic?
 int P_Random (void)
 {
+#ifdef WEBDOOM_INVARIANTS
+    // §16 invariant: P_Random must never be called from render code.
+    // The renderer is explicitly "free" (playsim.md §16); any call from the
+    // render path would contaminate prndindex and desync demos.
+    // Fire condition: doom_in_render_path is nonzero when P_Random is called.
+    DOOM_ASSERT(doom_in_render_path == 0
+		&& "P_Random called from render path -- sim/render contamination");
+
+    // §16 invariant: prndindex advances by exactly 1 (mod 256) each call.
+    // Nothing else may modify prndindex between P_Random calls.
+    // doom_prnd_expected is separately maintained; if anything writes to
+    // prndindex outside P_Random/M_ClearRandom the comparison diverges
+    // and this fires.  Non-tautological: compares against an independently
+    // tracked shadow, not the expression about to be computed.
+    DOOM_ASSERT(prndindex == doom_prnd_expected
+		&& "prndindex modified outside P_Random/M_ClearRandom");
+#endif
+
     prndindex = (prndindex+1)&0xff;
+
+#ifdef WEBDOOM_INVARIANTS
+    doom_prnd_expected = prndindex;
+#endif
+
     return rndtable[prndindex];
 }
 
@@ -69,8 +115,9 @@ int M_Random (void)
 void M_ClearRandom (void)
 {
     rndindex = prndindex = 0;
+#ifdef WEBDOOM_INVARIANTS
+    // Reset shadow to match: prndindex is now 0, so the first P_Random
+    // after level load must see prndindex == 0.
+    doom_prnd_expected = 0;
+#endif
 }
-
-
-
-

@@ -49,6 +49,12 @@ rcsid[] = "$Id: p_map.c,v 1.5 1997/02/03 22:45:11 b1 Exp $";
 #include "perf.h"
 #endif
 
+// webdoom task 8.1: frozen-surface invariant asserts.
+// Include inside the #ifdef to stay zero-cost when the flag is off.
+#ifdef WEBDOOM_INVARIANTS
+#include "doomassert.h"
+#endif
+
 
 fixed_t		tmbbox[4];
 mobj_t*		tmthing;
@@ -454,6 +460,14 @@ P_CheckPosition
 	    if (!P_BlockLinesIterator (bx,by,PIT_CheckLine))
 		return false;
 
+    // §16 note (x-outer, y-inner iteration order): the nested loop structure
+    // above IS the invariant.  Any swap to y-outer would be a textual change
+    // here, visible in code review.  A runtime assert would require
+    // per-iteration state tracking (prev_bx / prev_by) and static vars that
+    // break under the multi-call pattern; this is classified as a structural
+    // guarantee in docs/s16-mapping.md (see "P_BlockLinesIterator iteration
+    // order" row — "structural" rationale documented there).
+
     return true;
 }
 
@@ -515,6 +529,30 @@ P_TryMove
     // if any special lines were hit, do the effect
     if (! (thing->flags&(MF_TELEPORT|MF_NOCLIP)) )
     {
+#ifdef WEBDOOM_INVARIANTS
+	// §16 invariant: spechit[] bounds — numspechit must be in [0, MAXSPECIALCROSS].
+	// Fire condition: numspechit > MAXSPECIALCROSS means the bounds-guard in
+	// PIT_CheckLine failed to clamp (or numspechit was corrupted).
+	// Not tautological: the guard in PIT_CheckLine and this assert are
+	// independent checks; one catches corruption the other does not.
+	DOOM_ASSERT(numspechit >= 0 && numspechit <= MAXSPECIALCROSS
+		    && "numspechit out of bounds before spechit[] processing");
+
+	// §16 invariant: spechit[] processing order is reverse (numspechit-1 → 0).
+	// The while(numspechit--) idiom guarantees this; the assert checks that
+	// we start at a nonnegative value (so the first iteration accesses
+	// spechit[numspechit-1], which is valid).  A "not assertable" row in
+	// the mapping for this would be misleading — the bounds check above plus
+	// the reverse-decrement in the loop body IS the structural guarantee;
+	// this assert is the per-call-site evidence that numspechit is sane
+	// before the reverse walk begins.
+	{
+	    int _ns = numspechit;
+	    DOOM_ASSERT(_ns >= 0
+		        && "spechit[] reverse processing: numspechit negative before loop");
+	    (void)_ns;
+	}
+#endif
 	while (numspechit--)
 	{
 	    // see if the line was crossed

@@ -33,6 +33,11 @@ rcsid[] = "$Id: p_sight.c,v 1.3 1997/01/28 22:08:28 b1 Exp $";
 // State.
 #include "r_state.h"
 
+// webdoom task 8.1: frozen-surface invariant asserts.
+#ifdef WEBDOOM_INVARIANTS
+#include "doomassert.h"
+#endif
+
 //
 // P_CheckSight
 //
@@ -332,6 +337,19 @@ P_CheckSight
     validcount++;
 	
     sightzstart = t1->z + t1->height - (t1->height>>2);
+
+#ifdef WEBDOOM_INVARIANTS
+    // §16 invariant: P_CheckSight eye height formula must be exactly
+    // t1->z + t1->height - (t1->height >> 2), i.e., 3/4 up from t1's base.
+    // This is re-computed independently below and compared against sightzstart.
+    // Non-tautological: if the formula in the assignment above is changed (e.g.
+    // using >>1 instead of >>2, or dropping t1->z), the re-computed value
+    // will differ and this fires.  The assert captures a formula, not just a
+    // pointer value.
+    DOOM_ASSERT(sightzstart == (t1->z + t1->height - (t1->height>>2))
+		&& "P_CheckSight eye height formula changed -- playsim.md S16 invariant");
+#endif
+
     topslope = (t2->z+t2->height) - sightzstart;
     bottomslope = (t2->z) - sightzstart;
 	

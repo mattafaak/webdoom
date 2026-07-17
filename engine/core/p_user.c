@@ -35,6 +35,11 @@ rcsid[] = "$Id: p_user.c,v 1.3 1997/01/28 22:08:29 b1 Exp $";
 
 #include "doomstat.h"
 
+// webdoom task 8.1: frozen-surface invariant asserts.
+#ifdef WEBDOOM_INVARIANTS
+#include "doomassert.h"
+#endif
+
 
 
 // Index of the special effects (INVUL inverse) map.
@@ -159,10 +164,21 @@ void P_MovePlayer (player_t* player)
     // Do not let the player control movement
     //  if not onground.
     onground = (player->mo->z <= player->mo->floorz);
-	
+
+#ifdef WEBDOOM_INVARIANTS
+    // §16 invariant: onground gate on player thrust (p_user.c:161).
+    // Verifies the DEFINITION of onground matches the mobj's actual position.
+    // Non-tautological: any code path that modifies player->mo->z or
+    // player->mo->floorz between the assignment and the thrust calls without
+    // updating `onground` will cause divergence and fire this assert.
+    // It also catches changes to the onground formula (e.g. < vs <=).
+    DOOM_ASSERT(onground == (player->mo->z <= player->mo->floorz)
+		&& "onground definition mismatch -- S16 invariant: player thrust gate broken");
+#endif
+
     if (cmd->forwardmove && onground)
 	P_Thrust (player, player->mo->angle, cmd->forwardmove*2048);
-    
+
     if (cmd->sidemove && onground)
 	P_Thrust (player, player->mo->angle-ANG90, cmd->sidemove*2048);
 

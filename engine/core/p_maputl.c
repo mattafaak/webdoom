@@ -40,6 +40,12 @@ rcsid[] = "$Id: p_maputl.c,v 1.5 1997/02/03 22:45:11 b1 Exp $";
 // State.
 #include "r_state.h"
 
+// webdoom task 8.1: frozen-surface invariant asserts.
+// Include inside the #ifdef to stay zero-cost when the flag is off.
+#ifdef WEBDOOM_INVARIANTS
+#include "doomassert.h"
+#endif
+
 //
 // P_AproxDistance
 // Gives an estimation of distance (not exact)
@@ -606,6 +612,17 @@ PIT_AddLineIntercepts (line_t* ld)
     if (intercept_p - intercepts < MAXINTERCEPTS-1)
 	intercept_p++;	// webdoom: clamp, vanilla overran on long traces
 
+#ifdef WEBDOOM_INVARIANTS
+    // §16 invariant: intercepts[] bounds — intercept_p must never exceed the
+    // array end.  The clamp above prevents an advance past [MAXINTERCEPTS-1];
+    // this assert verifies the invariant holds at the call site.
+    // Not tautological: checks the actual pointer arithmetic, not the
+    // conditional that was just evaluated; also catches any future refactor
+    // that breaks the clamp.
+    DOOM_ASSERT(intercept_p - intercepts <= MAXINTERCEPTS - 1
+		&& "PIT_AddLineIntercepts: intercept_p overran intercepts[]");
+#endif
+
     return true;	// continue
 }
 
@@ -672,6 +689,12 @@ boolean PIT_AddThingIntercepts (mobj_t* thing)
     if (intercept_p - intercepts < MAXINTERCEPTS-1)
 	intercept_p++;	// webdoom: clamp, vanilla overran on long traces
 
+#ifdef WEBDOOM_INVARIANTS
+    // §16 invariant: intercepts[] bounds (things path — same guard as lines).
+    DOOM_ASSERT(intercept_p - intercepts <= MAXINTERCEPTS - 1
+		&& "PIT_AddThingIntercepts: intercept_p overran intercepts[]");
+#endif
+
     return true;		// keep going
 }
 
@@ -690,11 +713,18 @@ P_TraverseIntercepts
     fixed_t		dist;
     intercept_t*	scan;
     intercept_t*	in;
-	
+#ifdef WEBDOOM_INVARIANTS
+    fixed_t		prev_dist;  // tracks last-processed intercept frac for ascending-order assert
+#endif
+
     count = intercept_p - intercepts;
-    
+
     in = 0;			// shut up compiler warning
-	
+
+#ifdef WEBDOOM_INVARIANTS
+    prev_dist = -1;  // before the first intercept; any frac >= 0 is > -1
+#endif
+
     while (count--)
     {
 	dist = MAXINT;
@@ -706,9 +736,9 @@ P_TraverseIntercepts
 		in = scan;
 	    }
 	}
-	
+
 	if (dist > maxfrac)
-	    return true;	// checked everything in range		
+	    return true;	// checked everything in range
 
 #if 0  // UNUSED
     {
@@ -722,12 +752,25 @@ P_TraverseIntercepts
     }
 #endif
 
+#ifdef WEBDOOM_INVARIANTS
+	// §16 invariant: P_TraverseIntercepts processes intercepts in ascending
+	// frac order (nearest first).  The O(n^2) selection sort above guarantees
+	// this; the assert verifies the invariant holds at the point of processing
+	// each intercept.  Non-tautological: compares against prev_dist which is
+	// independently maintained; if the sort is replaced by a buggy one that
+	// produces non-ascending order, this fires at the exact mis-ordered step.
+	// prev_dist starts at -1 so the first intercept (frac >= 0) always passes.
+	DOOM_ASSERT(dist >= prev_dist
+		    && "P_TraverseIntercepts: intercept processed out of ascending order");
+	prev_dist = dist;
+#endif
+
         if ( !func (in) )
 	    return false;	// don't bother going farther
 
 	in->frac = MAXINT;
     }
-	
+
     return true;		// everything was traversed
 }
 

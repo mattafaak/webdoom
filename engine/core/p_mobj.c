@@ -106,10 +106,21 @@ void P_ExplodeMissile (mobj_t* mo)
 
 
 //
-// P_XYMovement  
+// P_XYMovement
 //
 #define STOPSPEED		0x1000
 #define FRICTION		0xe800
+
+#ifdef WEBDOOM_INVARIANTS
+// §16 frozen-surface static asserts for momentum-decay constants.
+// STOPSPEED and FRICTION are defined locally here (not in a shared header),
+// so the asserts live adjacent to the defines.  Any accidental change to
+// either constant fires at compile time.
+_Static_assert(STOPSPEED == 0x1000,
+    "STOPSPEED changed -- playsim.md S16 invariant: must be 0x1000");
+_Static_assert(FRICTION == 0xe800,
+    "FRICTION changed -- playsim.md S16 invariant: must be 0xe800");
+#endif /* WEBDOOM_INVARIANTS */
 
 void P_XYMovement (mobj_t* mo) 
 { 	
