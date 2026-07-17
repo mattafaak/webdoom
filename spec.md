@@ -37,7 +37,10 @@ no filesystem, tightest routines, "runs on everything" — and runs
    depends on are enforced by the code at their exact call site, not
    merely described alongside it; and the platform contract is validated
    by an actual freestanding port, not asserted. Understanding is proven,
-   reproduced, and load-bearing — or it isn't claimed.
+   reproduced, and load-bearing — or it isn't claimed. This applies to
+   *published promises* too: every quantitative or behavioral claim in
+   README.md and this spec maps to a gate, committed evidence, or an
+   explicit FLAGGED entry — a promise without a gate is doc drift.
 
 ## Correctness gates (every change must pass)
 
@@ -50,7 +53,9 @@ no filesystem, tightest routines, "runs on everything" — and runs
   hashes; mid-game drop and drop-in survival.
 - **Perf gate**: `bench.mjs` per-stage numbers on all four hosts;
   regressions on any host block, wins are recorded in
-  `tools/golden/bench-baseline.json`.
+  `tools/golden/bench-baseline.json`. The browser-pipeline baseline
+  (per-frame JS/GPU/audio cost, input latency) joins this gate once
+  Phase 12 lands.
 
 ## Reference hardware fleet
 
@@ -110,3 +115,11 @@ composited and negligible on top).
 - Rewriting the core in another language.
 - Gameplay-visible "enhancements" beyond vanilla (freelook/interpolation
   stay render-side only; vanilla mode toggle preserved).
+- Actual retro-console ports (SNES/32X/GBA-class hardware). The
+  deliverable is the **retro feasibility atlas**: measured cycle/RAM/
+  storage floors of the vanilla-exact core mapped against period
+  hardware, each row concluding feasible / infeasible / feasible-with-
+  named-cuts, arithmetic shown. Running on the hardware is a future
+  project that starts from the atlas.
+- Safari/iOS and mobile/touch support (untested; not promised). Firefox
+  status is decided by task 15.2 and recorded here.

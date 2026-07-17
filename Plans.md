@@ -1,165 +1,166 @@
-# webdoom Plans.md — deep understanding initiative
+# webdoom Plans.md — refinement & the measured floor initiative
 
-作成日: 2026-07-16
-Contract: root `spec.md` — read tenet #6 first ("Understanding is verifiable
-and self-defending"), which this plan operationalizes.
-Prior work: the completed refinement pass (26/26) is archived in
-`Plans-refinement-complete.md`.
+作成日: 2026-07-17
+Contract: root `spec.md` — tenets #2 (measure, don't assume), #5 (bare-metal
+adaptability), #6 (verifiable understanding, now extended to published
+promises) govern this plan.
+Prior initiatives archived: `Plans-refinement-complete.md` (26/26),
+`Plans-understanding-complete.md` (Phases 6–11, understanding-on-trial, all
+complete; 11.1b's OS-less demo-hash stretch deferred → picked up here as 13.4).
 
-Goal: go from "we understand DOOM's data and algorithms" (documented) to the
-deepest *verifiable* understanding — every claim reproduced, the accuracy
-invariants enforced by the code itself, and the platform contract put on trial
-by an actual freestanding port. Three tiers escalate the depth: **predict**
-(reproduce every claim), **prove** (retire "empirical/sketch"), **defend**
-(understanding load-bearing in code), then **falsify** (understanding on trial).
+Goal: (1) put every remaining PROMISE on trial — engine and web; (2) measure
+the engine's true resource floor (instructions/tic, RAM, read-only-ness,
+endianness) on the freestanding builds; (3) optimize vanilla-exact toward that
+floor, bare-metal-first; (4) refine the web interface against measured browser
+reality. North star converted from aspiration to arithmetic — the **retro
+feasibility atlas** (13.5).
 
-Key existing assets to build on (do NOT reinvent): `tools/archaeology/*`
-(crackers), `tools/native-sanitize/nat-doom` (a near-freestanding native build
-that already dumps per-tic state hashes — the seed for Phases 9 and 11),
-`tools/lint.sh` (lint baseline exists — no setup task needed), the render+sim
-golden gates, the instrumented-Chocolate cross-validation.
+**The SNES question, answered by the Skeptic panel (externally verified):**
+stock SNES fails vanilla-exact DOOM by **~20–100× on CPU** (a software 32×32
+FixedMul ≈150–400 cycles; thousands per tic vs a ~102K-cycle/tic total budget
+at 3.58 MHz), **~2× on RAM** (128 KB WRAM vs the rp2040-proven ~264 KB vanilla
+floor), **~10× on video bandwidth** (no framebuffer; ~6 KB/vblank VRAM DMA vs
+64 KB/frame) — three independent walls. Randy Linden's SNES Doom used a 21 MHz
+Super FX 2 for rendering AND a from-scratch non-vanilla playsim (no infighting,
+no pellet spread, altered damage). D32XR runs game logic at 15 Hz on a Jaguar
+codebase — it proves renderer headroom, not vanilla playsim cost. The honest
+open frontier: **no port has ever been tic-exact below ~100 MHz-class hardware**
+(GBA 16.8 MHz: demo compat broken; rp2040 2×270 MHz: smallest success). The
+atlas answers "how close can webdoom get" with per-row arithmetic; a quantified
+"no" is a deliverable, and the 32X/GBA-class gap is the genuinely open cell.
+
+**Kill-list** (imported from perf.md §G/Q1–Q5 — no task may re-propose without
+the named reopen condition): span u32 packing (wbox +7.9%), wasm SIMD (no
+gather), visplane hash (ceiling 2.9%, probe depth 6.6), Q4 sim hot paths
+(absent perf.md's two reopen conditions), emcc knob re-sweeps (axes 1–5 done),
+per-target wasm builds (spec non-goal), runtime lookup→transcendental
+(magic-data policy), browser-fps-motivated wasm-side work (render = 1.71% and
+sim = 0.25% of the 35 Hz budget on the weakest host — retrospective.md already
+caught this framing error once).
+
+**Process guardrails** (FINDING-7 + worker-cap history): file-coupled tasks run
+SEQUENTIALLY; workers `git add` explicit paths only (never `-A`/`.`); cite by
+function name, not line number; tasks pre-sized under the ~107-tool-call cap
+with budget-briefed workers; every regold validates against a pre-change build,
+never self-consistency; exit codes measured bare, never through a pipe.
 
 ---
 
-## Phase 6: Executable archaeology — every claim self-verifying (PREDICT tier)
-
-The archaeology docs mix reproducible crackers with prose numbers. Make the
-*entire* corpus regenerate on demand. [tdd:skip:verification-tooling]
+## Phase 12: Scrutiny — every promise on trial (engine + web)
+[tdd:skip:verification-tooling] (12.3/12.4b fixes: [tdd:required] per fix)
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 6.1 | Claim inventory: enumerate every quantitative claim across engine-archaeology.md / renderer.md / playsim.md / formats.md / perf.md; map each to a reproducing script or flag "needs verifier" | `docs/claims-index.md` maps 100% of quantitative claims → a script or a needs-verifier flag; count committed | - | cc:完了 [85541b3+34cb6e1] — docs/claims-index.md: 182 claims mapped 100% (invariant/measurement/derived taxonomy for 6.3's drift-check); FINDING-1 caught a PUBLISHED error (invuln COLORMAP 242→241, arithmetically impossible: 242+15=257) — fixed in repo + public magic-data.md |
-| 6.2 | Write the missing verifiers: gamma power-fit residuals, scalelight/zlight recipe check, P_AproxDistance measured error curve, DMX in-band pad verification, and every prose figure without a script | each flagged claim regenerates from a committed `tools/archaeology/` script whose output equals the doc figure | 6.1 | cc:完了 [5ac9732+7d15993] — 5 verifier families (source-constant 40, wad-data 23, runtime-stat 15, recipe-crack, stamp-check); 106/122 done → 166/182 verified (91%); 16 unverifiable w/ per-ID reasons; claims.json manifest for 6.3; FINDING-2 resolved, FINDING-3 = real doc error (gamma L4 51→34) fixed |
-| 6.3 | `tools/archaeology/verify-all.sh`: regenerates every figure; a drift-check diffs committed doc numbers vs script output and FAILS on divergence; wire into run-tests.sh | verify-all green; editing any doc figure to a wrong value makes run-tests.sh fail at that claim | 6.2 | cc:完了 [91fea5e+985c128] — verify-all.sh + doc-drift.mjs three-way check (doc==manifest==script, distinguishes DOC_ERROR vs MANIFEST_STALE); fast gate 96 claims/3.8s wired into run-tests.sh; extended to the flagship claims (ea-018 headline COLORMAP, ea-023 the published-wrong figure) that the 'already verified' split had left unprotected; drift proof: corrupt 0→1 ⇒ FAIL ea-018 exit 1, revert ⇒ ALL PASS; FINDING-4 (unreproducible 'standard luma 92' pinned to 77/150/29@A=254→91) |
-| 6.4 | Literate pass: annotate each archaeology figure with its generating command (caption/footnote) so the corpus is auditable claim-by-claim | zero unattributed quantitative claims remain in the archaeology docs | 6.3 | cc:完了 [5f91103] — section-level `Reproduce:` lines (extends the existing Crackers:/Script: precedent, keeps doc density); 182/182 claims attributable; 16 unverifiable marked inline with specific reasons; gate pointer + claims-index link added; values provably unchanged (lead-verified: 0 numbers removed/changed across all 5 docs) |
+| 12.1 | Promise inventory — the DELTA only (claims-index already gates 182 quantitative claims): qualitative/behavioral promises in README+spec (browsers, offline, gamepad, "readable in a sitting", HOL "unmeasurably small", prefers-reduced-motion, WAD-library breadth, systemd path), perf.md's "(not machine-verified)" figures, magic-data.md's 9 unlocatored figures. Known-stale seed: README "356 KB of wasm" (shipping = 359,574 B) | `docs/promises-index.md` maps 100% of enumerated promises → {gate \| committed evidence \| FLAGGED}; drift checker extended to README+spec published figures and FAILS on divergence (the 6.5 pattern); count committed | - | cc:TODO |
+| 12.2a | Browser pipeline, cheap pass: CDP `Performance.getMetrics` per-frame aggregate diff (perf.md §C names this a ~2-line step on the browser-test.mjs `cdp()` helper) | aggregate frame metrics committed for ≥2 fleet hosts; go/no-go note on which stages merit 12.2b marks | - | cc:TODO |
+| 12.2b | Browser pipeline, real pass (perf.md Q0 "DO FIRST" — the known UNMEASURED gap): `performance.mark` instrumentation of the palette expand, texSubImage2D upload, rAF jitter, AudioWorklet cost, input-event→ticcmd→pixel latency. Full-trace option-1 explicitly forbidden (perf.md dis-recommends) | committed script regenerates a per-frame profile (≥100 frames) on ≥2 fleet hosts; baseline JSON mirrors bench-baseline.json; EVERY perf.md NEEDS-Q0 verdict re-adjudicated with the new data | 12.2a | cc:TODO |
+| 12.3 | Tenet-4 robustness closure: fix the 9.3-recorded no-player-start null-deref fail-soft; adversarial map corpus runs ASan-clean natively (I_Error allowed, memory corruption NOT); wasm client returns to landing on engine I_Error instead of wedging | each fixed path has a regression test; adversarial corpus green under the stated rule; browser I_Error → landing proven by a committed browser test | - | cc:TODO |
+| 12.4a | Web scrutiny ledger — client/js (~2.3k lines) + server (~0.6k lines) + sw.js, every file. Panel-found seeds: main.js per-frame catch swallows ALL exceptions → frozen canvas wedge; onDoomError hides panel but never restores landing; sw.js SHELL precache omits fire.js/countdown.js (offline-by-accident); sw.js skipWaiting mid-game semantics; serve.js static HTTP path has zero tests | findings ledger committed, every file covered, each finding disposed fix / won't-fix-with-reason; ledger is read-only (fixes live in 12.4b/15.3) | - | cc:TODO |
+| 12.4b | Apply the ledger's Required fixes (server side + sw.js precache pin) + add server static-HTTP fuzz/malformed-path cases to run-tests.sh | every applied fix carries a test; HTTP fuzz in run-tests.sh green; precache list pinned against `client/js/*` by a build-time check (no sw manifest machinery — tenet #3) | 12.4a | cc:TODO |
+| 12.5 | Chocolate cross-validation re-enablement (blocked on SDL2 since 8.2): install SDL2 dev pkgs, `build-choco-reference.sh`, `demo-test.mjs --cross` | the strongest external oracle green again (44,580-tic cross-check reproduced on current master) BEFORE Phase 14 touches the engine | - | cc:TODO |
 
-> **FINDING-7 (process, lead — 2026-07-17).** `Agent(isolation: "worktree")` is
-> keyed by **SESSION, not by agent**. Three concurrently-spawned workers (7.2,
-> 8.1, 10.1) all shared ONE worktree
-> (`.harness-worktrees/<session-id>`) and ONE branch. Each worker's brief said
-> "you are in an isolated git worktree" — false. Consequences observed:
-> (a) worker 10.1 read siblings' **uncommitted** edits as if they were master
-> and cited not-yet-existing code in a doc; (b) it filed a correct doc as
-> "stale" because a sibling's unlanded insertions shifted line numbers;
-> (c) any `git add -A` would sweep siblings' WIP into the wrong commit, and
-> `build`/`wads` show as UNTRACKED (`.gitignore` has `wads/`+`build/` with
-> trailing slashes, which do NOT match symlinks) so `-A` would commit
-> absolute-path symlinks to a PUBLIC repo.
-> **Mitigations:** parallel workers must (1) `git add` explicit paths only,
-> never `-A`/`.`/`commit -a`; (2) cite by function name, not line number;
-> (3) treat sibling-owned file failures as noise, not their own. **Safest: run
-> file-coupled tasks SEQUENTIALLY** — disjoint file sets are not enough when
-> the tree itself is shared. Consider fixing `.gitignore` to also ignore the
-> `wads`/`build` symlinks (no trailing slash).
-
-## Phase 7: Formal proofs — retire "empirical/sketch" (PROVE tier)
-
-Where the docs say "2×10⁹ samples" or "sketch," replace with a proof or a
-precisely-bounded, documented guarantee. [tdd:skip:proof-artifact-is-the-test]
+## Phase 13: The measured floor (bare-metal falsification, continued)
+[tdd:skip:measurement-harness-is-the-test]
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 7.1 | FixedDiv exhaustive/SMT: prove double == int64 over the full guarded domain (`\|a\|>>14 < \|b\|`) rather than sampling — enumerate the finite boundary set or drive an SMT solver | a committed harness terminates with "proven exhaustively over the guarded domain" (or a precisely-characterized residual set); archaeology §2 updated from "empirical" to "proven" | - | cc:完了 [ca13af7] |
-| 7.2 | FixedMul, P_AproxDistance bound, angle/BAM round-trips: formalize where tractable; document each intractable case with the exact reason it resists proof | every fixed-point/angle primitive has a proof OR a stated bounded-empirical guarantee with the limit named | 7.1 | cc:完了 [3bc3acd] — 6-primitive inventory (§15), every row PROOF or BOUNDED-EMPIRICAL w/ named limit. FixedMul=PROOF (product ≤2^62<INT64_MAX; 2 named IDBs C99 §6.5.7p5/§6.3.1.3p3; floor-vs-trunc asymmetry vs FixedDiv confirmed). P_AproxDistance=BOUNDED-EMPIRICAL, graded by its weakest part (continuous sup √1.25=+11.803% by calculus + integer sup √2=+41.42% at (1,1) exhaustive, but M≥65536 bound is a 65,536-pair sweep). R_PointToAngle=BOUNDED-EMPIRICAL (all 8,192 fine angles enumerated, but distance sampled → honest downgrade). SlopeDiv=PROOF. Lead-verified on master: verify-all 105 claims ALL PASS, lint OK |
-| 7.3 | **RESCOPED by FINDING-5** — the original premise was false; the job became correcting the claim, not strengthening it | §6 + the PUBLIC magic-data.md carry no unsupported universality claim; byte-identity stated; HACX 3517/8192 + curve corroboration committed as a reproducer; FINDING-5 filed | 6.2 | cc:完了 [b1ad3a5] — worker DIED at 33min (stale-base worktree, FINDING-7); lead salvaged its reproducer (which independently confirmed every lead number) and wrote the corrections on master. §6 + **public magic-data.md** corrected in place. FINDING-5 + the FINDING-4 straggler (public doc still said luma-92 vs the fixed 91) filed. colormap-cross-palette.c → ea-048/049, fast gate **107 claims ALL PASS**, lint OK, drift-proved (3517→3518 ⇒ FAIL ea-048 DOC_ERROR ⇒ revert ⇒ green). Matcher divergence left as an OPEN QUESTION, not guessed. **FINDING-9 (open)**: doc-drift.mjs indexes off claims-index.md whose locators all point at engine-archaeology.md ⇒ **magic-data.md, the only PUBLISHED doc, is outside the gate's scope entirely** |
+| 13.1a | Cycle-floor harness: deterministic per-tic instruction counts on fs-doom/nat-doom (callgrind Ir / `perf stat` / qemu icount — noise-free, unlike the wall-clock benches that were noise-limited at ~0.001 ms) | committed script regenerates whole-program instructions/tic for all 13 demos: avg AND p99/max per tic (35 Hz is a deadline; texture-composite frames spike) | - | cc:TODO |
+| 13.1b | Per-subsystem attribution: callgrind inclusive costs mapped to the established bench stages (sim vs bsp+segs vs planes vs masked) | committed table, regenerable by one script; stage sums reconcile against whole-program counts; this becomes Phase 14's scoreboard | 13.1a | cc:TODO |
+| 13.2a | Zone floor, decisive cheap step: re-run the 4 MB and 8 MB ZONESIZE render+net gates on post-3.2 master (task 2.5's failures predate the dc_texheight OOB fixes — they may simply vanish) | pass/fail per size recorded with the render gate AND the 4-client net gate (zone backs thinker allocations); if failures persist, failing golden set named | - | cc:TODO |
+| 13.2b | Render-enabled zone instrumentation (the retrospective.md trap: -nodraw HWM is proven NOT a safe floor): peak + purge counts with rendering ON, flag-guarded, off the shipping build | render-ON HWM + purge-pressure numbers committed per IWAD; shipping wasm byte-identical with the flag off (8.1 md5 precedent); a defensible minimum ZONESIZE stated with its evidence | 13.2a | cc:TODO |
+| 13.2c | Read-only-WAD proof (XIP feasibility): mprotect the fs-doom WAD blob PROT_READ, run 13 demos; verify the BLOCKMAP in-place byte-swap (bare-metal.md §5.1) hits the zone copy, not the blob | 13/13 green under PROT_READ or every writer named+dispositioned; result recorded in bare-metal.md §2.3 (this doubles as a trap for 13.4's wild write) | - | cc:TODO |
+| 13.3a | Big-endian trial, rung A — the first BE execution in repo history (SwapSHORT/LONG are identity macros, proven unreachable on LE by 9.2b): qemu-user m68k fs-doom (BE, tolerates unaligned — isolates pure byte-order bugs) | 13/13 per-tic hashes bit-identical on m68k; Swap implementations live inside the sanctioned `#ifdef` in m_swap.h; LE wasm proven byte-identical to master; bare-metal.md §5.1 promoted prediction→tested | - | cc:TODO |
+| 13.3b | Big-endian trial, rung B — BE + strict alignment: qemu-user mips BE, exercising bare-metal.md §5.2's 7 unaligned-access sites (r_data.c columnofs is per-frame) | 13/13 on mips BE; §5.2's site list validated or corrected; any core fix follows the 13.4b core-touch policy | 13.3a, 13.4a | cc:TODO |
+| 13.4a | Rung-2 fault CAPTURE (not cure — never brief "debug until fixed"): exception vectors + fault handler in tools/baremetal; pin the 11.1b wild write (known: PC ~0x800000 below code, sp=0, stack relocation ruled out; candidates: baked-WAD offset, unaligned access) | faulting PC + faulting write address + named candidate site committed to tools/baremetal/README.md — all three yes/no | - | cc:TODO |
+| 13.4b | Rung-2 fix + the deferred crown-jewel stretch: R_InitData completes, OS-less ARM streams per-tic UART hashes. Core-touch policy (pre-decided): alignment fixes are EITHER a strict-alignment-guarded macro override (with 13.3b CI keeping it exercised) OR a universal helper proven wasm-perf-neutral (13.1a counts) and render-pixel-identical | 13/13 per-tic hashes match goldens over the emulated UART, NO OS — retroactively completes 11.1b's stretch and upgrades 11.2 from hosted-freestanding to OS-less; bare-metal.md §8 updated | 13.4a | cc:TODO |
+| 13.5 | Retro feasibility atlas — the north star as arithmetic: rows = stock SNES, SNES+SuperFX2, 32X, GBA, 386/486, ESP32-S3, RP2040; columns = measured webdoom floors (13.1b instructions/tic avg+p99, 13.2b RAM, 13.2c ROM/XIP split) vs platform budgets, conversion factor with stated error bars, verdict as a RATIO. Prior-art anchor rows: rp2040-doom (264 KB but 2×270 MHz, WHD compression), GBADoom (demo-compat broken), D32XR (15 Hz logic, Jaguar codebase) — "what tic-exact vanilla costs vs what prior art paid to ship". Stock SNES = paper verdict (the arithmetic is conclusive); 32X/GBA-class = the open cells | `docs/feasibility-atlas.md`: every row shows its arithmetic in-repo (perf.md §A precedent); UNMEASURED cells labeled UNMEASURED, never extrapolated silently; verdicts cross-checked against the external anchors; wired into the claims drift gate | 13.1b, 13.2b, 13.2c | cc:TODO |
 
-## Phase 8: The self-enforcing frozen surface (DEFEND tier)
-
-playsim.md §16 *describes* what must never change. Make the code *enforce* it —
-the honest fix for the blind spot that let the Tutti-Frutti regold hide.
-[tdd:required]
-
-| Task | 内容 | DoD | Depends | Status |
-|------|------|-----|---------|--------|
-| 8.1 | `WEBDOOM_INVARIANTS` instrumented build: runtime asserts at the exact call site for each demo-visible invariant — P_Random per-tic call count/order, thinker traversal order, blockmap iteration order, spechit/intercepts bounds | build compiles; asserts are zero-cost when the flag is off (core stays web-layer-independent); each §16 invariant has a corresponding assert | - | cc:完了(partial) [844c3d6] — **worker STALLED at 27min idle; lead took over, ran every gate it never ran.** Landed: 11 runtime DOOM_ASSERTs + 7 _Static_asserts behind `-DWEBDOOM_INVARIANTS`; doomassert.h includes only `<assert.h>`, every include inside the #ifdef (2.2 precedent honored). Lead-verified: **zero-cost PROVEN — flag-off wasm byte-identical to clean master (md5 e7772ad6…, 359574 B)**; flag-off 13/13 sim goldens bit-identical + render pixel-identical + verify-all 105 green + lint OK; flag-on builds (365799 B) and all demos run silent. **FINDING-8**: the worker's `P_AddThinker` assert "thinker not already sentinel-marked" fired on 10/13 stock demos — it reads UNINITIALISED memory (non-mobj callers Z_Malloc without zeroing and call P_AddThinker BEFORE assigning `.function`; p_doors/p_lights/p_plats/p_ceilng/p_floor = 14 Z_Mallocs / 0 memsets; P_RemoveThinker writes exactly `(actionf_v)(-1)` so a recycled block still holds it). Removed with rationale at the site — a false invariant, not a weakened one. **OUTSTANDING → 8.1b**: the §16 20-row mapping table was never written, so the "every §16 invariant" clause is UNVERIFIED |
-| 6.5 | **FINDING-9 (carved out of 7.3)**: `magic-data.md` — the only PUBLISHED doc — was outside doc-drift.mjs's scope, because the drift index is built from claims-index.md whose locators all point at engine-archaeology.md | editing any figure in magic-data.md to a wrong value makes verify-all fail at that claim (drift-proved); no published figure lacks a locator | 6.3 | cc:完了 [7eff02e] — lead did this directly (worktree pinned 13 commits stale at 34cb6e1 ⇒ delegating would repeat 7.3's death). PUBLIC_HINTS re-checks the public doc's prose against the SAME claims.json `expected` (one source of truth, both docs answer to it); 7 figures = the COLORMAP family, exactly where both escapes happened. PUBLIC_DOC_ERROR is a HARD fail. **Proved against real history, not a synthetic case**: reintroducing FINDING-4 (luma 91→92) ⇒ FAIL ea-026 exit 1; reintroducing FINDING-1 (invuln 241→242) ⇒ FAIL ea-023 exit 1; revert ⇒ public-doc 7/7, ALL PASS. Review hook caught 3 real defects in my own edit (undeclared vars ⇒ ReferenceError; exit gate ignoring publicFail ⇒ would print FAIL and exit 0 — the gamma-crack defect again). Remaining: 9 of magic-data.md's 16 numeric figures still lack locators (finesine/tantoangle/tic-count family) |
-| 8.1b | **Carved out of 8.1** (worker stalled before writing it): the §16 20-row mapping table | every one of §16's 20 rows maps to exactly one classification with its evidence; no row unaccounted | 8.1 | cc:完了 [3e97c3d] — playsim.md **§16.1**: 20/20 rows, zero skipped, exactly one class each (10 runtime / 4 static / 3 already-covered / 3 not-assertable). **The worker corrected 3 errors in my draft**: rows 6+7 (block iterators) have NO asserts — I asserted they did, fabricating from expectation; verified 0 DOOM_ASSERTs in P_BlockLinesIterator/P_BlockThingsIterator/P_PathTraverse. Rows 18/19 I dual-classified, violating the exactly-one rule. Row 17 (deferred-free) proven **not assertable**: the only candidate — a post-P_RunThinkers 'all clean' check — fires on valid vanilla behavior (A's action removes an already-iterated B, which stays marked until the next pass). Lead-verified: verify-all 107 ALL PASS, lint OK |
-| 8.1c | **FINDING-10**: audit the ~120 at-risk file:line doc citations 844c3d6 shifted; make citations verifiable | the 9 shifted files' citations verified or converted; a committed check FAILS on a wrong citation like a wrong figure | 8.1 | cc:完了 [7d72ee1] — worker died at the ~107-tool cap (3rd occurrence: 7.3=107, 8.1c=107, 8.1=113 — **size worker tasks under the cap**) but left a sound tool + 40 verified re-pins; lead finished. check-citations.mjs: **483 citations, 96 identifier-anchored, 0 fail, 0.02s**, in the fast gate. 15 more stales fixed incl. 2 meaning-level (P_PointOnLineSide→P_DivlineSide in the sight walk; ambiguous i_main.c → web/i_main.c). Tool hardened: leading-identifier backtick extraction, file-stem exclusion, prev-line context, enclosing-context fallback (80 lines). Drift-proved on the REAL stale value (239⇒FAIL⇒255⇒green). NOTE: my 'prints FAIL, exits 0' accusation against the worker's tool was MY measurement error (piped $? through tail — 2nd time this project); the tool was correct |
-| 8.2 | Cross-validate: run all 13 demos + Chocolate cross-check under the invariant build; prove a deliberately-injected invariant violation trips the assert AT ITS CALL SITE (not a golden diff 5000 tics later) | clean run passes 13/13 with no assert; an injected violation is caught at the exact source line (shown in the task evidence) | 8.1 | cc:完了 [aeb3219] — playsim.md §16.2: (1) flag-ON clean run 13/13 bit-identical, zero assert output; (2) **behavioral injection** (P_AddThinker head-insert) aborts ON TIC 1 naming `core/p_tick.c:85 P_AddThinker` — the cause at the site, vs a golden diff thousands of tics later; (3) **static injection** (MAXSPECIALCROSS 64→32) kills the BUILD at p_local.h:84 with the named _Static_assert. Both reverted, engine clean, flag-OFF build restored (md5 e7772ad6… verified by lead). Worker: 49 tool calls (budget-briefed post-cap-finding). **Chocolate cross-check SKIPPED (env)**: SDL2 dev packages absent; to enable: `apt install libsdl2-dev libsdl2-mixer-dev libsdl2-net-dev && bash tools/build-choco-reference.sh && node tools/demo-test.mjs --cross` — carry into 8.3 or run when the env has SDL2 |
-| 8.3 | Wire the invariant build into run-tests.sh as a gate stronger than goldens (an assert is a precise cause; a golden diff is a downstream symptom) | run-tests.sh runs the invariant build over all 13 demos; documented as the primary sim-safety gate | 8.2 | cc:完了 [efcabb3] — run-tests.sh now builds `-DWEBDOOM_INVARIANTS` into a SEPARATE `build-invariants/` dir (Makefile BUILD/OUT overrides, same pattern as the perf build) and runs all 13 demos under armed asserts BEFORE the golden gates; shipping build/ untouched **by construction** (make cannot write to it in that invocation — md5 e7772ad6… verified). demo-test.mjs gains a minimal `--build-dir` flag (default `build`, existing callers unaffected). Failure propagates through the `| tail` pipes via the script's existing `set -eo pipefail` (lead-checked — the recurring pipe-exit bug class). Drift-proved: injected P_AddThinker head-insert ⇒ gate FAILS naming core/p_tick.c:85 ⇒ revert ⇒ green. Worker: 102 tool calls (under the cap, budget-briefed). **PHASE 8 COMPLETE — the frozen surface now defends itself in CI** |
-
-## Phase 9: Differential understanding beyond the 13 demos
-
-The 13 demos are fixed inputs. Explore the space they can't cover.
-[tdd:skip:differential-harness-is-the-test]
+## Phase 14: Vanilla-exact optimization, floor-driven
+[tdd:skip:gates-are-the-test] — every landing passes sim+render goldens,
+invariant build, fuzz fast tier; regolds only against a pre-change build.
+Wins are claimed in 13.1 units (instructions/tic) and CI/bare-metal throughput,
+NEVER browser fps (perf.md §B: render is 1.71% of the browser budget).
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 9.1 | ~~monolith~~ **DECOMPOSED by lead (worker ~107-tool cap; 3 workers died oversized)** into 9.1a + 9.1b below. Design (lead, scouted): DOOM demos ARE ticcmd streams, so the fuzzer is a **synthetic demo-lump generator** — zero engine changes. nat-doom already accepts external demos (`-waddir` + `-timedemo <lump>`) and dumps per-tic hashes; webdoom resolves `-timedemo` via W_CacheLumpName, so synthetic demos arrive as single-lump PWADs. Differential oracle = wasm(emcc) vs native-x86-32(gcc, ASan/UBSan) — different compiler AND arch, exactly the UB/layout class that produced Tutti-Frutti. (Chocolate cross-check stays blocked on SDL2 — see 8.2 note) | (superseded — see 9.1a/9.1b) | 8.2 | cc:分割 |
-| 9.1a | Fuzzer pipeline proof: seeded synthetic demo generator + differential runner (webdoom wasm vs nat-doom native), per-tic hash comparison | 10 seeded synthetic games on both engines, per-tic hashes bit-identical (or divergence reported with seed); generator + runner committed | 8.2 | cc:完了 [68b51b4] — tools/fuzz/{gen-demo,run-fuzz}.mjs: mulberry32-seeded v1.9 demo PWADs (FUZZDEMO lump), replayed via existing -timedemo paths on BOTH engines — zero engine changes. Ticcmd layout verified from g_game.c incl. the two traps (BT_SPECIAL=0x80 cleared from buttons; forwardmove bounded off -128 = DEMOMARKER). Hash functions verified byte-identical (web_state_hash ≡ nat_state_hash). nat-doom rebuilt -m32 ASan/UBSan. Worker: 10 seeds × 700 tics identical (49 tool calls); lead re-ran with 15 seeds — identical, exit 0. The differential oracle is LIVE: wasm(emcc) vs native-x86-32(gcc+sanitizers) per tic |
-| 9.1b | Scale + CI: ≥1000 seeded games through the 9.1a pipeline (batched), summary report; fast tier (~20 games) wired into run-tests.sh; full tier documented as release gate | ≥1000 games, 0 divergences (or divergence root-caused as a FINDING); CI-able fast tier green in run-tests.sh | 9.1a | cc:完了 [72c690a+0ea2592+c028c53] — POST-FIX FULL TIER: **1000/1000 seeds bit-identical (wasm ≡ native), zero crashes** (verified exit 0 with honest propagation). Wiring LANDED [72c690a + 0ea2592 + fix]. **FINDING-11 (the fuzzer's first real catch, run 1)**: 52/1000 seeds crashed nat-doom ASan — R_ScaleFromGlobalAngle (r_main.c:489) signed->>19 on anglea<0 = NEGATIVE finesine index, OOB read; vanilla's 'both sines are allways positive' comment is FALSE; Tutti-Frutti's exact family (layout-dependent render UB, wasm-silent). Sim-neutral proven: all 1000 seeds' per-tic sim hashes identical (crashes, not divergences); 0 ASan hits on the golden corpus; post-fix 13/13 sim AND render goldens unchanged. Fixed via (angle_t) cast (in-bounds always, vanilla-identical for normal views). run-fuzz now rejects unknown args (a typo'd flag silently ran the default and looked green). Post-fix 1000-seed tier re-running now. Prior wiring notes: --parallel J (fresh wasm module per seed, async nat-doom spawns; seq==par proven under the TRUE differential by lead), 20-seed fast tier in run-tests.sh with **--require-native** (lead addition: the worker's worktree lacked the gitignored nat-doom binary, so its rewrite silently downgraded to wasm self-consistency and validated '100/100 PASS' against the WEAK oracle — CI now FAILS LOUDLY instead of degrading; drift-proved by hiding the binary). Remaining: the ≥1000-game clause — full tier running now as lead background task (seeds 1000, parallel 12); marked done when it completes 0-divergence or a FINDING is filed |
-| 9.2 | ~~monolith~~ **DECOMPOSED (cap-sizing)**: 9.2a = the gcov coverage harness + committed report (which functions/branches the 13 demos + fuzz corpus actually execute); 9.2b = the classification pass over the un-exercised remainder (understood-by-inference w/ docs, or unknown w/ flag). Split because 9.2b's size is unknowable until 9.2a's report exists | (superseded — see 9.2a/9.2b) | 9.1 | cc:分割 |
-| 9.2a | Coverage harness: gcov variant of native-sanitize; 13 demos + ≥50 fuzz seeds; committed machine-readable report + human summary | harness + report committed and regenerable by one script; fn vs branch distinguished; fuzz delta shown | 9.1a | cc:完了 [46a0bb2] — nat-doom-cov (-m32 --coverage -O1, no sanitizers; GCC 16 JSON gcov). Two passes: demos 423/711 fn (59.5%) / 48.2% br; +50 fuzz seeds → 427 (60.1%) / 48.6%. Honest fuzz delta: **+4 functions only** — the fuzzer explores INPUT space, not FEATURE space (worth remembering for 9.3). **284 never-executed functions** = the negative space, dominated by automap/menu/net/finale/save (headless timedemo can't reach them) — the exact input 9.2b classifies. Lead-verified REGENERABLE: re-ran run-coverage.sh from scratch, exit 0, all numbers reproduce. Worker: 38 tool calls |
-| 9.2b | Negative-space classification: every un-exercised engine/core path → understood-by-inference (doc cited) or unknown (flagged) | zero 'unknown un-exercised' paths unclassified; committed alongside the report | 9.2a | cc:完了 [7fffdd6+285adef] — tools/coverage/NEGATIVE-SPACE.md: **284/284 classified, ZERO unknowns** (7 subsystem groups = 143 fns + 141 individual straggler rows; reconciliation arithmetic printed). Notable stragglers = real archaeology: P_CalcSwing writes globals nothing reads (dead code, grep-proven); R_InitPointToAngle/R_InitTables are #if 0 shells; SwapSHORT/LONG unreachable on LE (identity macros); filelength has zero call sites; W_Profile's only caller is commented out. Worker survived 124 tool calls (the ~107 'cap' is not hard — earlier deaths may be token-budget; still size conservatively). Worker also caught 7 citation drifts MY FINDING-11 comment block caused in r_main.c — the 8.1c gate catching the very commit class it was built for; re-pinned, all green. **PHASE 9 remaining: 9.3 only** |
-| 9.3 | Map-mutation differential: procedurally mutate valid maps within the format's rules, same differential check vs the ASan oracle — hunt for setup/load divergences | mutation harness runs; any divergence root-caused; else "map-load behavior matches vanilla under mutation" | 9.1a | cc:完了 [4fdbd02] — tools/fuzz/{gen-map,run-map-fuzz}.mjs: mutates E1M1 non-geometry fields (THINGS/LINEDEFS/SIDEDEFS/SECTORS; geometry untouched ⇒ no node rebuild), rebuilds PWAD, runs BOTH nat-doom(-m32 ASan/UBSan) and wasm, per-tic hashes. **75/75 benign seeds bit-identical (wasm==native)** = the DoD: map-load+sim differentially sound under valid mutation. Adversarial (deliberate OOB sidedef sector / OOB type) crashes ~21/30 — I_Error(P_GroupLines miscounted) in BOTH, or nat sanitizer-traps the OOB while wasm reads garbage: the expected sanitizer-vs-release diff on INVALID input, matching the atlas F5c unguarded-index surface, NOT a valid-map divergence. **Worker's draft had a methodology flaw the lead caught+fixed**: it ran wasm -nodraw vs nat-doom RENDERING, so render-path ASan hits (R_DrawMaskedColumn) read as false 'divergences' (mislabeled FINDING-B, mis-attributed). Lead made -nodraw symmetric, preserved player-1 starts (mutating them away = P_PlayerThink null-deref, vanilla's own trust-the-WAD, not a bug), fixed the root-cause strings. NO real divergence found — the correct, honest result. Robustness note recorded (no-player-start null-deref; tenet-4 opportunity). Manual research tool, not a CI gate (nonzero exit on adversarial is expected) |
+| 14.1 | Candidate ledger from 13.1b attribution + archaeology understanding. Each row: mechanism, predicted Δinstructions/tic, axis (cycle-floor / RAM / size / simplicity / portability), magic-data policy check, kill rule ("wbox regression = kill"). Kill-list imported verbatim; browser-motivated rows BLOCKED until 12.2b data exists. Known seeds: framebuffer transposition (2.2's deferred architectural item), low-detail mode as a bare-metal option, BSS diet (visplanes ≈569 KiB + openings 160 KiB + drawsegs 120 KiB) if 13.2b motivates it | committed ledger; every candidate has all five fields; one follow-up task PER surviving candidate appended to this table (not monoliths) | 13.1b, 12.2b | cc:TODO |
+| 14.2 | (emitted by 14.1 — one task per surviving candidate; placeholder, do not start) | per candidate: before/after 13.1 counts + four-host bench (or universal-axes justification per spec tenet #2); sim + render + invariant + fuzz-fast green | 14.1 | cc:TODO |
+| 14.3 | Size ledger gate: extend stamp-check.mjs into a CI-tracked size ledger (wasm raw+gzip, fs-doom .text) with a committed byte budget; README's size figure regenerates from the build | run-tests.sh FAILS if doom.wasm exceeds budget; README figure can never go stale again (kills the 12.1 seed permanently); several "(not machine-verified)" size claims close | - | cc:TODO |
+| 14.4 | Phase release gate: the full artillery on the phase's final state — invariant build 13/13, 1000-seed fuzz FULL tier, render+sim+net goldens, 4-host fleet bench (interleaved 3-rep protocol, FLEET_PI5 env documented in the brief) | all gates green on one named commit; results recorded in perf.md with before/after vs the phase-start baseline | 14.2 | cc:TODO |
 
-## Phase 10: The divergence atlas — map the whole compatibility landscape
-
-Position webdoom precisely against the entire port lineage, not just Chocolate.
-[tdd:skip:docs-with-verified-evidence]
+## Phase 15: Web interface refinement (measured, not vibes)
+[tdd:required] (fixes ship with their tests)
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 10.1 | Catalog every known behavioral fork across vanilla / Boom / MBF / MBF21 / PrBoom+ / dsda-doom — with, for each: what it is, which webdoom implements, why, and demo evidence | docs/divergence-atlas.md: every catalogued fork states webdoom's position + evidence; cross-referenced to playsim.md quirk catalog | 1.2-done | cc:完了 [draft e810823 → landed] — drafted under FINDING-7 contamination, HELD, then re-verified once 8.1 landed: most 'phantom' citations became true; 2 genuinely wrong ones fixed (P_CheckPosition MAXRADIUS thing-pass 438-445 / line-pass 452-460); its NF1 playsim-drift finding WITHDRAWN in-doc as the FINDING-7 false positive. check-citations: 119 identifier-anchored, 0 fail. 9 fork families, positions source-cited, unverifiable port cells daggered, and the measured result: peak numspechit=8 / intercepts=45 across 13 demos — the raised clamps never engage during demo playback |
-| 10.2 | Compatibility statement: state exactly which vanilla quirks webdoom preserves vs which modern fixes it deliberately does NOT take, each traceable to an atlas row | a one-screen compatibility position, every claim linking to a divergence-atlas entry | 10.1 | cc:完了 [8bb3cbf] — 43-line 'Compatibility position' section atop divergence-atlas.md: 6 preserved quirks (F3/F4/F5a-c/F6, source-anchored), 1 fix not taken (comp_* layer, F7, tenet #3), 2 taken divergences (F1/F2 clamps) with the measured cover (peaks 8/45 → clamps never engage over the corpus). Proof scope stated honestly: demo-proven over 13 demos + 44,580-tic Chocolate cross-validation, NOT a universal claim (Phase 9 exists for that gap). 9/9 claims atlas-linked. Worker: 16 tool calls. check-citations/verify-all/lint green on master (lead-verified). **PHASE 10 COMPLETE** |
-
-## Phase 11: Bare-metal falsification — understanding on trial (the crown jewel)
-
-Put bare-metal.md's contract on trial by actually porting across it. The only
-real proof you understand what it takes to run DOOM anywhere. [tdd:skip:bring-up-is-the-test]
-
-> **FINDING-6 (lead, found by inspection BEFORE any bring-up — the contract is
-> already falsified).** `bare-metal.md` §1 claims "The entire platform surface is
-> in **three files**: `i_system.h`, `i_video.h`, `i_sound.h`" and that the
-> completeness claim "is auditable by diffing against the two header files."
-> Both statements are wrong, and the section contradicts itself (*three* files
-> vs *"both headers"/"the two header files"*).
-> Reality: `engine/core` **unconditionally** includes two further platform
-> headers — `engine/web/web.h` and `engine/web/perf.h` (d_main.c:79-80,
-> m_misc.c:63, r_main.c:43, w_wad.c:50) — and calls six functions from web.h:
-> `D_DoomFrame` (d_main.c), `W_WebFile` (w_wad.c), `W_WebFileExists` (d_main.c),
-> `Web_FileLen`/`Web_FileCopy`/`Web_FileWrite` (m_misc.c), plus perf.h's
-> counters. A porter following §1 fails to compile four core files.
-> **Dispositive evidence**: `tools/native-sanitize/` already ships THREE shims —
-> `nat_platform.h`, `perf.h`, AND `web.h`. The repo has already been forced to
-> work around the gap the doc denies. The true surface is FIVE headers.
-> This is the exact doc-vs-reality discrepancy 11.3 was scheduled to discover
-> *after* the bring-up; it is now an input to 11.1, not an output of 11.3.
-> NOTE: this also means "core is web-layer-independent" is false as a blanket
-> rule — it holds only for the flag-guarded counters (p_telept.c/p_map.c/
-> r_draw.c/r_plane.c guard their `perf.h` include inside the `#ifdef`; the five
-> above do not). That narrower rule is the real, enforced precedent from 2.2.
-
-| Task | 内容 | DoD | Depends | Status |
-|------|------|-----|---------|--------|
-| 11.1 | ~~monolith~~ **DECOMPOSED (cap-sizing)** into the plan's own two rungs | (superseded — see 11.1a/11.1b) | 8.1 | cc:分割 |
-| 11.1a | **Rung 1 — hosted freestanding core**: engine/core + a minimal platform layer assuming only a memory region, a byte-out, and a preloaded-blob WAD; dumps per-tic hashes | the freestanding build boots headless, runs demos, streams per-tic hashes MATCHING nat-doom; every libc import enumerated by a committed command | 8.1 | cc:完了 [c7b5f11+b3c8a40] — tools/freestanding/ (fs-doom): engine/core built against 3 surfaces — 8 MiB static arena (no malloc in I_ZoneBase/I_AllocLow), fs_putc byte-out (write(1)), WAD preloaded to memory by the shim (no OS file I/O below it). **engine/core: 0 diff — the contract held, core did not bend to the port**. IMPORTS.md: 51 undefined libc symbols, generated by gen-imports.sh (memcpy/memset/libm expected; realloc/access/mkdir from m_misc.c flagged as rung-2 stubs — real bare-metal.md gaps for 11.3). Worker validated demo3 only; **lead ran the FULL corpus and caught demo4 diverging at tic 0** — NOT an engine bug: DEMO4 is retail-only, IdentifyVersion checks doomu.wad first, so the golden is retail-identified; presenting plain doom.wad picks registered mode (verified: 818 tics identical under retail name). Fixed 3 run-check.sh defects (CWD-relative WAD path; missing doomu.wad presentation; **it never compared to goldens — a silent non-gate**). Now a real gate: **13/13 bit-identical, drift-proved** (corrupt a golden tic ⇒ FAIL naming it). Minor known nit: IMPORTS.md embeds ASLR load addresses (cosmetic churn; symbol list is stable) |
-| 11.1b | **Rung 2 — QEMU bare-metal ELF** (no OS): the 11.1a core linked against a real bare-metal shim (linker script, crt0, UART byte-out, WAD baked via objcopy), booted under qemu-system-arm | the ELF boots in QEMU with no OS and streams per-tic hashes over the emulated UART; documented even if partial | 11.1a | cc:完了(partial) [600a309+4d7df73+8f5d648] — **DOOM's sim boots OS-less on ARM.** tools/baremetal/: engine/core (0 diff) + crt0 (sets SP, calls C) + PL011 UART byte-out (0x09000000) + 11.8 MiB WAD baked via objcopy + newlib + syscall stubs. Boots under qemu-system-arm -M virt -cpu cortex-a7, NO OS, streaming the full startup over the UART (lead-verified on master: BM-DOOM-BOOT to D_DoomMain to Z_Init to W_Init 'adding doom.wad' to M_Init to R_Init). **FINDING-12 (crown-jewel cross-arch, outcome A)**: R_Init runs ⇒ tables.c T_GenerateTables built finesine/finetangent from ARM newlib libm, applied corrections, PASSED the FNV-1a canon checksum with NO 'tables differ from 1993 canon' I_Error — **engine-archaeology §1's robustness claim VALIDATED on a genuinely different architecture** (ARM vs x86). **Documented gap**: per-tic demo hash comparison blocked — R_InitData (texture composition over the full WAD) stalls under QEMU TCG (300s, zero progress). **classified via QEMU gdbstub: a runaway fault, NOT slowness** (PC parked ~0x800000 below the code region, sp=0x0, executing zero memory). Stack depth/collision RULED OUT (relocating the stack to top-of-RAM didn't help) ⇒ sp=0 is an overwrite ⇒ a wild-pointer write in R_InitTextures/R_GenerateComposite (bare-metal/ARM memory bug; candidate: baked-WAD offset or unaligned access). Pinning it needs breakpoint debugging + exception vectors (README.md). DoD 'boots OS-less + streams UART, documented even if partial' = MET; demo hash-match is the deferred stretch |
-| 11.2 | Run the 13-demo trace on the freestanding build — 13/13 tic-identical PROVES the bare-metal.md contract is real and complete | all 13 demos' per-tic state hashes match the golden traces on the freestanding target | 11.1 | cc:完了 [b3c8a40] — **satisfied for the rung-1 freestanding target**: `tools/freestanding/run-check.sh` runs all 13 golden demos through fs-doom (memory arena + byte-out + preloaded WAD blob) and asserts per-tic hash identity — **13/13 bit-identical**, drift-proved (corrupt a golden tic ⇒ FAIL naming it). The DoD ("match the golden traces on the freestanding target") is met. The QEMU/bare-metal target extension is deferred with 11.1b (no toolchain on this host) — rung 1 is a genuine freestanding target and passes, so the contract is demonstrated; rung 2 would strengthen it from hosted-freestanding to OS-less |
-| 11.3 | Contract-on-trial: record every gap the bring-up exposed between bare-metal.md's *predicted* contract and reality; promote bare-metal.md from claim to tested contract; refine ESP32 scoping | bare-metal.md updated with "validated by freestanding bring-up [commit]"; every doc-vs-reality discrepancy recorded and resolved | 11.2 | cc:完了 [ab6e24f+525d9f6] — bare-metal.md promoted from *prediction* to *tested contract*. Scope-honest validation banner (rung 1, hosted-freestanding, 13/13, commit c7b5f11; explicitly NOT bare-metal-on-hardware — 11.1b deferred). §1 fixed three→**five headers**, FINDING-6 self-contradiction removed. New **§8 'Contract on trial'**: 6-row PREDICTED-vs-REALITY-vs-RESOLUTION table — 4 gaps (5-header surface, the 48-symbol libc surface §1 never enumerated, the realloc/access/mkdir heap/fs stragglers core calls directly, zone 4→8 MiB unreconciled) + **2 held predictions** (§4.1 trig boot-gen, §6.2 headless independence) — a fair trial reports acquittals too. ESP32 scoping refined to rung-1 reality. Lead fixed IMPORTS.md's one stale attribution (R_InitTables→T_GenerateTables, cross-checked vs 9.2b's #if-0 finding). Gates green: check-citations 527/0, verify-all 107 ALL PASS, lint OK. **PHASE 11 COMPLETE — the platform contract is now on trial and tested, not asserted** |
+| 15.1 | Offline SP gate — the promise with a latent bug behind it (precache rot): a committed test loads the app, goes network-disabled, reloads, boots single-player | offline gate in run-tests.sh; fails today's precache-rot class (proven by reverting the 12.4b pin); green after | 12.4b | cc:TODO |
+| 15.2 | Browser baseline in CI + the browser-matrix decision: wire the 12.2b JSON into run-tests.sh with regression comparison; decide Firefox (add a smoke leg and keep README's claim, or de-promise) — decision recorded in spec.md | baseline comparison runs in CI; Firefox either smoke-tested in CI or README+spec amended; Safari/iOS recorded as explicit non-goal | 12.2b | cc:TODO |
+| 15.3 | Client error-path UX: the main.js wedge pair (per-frame catch-all → frozen canvas; onDoomError → no landing restore) + any 12.4a Required client findings — return-to-landing on every engine death, message shown | each path has a browser test that kills the engine and asserts landing restore + user-visible message; no silent wedge remains in the 12.4a ledger | 12.4a | cc:TODO |
+| 15.4 | State-machine gate: mechanical cross-check that every docs/state-machine.md edge ID maps to a live test (the edge→test table is machine-checkable) + root-cause the T07 ~1/3-pass lobby flake (a flaky gate trains people to ignore red) | edge↔test checker in run-tests.sh, fails on an unmapped edge; T07 either fixed (≥19/20 pass) or quarantined WITH a replacement test covering its edges | - | cc:TODO |
+| 15.5 | Persistence + netcode UX numbers: persist.js round-trip test (save/config survives reload); measure the promised-but-unmeasured net numbers — stall length at the grace boundary, drop-in catch-up duration on the weakest host, LAN/tailnet HOL blocking (spec.md's "unmeasurably small" gets a number) | round-trip test green in CI; three measured numbers committed and linked from promises-index; the HOL number either confirms the no-WebRTC scope decision or triggers a spec conversation (NOT a transport task) | - | cc:TODO |
 
 ---
 
 ## Priority matrix
 
-- **Required** (the spine of tenet #6): 6.1–6.3 (executable archaeology — fastest, highest-credibility understanding win), 8.1–8.2 (self-enforcing invariants — the "defend" tier, and the honest fix for the golden blind spot), 11.1–11.2 (bare-metal falsification — the crown jewel; also de-risks the future ESP32 project).
-- **Recommended**: 6.4, 7.1, 7.3, 8.3, 9.1, 9.2, 10.1, 11.3.
-- **Optional** (diminishing returns — do a bounded pass, don't chase): 7.2 (formalize every primitive), 9.3 (map fuzz), 10.2.
-- **Rejected / guardrails** (per spec tenet #3, simplicity): don't pursue intractable formal proofs — 7.2 explicitly caps at "proof OR bounded-empirical with the limit named." Don't let the divergence atlas become an open-ended survey — 10.1 is bounded to the known *major* forks. Don't add a heavyweight proof-assistant dependency if an exhaustive enumeration or a single SMT invocation suffices (7.1 prefers the lightest tool that closes the domain).
+- **Required**: 12.1 (promise gate — a README number is wrong TODAY; cheapest
+  credibility win), 12.2a+b (the keystone — every browser claim and half of
+  Phase 14's scoping depend on it), 12.3 (tenet-4 debt, known null-deref),
+  12.5 (external oracle back before optimizing), 13.1a+b (the measurement
+  substrate — sequence-critical, before ALL of Phase 14), 13.4a+b (the one
+  open falsification of the crown-jewel contract), 13.3a (first-ever BE
+  execution), 14.1, 15.1, 15.3.
+- **Recommended**: 12.4a+b, 13.2a→c, 13.3b, 13.5 (the atlas — the north star
+  deliverable), 14.3, 15.2, 15.4, 15.5.
+- **Optional**: individual 14.2 candidates beyond the first two survivors
+  (diminishing returns governed by the ledger's own kill rules).
+- **Rejected / guardrails**: actual SNES/32X/GBA hardware bring-up (the atlas
+  IS the deliverable; a port is a future project that starts from it); any
+  kill-list re-litigation; browser-fps-motivated wasm work before 12.2b;
+  WebRTC/UDP transport revisit (unless 15.5's HOL number comes back non-small
+  — then it's a spec change, not a task); sw.js versioned-manifest machinery
+  (the fix is a precache pin, tenet #3); -Os for the universal artifact
+  (−9.3% wbox sim — bare-metal flash builds may revisit).
+
+## Sequencing spine (hard edges)
+
+13.1 before all 14.x (deterministic counts are the scoreboard) · 12.2 before
+15.2 and before any browser-motivated candidate · 13.2a before 13.2b (may
+dissolve it) · 13.4a before 13.3b (alignment findings interact) · 12.5 before
+Phase 14 landings (external oracle armed).
 
 ## Team validation
 
-`team_validation_mode: manual-pass` (perspectives evaluated separately; no subagents spawned during planning).
-- **Product** — every task directly serves spec tenet #6; nothing here changes gameplay or the shipped artifact (all tasks are verification tooling, proofs, invariant asserts, or docs). Reinvention check: builds on existing crackers, the native harness, and the golden gates — no duplication.
-- **Architecture** — the invariant asserts (8.1) and any core instrumentation must stay behind a build flag so `engine/core` keeps zero web-layer dependency (the rule established in task 2.2's review). The freestanding target (11.1) extends `tools/native-sanitize`, honoring the documented core↔platform contract rather than forking it.
-- **Security** — no new untrusted-input surface beyond the existing net fuzz; the differential fuzzer (9.1) synthesizes inputs for *offline* comparison, not network exposure. No secrets, no supply-chain additions (SMT/QEMU are dev-only tools, gated to the tasks that use them). No `.env`/secret reads required.
-- **QA** — every task's DoD is a yes/no verifiable artifact + gate (a script that prints the number, an assert that fires at a line, 13/13 hashes on new hardware). The lint baseline already exists. The sim/render/net gates remain the floor; new gates only strengthen them.
-- **Skeptic** — biggest risks: (a) bare-metal (Phase 11) is large scope → mitigated by the two-rung structure (minimal hosted freestanding first, QEMU second) so partial progress still validates the contract; (b) formal proofs (Phase 7) may hit intractability → mitigated by the explicit "proof OR bounded-empirical, limit named" cap; (c) the coverage audit (9.2) could surface un-exercised code that's genuinely un-understood → that's the point, and it's a finding, not a failure. No task claims completion without an artifact that a skeptic can run.
+`team_validation_mode: subagent` — three independent perspectives, run during
+planning (2026-07-17):
+- **Skeptic (+external research)** — verified SNES/D32XR/rp2040-doom/GBADoom
+  facts against primary sources; premise verdict "stock SNES: no, by ~20–100×
+  CPU / ~2× RAM / ~10× video, independently"; reframed the north star as the
+  falsifiable atlas; risks: exactness-breaking opts (→ gates + regold
+  discipline), wrong-metric optimization (→ icount scoreboard), hand-waved
+  conversion factors (→ per-row arithmetic + external anchors), non-vanilla
+  renderer scope creep (→ pixel-identical rule), evidence inflation (→
+  numbers with in-repo arithmetic, exit codes bare).
+- **Architecture+Perf** — reinvention check: zone floor partially done (2.5)
+  with the decisive re-run named; XIP mostly designed (§2.3), open delta =
+  PROT_READ proof; BE genuinely first; render queue mined out (kill-list);
+  13.1 fixes Phase 14's noise-limit problem; universal-artifact byte-identity
+  clauses required on every core touch; 13.4b core-touch policy pre-decided;
+  all tasks split under the worker cap.
+- **Product+QA** — promise-audit seed (13 unbacked promises incl. one stale
+  today + a latent sw.js precache bug + two user-wedging error paths found by
+  inspection); web track expanded from 3 vague tasks to 7 concrete gated ones;
+  six permanent gates specified; spec deltas drafted; browser-fps-before-Q0
+  flagged as a documented past mistake.
 
 ## Spec delta
 
-Updated root `spec.md`: added **tenet #6 — "Understanding is verifiable and
-self-defending"** (every documented claim regenerates from a committed script;
-demo-visible invariants are enforced by the code at their call site; the platform
-contract is validated by an actual freestanding port). This plan operationalizes
-that tenet; precedence remains `spec.md > Plans.md`.
+Applied to root `spec.md` (consumer to approve/amend):
+1. **Tenet #6 extended** — published promises (README + spec) now inside the
+   verifiable-understanding rule: every quantitative/behavioral claim maps to
+   a gate, committed evidence, or an explicit FLAGGED entry.
+2. **Perf gate amended** — the browser-pipeline baseline joins the gate once
+   Phase 12 lands.
+3. **Non-goals extended** — actual retro-console ports (the feasibility atlas
+   is the deliverable); Safari/iOS/mobile-touch not promised (Firefox status
+   to be decided by 15.2 and recorded).
