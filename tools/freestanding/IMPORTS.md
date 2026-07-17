@@ -164,7 +164,7 @@ All standard; provide from newlib, musl, or compiler built-ins on bare-metal.
 
 | Symbol | Source | Rung-2 action |
 |--------|--------|---------------|
-| `sin` | `tables.c:R_InitTables()` trig table boot-generation | Provide libm OR pre-generate and ship as const (bare-metal.md §4.1) |
+| `sin` | `tables.c:T_GenerateTables()` trig table boot-generation (`R_InitTables` in r_main.c is an `#if 0` shell — see coverage NEGATIVE-SPACE.md) | Provide libm OR pre-generate and ship as const (bare-metal.md §4.1) |
 | `tan` | same | same |
 | `atan` | same | same |
 
