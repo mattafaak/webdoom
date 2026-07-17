@@ -1,0 +1,138 @@
+{
+  "schema": "browser-metrics.v1",
+  "host": "wbox",
+  "chromeBin": "google-chrome-stable",
+  "chromeVersion": "Google Chrome 150.0.7871.114",
+  "timestamp": "2026-07-17T23:48:42.132Z",
+  "commit": "13ffb9d",
+  "durationSecs": 60,
+  "wallSec": 63.139,
+  "note": "Single run. wbox AMD G-T56N (Bobcat, 2×1.65GHz). Lower script% than alder: headless Chrome fires rAF at a reduced rate on slow CPU — fewer video.js tic callbacks per second of wall time. AudioWorklet runs on a separate thread and is NOT captured in ScriptDuration.",
+  "aggregate": {
+    "scriptSec": 0.6146260000000001,
+    "taskSec": 1.633267,
+    "layoutSec": 0,
+    "recalcSec": 0,
+    "v8compSec": 0,
+    "heapUsedMB": 1.5275115966796875,
+    "heapTotalMB": 2.25,
+    "mainThreadPct": 0.973449056842839,
+    "scriptPctOfWall": 0.973449056842839,
+    "taskPctOfWall": 2.5867799616718665
+  },
+  "samples": [
+    {
+      "elapsedSec": 0,
+      "metrics": {
+        "Timestamp": 297830.6183,
+        "AudioHandlers": 14,
+        "AudioWorkletProcessors": 1,
+        "Documents": 1,
+        "Frames": 1,
+        "JSEventListeners": 63,
+        "LayoutObjects": 17,
+        "MediaKeySessions": 0,
+        "MediaKeys": 0,
+        "Nodes": 104,
+        "Resources": 23,
+        "ContextLifecycleStateObservers": 9,
+        "V8PerContextDatas": 1,
+        "WorkerGlobalScopes": 1,
+        "UACSSResources": 0,
+        "RTCPeerConnections": 0,
+        "ResourceFetchers": 4,
+        "AdSubframes": 0,
+        "DetachedScriptStates": 0,
+        "ArrayBufferContents": 28,
+        "LayoutCount": 7,
+        "RecalcStyleCount": 10,
+        "LayoutDuration": 0.337958,
+        "RecalcStyleDuration": 0.023454,
+        "DevToolsCommandDuration": 0.03172,
+        "ScriptDuration": 1.392987,
+        "V8CompileDuration": 0,
+        "TaskDuration": 7.498856,
+        "TaskOtherDuration": 5.712737,
+        "ThreadTime": 0.925656,
+        "ProcessTime": 2.15,
+        "JSHeapUsedSize": 1878132,
+        "JSHeapTotalSize": 6553600,
+        "FirstMeaningfulPaint": 297820.507211,
+        "DomContentLoaded": 297815.809213,
+        "NavigationStart": 297812.871871
+      }
+    },
+    {
+      "elapsedSec": 10.396,
+      "metrics": {
+        "Timestamp": 297841.018565,
+        "ScriptDuration": 1.50402,
+        "TaskDuration": 7.755402,
+        "LayoutDuration": 0.337958,
+        "RecalcStyleDuration": 0.023454,
+        "JSHeapUsedSize": 1949464,
+        "JSHeapTotalSize": 6553600
+      }
+    },
+    {
+      "elapsedSec": 20.785,
+      "metrics": {
+        "Timestamp": 297851.406572,
+        "ScriptDuration": 1.597593,
+        "TaskDuration": 8.094672,
+        "LayoutDuration": 0.337958,
+        "RecalcStyleDuration": 0.023454,
+        "JSHeapUsedSize": 1366776,
+        "JSHeapTotalSize": 2359296
+      }
+    },
+    {
+      "elapsedSec": 31.56,
+      "metrics": {
+        "Timestamp": 297862.180361,
+        "ScriptDuration": 1.710567,
+        "TaskDuration": 8.390857,
+        "LayoutDuration": 0.337958,
+        "RecalcStyleDuration": 0.023454,
+        "JSHeapUsedSize": 1429572,
+        "JSHeapTotalSize": 2359296
+      }
+    },
+    {
+      "elapsedSec": 41.952,
+      "metrics": {
+        "Timestamp": 297872.574732,
+        "ScriptDuration": 1.823428,
+        "TaskDuration": 8.621265,
+        "LayoutDuration": 0.337958,
+        "RecalcStyleDuration": 0.023454,
+        "JSHeapUsedSize": 1491236,
+        "JSHeapTotalSize": 2359296
+      }
+    },
+    {
+      "elapsedSec": 52.743,
+      "metrics": {
+        "Timestamp": 297883.3612,
+        "ScriptDuration": 1.917287,
+        "TaskDuration": 8.883652,
+        "LayoutDuration": 0.337958,
+        "RecalcStyleDuration": 0.023454,
+        "JSHeapUsedSize": 1549304,
+        "JSHeapTotalSize": 2359296
+      }
+    },
+    {
+      "elapsedSec": 63.139,
+      "metrics": {
+        "Timestamp": 297893.759843,
+        "ScriptDuration": 2.007613,
+        "TaskDuration": 9.132123,
+        "LayoutDuration": 0.337958,
+        "RecalcStyleDuration": 0.023454,
+        "JSHeapUsedSize": 1601712,
+        "JSHeapTotalSize": 2359296
+      }
+    }
+  ]
+}

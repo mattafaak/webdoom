@@ -198,10 +198,10 @@ and inline `*(not machine-verified)*` markers for the 16 unverifiable claims.
 | perf-033 | perf.md:409 | total Chocolate Doom tics cross-validated | 44,580 | measurement | external Chocolate Doom instrumented run; no current script in repo | unverifiable |
 | perf-034 | perf.md:485 | R_DrawColumn calls/frame avg (doom demo1) | 714.8 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
 | perf-035 | perf.md:485 | R_DrawColumn avg pixels/call | 47.9 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
-| perf-036 | perf.md:485 | R_DrawColumn total pixels/frame | 34,203 | derived | tools/archaeology/derived-check.mjs (±1% tolerance; inputs from unverifiable perf-034/035) | verified |
+| perf-036 | perf.md:578 | R_DrawColumn total pixels/frame | 34,203 | derived | tools/archaeology/derived-check.mjs (±1% tolerance; inputs from unverifiable perf-034/035) | verified |
 | perf-037 | perf.md:486 | R_DrawSpan calls/frame avg | 147.8 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
 | perf-038 | perf.md:486 | R_DrawSpan avg pixels/call | 168.2 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
-| perf-039 | perf.md:486 | R_DrawSpan total pixels/frame | 24,854 | derived | tools/archaeology/derived-check.mjs (±1% tolerance; inputs from unverifiable perf-037/038) | verified |
+| perf-039 | perf.md:579 | R_DrawSpan total pixels/frame | 24,854 | derived | tools/archaeology/derived-check.mjs (±1% tolerance; inputs from unverifiable perf-037/038) | verified |
 | perf-040 | perf.md:526 | task-2.2 unroll-4: bsp+segs improvement (wbox) | −3.5% | measurement | historical experiment requiring specific commit comparison; no current script | unverifiable |
 | perf-041 | perf.md:532 | task-2.2 unroll-4: render total improvement (wbox) | −1.5% | measurement | historical experiment requiring specific commit comparison; no current script | unverifiable |
 | perf-042 | perf.md:861 | -Os CODE section size reduction vs -O3 | −33.0% | measurement | requires separate -Os emcc build; no current script | unverifiable |

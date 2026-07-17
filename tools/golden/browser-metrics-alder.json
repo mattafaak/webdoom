@@ -1,0 +1,138 @@
+{
+  "schema": "browser-metrics.v1",
+  "host": "alder",
+  "chromeBin": "google-chrome-stable",
+  "chromeVersion": "Google Chrome 150.0.7871.114",
+  "timestamp": "2026-07-17T23:44:43.397Z",
+  "commit": "13ffb9d",
+  "durationSecs": 60,
+  "wallSec": 63.189,
+  "note": "Run 1 of 2. Run 2: scriptSec=1.966 taskSec=3.127 mainThreadPct=3.11%. Variance: scriptSec +0.061s (+3.2%) — within normal run-to-run noise.",
+  "aggregate": {
+    "scriptSec": 1.9048139999999998,
+    "taskSec": 3.011298,
+    "layoutSec": 0,
+    "recalcSec": 0,
+    "v8compSec": 0,
+    "heapUsedMB": 1.8596534729003906,
+    "heapTotalMB": 3.5,
+    "mainThreadPct": 3.0144708730950005,
+    "scriptPctOfWall": 3.0144708730950005,
+    "taskPctOfWall": 4.765541470825618
+  },
+  "samples": [
+    {
+      "elapsedSec": 0,
+      "metrics": {
+        "Timestamp": 293288.136982,
+        "AudioHandlers": 14,
+        "AudioWorkletProcessors": 1,
+        "Documents": 1,
+        "Frames": 1,
+        "JSEventListeners": 68,
+        "LayoutObjects": 17,
+        "MediaKeySessions": 0,
+        "MediaKeys": 0,
+        "Nodes": 110,
+        "Resources": 23,
+        "ContextLifecycleStateObservers": 10,
+        "V8PerContextDatas": 2,
+        "WorkerGlobalScopes": 1,
+        "UACSSResources": 0,
+        "RTCPeerConnections": 0,
+        "ResourceFetchers": 4,
+        "AdSubframes": 0,
+        "DetachedScriptStates": 0,
+        "ArrayBufferContents": 28,
+        "LayoutCount": 9,
+        "RecalcStyleCount": 12,
+        "LayoutDuration": 0.006152,
+        "RecalcStyleDuration": 0.001153,
+        "DevToolsCommandDuration": 0.001533,
+        "ScriptDuration": 0.261014,
+        "V8CompileDuration": 0.000044,
+        "TaskDuration": 0.640646,
+        "TaskOtherDuration": 0.37075,
+        "ThreadTime": 0.428155,
+        "ProcessTime": 1.1,
+        "JSHeapUsedSize": 2247480,
+        "JSHeapTotalSize": 6815744,
+        "FirstMeaningfulPaint": 293280.512195,
+        "DomContentLoaded": 293280.401218,
+        "NavigationStart": 293280.376861
+      }
+    },
+    {
+      "elapsedSec": 10.415,
+      "metrics": {
+        "Timestamp": 293298.552363,
+        "ScriptDuration": 0.567048,
+        "TaskDuration": 1.120265,
+        "LayoutDuration": 0.006152,
+        "RecalcStyleDuration": 0.001153,
+        "JSHeapUsedSize": 2528200,
+        "JSHeapTotalSize": 6815744
+      }
+    },
+    {
+      "elapsedSec": 20.825,
+      "metrics": {
+        "Timestamp": 293308.963546,
+        "ScriptDuration": 0.893209,
+        "TaskDuration": 1.635126,
+        "LayoutDuration": 0.006152,
+        "RecalcStyleDuration": 0.001153,
+        "JSHeapUsedSize": 2798468,
+        "JSHeapTotalSize": 6815744
+      }
+    },
+    {
+      "elapsedSec": 31.6,
+      "metrics": {
+        "Timestamp": 293319.73779,
+        "ScriptDuration": 1.222546,
+        "TaskDuration": 2.164686,
+        "LayoutDuration": 0.006152,
+        "RecalcStyleDuration": 0.001153,
+        "JSHeapUsedSize": 1788744,
+        "JSHeapTotalSize": 2359296
+      }
+    },
+    {
+      "elapsedSec": 42.005,
+      "metrics": {
+        "Timestamp": 293330.142823,
+        "ScriptDuration": 1.539157,
+        "TaskDuration": 2.659959,
+        "LayoutDuration": 0.006152,
+        "RecalcStyleDuration": 0.001153,
+        "JSHeapUsedSize": 2063836,
+        "JSHeapTotalSize": 2621440
+      }
+    },
+    {
+      "elapsedSec": 52.787,
+      "metrics": {
+        "Timestamp": 293340.925857,
+        "ScriptDuration": 1.86182,
+        "TaskDuration": 3.166344,
+        "LayoutDuration": 0.006152,
+        "RecalcStyleDuration": 0.001153,
+        "JSHeapUsedSize": 2335164,
+        "JSHeapTotalSize": 2883584
+      }
+    },
+    {
+      "elapsedSec": 63.189,
+      "metrics": {
+        "Timestamp": 293351.327642,
+        "ScriptDuration": 2.165828,
+        "TaskDuration": 3.651944,
+        "LayoutDuration": 0.006152,
+        "RecalcStyleDuration": 0.001153,
+        "JSHeapUsedSize": 1949988,
+        "JSHeapTotalSize": 3670016
+      }
+    }
+  ]
+}

@@ -342,6 +342,79 @@ deferred — add as Q0 in the queue. The queue entries below apply
 unambiguously to the bare-metal axis; their browser applicability is
 flagged NEEDS-Q0 where the JS side might dominate.
 
+#### §C results — cheap pass (task 12.2a, 2026-07-17, commit 13ffb9d)
+
+Measured via `tools/browser-metrics.mjs`: boots webdoom headlessly, navigates
+to E1M1, plays for 60 s (wall), samples `Performance.getMetrics` before and
+after.  Raw golden files: `tools/golden/browser-metrics-<host>.json`.
+
+Reproduce (alder):
+```
+node tools/browser-metrics.mjs --url http://127.0.0.1:8666/ --json --duration 60
+```
+Reproduce (remote fleet):
+```
+# on wbox: start server, then run script
+DOOM_PORT=8669 node ~/.cache/webdoom-metrics/server/serve.js &
+node ~/.cache/webdoom-metrics/tools/browser-metrics.mjs --url http://127.0.0.1:8669/ --json --duration 60
+```
+
+**Aggregate results** (ScriptDuration, TaskDuration are cumulative CPU seconds;
+LayoutDuration and RecalcStyleDuration are 0 throughout — DOM does not change
+during gameplay):
+
+| host | CPU | wall (s) | ScriptDuration (s) | script % of wall | TaskDuration (s) | task % of wall | heap used (MB) |
+|------|-----|----------|-------------------|-----------------|-----------------|----------------|---------------|
+| alder (i9-12900K) | 3.6 GHz P-core | 63.2 | 1.90–1.97 | **3.0–3.1%** | 3.0–3.1 | 4.8–4.9% | 1.86 |
+| wbox (AMD G-T56N Bobcat) | 1.65 GHz | 63.1 | 0.61 | **0.97%** | 1.63 | 2.59% | 1.53 |
+
+(alder run-to-run variance: scriptSec +0.061s between two consecutive runs = 3.2% relative; within normal noise.)
+
+**Key observations**:
+
+1. **Main-thread JS is < 3% of wall on alder, < 1% on wbox** (aggregate).
+   The V8 heap used by webdoom's JS layer is 1.5–1.9 MB — tiny because the
+   wasm engine owns its own 64 MB linear memory outside V8's heap.
+
+2. **LayoutDuration and RecalcStyleDuration deltas are exactly 0** during
+   gameplay on both hosts.  The browser's CSS/layout engine does zero work
+   during active game rendering — the game is drawn entirely in a WebGL
+   canvas and the DOM is static.
+
+3. **wbox shows lower script% than alder** despite being slower.  In headless
+   Chrome (`--headless=new`) without a real vsync source, rAF fires at a
+   rate limited by the CPU's ability to process frames.  On the slow Bobcat
+   (≈ 1.65 GHz), Chrome fires fewer rAF callbacks per second of wall time
+   → fewer `video.js` tic-callback invocations → less ScriptDuration
+   accumulated per second.  This is a headless-measurement artefact:
+   on a real display at 60 Hz the Bobcat would be CPU-bound rather than
+   rAF-rate-limited.
+
+4. **AudioWorklet is not captured**.  `AudioWorkletProcessors: 1` confirms
+   the AudioWorklet is active throughout, but its CPU time runs on a
+   dedicated audio thread and is NOT included in `ScriptDuration`.
+   The OPL synthesis at 140 Hz + PCM mixing cost is unknown from this data.
+
+**Go / no-go verdict for 12.2b per-stage `performance.mark` instrumentation**:
+
+| pipeline stage | aggregate data says | verdict |
+|----------------|---------------------|---------|
+| palette expand (`I_FinishUpdate`) | Subsumed in 3% ScriptDuration total. Total is too small for palette expand alone to be material. | **NEGLIGIBLE** — skip 12.2b for this stage |
+| `texSubImage2D` WebGL upload | Same: total ScriptDuration < 3%, cannot dominate. | **NEGLIGIBLE** — skip 12.2b for this stage |
+| rAF jitter | `Performance.getMetrics` gives no per-frame timing. Cannot assess from aggregate. rAF jitter may still cause audio/video sync issues even with low CPU usage. | **MERITS 12.2b** — aggregate data blind to frame-level jitter |
+| AudioWorklet (OPL + PCM) | Separate thread; zero contribution to measured ScriptDuration. Completely unmeasured. | **MERITS 12.2b** — need AudioWorklet-specific timing (e.g. `currentTime` drift or worklet `port.postMessage` round-trip) |
+| input latency | Not assessable from aggregate metrics — `Performance.getMetrics` carries no event-to-present timing; CPU headroom bounds throughput, not queueing delay (event → ticcmd → 35 Hz tic boundary → render → present). | **MERITS 12.2b** |
+
+**Conclusion**: the cheap-pass data closes the budget sanity-check: webdoom's
+entire JS main-thread pipeline consumes < 3% of wall-clock CPU on alder at
+35 Hz / 60 fps.  The three stages that MERIT further measurement (rAF jitter,
+AudioWorklet thread cost, and input latency) require per-frame
+`performance.mark` instrumentation (12.2b) and are NOT addressable with
+aggregate CDP metrics alone.
+12.2b should be scoped to: rAF frame-to-frame interval distribution,
+AudioWorklet timing, and event-to-present latency; ignoring palette expand /
+texSubImage2D (aggregate already rules them out).
+
 ---
 
 ### D. Within bsp+segs: attribution reasoning
