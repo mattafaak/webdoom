@@ -12,10 +12,12 @@
 // Exits 0 on all-pass, 1 on any mismatch.
 
 let failures = 0;
+const claimActuals = {};
 
 function check(id, desc, expected, actual) {
     const pass = String(actual) === String(expected);
     if (!pass) failures++;
+    claimActuals[id] = actual === null || actual === undefined ? null : String(actual);
     console.log(`${pass ? 'PASS' : 'FAIL'}  ${id}  ${desc}`);
     if (!pass) {
         console.log(`      expected: ${expected}`);
@@ -163,6 +165,7 @@ function check(id, desc, expected, actual) {
     const pctErr  = Math.abs(recomp - stated) / stated * 100;
     const pass = pctErr < 1.0;
     if (!pass) failures++;
+    claimActuals['perf-036'] = String(stated);
     console.log(`${pass ? 'PASS' : 'FAIL'}  perf-036  R_DrawColumn total pixels/frame ≈ ${stated} (recomp=${recomp}, err=${pctErr.toFixed(2)}%)`);
 }
 
@@ -177,8 +180,10 @@ function check(id, desc, expected, actual) {
     const pctErr  = Math.abs(recomp - stated) / stated * 100;
     const pass = pctErr < 1.0;
     if (!pass) failures++;
+    claimActuals['perf-039'] = String(stated);
     console.log(`${pass ? 'PASS' : 'FAIL'}  perf-039  R_DrawSpan total pixels/frame ≈ ${stated} (recomp=${recomp}, err=${pctErr.toFixed(2)}%)`);
 }
 
 console.log(`\nderived-check: ${4 - failures}/4 passed (failures=${failures})`);
+console.log(`CLAIMS_JSON ${JSON.stringify(claimActuals)}`);
 if (failures > 0) process.exit(1);

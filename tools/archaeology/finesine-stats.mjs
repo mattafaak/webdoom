@@ -56,10 +56,12 @@ const SIZES = { finesine: 10240, finetangent: 4096, tantoangle: 2049 };
 const totalEntries = Object.values(SIZES).reduce((a, b) => a + b, 0);
 
 let failures = 0;
+const claimActuals = {};
 
 function check(id, desc, expected, actual) {
     const pass = String(actual) === String(expected);
     if (!pass) failures++;
+    claimActuals[id] = actual === null || actual === undefined ? null : String(actual);
     console.log(`${pass ? 'PASS' : 'FAIL'}  ${id}  ${desc}`);
     if (!pass) {
         console.log(`      expected: ${expected}`);
@@ -77,4 +79,5 @@ check('ea-003', `boot FNV checksum entry count (finesine+finetangent+tantoangle)
       16385, totalEntries);
 
 console.log(`\nfinesine-stats: ${3 - failures}/3 passed`);
+console.log(`CLAIMS_JSON ${JSON.stringify(claimActuals)}`);
 if (failures > 0) process.exit(1);

@@ -27,11 +27,13 @@ import { dirname, join } from 'node:path';
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
 let failures = 0;
+const claimActuals = {};
 
 function check(id, desc, expected, actual, soft = false) {
     const pass = String(actual) === String(expected);
     if (!pass && !soft) failures++;
     const tag = pass ? 'PASS' : (soft ? 'INFO' : 'FAIL');
+    claimActuals[id] = actual === null || actual === undefined ? null : String(actual);
     console.log(`${tag}  ${id}  ${desc}`);
     if (!pass) {
         console.log(`      documented: ${expected}`);
@@ -173,4 +175,5 @@ function gzipSize(path) {
 }
 
 console.log(`\nstamp-check: ${7 - failures}/7 passed (hard failures: ${failures})`);
+console.log(`CLAIMS_JSON ${JSON.stringify(claimActuals)}`);
 if (failures > 0) process.exit(1);

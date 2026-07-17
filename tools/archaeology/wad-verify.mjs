@@ -93,12 +93,14 @@ function countNFSubsectors(mapPrefix) {
 // ── claim table ──────────────────────────────────────────────────────────────
 
 let failures = 0;
+const claimActuals = {};  // for CLAIMS_JSON footer
 
 function check(id, desc, expected, actual) {
     const aStr = actual === null || actual === undefined ? '(null)' : String(actual);
     const eStr = String(expected);
     const pass = aStr === eStr;
     if (!pass) failures++;
+    claimActuals[id] = aStr === '(null)' ? null : aStr;
     console.log(`${pass ? 'PASS' : 'FAIL'}  ${id}  ${desc}`);
     if (!pass) {
         console.log(`      expected: ${eStr}`);
@@ -260,4 +262,5 @@ function mapLump(relIdx) {
 const total = 23; // total checks above
 const passed = total - failures;
 console.log(`\nwad-verify: ${passed}/${total} passed`);
+console.log(`CLAIMS_JSON ${JSON.stringify(claimActuals)}`);
 if (failures > 0) process.exit(1);

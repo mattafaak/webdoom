@@ -58,10 +58,12 @@ const codeSize = sections[CODE_ID]?.size ?? null;
 const dataSize = sections[DATA_ID]?.size ?? null;
 
 let failures = 0;
+const claimActuals = {};
 
 function checkHard(id, desc, expected, actual) {
     const pass = String(actual) === String(expected);
     if (!pass) failures++;
+    claimActuals[id] = actual === null || actual === undefined ? null : String(actual);
     console.log(`${pass ? 'PASS' : 'FAIL'}  ${id}  ${desc}`);
     if (!pass) {
         console.log(`      expected: ${expected}`);
@@ -72,6 +74,7 @@ function checkHard(id, desc, expected, actual) {
 function checkSoft(id, desc, documented, actual) {
     const pass = String(actual) === String(documented);
     const tag = pass ? 'PASS' : 'INFO';
+    claimActuals[id] = actual === null || actual === undefined ? null : String(actual);
     console.log(`${tag}  ${id}  ${desc}`);
     if (!pass) {
         console.log(`      documented: ${documented}`);
@@ -129,4 +132,5 @@ if (dataSize === null) {
 }
 
 console.log(`\nwasm-stamp: ${3 - failures}/3 passed (hard failures: ${failures})`);
+console.log(`CLAIMS_JSON ${JSON.stringify(claimActuals)}`);
 if (failures > 0) process.exit(1);

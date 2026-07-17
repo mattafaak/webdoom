@@ -72,5 +72,8 @@ int main (void)
     }
 
     printf ("\nrndtable-stats: %d/3 passed\n", 3 - failures);
+    printf ("CLAIMS_JSON "
+            "{\"ea-007\":\"%.2f\",\"ea-008\":\"%d\",\"ea-009\":\"%d\"}\n",
+            mean, distinct, never);
     return failures > 0 ? 1 : 0;
 }

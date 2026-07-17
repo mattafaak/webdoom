@@ -62,11 +62,13 @@ const claimIds  = ['ea-010', 'ea-011', 'ea-012', 'ea-013', 'ea-014'];
 const claimedMM = [       5,       34,       36,       41,       34];
 
 let failures = 0;
+const claimActuals = {};
 for (let lv = 0; lv < 5; lv++) {
     const { gamma, mismatches } = sweepBestFit(lv);
     const exp  = claimedMM[lv];
     const pass = (mismatches === exp);
     if (!pass) failures++;
+    claimActuals[claimIds[lv]] = String(mismatches);
 
     console.log(`${pass ? 'PASS' : 'FAIL'}  ${claimIds[lv]}  gamma level-${lv} γ≈${gamma.toFixed(3)} residual mismatches=${mismatches}/256 expected=${exp}`);
     if (!pass) {
@@ -75,6 +77,7 @@ for (let lv = 0; lv < 5; lv++) {
 }
 
 console.log(`\ngamma-crack: ${5 - failures}/5 passed (failures=${failures})`);
+console.log(`CLAIMS_JSON ${JSON.stringify(claimActuals)}`);
 if (failures > 0) {
     console.log('ERROR: gamma table fit disagrees with engine-archaeology.md §4');
     process.exit(1);

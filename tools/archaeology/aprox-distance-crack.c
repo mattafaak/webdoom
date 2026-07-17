@@ -100,5 +100,10 @@ int main (void)
     }
 
     printf ("\naprox-distance-crack: %d/3 passed\n", 3 - failures);
+    printf ("CLAIMS_JSON "
+            "{\"ea-015\":\"+%.1f%%\",\"ea-016\":\"+%.1f%%\",\"ea-017\":\"%.1f%%"
+            "\"}\n",
+            max_err * 100.0, relative_error (M_PI / 4.0) * 100.0,
+            relative_error (0.0) * 100.0);
     return failures > 0 ? 1 : 0;
 }

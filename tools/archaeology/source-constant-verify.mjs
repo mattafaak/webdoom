@@ -269,4 +269,10 @@ for (const c of claims) {
 
 const total = filterClaim ? 1 : claims.length;
 console.log(`\nsource-constant: ${total - failures}/${total} passed`);
+
+// Emit actual values for three-way drift check (consumed by verify-all.sh / doc-drift.mjs)
+const valuesMap = {};
+for (const r of results) { valuesMap[r.id] = r.actual === null || r.actual === undefined ? null : String(r.actual); }
+console.log(`CLAIMS_JSON ${JSON.stringify(valuesMap)}`);
+
 if (failures > 0) process.exit(1);
