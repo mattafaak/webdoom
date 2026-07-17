@@ -939,7 +939,7 @@ P_Random or demo-observable gamestate.
 | `COLORMAP` light maps (0-31) | (WAD lump) | 8 KB | **recipe** — nearest-color to linear darken, Euclidean metric | archaeology §6 | No |
 | `COLORMAP` invuln map (32) | (WAD lump) | 256 B | **irreducible** — luma weights 76/152/34 (sum 262), 14 tie-breaks | archaeology §6 | No |
 | `COLORMAP` blackout (33) | (WAD lump) | 256 B | **declarative** — all zeros (trivial blackout map) | archaeology §6 | No |
-| `DISTMAP=2`, `LIGHTZSHIFT=20` | r_main.c:616, r_main.h:75 | constants | **irreducible** — aesthetic tuning for falloff slope and distance scale | archaeology §8 | No |
+| `DISTMAP=2`, `LIGHTZSHIFT=20` | r_main.c:632-649, r_main.h:75 | constants | **irreducible** — aesthetic tuning for falloff slope and distance scale | archaeology §8 | No |
 | `zlight[16][128]`, `scalelight[16][48]` | r_main.c | 12 KB | **recipe** — linear interp via startmap formula (renderer.md §2.3) | archaeology §8 | No |
 | `checkcoord[12][4]` | r_bsp.c:365 | 48 B | **equivalence** — widest-span corner pair, 9/9 cases verified by script | archaeology §9 | No |
 | `S_CLOSE_DIST=160`, `S_CLIPPING_DIST=1200`, `S_ATTENUATOR=1040` | s_sound.c:55-64 | constants | **irreducible** — linear sound falloff tuning | archaeology §10 | No |

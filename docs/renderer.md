@@ -35,7 +35,7 @@ verified by `node tools/archaeology/source-constant-verify.mjs`.
 
 ## 1. Frame pipeline overview
 
-`R_RenderPlayerView` (r_main.c:957) drives one complete frame in four timed
+`R_RenderPlayerView` (r_main.c:973) drives one complete frame in four timed
 stages:
 
 ```
@@ -92,7 +92,7 @@ exactly.)
 
 ### 2.2 Angle→column mapping: `viewangletox` and `xtoviewangle`
 
-Built in `R_InitTextureMapping` (r_main.c:548), called from
+Built in `R_InitTextureMapping` (r_main.c:564), called from
 `R_ExecuteSetViewSize` whenever the view size changes.
 
 **`viewangletox[i]`** — maps a fine-angle index `i` (0…FINEANGLES/2−1) to the
@@ -134,7 +134,7 @@ Two 2D pointer arrays into `colormaps`. Both map a lighting level and a
 distance to the appropriate COLORMAP entry.
 
 **`zlight[LIGHTLEVELS][MAXLIGHTZ]`** — distance-based, for floor/ceiling spans.
-Built in `R_InitLightTables` (r_main.c:618). `LIGHTLEVELS = 16`,
+Built in `R_InitLightTables` (r_main.c:634). `LIGHTLEVELS = 16`,
 `MAXLIGHTZ = 128`. Per entry:
 
 ```
@@ -147,7 +147,7 @@ zlight[i][j] = colormaps + level*256
 ```
 
 Constants (r_main.h): `NUMCOLORMAPS = 32`, `LIGHTZSHIFT = 20`,
-`LIGHTSCALESHIFT = 12`, `DISTMAP = 2` (r_main.c:616).
+`LIGHTSCALESHIFT = 12`, `DISTMAP = 2` (r_main.c:632-649).
 
 `LIGHTZSHIFT = 20` means the column index `j` encodes distance in units of
 `1/2^20` of a world unit; `(j+1) << 20` is the distance in fixed-point.
@@ -179,7 +179,7 @@ structure is unambiguous.
 
 ### 2.4 `yslope` and `distscale`
 
-**`yslope[y]`** (r_plane.c:85, built in r_main.c:734-738): the flat-to-eye
+**`yslope[y]`** (r_plane.c:85, built in r_main.c:750-754): the flat-to-eye
 distance multiplier for each screen row. For row `y`:
 
 ```
@@ -191,7 +191,7 @@ At `y = centery`, `dy` approaches 0 and `yslope` would overflow — but that row
 is the horizon and never receives span fills because the floor is always below
 the horizon (r_main.c has clamp at `viewheight/2 − 8` via `R_ShearView`).
 
-**`distscale[x]`** (r_plane.c:86, built in r_main.c:742-745): corrects flat
+**`distscale[x]`** (r_plane.c:86, built in r_main.c:757-761): corrects flat
 distances for oblique viewing angles at each screen column:
 
 ```
