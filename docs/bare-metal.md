@@ -20,17 +20,37 @@ shown. Code claims are cited as `file:line`.
 5. [Endianness, alignment, and integer-width portability](#5-endianness-alignment-and-integer-width-portability)
 6. [What this repo already proves](#6-what-this-repo-already-proves)
 7. [ESP32 sketch](#7-esp32-sketch)
+8. [Contract on trial: what the bring-up found](#8-contract-on-trial-what-the-bring-up-found)
+
+---
+
+> **Validation status — rung 1 (hosted-freestanding, 2026-07-17)**: commit
+> c7b5f11 produced `tools/freestanding/fs-doom`, a Linux -m32 build of
+> `engine/core` against a static 8 MiB arena + `fs_putc` byte-out + preloaded
+> WAD blob. Gate commit b3c8a40 (`tools/freestanding/run-check.sh`) verified
+> 13/13 golden demos bit-identical to vanilla. Every claim in §1–§7 was measured
+> against this bring-up; gaps and validated predictions are recorded in §8.
+> **Scope caveat**: this is hosted-freestanding (Linux, glibc, -m32 ABI). The
+> QEMU/OS-less rung (11.1b) is deferred — no cross-compiler toolchain on this
+> build host. Do not read this as bare-metal-on-hardware validation.
 
 ---
 
 ## 1. The platform contract
 
-The entire platform surface is in three files: `engine/core/i_system.h`
-(timing, memory, error, startup), `engine/core/i_video.h` (display), and
-`engine/core/i_sound.h` (audio). The web implementation in `engine/web/` is
-the reference. Every function below is cited against its web implementation.
-Together, §1.1–§1.10 enumerate every symbol in both headers; the completeness
-claim is auditable by diffing against the two header files.
+The platform contract spans **five** header files: `engine/core/i_system.h`
+(timing, memory, error, startup), `engine/core/i_video.h` (display),
+`engine/core/i_sound.h` (audio), `engine/web/web.h` (file registry, music
+sequencer bridge, and `D_DoomFrame` declaration — mirrored for non-web builds
+at `tools/freestanding/web.h`), and `engine/web/perf.h` (per-stage timing
+counters — mirrored at `tools/freestanding/perf.h`). `engine/core/d_main.c`,
+`m_misc.c`, and `w_wad.c` unconditionally `#include "web.h"`; `d_main.c` and
+`r_main.c` unconditionally `#include "perf.h"`. A bare-metal porter must
+supply stubs for both (FINDING-6; see §8.1). The web implementation in
+`engine/web/` is the reference. §1.1–§1.10 enumerate the `i_system.h` /
+`i_video.h` / `i_sound.h` function symbols. The full libc symbol surface a
+porter must also satisfy is in `tools/freestanding/IMPORTS.md` (authoritative
+list, §8.2).
 
 ### 1.1 Timing — MUST implement
 
@@ -943,6 +963,15 @@ recommended mitigation for the column-draw latency bottleneck (§7.3).
 A 16 MiB PSRAM part leaves ~6.4 MiB margin above the 9.6 MiB requirement —
 comfortable for purgeable texture cache growth beyond the attract-demo peak.
 
+**Rung-1 arena vs. this recommendation**: the freestanding bring-up (rung 1,
+commit c7b5f11) used an 8 MiB zone (`ZONESIZE = 8 * 1024 * 1024` in
+`tools/freestanding/web.h`), consistent with perf.md §3's "4–8 MiB first
+pass" guidance. All 13 golden demos passed at 8 MiB; the 4 MiB lower bound
+from §2.2 is analytically sound (3× the 1.36 MiB non-purgeable peak) but was
+not stress-tested by rung 1. For an ESP32 bring-up, start with 8 MiB if PSRAM
+allows; reduce to 4 MiB only after profiling confirms no `PU_STATIC` overflows
+on the target map set. See §8.1 (zone-size row) for the trial record.
+
 **Full doom.wad (≈ 11.8 MiB, Ultimate Doom variant) in PSRAM**:
 1.21 + 0.19 + 4 + 11.8 = ~17.2 MiB → exceeds 16 MiB PSRAM. Either stream
 the WAD from XIP-flash (§2.3c) or use a 32 MiB PSRAM part (available in the
@@ -1022,9 +1051,60 @@ eliminates in-game stutter.
 
 ---
 
+## 8. Contract on trial: what the bring-up found
+
+Rung 1 (`tools/freestanding/`, commit c7b5f11, gate b3c8a40) compiled
+`engine/core` against a minimal hosted-freestanding platform layer and ran
+13/13 golden demos bit-identical to vanilla. This section records one row per
+checkable claim: what the doc predicted, what rung 1 found, and how it was
+resolved. `tools/freestanding/IMPORTS.md` is the authoritative symbol surface
+list; every row that cites a symbol cites its category letter there.
+
+Verdicts: **held** = the doc's prediction was correct. **gap** = reality
+diffed from the doc.
+
+### 8.1 Trial table
+
+| Predicted | Reality (rung 1) | Resolution | Verdict |
+|-----------|-----------------|------------|---------|
+| **Platform surface is three files** (§1 before this revision): `i_system.h`, `i_video.h`, `i_sound.h`. Completeness "auditable by diffing against **the two header files**" (§1 self-contradicted its own count). | **Five headers.** `engine/core` unconditionally `#include`s `web.h` (`d_main.c`, `m_misc.c`, `w_wad.c`) and `perf.h` (`d_main.c`, `r_main.c`). Freestanding stubs provided at `tools/freestanding/web.h` and `tools/freestanding/perf.h`. (FINDING-6) | §1 corrected to name all five headers; the "three"/"two" contradiction removed. | gap |
+| **Libc surface not enumerated** — §1 framed the contract as only I_ header functions | **48 strong undefined symbols** across 8 categories (see §8.2 and `tools/freestanding/IMPORTS.md`). The surface spans memcpy/memset/str* (12), platform primitives (6), core stdio stragglers (8), core heap stragglers (3), math one-shot boot (3), shim symbols eliminated in rung 2 (14), and infra/weak symbols (7). | `tools/freestanding/IMPORTS.md` is now the porter's authoritative symbol checklist. See §8.2. | gap |
+| **Core needs no heap beyond the zone** (§1.3 framing: "The engine manages everything inside this block via Z_Zone") | `m_misc.c` calls `realloc` (config-file token parser), `access` (file-existence check), and `mkdir` (savegame directory creation) directly and unconditionally — outside the platform layer's control (IMPORTS.md category d). | Stubbed for rung 1: `realloc` → NULL, `access` → −1, `mkdir` → no-op. All 13 goldens pass with these stubs. Rung-2 disposition: stub or zone-backed (`m_misc.c`). | gap |
+| **§4.1 predicted**: trig tables (`finesine`, `finetangent`, `tantoangle`; 14,336 entries) boot-generated at startup via `sin`, `tan`, `atan` — called once, not in the render loop | **Confirmed.** `sin`, `tan`, `atan` appear as strong undefined symbols (IMPORTS.md category g), called from `tables.c:T_GenerateTables` (invoked by `d_main.c:723`). Zero runtime cost after the one-time fill. | §4.1 prediction correct — no change needed. | held |
+| **Zone: 4 MiB recommended** as credible first-pass minimum (§2.2; perf.md §3: "4–8 MiB first pass") | Rung 1 used **8 MiB** static arena (`ZONESIZE = 8 * 1024 * 1024` in `tools/freestanding/web.h`). All 13 goldens passed. The 4 MiB lower bound was not stress-tested by rung 1. | §7 ESP32 sketch updated to note the 8 MiB rung-1 arena. §2.2 reasoning (3× non-purgeable peak) is unchanged, but 4 MiB remains an untested extrapolation from rung 1's evidence. | gap (not validated) |
+| **§6.2 predicted**: simulation is independent of display and audio; headless bring-up first, display/audio added incrementally | **Confirmed.** 13/13 demos run to completion with `I_FinishUpdate` as a no-op and all sound functions as empty stubs. The freestanding platform layer never touches a display or audio device. | §6.2 prediction validated by rung 1. | held |
+
+### 8.2 The full libc surface: IMPORTS.md as porter's checklist
+
+`tools/freestanding/IMPORTS.md` was generated from the `fs-doom` binary via
+`nm -u fs-doom | sort` (rung 1, commit c7b5f11). It lists every strong
+undefined symbol `engine/core` demanded and classifies each with its rung-2
+disposition (eliminate, replace, stub, or provide from newlib/musl). The 48
+strong symbols divide as follows:
+
+| Category | Symbols | Rung-2 action |
+|----------|---------|---------------|
+| Shim — WAD load | `open`, `read`, `close`, `lseek`, `malloc`, `free` | Eliminated: WAD becomes a linker symbol or ROM blob |
+| Shim — `-sim` file output | `fopen`, `fclose`, `fwrite`, `fputc`, `fread`, `fseek`, `ftell`, `fstat` | Eliminated: drop the `-sim` shim path |
+| Platform primitives | `write`, `clock_gettime`, `_setjmp`, `longjmp`, `abort`, `exit` | Replaced: UART/SWO, hardware timer, spin-loop, reset |
+| Core stdio stragglers | `fprintf`, `printf`, `putchar`, `puts`, `setbuf`, `sprintf`, `vsnprintf`, `sscanf` | Route through `fs_putc` / newlib |
+| Core heap stragglers | `realloc`, `access`, `mkdir` | Stub: NULL / −1 / no-op (§8.1 row 3) |
+| String/memory | `memcpy`, `memset`, `strcpy`, `strncpy`, `strcmp`, `strncmp`, `strcasecmp`, `strncasecmp`, `strlen`, `strchr`, `strrchr`, `strtol` | Newlib or compiler built-ins |
+| Math — one-shot boot | `sin`, `tan`, `atan` | Libm at boot, or pre-generated tables (§4.1) |
+| Infra/weak | `__libc_start_main`, `__ctype_toupper_loc`, `__cxa_finalize`, `__gmon_start__`, `_ITM_*` | crt0 / newlib |
+
+The distinction between §1 functions (what the porter *writes*) and
+IMPORTS.md (what the porter's runtime must *provide*) matters most on
+targets with a constrained libc (newlib-nano, picolibc): even if `i_system.c`
+stubs `exit` and `abort`, string and memory symbols must still resolve at
+link time.
+
+---
+
 *References*: `docs/engine-archaeology.md` (table ledger, §14; FixedDiv,
 §2; trig recipe, §1; sound constants, §10), `docs/perf.md` (memory numbers,
 §2–3; bench baseline, §perStage), `docs/renderer.md` (framebuffer layout,
 §7.1; column draw, §7.2), `docs/playsim.md` (tic orchestration, §1; zone
 use-after-free caution, §1.2), `docs/formats.md` (WAD format, §1;
-endianness doctrine, §11; DMX sound, §6).
+endianness doctrine, §11; DMX sound, §6),
+`tools/freestanding/IMPORTS.md` (authoritative rung-1 symbol surface, §8.2).
