@@ -59,10 +59,14 @@ for (const line of indexText.split('\n')) {
 }
 
 // ── Doc file cache ────────────────────────────────────────────────────────────
+// Filenames beginning with "../" are relative to the repo root (not docs/).
+// All other names are resolved from docsDir.
 const docCache = {};
 function loadDoc(filename) {
     if (!docCache[filename]) {
-        const p = join(docsDir, filename);
+        const p = filename.startsWith('../')
+            ? join(root, filename.slice(3))
+            : join(docsDir, filename);
         docCache[filename] = existsSync(p) ? readFileSync(p, 'utf8').split('\n') : null;
     }
     return docCache[filename];
@@ -645,6 +649,7 @@ const DOC_HINTS = {
 // Keyed by the same claim id, so there is exactly one source of truth per
 // figure (claims.json's `expected`) and both docs are checked against it.
 const PUBLIC_HINTS = {
+    // ── COLORMAP family (task 6.5 original set) ──────────────────────────────
     'ea-018': { needle: '0 mismatches out of',
                 extract_re: /reproduces COLORMAP \*\*exactly — ([\d,]+) mismatches out of 8,192/ },
     'ea-019': { needle: 'truncation instead of rounding',
@@ -659,8 +664,71 @@ const PUBLIC_HINTS = {
                 extract_re: /standard luma formulas miss it by ([\d,]+)/ },
     'ea-048': { needle: 'palette bytes differ',
                 extract_re: /misses \*\*([\d,]+)\s*\/\s*8,192/ },
+    // ── finesine / rndtable family (task 12.1 additions) ─────────────────────
+    'ea-001': { needle: 'of the 10,240',
+                extract_re: /\*\*([\d,]+) of the 10,240 `finesine` entries/ },
+    'ea-002': { needle: '`finesine`',
+                extract_re: /just \*\*(\d+) `finesine`[\s\S]*?exceptions/ },
+    'ea-003': { needle: 'FNV checksum over all',
+                extract_re: /FNV checksum over all ([\d,]+) table entries/ },
+    'ea-007': { needle: '128.85',
+                extract_re: /mean \*\*([\d.]+)\*\*/ },
+    'ea-008': { needle: '166 of 256',
+                extract_re: /only \*\*(\d+) of 256 values distinct\*\*/ },
+    'ea-009': { needle: 'never appear at all',
+                extract_re: /\*\*(\d+) of the 256 possible[\s\S]*?byte values never appear/ },
+    'ea-024': { needle: 'gray-ramp tie-breaks',
+                extract_re: /residual (\d+) are\s+gray-ramp tie-breaks/ },
 };
 const PUBLIC_DOC = 'magic-data.md';
+
+// ── README.md published-promise guard (task 12.1) ─────────────────────────────
+// Machine-checkable figures that appear in README.md. Keyed by claim id so there
+// is exactly one source of truth per figure (claims.json `expected`). A mismatch
+// here is a HARD failure: a wrong number in the public README is strictly worse
+// than a wrong number in an internal doc.
+//
+// Canonical update command (when wasm size changes):
+//   node tools/archaeology/stamp-check.mjs   # prints wasm_size_bytes
+//   → divide by 1024, round to nearest integer → update readme-001 expected + README.md
+const README_HINTS = {
+    'readme-001': { needle: 'KB of wasm',
+                    extract_re: /(\d+)\s*KB of wasm/,
+                    doc_file: '../README.md' },
+};
+
+// ── spec.md published-promise guard (task 12.1) ──────────────────────────────
+// Measured ms figures quoted in spec.md's fire section. Soft (no CI script
+// produces these; they need a browser/node bench), but the doc vs manifest
+// check is hard: if someone hand-edits spec.md to a different value it fails.
+const SPEC_HINTS = {
+    'spec-001': { needle: 'alder 0.',
+                  extract_re: /alder ([\d.]+) ms, pi5/,
+                  doc_file: '../spec.md' },
+    'spec-002': { needle: 'pi5 0.',
+                  extract_re: /pi5 ([\d.]+) ms,\s*\*\*wbox/,
+                  doc_file: '../spec.md' },
+    'spec-003': { needle: 'wbox 0.',
+                  extract_re: /\*\*wbox ([\d.]+) ms\*\*/,
+                  doc_file: '../spec.md' },
+};
+
+// Generic guard for any hints-map pointing at a single doc.
+// Returns null when the claim has no entry in hintsMap; otherwise {ok, got, want}.
+function checkHintsDoc(claimId, manifestExpected, hintsMap) {
+    const hint = hintsMap[claimId];
+    if (!hint) return null;
+    const lines = loadDoc(hint.doc_file);
+    if (!lines) return { ok: false, got: null, want: normalize(manifestExpected),
+                         err: `doc not found: ${hint.doc_file}` };
+    const text = lines.join('\n');
+    const m = text.match(hint.extract_re);
+    if (!m) return { ok: false, got: null, want: normalize(manifestExpected),
+                     err: `figure not found in ${hint.doc_file} (needle: "${hint.needle}")` };
+    const got = normalize(m[1]);
+    const want = normalize(manifestExpected);
+    return { ok: got === want, got, want, docFile: hint.doc_file };
+}
 
 // Returns null when the claim has no public figure; otherwise {ok, got, want}.
 function checkPublicDoc(claimId, manifestExpected) {
@@ -785,6 +853,11 @@ const fastFamilies = new Set(['source-constant', 'wad-data', 'recipe-crack', 'de
 const fullFamilies = new Set([...fastFamilies, 'runtime-stat', 'measurement-stamp']);
 const activeFamilies = fullMode ? fullFamilies : fastFamilies;
 
+// Published-promise guard claims run unconditionally (outside family filter).
+// These are all 'unverifiable' in claims.json (no CI script) but the doc-vs-manifest
+// check is HARD: the checker ensures the published doc matches the committed expected.
+const publishedPromiseClaims = new Set(['readme-001', 'spec-001', 'spec-002', 'spec-003']);
+
 let pass = 0, fail = 0, soft = 0;
 const failDetails = [];
 const softDetails = [];
@@ -795,7 +868,17 @@ const softDetails = [];
 let publicChecked = 0, publicPass = 0, publicFail = 0;
 const publicFailDetails = [];
 
+// README + spec guards (task 12.1)
+let readmeChecked = 0, readmePass = 0, readmeFail = 0;
+const readmeFailDetails = [];
+let specChecked = 0, specPass = 0, specFail = 0;
+const specFailDetails = [];
+
 for (const [id, entry] of Object.entries(manifest.claims)) {
+    // Published-promise claims (readme-001, spec-001..003) are checked via
+    // their own hints maps below; skip the three-way loop for them.
+    if (publishedPromiseClaims.has(id)) continue;
+
     if (entry.status === 'unverifiable') continue;
     if (!activeFamilies.has(entry.family)) continue;
     const expected = entry.expected;
@@ -840,6 +923,48 @@ for (const [id, entry] of Object.entries(manifest.claims)) {
     }
 }
 
+// ── README published-promise checks (task 12.1) ───────────────────────────────
+for (const [id, entry] of Object.entries(manifest.claims)) {
+    if (!README_HINTS[id]) continue;
+    const expected = entry.expected;
+    if (expected === null || expected === undefined) continue;
+    const r = checkHintsDoc(id, expected, README_HINTS);
+    if (r === null) continue;
+    readmeChecked++;
+    if (r.ok) {
+        readmePass++;
+        if (!jsonOnly) console.log(`PASS  ${id}  [README.md]`);
+    } else {
+        readmeFail++;
+        const msg = r.err
+            ? r.err
+            : `README.md says '${r.got}', manifest says '${r.want}'`;
+        readmeFailDetails.push({ id, msg });
+        console.log(`FAIL  ${id}  [README_ERROR] ${msg}`);
+    }
+}
+
+// ── spec.md published-promise checks (task 12.1) ─────────────────────────────
+for (const [id, entry] of Object.entries(manifest.claims)) {
+    if (!SPEC_HINTS[id]) continue;
+    const expected = entry.expected;
+    if (expected === null || expected === undefined) continue;
+    const r = checkHintsDoc(id, expected, SPEC_HINTS);
+    if (r === null) continue;
+    specChecked++;
+    if (r.ok) {
+        specPass++;
+        if (!jsonOnly) console.log(`PASS  ${id}  [spec.md]`);
+    } else {
+        specFail++;
+        const msg = r.err
+            ? r.err
+            : `spec.md says '${r.got}', manifest says '${r.want}'`;
+        specFailDetails.push({ id, msg });
+        console.log(`FAIL  ${id}  [SPEC_ERROR] ${msg}`);
+    }
+}
+
 const total = pass + fail + soft;
 console.log(`\ndoc-drift: ${pass} pass, ${fail} fail, ${soft} soft (of ${total} checked)`);
 if (failDetails.length > 0) {
@@ -864,4 +989,22 @@ if (publicFailDetails.length > 0) {
     }
 }
 
-if (fail > 0 || publicFail > 0) process.exit(1);
+// README guard summary (task 12.1)
+console.log(`readme-guard (README.md): ${readmePass}/${readmeChecked} figures match the manifest`);
+if (readmeFailDetails.length > 0) {
+    console.log('\nREADME.md is WRONG — published figures differ from committed expected values:');
+    for (const f of readmeFailDetails) {
+        console.log(`  ${f.id}: ${f.msg}`);
+    }
+}
+
+// spec.md guard summary (task 12.1)
+console.log(`spec-guard (spec.md): ${specPass}/${specChecked} figures match the manifest`);
+if (specFailDetails.length > 0) {
+    console.log('\nspec.md is WRONG — published figures differ from committed expected values:');
+    for (const f of specFailDetails) {
+        console.log(`  ${f.id}: ${f.msg}`);
+    }
+}
+
+if (fail > 0 || publicFail > 0 || readmeFail > 0 || specFail > 0) process.exit(1);

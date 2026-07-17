@@ -925,18 +925,53 @@
       "command": "bash tools/archaeology/verify-all.sh (colormap-cross-palette.c: doom-family PLAYPAL+COLORMAP byte identity)",
       "expected": "4",
       "status": "verified"
+    },
+    "readme-001": {
+      "family": "unverifiable",
+      "command": null,
+      "expected": "351",
+      "status": "unverifiable",
+      "notes": "Wasm binary size in README.md, in KB (binary, rounded to nearest integer). Source: CURRENT shipping artifact (359,566 bytes per node tools/archaeology/stamp-check.mjs on master, 2026-07-17); 359566/1024=351.14→351. NOT derived from perf.md §1 commit-pinned table (perf-001=357,978 is pinned to commit 6de6256 and legitimately drifts). Update command: node tools/archaeology/stamp-check.mjs → read actual wasm_size_bytes → divide by 1024, round to nearest integer → update expected here and README.md. Checked by doc-drift.mjs README_HINTS (hard fail on divergence)."
+    },
+    "spec-001": {
+      "family": "unverifiable",
+      "command": null,
+      "expected": "0.008",
+      "status": "unverifiable",
+      "notes": "fire.js CPU cost per tick, alder (i9-12900K), ms — as quoted in spec.md. Measured by node microbench (fire.js sim + pixel-fill, best-of-10 × 2000 ticks, 2026-07-16). Not machine-verified in CI: requires JS/node benchmark. Source: perf.md §fire 0.0078 ms rounded to 0.008."
+    },
+    "spec-002": {
+      "family": "unverifiable",
+      "command": null,
+      "expected": "0.022",
+      "status": "unverifiable",
+      "notes": "fire.js CPU cost per tick, pi5 (Cortex-A76), ms — as quoted in spec.md. Source: perf.md §fire 0.0222 ms rounded to 0.022."
+    },
+    "spec-003": {
+      "family": "unverifiable",
+      "command": null,
+      "expected": "0.072",
+      "status": "unverifiable",
+      "notes": "fire.js CPU cost per tick, wbox (G-T56N Bobcat), ms — as quoted in spec.md. Source: perf.md §fire 0.0722 ms rounded to 0.072. This is the headline figure (~14× under 1 ms budget)."
+    },
+    "md-tic-001": {
+      "family": "unverifiable",
+      "command": null,
+      "expected": "44580",
+      "status": "unverifiable",
+      "notes": "Total tic count across 13 IWAD demos cross-validated against instrumented Chocolate Doom. Quoted in README.md and magic-data.md. Not gateable in CI without external Chocolate Doom binary + WAD files. Source: tools/build-choco-reference.sh + node tools/demo-test.mjs --cross <binary>."
     }
   },
   "_summary": {
-    "_note": "computed from claims by tools/archaeology (task 6.3) — do not hand-edit; ea-042..047 added by task 7.2",
-    "total_in_manifest": 143,
+    "_note": "computed from claims by tools/archaeology (task 6.3) — do not hand-edit; ea-042..047 added by task 7.2; readme-001/spec-001..003/md-tic-001 added by task 12.1 (published-promise gate); counts recomputed 2026-07-17",
+    "total_in_manifest": 150,
     "by_status": {
-      "verified": 127,
-      "unverifiable": 16
+      "verified": 132,
+      "unverifiable": 18
     },
     "by_family": {
-      "recipe-crack": 35,
-      "unverifiable": 16,
+      "recipe-crack": 40,
+      "unverifiable": 18,
       "wad-data": 23,
       "source-constant": 40,
       "runtime-stat": 15,

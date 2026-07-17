@@ -2,7 +2,7 @@
 
 A slim, modern DOOM port for the browser, built directly from the
 [id-Software/DOOM](https://github.com/id-Software/DOOM) `linuxdoom-1.10`
-source. 356 KB of wasm, zero client install, zero-config multiplayer.
+source. 351 KB of wasm, zero client install, zero-config multiplayer.
 
 - Runs in stock Chrome / Edge / Firefox (WASM + WebGL2 + WebAudio)
 - Uncapped framerate with 35 Hz-exact game logic (Crispy-style
