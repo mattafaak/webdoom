@@ -1,0 +1,115 @@
+# webdoom Plans.md — deep understanding initiative
+
+作成日: 2026-07-16
+Contract: root `spec.md` — read tenet #6 first ("Understanding is verifiable
+and self-defending"), which this plan operationalizes.
+Prior work: the completed refinement pass (26/26) is archived in
+`Plans-refinement-complete.md`.
+
+Goal: go from "we understand DOOM's data and algorithms" (documented) to the
+deepest *verifiable* understanding — every claim reproduced, the accuracy
+invariants enforced by the code itself, and the platform contract put on trial
+by an actual freestanding port. Three tiers escalate the depth: **predict**
+(reproduce every claim), **prove** (retire "empirical/sketch"), **defend**
+(understanding load-bearing in code), then **falsify** (understanding on trial).
+
+Key existing assets to build on (do NOT reinvent): `tools/archaeology/*`
+(crackers), `tools/native-sanitize/nat-doom` (a near-freestanding native build
+that already dumps per-tic state hashes — the seed for Phases 9 and 11),
+`tools/lint.sh` (lint baseline exists — no setup task needed), the render+sim
+golden gates, the instrumented-Chocolate cross-validation.
+
+---
+
+## Phase 6: Executable archaeology — every claim self-verifying (PREDICT tier)
+
+The archaeology docs mix reproducible crackers with prose numbers. Make the
+*entire* corpus regenerate on demand. [tdd:skip:verification-tooling]
+
+| Task | 内容 | DoD | Depends | Status |
+|------|------|-----|---------|--------|
+| 6.1 | Claim inventory: enumerate every quantitative claim across engine-archaeology.md / renderer.md / playsim.md / formats.md / perf.md; map each to a reproducing script or flag "needs verifier" | `docs/claims-index.md` maps 100% of quantitative claims → a script or a needs-verifier flag; count committed | - | cc:完了 [85541b3+34cb6e1] — docs/claims-index.md: 182 claims mapped 100% (invariant/measurement/derived taxonomy for 6.3's drift-check); FINDING-1 caught a PUBLISHED error (invuln COLORMAP 242→241, arithmetically impossible: 242+15=257) — fixed in repo + public magic-data.md |
+| 6.2 | Write the missing verifiers: gamma power-fit residuals, scalelight/zlight recipe check, P_AproxDistance measured error curve, DMX in-band pad verification, and every prose figure without a script | each flagged claim regenerates from a committed `tools/archaeology/` script whose output equals the doc figure | 6.1 | cc:完了 [5ac9732+7d15993] — 5 verifier families (source-constant 40, wad-data 23, runtime-stat 15, recipe-crack, stamp-check); 106/122 done → 166/182 verified (91%); 16 unverifiable w/ per-ID reasons; claims.json manifest for 6.3; FINDING-2 resolved, FINDING-3 = real doc error (gamma L4 51→34) fixed |
+| 6.3 | `tools/archaeology/verify-all.sh`: regenerates every figure; a drift-check diffs committed doc numbers vs script output and FAILS on divergence; wire into run-tests.sh | verify-all green; editing any doc figure to a wrong value makes run-tests.sh fail at that claim | 6.2 | cc:完了 [91fea5e+985c128] — verify-all.sh + doc-drift.mjs three-way check (doc==manifest==script, distinguishes DOC_ERROR vs MANIFEST_STALE); fast gate 96 claims/3.8s wired into run-tests.sh; extended to the flagship claims (ea-018 headline COLORMAP, ea-023 the published-wrong figure) that the 'already verified' split had left unprotected; drift proof: corrupt 0→1 ⇒ FAIL ea-018 exit 1, revert ⇒ ALL PASS; FINDING-4 (unreproducible 'standard luma 92' pinned to 77/150/29@A=254→91) |
+| 6.4 | Literate pass: annotate each archaeology figure with its generating command (caption/footnote) so the corpus is auditable claim-by-claim | zero unattributed quantitative claims remain in the archaeology docs | 6.3 | cc:完了 [5f91103] — section-level `Reproduce:` lines (extends the existing Crackers:/Script: precedent, keeps doc density); 182/182 claims attributable; 16 unverifiable marked inline with specific reasons; gate pointer + claims-index link added; values provably unchanged (lead-verified: 0 numbers removed/changed across all 5 docs) |
+
+## Phase 7: Formal proofs — retire "empirical/sketch" (PROVE tier)
+
+Where the docs say "2×10⁹ samples" or "sketch," replace with a proof or a
+precisely-bounded, documented guarantee. [tdd:skip:proof-artifact-is-the-test]
+
+| Task | 内容 | DoD | Depends | Status |
+|------|------|-----|---------|--------|
+| 7.1 | FixedDiv exhaustive/SMT: prove double == int64 over the full guarded domain (`\|a\|>>14 < \|b\|`) rather than sampling — enumerate the finite boundary set or drive an SMT solver | a committed harness terminates with "proven exhaustively over the guarded domain" (or a precisely-characterized residual set); archaeology §2 updated from "empirical" to "proven" | - | cc:完了 [ca13af7] |
+| 7.2 | FixedMul, P_AproxDistance bound, angle/BAM round-trips: formalize where tractable; document each intractable case with the exact reason it resists proof | every fixed-point/angle primitive has a proof OR a stated bounded-empirical guarantee with the limit named | 7.1 | cc:TODO |
+| 7.3 | COLORMAP uniqueness: strengthen "0/8192 on 3 palettes" — cross-validate the recipe against ≥5 independently-authored palettes (add Chex, SIGIL, HACX, Freedoom), and tabulate the falsified near-miss recipes as a determinacy argument | recipe holds 0-mismatch across ≥5 palettes; near-miss recipes recorded as falsified with their error magnitudes | 6.2 | cc:TODO |
+
+## Phase 8: The self-enforcing frozen surface (DEFEND tier)
+
+playsim.md §16 *describes* what must never change. Make the code *enforce* it —
+the honest fix for the blind spot that let the Tutti-Frutti regold hide.
+[tdd:required]
+
+| Task | 内容 | DoD | Depends | Status |
+|------|------|-----|---------|--------|
+| 8.1 | `WEBDOOM_INVARIANTS` instrumented build: runtime asserts at the exact call site for each demo-visible invariant — P_Random per-tic call count/order, thinker traversal order, blockmap iteration order, spechit/intercepts bounds | build compiles; asserts are zero-cost when the flag is off (core stays web-layer-independent); each §16 invariant has a corresponding assert | - | cc:TODO |
+| 8.2 | Cross-validate: run all 13 demos + Chocolate cross-check under the invariant build; prove a deliberately-injected invariant violation trips the assert AT ITS CALL SITE (not a golden diff 5000 tics later) | clean run passes 13/13 with no assert; an injected violation is caught at the exact source line (shown in the task evidence) | 8.1 | cc:TODO |
+| 8.3 | Wire the invariant build into run-tests.sh as a gate stronger than goldens (an assert is a precise cause; a golden diff is a downstream symptom) | run-tests.sh runs the invariant build over all 13 demos; documented as the primary sim-safety gate | 8.2 | cc:TODO |
+
+## Phase 9: Differential understanding beyond the 13 demos
+
+The 13 demos are fixed inputs. Explore the space they can't cover.
+[tdd:skip:differential-harness-is-the-test]
+
+| Task | 内容 | DoD | Depends | Status |
+|------|------|-----|---------|--------|
+| 9.1 | Differential tic-fuzzer: synthesize valid ticcmd streams, feed to webdoom AND instrumented Chocolate (extend `tools/native-sanitize/nat-doom`'s per-tic hash dump), assert identical gamestate per tic | fuzzer runs ≥1000 synthetic games with 0 divergences (or a divergence is root-caused as a real finding); committed as a CI-able tool | 8.2 | cc:TODO |
+| 9.2 | Coverage / negative-space audit: record which engine/core functions+branches are hit across all 13 demos + the fuzzer; classify every UN-exercised path as understood-by-inference (documented) or unknown (flagged) | coverage report committed; zero "unknown un-exercised" paths — every path either exercised or documented as inferred | 9.1 | cc:TODO |
+| 9.3 | Map-mutation differential: procedurally mutate valid maps within the format's rules, same differential check vs Chocolate — hunt for setup/load divergences | mutation harness runs; any divergence root-caused; else recorded as "map-load behavior matches vanilla under mutation" | 9.1 | cc:TODO |
+
+## Phase 10: The divergence atlas — map the whole compatibility landscape
+
+Position webdoom precisely against the entire port lineage, not just Chocolate.
+[tdd:skip:docs-with-verified-evidence]
+
+| Task | 内容 | DoD | Depends | Status |
+|------|------|-----|---------|--------|
+| 10.1 | Catalog every known behavioral fork across vanilla / Boom / MBF / MBF21 / PrBoom+ / dsda-doom — spechit & intercepts overflow families, wallrunning, blockmap, sight asymmetries, comp_* flags — with, for each: what it is, which webdoom implements, why, and demo evidence | `docs/divergence-atlas.md`: every catalogued fork states webdoom's position + evidence; cross-referenced to playsim.md quirk catalog | 1.2-done | cc:TODO |
+| 10.2 | Compatibility statement: state exactly which vanilla quirks webdoom preserves vs which modern fixes it deliberately does NOT take, each traceable to an atlas row | a one-screen compatibility position, every claim linking to a divergence-atlas entry | 10.1 | cc:TODO |
+
+## Phase 11: Bare-metal falsification — understanding on trial (the crown jewel)
+
+Put bare-metal.md's contract on trial by actually porting across it. The only
+real proof you understand what it takes to run DOOM anywhere. [tdd:skip:bring-up-is-the-test]
+
+| Task | 内容 | DoD | Depends | Status |
+|------|------|-----|---------|--------|
+| 11.1 | Freestanding headless core: extend `tools/native-sanitize` into a genuinely freestanding target — engine/core + a minimal platform layer assuming only a memory region + a byte-out — dumping per-tic state hashes. Rung 1: minimal hosted build; Rung 2: a QEMU bare-metal ELF (Cortex-M or RISC-V, no OS) | a freestanding build (no OS services beyond memory + putchar) boots the sim headless and dumps per-tic hashes; QEMU rung documented even if rung 1 ships first | 8.1 | cc:TODO |
+| 11.2 | Run the 13-demo trace on the freestanding build — 13/13 tic-identical PROVES the bare-metal.md contract is real and complete | all 13 demos' per-tic state hashes match the golden traces on the freestanding target | 11.1 | cc:TODO |
+| 11.3 | Contract-on-trial: record every gap the bring-up exposed between bare-metal.md's *predicted* contract and reality; promote bare-metal.md from claim to tested contract; refine ESP32 scoping from what the bring-up actually needed | bare-metal.md updated with "validated by freestanding bring-up [commit]"; every doc-vs-reality discrepancy recorded and resolved | 11.2 | cc:TODO |
+
+---
+
+## Priority matrix
+
+- **Required** (the spine of tenet #6): 6.1–6.3 (executable archaeology — fastest, highest-credibility understanding win), 8.1–8.2 (self-enforcing invariants — the "defend" tier, and the honest fix for the golden blind spot), 11.1–11.2 (bare-metal falsification — the crown jewel; also de-risks the future ESP32 project).
+- **Recommended**: 6.4, 7.1, 7.3, 8.3, 9.1, 9.2, 10.1, 11.3.
+- **Optional** (diminishing returns — do a bounded pass, don't chase): 7.2 (formalize every primitive), 9.3 (map fuzz), 10.2.
+- **Rejected / guardrails** (per spec tenet #3, simplicity): don't pursue intractable formal proofs — 7.2 explicitly caps at "proof OR bounded-empirical with the limit named." Don't let the divergence atlas become an open-ended survey — 10.1 is bounded to the known *major* forks. Don't add a heavyweight proof-assistant dependency if an exhaustive enumeration or a single SMT invocation suffices (7.1 prefers the lightest tool that closes the domain).
+
+## Team validation
+
+`team_validation_mode: manual-pass` (perspectives evaluated separately; no subagents spawned during planning).
+- **Product** — every task directly serves spec tenet #6; nothing here changes gameplay or the shipped artifact (all tasks are verification tooling, proofs, invariant asserts, or docs). Reinvention check: builds on existing crackers, the native harness, and the golden gates — no duplication.
+- **Architecture** — the invariant asserts (8.1) and any core instrumentation must stay behind a build flag so `engine/core` keeps zero web-layer dependency (the rule established in task 2.2's review). The freestanding target (11.1) extends `tools/native-sanitize`, honoring the documented core↔platform contract rather than forking it.
+- **Security** — no new untrusted-input surface beyond the existing net fuzz; the differential fuzzer (9.1) synthesizes inputs for *offline* comparison, not network exposure. No secrets, no supply-chain additions (SMT/QEMU are dev-only tools, gated to the tasks that use them). No `.env`/secret reads required.
+- **QA** — every task's DoD is a yes/no verifiable artifact + gate (a script that prints the number, an assert that fires at a line, 13/13 hashes on new hardware). The lint baseline already exists. The sim/render/net gates remain the floor; new gates only strengthen them.
+- **Skeptic** — biggest risks: (a) bare-metal (Phase 11) is large scope → mitigated by the two-rung structure (minimal hosted freestanding first, QEMU second) so partial progress still validates the contract; (b) formal proofs (Phase 7) may hit intractability → mitigated by the explicit "proof OR bounded-empirical, limit named" cap; (c) the coverage audit (9.2) could surface un-exercised code that's genuinely un-understood → that's the point, and it's a finding, not a failure. No task claims completion without an artifact that a skeptic can run.
+
+## Spec delta
+
+Updated root `spec.md`: added **tenet #6 — "Understanding is verifiable and
+self-defending"** (every documented claim regenerates from a committed script;
+demo-visible invariants are enforced by the code at their call site; the platform
+contract is validated by an actual freestanding port). This plan operationalizes
+that tenet; precedence remains `spec.md > Plans.md`.
