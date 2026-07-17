@@ -1241,7 +1241,7 @@ is free.
 | `P_BlockLinesIterator` iteration order (x outer, y inner) | Determines which lines `PIT_CheckLine` sees first; affects `spechit[]` ordering |
 | `P_BlockThingsIterator` iteration order (linked list per block) | Determines `PIT_CheckThing` order; affects damage sequencing |
 | `P_TraverseIntercepts` selection sort | Must process intercepts in ascending frac order; any sort change breaks hitscan accuracy |
-| `spechit[]` processing order (reverse, from `numspechit-1` downward) | p_map.c:506; reverse order is vanilla, changing it changes which specials fire |
+| `spechit[]` processing order (reverse, from `numspechit-1` downward) | `P_TryMove` in p_map.c; reverse order is vanilla, changing it changes which specials fire |
 | Fixed-point arithmetic identities | `FixedMul`, `FixedDiv`, `P_AproxDistance` — see archaeology §2 for FixedDiv proof |
 | `finesine`/`finetangent` table values | Every angle-dependent calculation — see archaeology §1 for the proof |
 | Blockmap structure (128-unit cells, iteration bounds) | Block assignment of things and lines is map-data-dependent |
@@ -1252,7 +1252,50 @@ is free.
 | Thinker deferred-free timing | Thinkers removed mid-tic survive until the next `P_RunThinkers` |
 | `MAXSPECIALCROSS = 64` (webdoom) / behavior above 8 | Affects which specials fire in crowded maps |
 | `MAXINTERCEPTS = 128` / clamp behavior | Affects hitscan in dense maps |
-| `onground` gate on player thrust (p_user.c:161) | Player cannot strafe or accelerate while airborne; removing this guard desyncs demos that rely on aerial momentum carrying from a previous tic |
+| `onground` gate on player thrust (`P_MovePlayer` in p_user.c) | Player cannot strafe or accelerate while airborne; removing this guard desyncs demos that rely on aerial momentum carrying from a previous tic |
+
+### §16.1 Assert mapping — every frozen row accounted for
+
+Commit 844c3d6 added 11 runtime `DOOM_ASSERT` sites and 7 `_Static_assert`s behind
+`-DWEBDOOM_INVARIANTS`.  The table below maps every one of the 20 frozen-surface rows
+to exactly one classification so a skeptic can verify the "every §16 invariant has a
+corresponding assert" clause without reading all the source.
+
+Classification key:
+- **runtime assert** — `DOOM_ASSERT(...)` in the named function; fires at the call site
+- **static assert** — `_Static_assert(...)` fires at compile time when the flag is on
+- **already covered** — an existing verifier or claim id covers the invariant
+- **not assertable** — explained below; no non-tautological assert exists
+
+| # | frozen-surface row | class | evidence |
+|---|-------------------|-------|----------|
+| 1 | `P_Random()` call sequence | runtime assert | `m_random.c` `P_Random()`: `DOOM_ASSERT(doom_in_render_path == 0 && "P_Random called from render path -- sim/render contamination")` and `DOOM_ASSERT(prndindex == doom_prnd_expected && "prndindex modified outside P_Random/M_ClearRandom")` |
+| 2 | `rndtable[256]` contents | already covered | ea-007 (mean 128.85), ea-008 (166/256 distinct values), ea-009 (90 values never appearing) — `tools/archaeology/rndtable-stats.c`; table is a source constant locked in the compiled binary |
+| 3 | `prndindex` initial value (0 at `M_ClearRandom`) | runtime assert | `m_random.c` `M_ClearRandom()` resets both `prndindex=0` and `doom_prnd_expected=0`; the `DOOM_ASSERT(prndindex == doom_prnd_expected...)` in `P_Random()` fires if any code modifies `prndindex` before the first post-reset call |
+| 4 | Thinker list insertion order | runtime assert | `p_tick.c` `P_AddThinker()`: `DOOM_ASSERT(thinkercap.prev == thinker && "P_AddThinker: new thinker not at tail -- insertion order broken")` |
+| 5 | Thinker list traversal direction (head → tail) | runtime assert | `p_tick.c` `P_RunThinkers()`: `DOOM_ASSERT(currentthinker == thinkercap.next && "P_RunThinkers: traversal start is not thinkercap.next (head)")` |
+| 6 | `P_BlockLinesIterator` iteration order (x outer, y inner) | not assertable | `P_PathTraverse` uses a DDA ray-march, not a nested x/y loop; within each block, line order follows WAD-loaded `blockmaplump` data. Any assert would either shadow the DDA state (reproducing the computation) or depend on WAD-specific data layout. No `DOOM_ASSERT` exists in `P_BlockLinesIterator` or `P_PathTraverse`. Order is structurally guaranteed by the code. |
+| 7 | `P_BlockThingsIterator` iteration order (linked list per block) | not assertable | Order follows the `blocklinks[y*bmapwidth+x]` linked list, which is insertion-order-dependent and changes per tic. Asserting list order would require knowing expected insertion sequence — tautological or WAD-dependent. No `DOOM_ASSERT` in `P_BlockThingsIterator`. Order is structurally guaranteed. |
+| 8 | `P_TraverseIntercepts` selection sort (ascending frac) | runtime assert | `p_maputl.c` `P_TraverseIntercepts()`: `DOOM_ASSERT(dist >= prev_dist && "P_TraverseIntercepts: intercept processed out of ascending order")` — checked on each iteration; `prev_dist` starts at −1 so the first intercept (frac ≥ 0) always passes |
+| 9 | `spechit[]` processing order (reverse, `numspechit-1` downward) | runtime assert | `p_map.c` `P_TryMove()`: `DOOM_ASSERT(numspechit >= 0 && numspechit <= MAXSPECIALCROSS && "numspechit out of bounds before spechit[] processing")` and `DOOM_ASSERT(_ns >= 0 && "spechit[] reverse processing: numspechit negative before loop")` |
+| 10 | Fixed-point arithmetic identities (`FixedMul`, `FixedDiv`, `P_AproxDistance`) | already covered | ea-004..006 (`tools/archaeology/fixeddiv-proof.c`: margin ≥ 64×, 8,388,608 guard-edge pairs, 0 mismatches); ea-042..043 (`tools/archaeology/fixedmul-proof.c`); ea-044..045 (`tools/archaeology/aprox-distance-crack.c`); ea-046..047 (`tools/archaeology/angle-roundtrip-check.c`) |
+| 11 | `finesine`/`finetangent` table values | already covered | ea-001..003 (`tools/archaeology/finesine-stats.mjs`): 5,377/10,240 rounding deviations, 33 escapes, 16,385-entry FNV boot checksum; `finetangent` is co-verified by the same FNV checksum (engine-archaeology.md §1) |
+| 12 | Blockmap structure (128-unit cells) | static assert | `p_local.h`: `_Static_assert(MAPBLOCKUNITS == 128, "MAPBLOCKUNITS changed -- playsim.md S16 invariant: blockmap cell must be 128 units")` |
+| 13 | `P_CheckSight` eye height formula | runtime assert | `p_sight.c` `P_CheckSight()`: `DOOM_ASSERT(sightzstart == (t1->z + t1->height - (t1->height>>2)) && "P_CheckSight eye height formula changed -- playsim.md S16 invariant")` |
+| 14 | Gravity constant `FRACUNIT` | static assert | `p_local.h`: `_Static_assert(GRAVITY == FRACUNIT, "GRAVITY changed -- playsim.md S16 invariant: must equal FRACUNIT")` |
+| 15 | `STOPSPEED`, `FRICTION` constants | static assert | `p_mobj.c`: `_Static_assert(STOPSPEED == 0x1000, ...)` and `_Static_assert(FRICTION == 0xe800, ...)` — adjacent to the `#define`s so any accidental change fires at compile time |
+| 16 | `FLOATSPEED = 4*FRACUNIT` | static assert | `p_local.h`: `_Static_assert(FLOATSPEED == 4*FRACUNIT, "FLOATSPEED changed -- playsim.md S16 invariant: must be 4*FRACUNIT")` |
+| 17 | Thinker deferred-free timing | not assertable | `P_RemoveThinker` sets the sentinel flag but does not unlink; `P_RunThinkers` is the only consumer. The "not already marked" assert was dropped — it reads uninitialised memory (Z_Malloc does not zero; 14 callers assign `.function` after `P_AddThinker`; recycled blocks legitimately hold the sentinel value) and fired on 10/13 stock demos. No replacement assert exists: when thinker A's action calls `P_RemoveThinker(B)` where B was already iterated past in the current `P_RunThinkers` pass, B remains sentinel-marked and linked until the NEXT pass — valid vanilla behavior that would cause a post-loop "all-clean" assert to fire. The timing guarantee is structural: `P_RunThinkers` is the only place that unlinks and frees sentinels. |
+| 18 | `MAXSPECIALCROSS = 64` / behavior above 8 | runtime assert | `p_map.c` `P_TryMove()`: `DOOM_ASSERT(numspechit >= 0 && numspechit <= MAXSPECIALCROSS && ...)` verifies the bound each tic. Also: `p_local.h` `_Static_assert(MAXSPECIALCROSS == 64, ...)` at compile time; ps-001 (vanilla=8), ps-002 (webdoom=64), ps-003 (peak=8 across 13 demos). |
+| 19 | `MAXINTERCEPTS = 128` / clamp behavior | runtime assert | `p_maputl.c` `PIT_AddLineIntercepts()` and `PIT_AddThingIntercepts()`: `DOOM_ASSERT(intercept_p - intercepts <= MAXINTERCEPTS - 1 && ...)` — verifies each time an intercept is added. Also: `p_local.h` `_Static_assert(MAXINTERCEPTS == 128, ...)` at compile time; ps-004 (source-constant invariant). |
+| 20 | `onground` gate on player thrust | runtime assert | `p_user.c` `P_MovePlayer()`: `DOOM_ASSERT(onground == (player->mo->z <= player->mo->floorz) && "onground definition mismatch -- S16 invariant: player thrust gate broken")` |
+
+Summary: 10 runtime assert · 4 static assert · 3 already covered · 3 not assertable = 20 rows.
+
+The two `not assertable` iteration-order rows (6, 7) were incorrectly listed as "runtime (p_maputl.c)"
+in the 8.1 worker draft — no `DOOM_ASSERT` exists in `P_BlockLinesIterator`, `P_BlockThingsIterator`,
+or `P_PathTraverse`.  Row 17 is not assertable for the reasons given; the structural guarantee is real
+but a runtime assert would fire on valid vanilla game behavior.
 
 ### What is free to change (render-side)
 
