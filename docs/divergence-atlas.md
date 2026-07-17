@@ -18,6 +18,49 @@ webdoom and are not forked behaviors.
 
 ---
 
+## Compatibility position
+
+webdoom's simulation is vanilla-exact: all 13 IWAD demos replay tic-identical
+against golden traces and cross-validate against instrumented Chocolate Doom
+(44,580 tics). That is the proof scope — demo-proven over that corpus, not a
+claim that all inputs behave identically to vanilla. The engine carries no
+`comp_*` toggle flags (`F7`); every behavioral position is hardwired. The sole
+sanctioned departure from vanilla semantics is netcode modernization
+(`g_game.c:684-693`): the relay-command consistency-check bypass that makes
+peer-to-peer sessions possible without altering the simulation (`spec.md`
+tenet #1).
+
+### Preserved vanilla quirks
+
+Every quirk below is demo-visible; changing it would desync the golden suite.
+
+| Quirk | Atlas | Source anchor |
+|-------|-------|---------------|
+| spechit[] processed in reverse order (`while numspechit--`) | F3 | `p_map.c:556-567` |
+| Wallrunning — P_SlideMove 3-retry limit + stairstep fallback | F4 | `p_map.c:749-842` |
+| Blockmap OOB block: silent `true` return (map-edge truncation) | F5a | `p_maputl.c:487-493` |
+| 0-length linedef: `den==0` guard returns 0 fraction in intercept math | F5b | `p_maputl.c` |
+| No runtime bounds check on 16-bit blockmap offsets | F5c | `playsim.md §12.2` |
+| P_CheckSight asymmetry: t1 eye height only, not t2's | F6 | `p_sight.c:334` |
+
+### Modern fixes NOT taken
+
+| Fix (not applied) | Atlas | Why |
+|-------------------|-------|-----|
+| comp_* runtime toggle layer (Boom/PrBoom+ selection mechanism) | F7 | webdoom targets vanilla, not Boom or MBF21; toggle layer adds complexity (`spec.md` tenet #3) with no benefit for the 13-demo corpus |
+
+### Deliberate divergences (taken, demo-transparent)
+
+The two taken divergences are safety clamps that never engage during golden
+demo playback — so vanilla-identical behavior is preserved over the proof corpus.
+
+| Divergence | Atlas | Measured cover (13 golden demos) |
+|------------|-------|----------------------------------|
+| MAXSPECIALCROSS raised to 64 with silent clamp; vanilla 8-entry OOB not reproduced | F1 | Peak numspechit = **8** — clamp at 64 never reached |
+| MAXINTERCEPTS = 128 with clamp at 127; heap OOB write not reproduced | F2 | Peak intercept count = **45** — clamp at 127 never reached |
+
+---
+
 ## How to read this document
 
 Each section covers one **behavioral fork family** — a class of behavior where
