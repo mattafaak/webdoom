@@ -127,6 +127,21 @@ const DOC_HINTS = {
                 needle: 'FNV over all',
                 extract_re: /FNV over all ([\d,]+) entries/ },
 
+    // ea-004: the doc states '2^37', not the literal integer 137438953472.
+    // Two-way (manifest vs script) check is sufficient for the analytic threshold.
+    'ea-004': { soft: true,
+                reason: "doc states '2^37' (mathematical expression), not the literal 137438953472; two-way manifest/script check sufficient" },
+
+    // ea-005/006: guard-edge sweep corroboration figures.
+    // "Corroboration: **8,388,608** guard-edge\npairs checked ... → **0**\nmismatches."
+    'ea-005': { doc_file: 'engine-archaeology.md',
+                needle: 'guard-edge',
+                extract_re: /\*\*([\d,]+)\*\*\s+guard-edge/ },
+
+    'ea-006': { doc_file: 'engine-archaeology.md',
+                needle: 'could occur)',
+                extract_re: /could occur\)\s+→\s+\*\*(\d+)\*\*/ },
+
     'ea-007': { doc_file: 'engine-archaeology.md',
                 needle: '128.85',
                 extract_re: /mean\s+([\d.]+)\s*\(not/ },

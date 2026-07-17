@@ -38,9 +38,9 @@ and inline `*(not machine-verified)*` markers for the 16 unverifiable claims.
 | ea-001 | engine-archaeology.md:17 | finesine entries differing from round-nearest | 5,377 / 10,240 | invariant | tools/archaeology/finesine-stats.mjs | verified |
 | ea-002 | engine-archaeology.md:20 | finesine entries where 1993 machine's last bit deviated (escapes) | 33 | invariant | tools/archaeology/finesine-stats.mjs | verified |
 | ea-003 | engine-archaeology.md:23 | entries covered by boot FNV checksum | 16,385 | invariant | tools/archaeology/finesine-stats.mjs | verified |
-| ea-004 | engine-archaeology.md:41 | random in-domain pairs tested for FixedDiv correctness | 2 × 10⁹ | measurement | correctness test requires 2×10⁹ iterations — too large for CI; one-time verification only | unverifiable |
-| ea-005 | engine-archaeology.md:41 | adversarial boundary pairs tested for FixedDiv correctness | 1.8 × 10⁶ | measurement | correctness test requires 1.8×10⁶ adversarial pairs — one-time verification | unverifiable |
-| ea-006 | engine-archaeology.md:42 | FixedDiv mismatches vs reference | 0 | measurement | result of one-time correctness test (ea-004/005); no CI script | unverifiable |
+| ea-004 | engine-archaeology.md:§2 | FixedDiv proof: mismatch requires \|a\| ≥ 2^37; INT32_MAX < 2^31 (margin ≥ 64x) | 137438953472 | derived | arithmetic: 2^37=137438953472 > INT32_MAX; verified by fixeddiv-proof.c analytic step | verified |
+| ea-005 | engine-archaeology.md:§2 | FixedDiv proof: guard-edge pairs checked (max-ULP corroboration) | 8,388,608 | measurement | tools/archaeology/fixeddiv-proof.c | verified |
+| ea-006 | engine-archaeology.md:§2 | FixedDiv proof: guard-edge mismatch count | 0 | measurement | tools/archaeology/fixeddiv-proof.c | verified |
 | ea-007 | engine-archaeology.md:68 | rndtable mean value | 128.85 | invariant | tools/archaeology/rndtable-stats.c | verified |
 | ea-008 | engine-archaeology.md:68 | rndtable distinct values | 166 / 256 | invariant | tools/archaeology/rndtable-stats.c | verified |
 | ea-009 | engine-archaeology.md:68 | rndtable values that never appear | 90 | invariant | tools/archaeology/rndtable-stats.c | verified |

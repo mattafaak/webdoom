@@ -27,25 +27,25 @@
       "status": "verified"
     },
     "ea-004": {
-      "family": "unverifiable",
-      "command": null,
-      "expected": null,
-      "status": "unverifiable",
-      "notes": "FixedDiv correctness requires 2e9 random pairs \u2014 too large for CI; one-time verification only"
+      "family": "recipe-crack",
+      "command": "gcc -O2 tools/archaeology/fixeddiv-proof.c -lm -o /tmp/fixeddiv-proof && /tmp/fixeddiv-proof",
+      "expected": "137438953472",
+      "status": "verified",
+      "notes": "Proof key inequality: mismatch requires |a|>=2^37=137438953472; INT32_MAX<2^31. Soft doc check (doc states 2^37, not literal). Supersedes old ea-004 sampling claim."
     },
     "ea-005": {
-      "family": "unverifiable",
-      "command": null,
-      "expected": null,
-      "status": "unverifiable",
-      "notes": "FixedDiv adversarial requires 1.8e6 boundary pairs \u2014 one-time verification"
+      "family": "recipe-crack",
+      "command": "gcc -O2 tools/archaeology/fixeddiv-proof.c -lm -o /tmp/fixeddiv-proof && /tmp/fixeddiv-proof",
+      "expected": "8388608",
+      "status": "verified",
+      "notes": "Guard-edge corroboration: 8,388,608 pairs checked. Supersedes old ea-005 sampling claim."
     },
     "ea-006": {
-      "family": "unverifiable",
-      "command": null,
-      "expected": null,
-      "status": "unverifiable",
-      "notes": "Result of one-time correctness run (ea-004/005); no CI reproducer"
+      "family": "recipe-crack",
+      "command": "gcc -O2 tools/archaeology/fixeddiv-proof.c -lm -o /tmp/fixeddiv-proof && /tmp/fixeddiv-proof",
+      "expected": "0",
+      "status": "verified",
+      "notes": "Guard-edge mismatch count = 0. Supersedes old ea-006."
     },
     "ea-007": {
       "family": "recipe-crack",

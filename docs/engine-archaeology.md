@@ -36,22 +36,62 @@ linuxdoom-1.10 computes `FixedDiv` in `double`:
 `(double)a / (double)b * 65536`. DOS DOOM used a 64/32 integer `idiv`.
 Modern ports use `((int64)a << 16) / b` and trust demos.
 
-**Claim (proven): all three are bit-identical over the guarded domain**
+**Theorem: all three are bit-identical over the guarded domain**
 (`|a| >> 14 < |b|`, else the function clamps).
 
-- *Sketch*: the guard bounds `|a/b| < 2^14`, so `a/b * 2^16 < 2^30` and
-  every integer-boundary image `k / 2^16` needs ≤ 46 significant bits —
-  exactly representable in a `double` (53-bit mantissa). Round-to-nearest
-  cannot move a value **across** an exactly-representable point, so the
-  double result and the truncating-integer result always fall in the
-  same unit interval → same `(int)` cast.
-- *Empirical*: 2×10⁹ random in-domain pairs + 1.8×10⁶ adversarially
-  constructed near-boundary pairs → **zero** mismatches. *(not
-  machine-verified: too large for CI; one-time verification only)*
-- *Consequence*: our `FixedDiv` can use the int64 form (faster in wasm,
-  and by construction the exact value the DOS `.exe` produced) with a
-  guarantee, not a hope. The double path's dead divide-by-zero
-  `I_Error` is unreachable under the guard.
+**Proof.** Let q = a/b (exact real). The two paths compute:
+- *Double path*: `trunc(rn(q) · 2^16)` — the `·2^16` is exact (power of
+  two; `|rn(q)| < 2^14` ⇒ product < 2^30, within the 53-bit mantissa).
+- *Int path*: `trunc(q · 2^16)` = `((int64)a << 16) / b`.
+
+They differ only if rounding q to rn(q) crosses, or lands exactly on, a
+boundary k/2^16. The earlier proof sketch stated "round-to-nearest cannot
+move a value **across** an exactly-representable point" — but it omitted
+the case where rn(q) **lands exactly on** the boundary (yielding double→k,
+int→k−1). Both cases are now closed:
+
+**Case 1 — exact representation** (`a·2^16 = k·b`): q = k/2^16 exactly.
+Since `|k| < 2^30 < 2^53`, k/2^16 is representable; rn(q) = q. Both
+paths yield k. ✓
+
+**Case 2 — off boundary** (`a·2^16 ≠ k·b`): the distance from q to the
+nearest boundary satisfies
+
+```
+|q − k/2^16| = |a·2^16 − k·b| / (|b|·2^16) ≥ 1/(|b|·2^16)
+```
+
+(the numerator is a nonzero integer). For rounding to reach that boundary,
+the half-ULP must be at least as large:
+
+```
+½·ulp(q) ≤ |q|·2^{−53}    [normal-number bound — q is never subnormal:
+                             |q| ≥ 1/INT32_MAX ≫ 2^{−1022}]
+```
+
+This requires `1/(|b|·2^16) ≤ (|a|/|b|)·2^{−53}`, i.e. **|a| ≥ 2^37**.
+But `|a| ≤ INT32_MAX < 2^31 < 2^37`. Contradiction. ✓
+
+*Negative operands*: C99 `/` and the `(int)` cast both truncate toward
+zero; both paths agree on sign. ✓
+
+*b = 0*: `(abs(a)>>14) ≥ abs(0) = 0` is always true, so the guard fires
+and the double path's divide-by-zero `I_Error` is unreachable. ✓
+
+*a = INT_MIN*: `abs(INT_MIN)` is undefined behaviour in C. On this
+implementation the guard silently misses for small |b|, and both paths
+overflow int32 — both are UB. INT_MIN as a DOOM fixed-point value equals
+−32768 map units, which is unreachable in any DOOM map. Honest residual:
+the claim is **proven for all int32 except a = INT_MIN**, which is UB in
+both paths with no observable consequence.
+
+**Consequence**: the int64 form is correct by proof, not by luck. The
+prior empirical claim (2×10⁹ random pairs, unverifiable in CI) is retired;
+it is superseded by this proof. Corroboration: **8,388,608** guard-edge
+pairs checked (the only region where a mismatch could occur) → **0**
+mismatches.
+
+Reproduce: `gcc -O2 tools/archaeology/fixeddiv-proof.c -lm -o /tmp/fixeddiv-proof && /tmp/fixeddiv-proof`
 
 ## 3. The random table — PROVEN not a standard PRNG
 

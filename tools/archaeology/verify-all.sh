@@ -121,6 +121,9 @@ capture_run "recipe-crack / gamma-crack (5 claims: ea-010..014)" \
 compile_and_run "recipe-crack / rndtable-stats (3 claims: ea-007..009)" \
     tools/archaeology/rndtable-stats.c
 
+compile_and_run "recipe-crack / fixeddiv-proof (3 claims: ea-004..006)" \
+    tools/archaeology/fixeddiv-proof.c
+
 compile_and_run "recipe-crack / aprox-distance-crack (3 claims: ea-015..017)" \
     tools/archaeology/aprox-distance-crack.c
 
@@ -204,12 +207,12 @@ fi
 
 # ── Coverage summary ───────────────────────────────────────────────────────────
 echo ""
-FAST_CLAIMS=96   # source-constant(40) + wad-data(23) + recipe-crack(29) + derived-check(4)
-                 # recipe-crack(29) = finesine(3) + gamma(5) + rndtable(3) +
-                 # aprox-dist(3) + colormap(4) + colormap-invuln(4) +
-                 # checkcoord(1) + zlight(1) + ledger(5)
+FAST_CLAIMS=99   # source-constant(40) + wad-data(23) + recipe-crack(32) + derived-check(4)
+                 # recipe-crack(32) = finesine(3) + gamma(5) + rndtable(3) +
+                 # fixeddiv-proof(3) + aprox-dist(3) + colormap(4) +
+                 # colormap-invuln(4) + checkcoord(1) + zlight(1) + ledger(5)
 FULL_CLAIMS=25   # + runtime-stat(15) + measurement-stamp(10)
-UNVERIFIABLE=16
+UNVERIFIABLE=13  # ea-004..006 retired from unverifiable (superseded by proof)
 
 if [ "$FULL" = "1" ]; then
     COVERED=$((FAST_CLAIMS + FULL_CLAIMS))
