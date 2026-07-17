@@ -78,7 +78,18 @@ if (!existsSync(IWAD_PATH)) {
 
 const natAvailable = existsSync(NAT_DOOM);
 if (!natAvailable) {
+    // Self-consistency is a much weaker oracle than the wasm-vs-native
+    // differential. It exists for dev boxes without the (gitignored) nat-doom
+    // binary — but CI must never silently degrade to it and stay green: a
+    // missing binary would turn the fuzz gate into a rubber stamp. run-tests.sh
+    // passes --require-native for exactly this reason.
+    if (process.argv.includes('--require-native')) {
+        console.error(`FATAL: --require-native set but ${NAT_DOOM} not found.`);
+        console.error('Build it: make -C tools/native-sanitize  (gcc -m32 + ASan/UBSan)');
+        process.exit(1);
+    }
     console.log('nat-doom not found — running wasm self-consistency mode (same seed x2)');
+    console.log('WARNING: this is NOT the differential oracle; do not treat green as full coverage');
 }
 
 // ── webdoom per-tic trace ─────────────────────────────────────────────────────
