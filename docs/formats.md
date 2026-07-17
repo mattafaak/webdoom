@@ -8,6 +8,13 @@ Source authority is the reader/writer code in this repository. Where our
 engine differs from the wider "vanilla Doom" family, the difference is noted
 explicitly.
 
+Quantitative claims are enumerated in `docs/claims-index.md`. Run
+`bash tools/archaeology/verify-all.sh` to cross-check all figures; CI
+enforces it. WAD-data figures are verified by
+`node tools/archaeology/wad-verify.mjs`; source-code constants by
+`node tools/archaeology/source-constant-verify.mjs`. Derived figures
+(arithmetic from other claims) are noted inline.
+
 ---
 
 ## Table of contents

@@ -8,6 +8,11 @@ where the code was verified by experiment the one-liner is shown.
 
 Tone standard: `docs/engine-archaeology.md`. Where folklore is wrong, say so.
 
+Quantitative claims are enumerated in `docs/claims-index.md`. Run
+`bash tools/archaeology/verify-all.sh` to cross-check all figures; CI
+enforces it. Invariant source constants (raised-limits table) are
+verified by `node tools/archaeology/source-constant-verify.mjs`.
+
 ---
 
 ## Contents
@@ -986,6 +991,8 @@ units, divided into 256-column segments → 4 repeats). Sky is always drawn at
 full brightness (`dc_colormap = colormaps` = map 0), so invulnerability inverse
 mapping does not apply (r_plane.c:404-405 — deliberate, noted in source).
 
+Reproduce (ANGLETOSKYSHIFT): `node tools/archaeology/source-constant-verify.mjs`
+
 **webdoom freelook**: `skytexturemid` is updated in `R_ShearView` (r_main.c:927)
 to scroll the sky with the pitch. At `lookdir = 0`, `skytexturemid = 100*FRACUNIT`
 (the vanilla value). Pitching up shifts `skytexturemid` upward, revealing the
@@ -1023,6 +1030,8 @@ feeds the simulation's state machine (P_Random, actor positions, line triggers).
 Raising them cannot change what `G_Ticker` computes, so golden demo traces
 remain tic-identical. Verified by inspection: none of the overflow paths touch
 `gametic`, `P_Random`, or any `mobj_t` field used by the sim.
+
+Reproduce (raised-limits table): `node tools/archaeology/source-constant-verify.mjs`
 
 ---
 

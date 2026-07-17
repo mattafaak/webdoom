@@ -5,6 +5,11 @@ blobs whose 1992 generators were never documented and, in most retellings,
 never questioned. Everything here is verified against `tools/golden/`
 canon and, where it feeds the simulation, against the demo traces.
 
+Every quantitative figure in this document has a reproducer listed in
+`docs/claims-index.md`. Run `bash tools/archaeology/verify-all.sh` to
+regenerate and cross-check all 96 fast-gate figures; CI enforces it on
+every push.
+
 ## 1. Trigonometry tables — CRACKED, regenerated at boot
 
 `finesine` (10,240), `finetangent` (4,096), `tantoangle` (2,049):
@@ -23,6 +28,8 @@ recipes + a correction stream (see `engine/core/tables.c`,
   checksum (FNV over all 16,385 entries) refuses to run if the
   toolchain's libm ever computes differently.
 
+Reproduce: `node tools/archaeology/finesine-stats.mjs`
+
 ## 2. FixedDiv float-vs-integer equivalence — PROVEN
 
 linuxdoom-1.10 computes `FixedDiv` in `double`:
@@ -39,7 +46,8 @@ Modern ports use `((int64)a << 16) / b` and trust demos.
   double result and the truncating-integer result always fall in the
   same unit interval → same `(int)` cast.
 - *Empirical*: 2×10⁹ random in-domain pairs + 1.8×10⁶ adversarially
-  constructed near-boundary pairs → **zero** mismatches.
+  constructed near-boundary pairs → **zero** mismatches. *(not
+  machine-verified: too large for CI; one-time verification only)*
 - *Consequence*: our `FixedDiv` can use the int64 form (faster in wasm,
   and by construction the exact value the DOS `.exe` produced) with a
   guarantee, not a hope. The double path's dead divide-by-zero
@@ -70,6 +78,8 @@ never appear — a *worse* distribution than any LCG would give, i.e. the
 fingerprint of human typing, not an algorithm. This is a strong,
 exhaustive negative result, not an absence of evidence.
 
+Reproduce: `gcc -O2 -I tools/archaeology/ tools/archaeology/rndtable-stats.c -lm -o /tmp/rndtable-stats && /tmp/rndtable-stats`
+
 ## 4. Gamma tables — approximate power curves, no exact recipe
 
 `gammatable[5][256]` (display brightness correction). Fit to
@@ -91,6 +101,8 @@ hand-adjusted power curves, or a generator tool now lost. Unlike the trig
 tables, these are display-only (never touch the sim), so exactness is
 cosmetic — kept as canon data, not regenerated.
 
+Reproduce: `node tools/archaeology/gamma-crack.mjs`
+
 ## 5. P_AproxDistance — the honest approximation
 
 `dist = max(|dx|,|dy|) + min(|dx|,|dy|)/2` — the octagonal
@@ -103,6 +115,8 @@ culling stays conservative and can't wrongly hide a monster. It feeds
 the sim, so it is frozen — but now its worst case is measured, and the
 "worst at 45°" folklore is corrected. (This write-up originally repeated
 that folklore; the measurement in `docs` caught it.)
+
+Reproduce: `gcc -O2 -lm tools/archaeology/aprox-distance-crack.c -o /tmp/aprox-dist && /tmp/aprox-dist`
 
 ## 6. COLORMAP light-diminishing tables — CRACKED, universal
 
@@ -147,7 +161,8 @@ rather than regenerated.
 **Map 33:** all zeros. (Trivially the blackout.)
 
 Crackers: `tools/archaeology/colormap-crack.c`,
-`colormap-invuln-crack.c`.
+`colormap-invuln-crack.c`. Map-0 identity count (ea-022):
+`node tools/archaeology/wad-verify.mjs`.
 
 ---
 
@@ -181,6 +196,9 @@ hardware. Isolated wasm primitive throughput, double vs int64 divide:
 | Cortex-A76 (ARM, Pi 5)  | 754 ms | 630 ms | **+20%** |
 | AMD G-T56N (x86 Bobcat) | 12304 ms | 13054 ms | −6% |
 | i5-8350U (x86 Kaby Lake) | 964 ms | 2725 ms | **−65%** |
+
+Reproduce (microbench): `tools/golden/bench-baseline.json` field
+`v1.primitiveMicrobench` (commit-stamped measurements).
 
 Old x86 64-bit `idiv` is genuinely slow (~40–95-cycle latency) vs double
 `divsd` (~14–20); ARM's integer divide wins. There is **no universally
@@ -778,3 +796,5 @@ P_Random or demo-observable gamestate.
 | `d_french.h` / `dstrings.c` | d_french.h, dstrings.c | ~310 defines + 1 array | **declarative** — French UI string replacements and quit-message array; string literals only | archaeology §13.7 | No |
 
 **Total ledger rows: 40.** Verdicts: recipe 5, equivalence 4, irreducible 17, declarative 14.
+
+Reproduce (row counts): `node tools/archaeology/ledger-count.mjs`

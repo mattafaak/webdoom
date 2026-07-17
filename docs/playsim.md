@@ -13,6 +13,13 @@ Evidence standard: same as `docs/engine-archaeology.md`. File:line for every cla
 Where a number was measured against code (rather than verified against 13 golden demos
 by instrumentation), that is stated.
 
+Quantitative claims are enumerated in `docs/claims-index.md`. Run
+`bash tools/archaeology/verify-all.sh` to cross-check all figures; CI
+enforces it. Source-code constants (invariant) are verified by
+`node tools/archaeology/source-constant-verify.mjs`. Runtime-stat
+figures require an instrumented build; see claims.json for per-claim
+commands. Unverifiable claims are marked *(not machine-verified)* inline.
+
 ---
 
 ## Contents
@@ -330,6 +337,7 @@ safer than scribbling. **For the 13 golden demos**: measured peak numspechit is 
 exactly at the vanilla limit of 8. No demo exceeds it, confirming the webdoom clamp
 at 64 is never reached by these demos. (Measurement: `EMSCRIPTEN_KEEPALIVE` counter,
 C changes reverted, 13/13 goldens confirmed; see §17.)
+Reproduce (peak numspechit): `node tools/archaeology/runtime-stat-verify.mjs` (WEB_PERF_SPECHIT_STATS build).
 
 `p_enemy.c:267–269` also declares a local `MAXSPECIALCROSS 8` and `extern spechit[]`
 for monster moves. Monster moves use the same buffer but the enemy-local `#define` is
@@ -422,7 +430,8 @@ objects are simply not checked — behaves as if they are transparent, which is 
 (plutonia-demo3, MAP12). Well below the 127 clamp, confirming the clamp is never
 reached by these demos. (Measurement: `EMSCRIPTEN_KEEPALIVE` counter in both
 `PIT_AddLineIntercepts` and `PIT_AddThingIntercepts`, C changes reverted, 13/13
-goldens confirmed; details in §17.)
+goldens confirmed; details in §17.) *(not machine-verified: instrumented build
+required; stat removed — no current CI script)*
 
 Same guard applies to `PIT_AddThingIntercepts` (p_maputl.c:672–673).
 
@@ -623,7 +632,7 @@ expensive sight checks against all four players every tic.
 Speed constants: `xspeed[8] = {FRACUNIT, 47000, 0, ...}`, `yspeed[8] = {0, 47000, FRACUNIT, ...}`
 (p_enemy.c:264–265). The diagonal speed of 47000 is `~0.717 * FRACUNIT`, approximating
 `1/sqrt(2)` in integer arithmetic. It is not the exact value and the inaccuracy is
-locked in.
+locked in. Reproduce (diagonal speed): `node tools/archaeology/derived-check.mjs`
 
 ### 8.4 The diagonal door quirk
 
@@ -1118,6 +1127,10 @@ exercised by every one of the 32 teleport events across those 4 demos. The golde
 harness at `tools/golden/` validates those demos per-tic via `web_state_hash()`
 (i_main.c:175–190), so any change to the Z-snap or the surrounding logic would
 desync them.
+
+Reproduce (teleport call counts): `node tools/archaeology/runtime-stat-verify.mjs`
+(WEB_PERF_TELEPORT_STATS instrumented build).
+Reproduce (tic counts 1710 / 818): `node tools/archaeology/stamp-check.mjs`
 
 **webdoom status**: Vanilla behavior preserved. The `// fixme: not needed?` comment
 is preserved from linuxdoom-1.10.

@@ -8,12 +8,21 @@ host-independent.
 Per-stage fleet performance numbers live in `tools/golden/bench-baseline.json`.
 The ranked optimization queue arrives with task 2.1.
 
+Quantitative claims are enumerated in `docs/claims-index.md`. Run
+`bash tools/archaeology/verify-all.sh --full` to cross-check all
+verified figures (default fast gate covers source constants; `--full`
+adds size stamps and runtime stats); CI runs the fast gate on every
+push. Claims that cannot be automated are marked *(not machine-verified)*
+inline with the reason from `tools/archaeology/claims.json`.
+
 ---
 
 ## 1. wasm section breakdown
 
 Command: `llvm-objdump -h build/doom.wasm`
 (llvm-objdump from `$EMSDK_DIR/upstream/bin/`, emsdk 6.0.2)
+CI verify (commit-pinned): `node tools/archaeology/wasm-stamp.mjs` (CODE/DATA/heap_base)
+and `node tools/archaeology/stamp-check.mjs` (total size, gzip size)
 
 | # | Section   | Size (bytes) | Size (KB) | Notes |
 |---|-----------|--------------|-----------|-------|
@@ -131,9 +140,10 @@ plutonia demo3 (5,662 tics, worst-case IWAD):
 | **56 MB** | 5,662 tics, PASS | **confirmed floor** |
 | 52 MB | `Aborted(OOM)` at WAD malloc | OOM |
 
-**Minimum safe `INITIAL_MEMORY`: 56 MB** (2.18 MB margin above measured peak;
-rounded to a convenient 4 MB boundary). This is the headline number for
-bare-metal targets (task 1.5).
+**Minimum safe `INITIAL_MEMORY`: 56 MB** *(not machine-verified: requires
+emcc INITIAL_MEMORY sweep build; no current CI script)* (2.18 MB margin
+above measured peak; rounded to a convenient 4 MB boundary). This is the
+headline number for bare-metal targets (task 1.5).
 
 **Recommendation for task 2.6**: Reduce `ZONESIZE` from 32 MB to 4 MB first
 (15× reduction in zone over-allocation with room to spare), then re-measure to
@@ -180,9 +190,12 @@ fetched separately on first play and cached in the browser; it is not part of
 the initial page-load transfer.
 
 **Finding**: the entire deliverable (wasm + JS glue + client JS + CSS +
-HTML) compresses to **177.7 KB gzip** on the wire. The wasm is 80% of that
-(142.6 KB). The JS+CSS+HTML surface is 35 KB gzip — small enough that
-minification is low-priority relative to wasm code size (task 2.6).
+HTML) compresses to **177.7 KB gzip** on the wire *(not machine-verified:
+requires all deliverable assets built — no current CI script)*. The wasm
+is 80% of that (142.6 KB). The JS+CSS+HTML surface is **35 KB gzip**
+*(not machine-verified: requires JS+CSS+HTML assets — no current CI
+script)* — small enough that minification is low-priority relative to
+wasm code size (task 2.6).
 
 ---
 
@@ -200,6 +213,9 @@ Values are averages across doom.wad demo1/demo2/demo3 from
 `tools/golden/bench-baseline.json` (schemaVersion 2, all four hosts
 coherent at commit 16c3354). The stage order within each host is the
 rank order: #1 = most expensive.
+
+Reproduce: `node tools/bench.mjs` on each fleet host; commit-stamped
+results in `tools/golden/bench-baseline.json` (field: `perStage`).
 
 #### Absolute costs (ms/frame avg)
 
@@ -397,7 +413,8 @@ wbox sim = 0.0706 ms/tic; at 35 Hz = 0.0706/28.57 = **0.25% of budget**.
 
 Headless sim throughput from v1 bench: wbox 21,107 tics/s
 = 35/21107 × 100 = **0.17% CPU** at 35 Hz. The render-pass measurement
-confirms: sim is negligible.
+confirms: sim is negligible. (Reproduce: `tools/golden/bench-baseline.json`
+field `v1.frameThroughput`)
 
 **Risk vs. reward**: the sim is the frozen surface (playsim.md §16).
 Any change to:
@@ -407,7 +424,9 @@ Any change to:
 - `P_TraverseIntercepts` sort order
 
 ...would desync all 13 golden demos. The cross-validation against 44,580
-Chocolate Doom tics provides zero tolerance for any behavioral divergence.
+Chocolate Doom tics *(not machine-verified: external Chocolate Doom
+instrumented run; no current script in repo)* provides zero tolerance
+for any behavioral divergence.
 
 **Verdict for task 2.4**: measure-first / likely-skip. The 0.25%
 budget contribution makes any win unmeasurable at the system level.
@@ -480,6 +499,8 @@ L > 3 days.
 
 **Step 1 — Call counts (doom.wad demo1, 1710 frames, build with -DWEB_PERF_COL_STATS):**
 
+Reproduce: `node tools/archaeology/runtime-stat-verify.mjs` (WEB_PERF_COL_STATS build)
+
 | function | calls/frame | avg px/call | px/frame |
 |----------|------------|------------|---------|
 | R_DrawColumn (all variants) | 714.8 | 47.9 | 34,203 |
@@ -523,13 +544,16 @@ alone on the Bobcat. The hoist is retained: it provably removes two aliasing-blo
 global reloads per pixel (confirmed in LLVM IR) and is universally correct across all
 targets, but it does not move numbers on wbox by itself.
 
-**Unroll-4 verdict (B vs A):** B avg 0.2558 vs A avg 0.2652 = **-0.0094 ms = -3.5%**.
+**Unroll-4 verdict (B vs A):** B avg 0.2558 vs A avg 0.2652 = **-0.0094 ms = -3.5%**
+*(not machine-verified: historical experiment requiring specific commit
+comparison; no current CI script)*.
 All 3 B reps are below all 3 A reps — the difference is 7× the A noise bar and is
 clearly separable from drift. On the Bobcat (in-order CPU), unrolling reduces the
 branch-taken + pointer-advance overhead from 1-per-pixel to 1-per-4-pixels; this is
 the dominant effect, not the ILP from independent texture reads. **KEEP unroll.**
 
-Total render B vs A: 0.4851 vs 0.4927 ms = **-1.5%**.
+Total render B vs A: 0.4851 vs 0.4927 ms = **-1.5%** *(not machine-verified:
+same historical experiment)*.
 
 *Killed:* **R_DrawSpan: 4-wide u32 packing (4 palette bytes into one i32.store)**
 - Pack four `ds_colormap[ds_source[spot]]` bytes into one `uint32_t` word and write with
@@ -717,6 +741,8 @@ Measurement script: `tools/plane-measure.mjs`.
 **Step 2 — Measured counts** (wbox, 1 rep each, best-rep for doom.wad; built with
 `-DWEB_PERF_PLANE_STATS`):
 
+Reproduce: `node tools/archaeology/runtime-stat-verify.mjs` (WEB_PERF_PLANE_STATS build)
+
 | case | frames | calls/frame | iters/frame | peak visplanes |
 |------|--------|-------------|-------------|----------------|
 | doom demo1 | 1709 | 33.1 | 205.2 | 33 |
@@ -858,10 +884,12 @@ on alder, 1 rep; not fleet-benched as not a finalist.)
 
 #### -Os analysis
 
--Os shrinks the CODE section from 281,457 to 188,554 bytes (**-33.0%**, the
-entire delta is in compiled machine code; DATA is unchanged at 73.5 KB).
-Wire payload (wasm gzip-9) drops from 145,926 to 123,875 bytes (**-15.1%**,
-−22 KB). Total payload story: 142.5 KB → 121.0 KB gzip.
+-Os shrinks the CODE section from 281,457 to 188,554 bytes (**-33.0%** *(not
+machine-verified: requires separate -Os emcc build; no current CI script)*,
+the entire delta is in compiled machine code; DATA is unchanged at 73.5 KB).
+Wire payload (wasm gzip-9) drops from 145,926 to 123,875 bytes (**-15.1%**
+*(not machine-verified: same -Os build)*, −22 KB). Total payload story:
+142.5 KB → 121.0 KB gzip.
 
 **Speed (wbox, 1-rep fleet bench):**
 
@@ -872,7 +900,8 @@ Wire payload (wasm gzip-9) drops from 145,926 to 123,875 bytes (**-15.1%**,
 | demo3 | 0.450 | 0.468 | +4.0% |
 | **avg** | **0.482** | **0.498** | **+3.3%** |
 
-Sim fps (wbox, headless -nodraw): -O3 avg 19,152 vs -Os avg 17,378 = **−9.3%**.
+Sim fps (wbox, headless -nodraw): -O3 avg 19,152 vs -Os avg 17,378 = **−9.3%**
+*(not machine-verified: requires -Os build + bench.mjs run; no current CI script)*.
 
 The render regression (+3.3%) is borderline for a 1-rep run (the 2.2 sweep
 established ~0.001 ms noise bar over 3 reps; 1-rep noise is wider). However,
@@ -969,6 +998,7 @@ Single-IWAD floor was established in §3: 56 MB (2.18 MB margin above the
 | plutonia.wad (no PWAD) | 17,420,824 | — | 17,420,824 (16.61 MB) | **53.82 MB** (§3 baseline) |
 
 Worst real combo: **tnt.wad + tnt31.wad** at 54.83 MB peak.
+Reproduce (54.83 MB peak): `node tools/archaeology/stamp-check.mjs`
 
 Note: `tnt.wad` at 18.20 MB is slightly larger than `plutonia.wad` at
 17.42 MB, making it the worst single IWAD, not plutonia.wad as stated in §3.
@@ -1053,6 +1083,9 @@ which is browser-composited and negligible; best-of-10 × 2000 ticks,
 | alder (i9-12900K) | 0.0078 |
 | pi5 (Cortex-A76)  | 0.0222 |
 | **wbox (G-T56N)** | **0.0722** |
+
+*(not machine-verified: fire.js timing requires browser/JS benchmark
+harness; no current CI script)*
 
 **wbox is measured at 0.072 ms/tick — ~14× under the < 1 ms budget.** This is
 hardware, not extrapolation. The alder→wbox ratio here (9.3×) is consistent
