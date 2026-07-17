@@ -33,6 +33,25 @@ The archaeology docs mix reproducible crackers with prose numbers. Make the
 | 6.3 | `tools/archaeology/verify-all.sh`: regenerates every figure; a drift-check diffs committed doc numbers vs script output and FAILS on divergence; wire into run-tests.sh | verify-all green; editing any doc figure to a wrong value makes run-tests.sh fail at that claim | 6.2 | cc:完了 [91fea5e+985c128] — verify-all.sh + doc-drift.mjs three-way check (doc==manifest==script, distinguishes DOC_ERROR vs MANIFEST_STALE); fast gate 96 claims/3.8s wired into run-tests.sh; extended to the flagship claims (ea-018 headline COLORMAP, ea-023 the published-wrong figure) that the 'already verified' split had left unprotected; drift proof: corrupt 0→1 ⇒ FAIL ea-018 exit 1, revert ⇒ ALL PASS; FINDING-4 (unreproducible 'standard luma 92' pinned to 77/150/29@A=254→91) |
 | 6.4 | Literate pass: annotate each archaeology figure with its generating command (caption/footnote) so the corpus is auditable claim-by-claim | zero unattributed quantitative claims remain in the archaeology docs | 6.3 | cc:完了 [5f91103] — section-level `Reproduce:` lines (extends the existing Crackers:/Script: precedent, keeps doc density); 182/182 claims attributable; 16 unverifiable marked inline with specific reasons; gate pointer + claims-index link added; values provably unchanged (lead-verified: 0 numbers removed/changed across all 5 docs) |
 
+> **FINDING-7 (process, lead — 2026-07-17).** `Agent(isolation: "worktree")` is
+> keyed by **SESSION, not by agent**. Three concurrently-spawned workers (7.2,
+> 8.1, 10.1) all shared ONE worktree
+> (`.harness-worktrees/<session-id>`) and ONE branch. Each worker's brief said
+> "you are in an isolated git worktree" — false. Consequences observed:
+> (a) worker 10.1 read siblings' **uncommitted** edits as if they were master
+> and cited not-yet-existing code in a doc; (b) it filed a correct doc as
+> "stale" because a sibling's unlanded insertions shifted line numbers;
+> (c) any `git add -A` would sweep siblings' WIP into the wrong commit, and
+> `build`/`wads` show as UNTRACKED (`.gitignore` has `wads/`+`build/` with
+> trailing slashes, which do NOT match symlinks) so `-A` would commit
+> absolute-path symlinks to a PUBLIC repo.
+> **Mitigations:** parallel workers must (1) `git add` explicit paths only,
+> never `-A`/`.`/`commit -a`; (2) cite by function name, not line number;
+> (3) treat sibling-owned file failures as noise, not their own. **Safest: run
+> file-coupled tasks SEQUENTIALLY** — disjoint file sets are not enough when
+> the tree itself is shared. Consider fixing `.gitignore` to also ignore the
+> `wads`/`build` symlinks (no trailing slash).
+
 ## Phase 7: Formal proofs — retire "empirical/sketch" (PROVE tier)
 
 Where the docs say "2×10⁹ samples" or "sketch," replace with a proof or a
@@ -41,8 +60,8 @@ precisely-bounded, documented guarantee. [tdd:skip:proof-artifact-is-the-test]
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
 | 7.1 | FixedDiv exhaustive/SMT: prove double == int64 over the full guarded domain (`\|a\|>>14 < \|b\|`) rather than sampling — enumerate the finite boundary set or drive an SMT solver | a committed harness terminates with "proven exhaustively over the guarded domain" (or a precisely-characterized residual set); archaeology §2 updated from "empirical" to "proven" | - | cc:完了 [ca13af7] |
-| 7.2 | FixedMul, P_AproxDistance bound, angle/BAM round-trips: formalize where tractable; document each intractable case with the exact reason it resists proof | every fixed-point/angle primitive has a proof OR a stated bounded-empirical guarantee with the limit named | 7.1 | cc:TODO |
-| 7.3 | COLORMAP uniqueness: strengthen "0/8192 on 3 palettes" — cross-validate the recipe against ≥5 independently-authored palettes (add Chex, SIGIL, HACX, Freedoom), and tabulate the falsified near-miss recipes as a determinacy argument | recipe holds 0-mismatch across ≥5 palettes; near-miss recipes recorded as falsified with their error magnitudes | 6.2 | cc:TODO |
+| 7.2 | FixedMul, P_AproxDistance bound, angle/BAM round-trips: formalize where tractable; document each intractable case with the exact reason it resists proof | every fixed-point/angle primitive has a proof OR a stated bounded-empirical guarantee with the limit named | 7.1 | cc:完了 [3bc3acd] — 6-primitive inventory (§15), every row PROOF or BOUNDED-EMPIRICAL w/ named limit. FixedMul=PROOF (product ≤2^62<INT64_MAX; 2 named IDBs C99 §6.5.7p5/§6.3.1.3p3; floor-vs-trunc asymmetry vs FixedDiv confirmed). P_AproxDistance=BOUNDED-EMPIRICAL, graded by its weakest part (continuous sup √1.25=+11.803% by calculus + integer sup √2=+41.42% at (1,1) exhaustive, but M≥65536 bound is a 65,536-pair sweep). R_PointToAngle=BOUNDED-EMPIRICAL (all 8,192 fine angles enumerated, but distance sampled → honest downgrade). SlopeDiv=PROOF. Lead-verified on master: verify-all 105 claims ALL PASS, lint OK |
+| 7.3 | **RESCOPED by FINDING-5 (lead, pre-flight)** — the original premise is false. `doom/doom2/plutonia/tnt/chex` ship **byte-identical PLAYPAL *and* COLORMAP**, so the doc's "three independently-authored palettes" is ONE palette tested 3×, and its "not an overfit" inference is vacuous. HACX is the only genuinely distinct palette available (748/768 pal bytes differ) and the recipe **misses 3517/8192 (43%)** on it. Nuance: HACX independently confirms the `(32−L)/32` curve (best-fit s recovers .875/.750/.625/.500/.375/.250/.125), so the *curve* generalizes; the *nearest-colour matching* does not. New job: (a) correct engine-archaeology.md §6 AND the **public** magic-data.md — drop "proven universal"/"three independently-authored palettes"; (b) state the honest claim: exact for the id palette, curve corroborated by HACX, index-matching not reproduced; (c) root-cause HACX's matcher divergence (tie-breaking? restricted search range? dense near-duplicate clusters?) or record it as an open question with the exact reason | §6 + magic-data.md carry no unsupported universality claim; the byte-identity of the doom-family palettes is stated; HACX's 3517/8192 + the curve corroboration are committed as a reproducer; FINDING-5 filed | 6.2 | cc:TODO |
 
 ## Phase 8: The self-enforcing frozen surface (DEFEND tier)
 
@@ -52,7 +71,8 @@ the honest fix for the blind spot that let the Tutti-Frutti regold hide.
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 8.1 | `WEBDOOM_INVARIANTS` instrumented build: runtime asserts at the exact call site for each demo-visible invariant — P_Random per-tic call count/order, thinker traversal order, blockmap iteration order, spechit/intercepts bounds | build compiles; asserts are zero-cost when the flag is off (core stays web-layer-independent); each §16 invariant has a corresponding assert | - | cc:TODO |
+| 8.1 | `WEBDOOM_INVARIANTS` instrumented build: runtime asserts at the exact call site for each demo-visible invariant — P_Random per-tic call count/order, thinker traversal order, blockmap iteration order, spechit/intercepts bounds | build compiles; asserts are zero-cost when the flag is off (core stays web-layer-independent); each §16 invariant has a corresponding assert | - | cc:完了(partial) [844c3d6] — **worker STALLED at 27min idle; lead took over, ran every gate it never ran.** Landed: 11 runtime DOOM_ASSERTs + 7 _Static_asserts behind `-DWEBDOOM_INVARIANTS`; doomassert.h includes only `<assert.h>`, every include inside the #ifdef (2.2 precedent honored). Lead-verified: **zero-cost PROVEN — flag-off wasm byte-identical to clean master (md5 e7772ad6…, 359574 B)**; flag-off 13/13 sim goldens bit-identical + render pixel-identical + verify-all 105 green + lint OK; flag-on builds (365799 B) and all demos run silent. **FINDING-8**: the worker's `P_AddThinker` assert "thinker not already sentinel-marked" fired on 10/13 stock demos — it reads UNINITIALISED memory (non-mobj callers Z_Malloc without zeroing and call P_AddThinker BEFORE assigning `.function`; p_doors/p_lights/p_plats/p_ceilng/p_floor = 14 Z_Mallocs / 0 memsets; P_RemoveThinker writes exactly `(actionf_v)(-1)` so a recycled block still holds it). Removed with rationale at the site — a false invariant, not a weakened one. **OUTSTANDING → 8.1b**: the §16 20-row mapping table was never written, so the "every §16 invariant" clause is UNVERIFIED |
+| 8.1b | **Carved out of 8.1** (worker stalled before writing it): the §16 20-row mapping table — classify EVERY row of playsim.md §16's frozen-surface table as `runtime assert` (file + the assert), `static assert`, `already covered` (name the existing verifier/claim id), or `not assertable` (exact reason). 844c3d6 landed 11 runtime + 7 static asserts; this is the artifact that lets a skeptic check the "every §16 invariant" clause. Zero rows may be silently skipped | every one of §16's 20 rows maps to exactly one classification with its evidence; no row unaccounted | 8.1 | cc:TODO |
 | 8.2 | Cross-validate: run all 13 demos + Chocolate cross-check under the invariant build; prove a deliberately-injected invariant violation trips the assert AT ITS CALL SITE (not a golden diff 5000 tics later) | clean run passes 13/13 with no assert; an injected violation is caught at the exact source line (shown in the task evidence) | 8.1 | cc:TODO |
 | 8.3 | Wire the invariant build into run-tests.sh as a gate stronger than goldens (an assert is a precise cause; a golden diff is a downstream symptom) | run-tests.sh runs the invariant build over all 13 demos; documented as the primary sim-safety gate | 8.2 | cc:TODO |
 
@@ -74,13 +94,35 @@ Position webdoom precisely against the entire port lineage, not just Chocolate.
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 10.1 | Catalog every known behavioral fork across vanilla / Boom / MBF / MBF21 / PrBoom+ / dsda-doom — spechit & intercepts overflow families, wallrunning, blockmap, sight asymmetries, comp_* flags — with, for each: what it is, which webdoom implements, why, and demo evidence | `docs/divergence-atlas.md`: every catalogued fork states webdoom's position + evidence; cross-referenced to playsim.md quirk catalog | 1.2-done | cc:TODO |
+| 10.1 | Catalog every known behavioral fork across vanilla / Boom / MBF / MBF21 / PrBoom+ / dsda-doom — spechit & intercepts overflow families, wallrunning, blockmap, sight asymmetries, comp_* flags — with, for each: what it is, which webdoom implements, why, and demo evidence | `docs/divergence-atlas.md`: every catalogued fork states webdoom's position + evidence; cross-referenced to playsim.md quirk catalog | 1.2-done | cc:TODO (unblocked — 8.1 landed at 844c3d6; re-verify citations against master NOW, cite by function name not line number) — atlas drafted (e810823, 9 fork families, 698 lines) but **NOT merged**: FINDING-7 (below) means every file:line in it was read from a tree carrying 8.1's uncommitted edits; it cites `p_local.h:84 _Static_assert(MAXSPECIALCROSS==64)` and a `p_map.c:533-554 WEBDOOM_INVARIANTS` block that DO NOT EXIST on master. Its reported playsim.md §5.1 "drift" (606-607→612-613) is a FALSE POSITIVE — playsim.md is correct for master; the shift is 8.1's unlanded work. Blocked on 8.1 landing, then re-verify all citations against master and cite by FUNCTION NAME, not line number |
 | 10.2 | Compatibility statement: state exactly which vanilla quirks webdoom preserves vs which modern fixes it deliberately does NOT take, each traceable to an atlas row | a one-screen compatibility position, every claim linking to a divergence-atlas entry | 10.1 | cc:TODO |
 
 ## Phase 11: Bare-metal falsification — understanding on trial (the crown jewel)
 
 Put bare-metal.md's contract on trial by actually porting across it. The only
 real proof you understand what it takes to run DOOM anywhere. [tdd:skip:bring-up-is-the-test]
+
+> **FINDING-6 (lead, found by inspection BEFORE any bring-up — the contract is
+> already falsified).** `bare-metal.md` §1 claims "The entire platform surface is
+> in **three files**: `i_system.h`, `i_video.h`, `i_sound.h`" and that the
+> completeness claim "is auditable by diffing against the two header files."
+> Both statements are wrong, and the section contradicts itself (*three* files
+> vs *"both headers"/"the two header files"*).
+> Reality: `engine/core` **unconditionally** includes two further platform
+> headers — `engine/web/web.h` and `engine/web/perf.h` (d_main.c:79-80,
+> m_misc.c:63, r_main.c:43, w_wad.c:50) — and calls six functions from web.h:
+> `D_DoomFrame` (d_main.c), `W_WebFile` (w_wad.c), `W_WebFileExists` (d_main.c),
+> `Web_FileLen`/`Web_FileCopy`/`Web_FileWrite` (m_misc.c), plus perf.h's
+> counters. A porter following §1 fails to compile four core files.
+> **Dispositive evidence**: `tools/native-sanitize/` already ships THREE shims —
+> `nat_platform.h`, `perf.h`, AND `web.h`. The repo has already been forced to
+> work around the gap the doc denies. The true surface is FIVE headers.
+> This is the exact doc-vs-reality discrepancy 11.3 was scheduled to discover
+> *after* the bring-up; it is now an input to 11.1, not an output of 11.3.
+> NOTE: this also means "core is web-layer-independent" is false as a blanket
+> rule — it holds only for the flag-guarded counters (p_telept.c/p_map.c/
+> r_draw.c/r_plane.c guard their `perf.h` include inside the `#ifdef`; the five
+> above do not). That narrower rule is the real, enforced precedent from 2.2.
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
