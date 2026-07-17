@@ -6,7 +6,7 @@ verifiers; task 6.3 wires them into `verify-all.sh` and a CI drift-check.
 Task 6.4 annotates each doc figure with its reproducer so the corpus is
 auditable claim-by-claim without consulting this index.
 
-**Gate**: `bash tools/archaeology/verify-all.sh` — fast tier (96 claims,
+**Gate**: `bash tools/archaeology/verify-all.sh` — fast tier (105 claims,
 ~4 s); `--full` adds runtime-stat + measurement-stamp families.
 
 **Docs annotated**: `engine-archaeology.md`, `renderer.md`, `playsim.md`,
@@ -68,6 +68,12 @@ and inline `*(not machine-verified)*` markers for the 16 unverifiable claims.
 | ea-031 | engine-archaeology.md:775 | ledger equivalence-class rows | 4 | derived | ledger-count.mjs category total | verified |
 | ea-032 | engine-archaeology.md:775 | ledger irreducible-class rows | 17 | derived | ledger-count.mjs category total | verified |
 | ea-033 | engine-archaeology.md:775 | ledger declarative-class rows | 14 | derived | ledger-count.mjs category total | verified |
+| ea-042 | engine-archaeology.md:§2a | FixedMul int64 product bound: max \|a·b\| for int32 inputs (2^62 < INT64_MAX) | 4611686018427387904 | derived | tools/archaeology/fixedmul-proof.c | verified |
+| ea-043 | engine-archaeology.md:§2a | FixedMul rounding asymmetry: floor vs trunc differ by N for negative non-exact products | 1 | invariant | tools/archaeology/fixedmul-proof.c | verified |
+| ea-044 | engine-archaeology.md:§5 | P_AproxDistance integer supremum (>>1 floor): ratio at (1,1) = sqrt(2) | +41.4% | invariant | tools/archaeology/aprox-distance-crack.c | verified |
+| ea-045 | engine-archaeology.md:§5 | P_AproxDistance integer max ratio at M=65536 (1 FRACUNIT), 65,536-pair sweep | 11.81% | invariant | tools/archaeology/aprox-distance-crack.c | verified |
+| ea-046 | engine-archaeology.md:§5a | R_PointToAngle fine-angle round-trip max error (8,192-enumeration, FRACUNIT scale) | 3 | invariant | tools/archaeology/angle-roundtrip-check.c | verified |
+| ea-047 | engine-archaeology.md:§5a | SlopeDiv output range upper bound (proven by construction) | 2048 | invariant | tools/archaeology/angle-roundtrip-check.c | verified |
 | ea-034 | engine-archaeology.md:§microbench | FixedDiv double path on i9-12900K (alder) | 419 ms / 2×10⁸ iters | measurement | tools/bench-baseline.json (v1.primitiveMicrobench) | verified |
 | ea-035 | engine-archaeology.md:§microbench | FixedDiv double path on Cortex-A76 (pi5) | 754 ms | measurement | tools/bench-baseline.json (v1.primitiveMicrobench) | verified |
 | ea-036 | engine-archaeology.md:§microbench | FixedDiv double path on AMD G-T56N (wbox) | 12,304 ms | measurement | tools/bench-baseline.json (v1.primitiveMicrobench) | verified |
@@ -222,21 +228,21 @@ and inline `*(not machine-verified)*` markers for the 16 unverifiable claims.
 
 ## Summary
 
-**Total claims: 182**
+**Total claims: 188**
 
 | type | count |
 |------|-------|
-| invariant | 78 |
+| invariant | 83 |
 | measurement | 71 |
-| derived | 33 |
+| derived | 34 |
 
 | status | count |
 |--------|-------|
-| verified | 166 |
+| verified | 172 |
 | needs-verifier | 0 |
 | unverifiable | 16 |
 
-Verification coverage: 166 / 182 = **91%** by count (16 claims unverifiable — historical experiments or multi-machine measurements). Task 6.2 complete; 6.3 wires these into verify-all.sh and CI drift-check.
+Verification coverage: 172 / 188 = **91%** by count (16 claims unverifiable — historical experiments or multi-machine measurements). Task 6.2 complete; 6.3 wires these into verify-all.sh and CI drift-check. Task 7.2 adds ea-042..047 (FixedMul proof, P_AproxDistance two-part bound, angle/BAM round-trip).
 
 ---
 

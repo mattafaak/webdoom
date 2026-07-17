@@ -7,7 +7,7 @@ canon and, where it feeds the simulation, against the demo traces.
 
 Every quantitative figure in this document has a reproducer listed in
 `docs/claims-index.md`. Run `bash tools/archaeology/verify-all.sh` to
-regenerate and cross-check all 96 fast-gate figures; CI enforces it on
+regenerate and cross-check all 105 fast-gate figures; CI enforces it on
 every push.
 
 ## 1. Trigonometry tables — CRACKED, regenerated at boot
@@ -93,6 +93,45 @@ mismatches.
 
 Reproduce: `gcc -O2 tools/archaeology/fixeddiv-proof.c -lm -o /tmp/fixeddiv-proof && /tmp/fixeddiv-proof`
 
+## 2a. FixedMul — PROVEN
+
+`(fixed_t)(((long long)a * (long long)b) >> FRACBITS)` (m_fixed.h), where
+`FRACBITS=16` and `fixed_t=int32`.
+
+**Product bound (ea-042):** `|a| ≤ INT32_MAX < 2^31`, so `|a·b| ≤ 2^62 < INT64_MAX`.
+The int64 intermediate never overflows. Trivially closed.
+
+**Two load-bearing implementation-defined behaviors (IDBs):**
+
+- *IDB-A*: `>> FRACBITS` on a negative `int64`. C99 §6.5.7p5 says this is
+  implementation-defined for negative left operands. C++20 (P0907R4) and C23
+  (N3088 §6.2.6.2) mandate two's-complement, making arithmetic right-shift
+  well-defined on all conforming toolchains.
+- *IDB-B*: `int64 → int32` narrowing via the `(fixed_t)` cast when the shifted
+  result is out of int32 range. C99 §6.3.1.3p3: implementation-defined. C23
+  §6.3.1.3p3: mandates two's-complement wrap (modular reduction).
+
+Both are *intentional*. FixedMul overflows by design — the wraparound is
+demo-visible in trick-shot angles and movement extremes. Fixing either IDB
+would break demo replay. They are features, not bugs.
+
+**Rounding asymmetry (ea-043):** FixedMul uses arithmetic right-shift (`>> 16`),
+which floors toward −∞. FixedDiv uses C integer division, which truncates toward 0.
+For negative products that are not exact multiples of 2^16, they differ by exactly 1
+for negative non-multiple-of-65536 products. Spot-check: `a=−1, b=3` → product `−3`;
+floor(`−3/65536`) = `−1`, trunc(`−3/65536`) = `0`, differ by 1 for negative
+non-exact inputs (difference = 1 for that case; positive products give the same result
+from both operations).
+
+*Residual:* `abs(INT_MIN)` is UB in C (same family as §2 residual); INT_MIN as
+`fixed_t` = −32768 map units, unreachable in any DOOM map.
+
+**Verdict: PROOF** (analytic + spot-check). Product exactness: closed.
+IDBs: named, load-bearing, C23-mandated on conforming toolchains. Rounding:
+floor vs trunc, differ by 1 on negative non-exact inputs.
+
+Reproduce: `gcc -O2 tools/archaeology/fixedmul-proof.c -o /tmp/fixedmul-proof && /tmp/fixedmul-proof`
+
 ## 3. The random table — PROVEN not a standard PRNG
 
 `rndtable[256]` drives every damage roll, monster decision, and
@@ -143,20 +182,90 @@ cosmetic — kept as canon data, not regenerated.
 
 Reproduce: `node tools/archaeology/gamma-crack.mjs`
 
-## 5. P_AproxDistance — the honest approximation
+## 5. P_AproxDistance — BOUNDED-EMPIRICAL
 
-`dist = max(|dx|,|dy|) + min(|dx|,|dy|)/2` — the octagonal
-"alpha max plus beta min" norm, used for blockmap/sight culling.
-Not a fossil (it's transparent code), but worth stating its exact
-character, since the usual retelling gets it wrong. Measured error:
-**+11.8% at 26.6° (arctan ½)** — *not* at 45°, where it is only +6.1%.
-It **never underestimates** (0% error on the axes), so blockmap/sight
-culling stays conservative and can't wrongly hide a monster. It feeds
-the sim, so it is frozen — but now its worst case is measured, and the
-"worst at 45°" folklore is corrected. (This write-up originally repeated
+`dist = max(|dx|,|dy|) + min(|dx|,|dy|)/2` — the octagonal "alpha max plus
+beta min" norm, used for blockmap/sight culling. Worth formalizing because the
+usual retelling gets it wrong. Two separate analyses are needed: the engine uses
+`>>1` (floor divide) for the division by 2, not real arithmetic, and the floor
+penalty matters at small magnitudes but is negligible at game-coordinate scales.
+
+**Continuous analysis — proven by calculus (ea-015, ea-016, ea-017).** Let
+t = min/max ∈ [0,1]:
+
+```
+r(t) = (1 + t/2) / sqrt(1+t²),   r'(t) = (½−t) / (1+t²)^{3/2}
+```
+
+r'(t)=0 at t=1/2 (unique interior maximum on [0,1]).
+r(0)=1.000, r(½)=sqrt(1.25) → maximum error is **+11.8% at 26.6° (arctan ½)**,
+*not* at 45°, where it is only +6.1%.
+The formula never underestimates (0% error on the axes); blockmap/sight culling
+stays conservative and can never wrongly hide a monster.
+Continuous supremum: sqrt(1.25)−1 ≈ +11.803%.
+
+**Integer analysis — exhaustive enumeration (ea-044, ea-045).** The engine's
+`>>1` floors toward −∞. At (dx,dy)=(1,1): max=1, min=1, `(1>>1)=0`, so
+approx=2, exact=sqrt(2)≈1.414. Ratio: 2/sqrt(2) = sqrt(2) ≈ **+41.4%** (ea-044).
+This is the integer supremum over all nonzero int32 inputs. Proof sketch: for
+min=1, max=m, ratio=(m+1)/sqrt(m²+1), maximized at m=1; confirmed exhaustively
+for all M≤1000. The floor penalty decays ~1/max; at M≥65536 an exhaustive sweep
+(65,536 pairs) shows the integer sup ≤ **11.81%** (ea-045). Since DOOM actors
+are separated by tens to thousands of map units, the operative in-game bound is
+≤11.81%. Both the absolute integer supremum (sqrt(2)) and the large-M bound
+(+11.81%) are stated here — stating only "+11.8%" without qualification is
+false at small magnitudes.
+
+It feeds the sim, so it is frozen — but now its exact character is established,
+and the "worst at 45°" folklore is corrected. (This write-up originally repeated
 that folklore; the measurement in `docs` caught it.)
 
 Reproduce: `gcc -O2 -lm tools/archaeology/aprox-distance-crack.c -o /tmp/aprox-dist && /tmp/aprox-dist`
+
+## 5a. R_PointToAngle / SlopeDiv — BOUNDED-EMPIRICAL
+
+`R_PointToAngle` maps (dx,dy) → `angle_t` (uint32 Binary Angle Measure) via
+an 8-octant structure; each octant delegates to `tantoangle[SlopeDiv(min,max)]`.
+
+**SlopeDiv range (ea-047):** `SlopeDiv(num,den) = min((num<<3)/(den>>8), SLOPERANGE)`,
+with `SLOPERANGE=2048`. Proven by construction from the source (tables.c):
+
+- Branch 1: if `den < 512`, return `SLOPERANGE` (= 2048).
+- Branch 2: compute `ans=(num<<3)/(den>>8)`; return `min(ans, SLOPERANGE)`.
+
+Both branches return a value always in [0, 2048]. Called with num ≤ den
+(min, max convention) and both non-negative; no path escapes the guard or clamp.
+Spot-checks confirm all edge cases (num=0, den<512 guard, huge num, num==den).
+
+**Fine-angle round-trip (ea-046):** Proof by 8,192-enumeration
+(FINEANGLES=8192; < 1 ms). For each fine angle i, the representative vector is
+the center of the bin: `(dx,dy) = K·(cos((i+0.5)·2π/8192), sin(...))`. Round-trip:
+(dx,dy) → PointToAngle → `angle_t >> ANGLETOFINESHIFT(19)` → fine_got.
+Error = |fine_got − i| in fine-angle steps (1 step = 360°/8192 ≈ 0.044°).
+
+Two scales measured:
+
+- *FRACUNIT scale* (K=65536): max error = **3 fine-angle steps** (0.13°). The
+  `>>8` truncation in SlopeDiv introduces quantization in the tantoangle index that
+  is largest when den ≈ FRACUNIT.
+- *Game scale* (K=16·FRACUNIT+): max error = **1 fine-angle step** (0.044°). At
+  actual game distances (dozens to thousands of map units), the slope-ratio
+  quantization error is negligible. 0 of 8192 fine angles have error > 1 step.
+
+Since DOOM objects are separated by far more than 1 FRACUNIT, the operative
+in-game bound is 1 fine-angle step (0.044°). The near-axis octant boundary
+term (`ANG90-1-tantoangle[...]`) accounts for the ±1 bin shift at octant seams.
+
+*Residuals:* `(dx=0,dy=0)` returns 0 (degenerate; skipped in enumeration).
+`abs(INT_MIN)` is UB in C (same family as §2 residual; INT_MIN as fixed_t
+= −32768 map units, outside any DOOM map).
+
+**Verdict: BOUNDED-EMPIRICAL.** SlopeDiv range proven by construction;
+fine-angle round-trip proven by 8,192-enumeration over all FINEANGLES. Feeds the
+sim (R_PointToAngle is called by sight-checks, automap, and projectile targeting);
+frozen.
+
+Reproduce: `gcc -O2 -lm tools/archaeology/angle-roundtrip-check.c -o /tmp/angle-roundtrip && /tmp/angle-roundtrip`
 
 ## 6. COLORMAP light-diminishing tables — CRACKED, universal
 
@@ -838,3 +947,19 @@ P_Random or demo-observable gamestate.
 **Total ledger rows: 40.** Verdicts: recipe 5, equivalence 4, irreducible 17, declarative 14.
 
 Reproduce (row counts): `node tools/archaeology/ledger-count.mjs`
+
+---
+
+## 15. Fixed-point and angle primitive inventory
+
+Focused inventory of the six core arithmetic primitives. Every entry ends as
+either PROOF or BOUNDED-EMPIRICAL with the named numeric limit.
+
+| primitive | where | verdict | numeric limit | section |
+|-----------|-------|---------|---------------|---------|
+| `finesine[10240]` / `finetangent[4096]` | tables.c | **PROOF** — recipe cracked (sin/tan, truncation, (i+0.5) phase, 33 corrections) | 5,377 of 10,240 entries differ from round-nearest (±1 ULP) | §1 |
+| `FixedDiv` | m_fixed.h | **PROOF** — bit-identical to double path over guarded domain (analytic; IDB at INT_MIN only) | mismatch requires \|a\| ≥ 2^37; INT32_MAX < 2^31 | §2 |
+| `FixedMul` | m_fixed.h | **PROOF** — product \|a·b\| ≤ 2^62 < INT64_MAX; two named IDBs (C99 §6.5.7p5, §6.3.1.3p3); floor vs trunc differ by 1 | 2^62 product bound; differ by exactly 1 for negative non-exact inputs | §2a |
+| `P_AproxDistance` | p_maputl.c | **BOUNDED-EMPIRICAL** — two-part: continuous sup sqrt(1.25)-1 ≈ +11.803% (calculus); integer sup sqrt(2) ≈ +41.421% at (1,1) (exhaustive); at M≥65536: ≤+11.81% (65,536-pair sweep) | +41.421% (integer, small magnitudes); +11.81% (integer, M≥65536); +11.803% (continuous) | §5 |
+| `SlopeDiv` | tables.c | **PROOF** — output always in [0, 2048] by construction (guard + clamp) | [0, 2048] | §5a |
+| `R_PointToAngle` | r_main.c | **BOUNDED-EMPIRICAL** — proven by 8,192-enumeration; max error ≤ 3 fine-angle steps (0.13°) at FRACUNIT scale, ≤ 1 step (0.044°) at game scale | 3 steps (0.13°) absolute; 1 step (0.044°) at game distances | §5a |

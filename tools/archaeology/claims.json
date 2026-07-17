@@ -871,17 +871,59 @@
       "command": "node tools/archaeology/ledger-count.mjs",
       "expected": "14",
       "status": "verified"
+    },
+    "ea-042": {
+      "family": "recipe-crack",
+      "command": "gcc -O2 tools/archaeology/fixedmul-proof.c -o /tmp/fixedmul-proof && /tmp/fixedmul-proof",
+      "expected": "4611686018427387904",
+      "status": "verified",
+      "notes": "Product bound: max |a*b| for int32 inputs = 2^62 < INT64_MAX. Doc states '2^62' (soft doc check); two-way manifest/script check is load-bearing."
+    },
+    "ea-043": {
+      "family": "recipe-crack",
+      "command": "gcc -O2 tools/archaeology/fixedmul-proof.c -o /tmp/fixedmul-proof && /tmp/fixedmul-proof",
+      "expected": "1",
+      "status": "verified",
+      "notes": "Rounding asymmetry: FixedMul floors, FixedDiv truncates; differ by exactly 1 for negative non-multiple-of-65536 products. Spot-check a=-1,b=3."
+    },
+    "ea-044": {
+      "family": "recipe-crack",
+      "command": "gcc -O2 -lm tools/archaeology/aprox-distance-crack.c -o /tmp/aprox-dist && /tmp/aprox-dist",
+      "expected": "+41.4%",
+      "status": "verified",
+      "notes": "Integer supremum of P_AproxDistance using >>1: ratio at (1,1) = 2/sqrt(2) = sqrt(2). Confirmed exhaustively for all M<=1000."
+    },
+    "ea-045": {
+      "family": "recipe-crack",
+      "command": "gcc -O2 -lm tools/archaeology/aprox-distance-crack.c -o /tmp/aprox-dist && /tmp/aprox-dist",
+      "expected": "11.81%",
+      "status": "verified",
+      "notes": "P_AproxDistance integer max ratio at M=65536 (1 FRACUNIT): exhaustive 65536-pair sweep, worst dy=32767."
+    },
+    "ea-046": {
+      "family": "recipe-crack",
+      "command": "gcc -O2 -lm tools/archaeology/angle-roundtrip-check.c -o /tmp/angle-roundtrip && /tmp/angle-roundtrip",
+      "expected": "3",
+      "status": "verified",
+      "notes": "R_PointToAngle fine-angle round-trip max error at FRACUNIT scale (8192-enumeration). At game scale (16+ FRACUNIT) max error=1. Doc characterizes both; manifest tracks FRACUNIT-scale worst case."
+    },
+    "ea-047": {
+      "family": "recipe-crack",
+      "command": "gcc -O2 -lm tools/archaeology/angle-roundtrip-check.c -o /tmp/angle-roundtrip && /tmp/angle-roundtrip",
+      "expected": "2048",
+      "status": "verified",
+      "notes": "SlopeDiv output always in [0, SLOPERANGE=2048]. Proven by construction (guard branch + clamp). CLAIMS_JSON reports SLOPERANGE constant."
     }
   },
   "_summary": {
-    "_note": "computed from claims by tools/archaeology (task 6.3) \u2014 do not hand-edit",
-    "total_in_manifest": 137,
+    "_note": "computed from claims by tools/archaeology (task 6.3) \u2014 do not hand-edit; ea-042..047 added by task 7.2",
+    "total_in_manifest": 143,
     "by_status": {
-      "verified": 121,
+      "verified": 127,
       "unverifiable": 16
     },
     "by_family": {
-      "recipe-crack": 29,
+      "recipe-crack": 35,
       "unverifiable": 16,
       "wad-data": 23,
       "source-constant": 40,

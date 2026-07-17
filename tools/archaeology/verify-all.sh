@@ -124,8 +124,14 @@ compile_and_run "recipe-crack / rndtable-stats (3 claims: ea-007..009)" \
 compile_and_run "recipe-crack / fixeddiv-proof (3 claims: ea-004..006)" \
     tools/archaeology/fixeddiv-proof.c
 
-compile_and_run "recipe-crack / aprox-distance-crack (3 claims: ea-015..017)" \
+compile_and_run "recipe-crack / fixedmul-proof (2 claims: ea-042..043)" \
+    tools/archaeology/fixedmul-proof.c
+
+compile_and_run "recipe-crack / aprox-distance-crack (5 claims: ea-015..017, ea-044..045)" \
     tools/archaeology/aprox-distance-crack.c
+
+compile_and_run "recipe-crack / angle-roundtrip-check (2 claims: ea-046..047)" \
+    tools/archaeology/angle-roundtrip-check.c
 
 capture_run "derived-check (4 claims: perf-036, perf-039, ps-018, ps-022)" \
     node tools/archaeology/derived-check.mjs
@@ -207,10 +213,11 @@ fi
 
 # ── Coverage summary ───────────────────────────────────────────────────────────
 echo ""
-FAST_CLAIMS=99   # source-constant(40) + wad-data(23) + recipe-crack(32) + derived-check(4)
-                 # recipe-crack(32) = finesine(3) + gamma(5) + rndtable(3) +
-                 # fixeddiv-proof(3) + aprox-dist(3) + colormap(4) +
-                 # colormap-invuln(4) + checkcoord(1) + zlight(1) + ledger(5)
+FAST_CLAIMS=105  # source-constant(40) + wad-data(23) + recipe-crack(38) + derived-check(4)
+                 # recipe-crack(38) = finesine(3) + gamma(5) + rndtable(3) +
+                 # fixeddiv-proof(3) + fixedmul-proof(2) + aprox-dist(5) +
+                 # angle-roundtrip(2) + colormap(4) + colormap-invuln(4) +
+                 # checkcoord(1) + zlight(1) + ledger(5)
 FULL_CLAIMS=25   # + runtime-stat(15) + measurement-stamp(10)
 UNVERIFIABLE=13  # ea-004..006 retired from unverifiable (superseded by proof)
 

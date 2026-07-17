@@ -240,6 +240,39 @@ const DOC_HINTS = {
                 extract_re: /\((\d+)%\s+error\s+on\s+the\s+axes\)/,
                 transform: v => v + '%' },
 
+    // ── ea-042..047: FixedMul proof + P_AproxDistance integer analysis +
+    //                angle/BAM round-trip (task 7.2) ─────────────────────
+    // ea-042: doc states '2^62' (mathematical expression), not the literal integer.
+    // Same soft-check pattern as ea-004.
+    'ea-042': { soft: true,
+                reason: "doc states '2^62' (mathematical expression), not the literal 4611686018427387904; two-way manifest/script check sufficient" },
+
+    // ea-043: "differ by exactly 1 for negative non-multiple-of-65536 products"
+    'ea-043': { doc_file: 'engine-archaeology.md',
+                needle: 'differ by 1',
+                extract_re: /differ by\s+(?:exactly\s+)?(\d+)\s+for\s+negative/ },
+
+    // ea-044: "sqrt(2) ≈ **+41.4%** (ea-044)"
+    'ea-044': { doc_file: 'engine-archaeology.md',
+                needle: 'sqrt(2) ≈ **+41.4%**',
+                extract_re: /sqrt\(2\)\s+≈\s+\*\*([\+\d.]+%)\*\*/ },
+
+    // ea-045: "integer sup ≤ **11.81%**" — note: no leading + in CLAIMS_JSON
+    'ea-045': { doc_file: 'engine-archaeology.md',
+                needle: '≤ **11.81%**',
+                extract_re: /integer sup\s+≤\s+\*\*([\d.]+%)\*\*/ },
+
+    // ea-046: compound claim (3 steps at FRACUNIT, 1 step at game scale).
+    // CLAIMS_JSON reports the FRACUNIT-scale max (3); doc characterizes both.
+    // Soft: the doc prose does not isolate the bare number "3" in a simple pattern.
+    'ea-046': { soft: true,
+                reason: "compound claim (3 steps at FRACUNIT, 1 step at game scale); CLAIMS_JSON reports FRACUNIT max (3); two-way manifest/script check sufficient" },
+
+    // ea-047: "always in [0, 2048]"
+    'ea-047': { doc_file: 'engine-archaeology.md',
+                needle: 'always in [0, 2048]',
+                extract_re: /always in \[0,\s*(\d+)\]/ },
+
     'ea-022': { doc_file: 'engine-archaeology.md',
                 needle: '249/256',
                 extract_re: /\(([\d]+)\/256\)\s*—\s*a handful/ },
