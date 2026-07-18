@@ -18,7 +18,12 @@ export function createAudio(doom) {
             if (ctx.state === 'suspended') ctx.resume().catch(() => {});
             return;
         }
-        ctx = new AudioContext();
+        try {
+            ctx = new AudioContext();
+        } catch (err) {
+            console.warn('AudioContext creation failed:', err);
+            return;
+        }
         if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
         doom._web_music_init(ctx.sampleRate);
         try {
@@ -39,11 +44,12 @@ export function createAudio(doom) {
         window.addEventListener(evt, arm, { once: false, capture: true });
     // Browsers suspend AudioContexts when a tab is hidden. Resume on reveal
     // so audio is live again the moment the player returns without needing
-    // a fresh user gesture.
-    document.addEventListener('visibilitychange', () => {
+    // a fresh user gesture. Named ref so stop() can remove it (ws-007).
+    const onVisible = () => {
         if (document.visibilityState === 'visible' && ctx && ctx.state === 'suspended')
             ctx.resume().catch(() => {});
-    });
+    };
+    document.addEventListener('visibilitychange', onVisible);
 
     function pump() {
         const deficit = Math.floor(TARGET_BACKLOG * ctx.sampleRate) - musicQueued;
@@ -113,6 +119,7 @@ export function createAudio(doom) {
             if (pumpTimer) clearInterval(pumpTimer);
             for (const evt of ['keydown', 'mousedown', 'touchstart'])
                 window.removeEventListener(evt, arm, { capture: true });
+            document.removeEventListener('visibilitychange', onVisible);
             try { ctx?.close(); } catch { /* already closed */ }
             ctx = null;
         },

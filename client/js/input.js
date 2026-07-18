@@ -54,7 +54,9 @@ export const defaultSettings = () => ({
 export function loadSettings() {
     try {
         const s = { ...defaultSettings(), ...JSON.parse(localStorage.getItem('webdoom.input') ?? '{}') };
-        if (s.mouseMove === true && !s.mouseY) s.mouseY = 'move';   // pre-freelook migration
+        // Pre-freelook migration: honor a legacy stored preference, then strip
+        // the key (settings.js now reads/writes mouseY directly — ws-010).
+        if (s.mouseMove === true && !s.mouseY) s.mouseY = 'move';
         delete s.mouseMove;
         return s;
     } catch { return defaultSettings(); }
@@ -204,7 +206,8 @@ export function createInput(doom, canvas, settings) {
     };
 
     function pollGamepad() {
-        const gp = navigator.getGamepads?.()[0];
+        const gpads = navigator.getGamepads?.();
+        const gp = gpads?.[0];
         if (!gp) return;
         const b = i => gp.buttons[i]?.pressed ?? false;
         const uiMode = doom._web_ui_mode();

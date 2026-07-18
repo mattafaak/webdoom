@@ -52,6 +52,12 @@ echo "── drop-in edge cases + churn ─────────────�
 node tools/edge-test.mjs | tail -1
 node tools/churn-test.mjs | tail -1
 
+echo "── sw.js precache integrity (ws-003 drift prevention) ──"
+node tools/check-sw-precache.mjs
+
+echo "── static HTTP path fuzz (ws-005 companion) ────────────"
+node tools/http-fuzz-test.mjs | tail -1
+
 echo "── net fuzz + abuse (malformed/hostile clients) ────────"
 node tools/net-fuzz-test.mjs | tail -1
 

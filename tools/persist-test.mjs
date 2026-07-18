@@ -1,5 +1,6 @@
 // save in E1M1, reload the page, assert the savegame was restored into
-// the fresh engine FS from IndexedDB
+// the fresh engine FS from IndexedDB. Also tests ws-008 teardown: after
+// doom.onQuit() the sync interval must stop firing (no unhandled rejections).
 import { spawn } from 'node:child_process';
 const CDP = 9230;
 const chrome = spawn('google-chrome-stable', [
@@ -69,5 +70,20 @@ await bootSP();
 const restored = await ev(`window.webdoom.doom['fileMap']?.get('doomsav0.dsg')?.length ?? 0`);
 console.log('savegame bytes restored after reload:', restored);
 if (!restored) fail('savegame not restored after reload');
-console.log('PASS — savegame survives a page reload');
+console.log('savegame bytes restored after reload:', restored);
+
+// ── Phase 3: teardown test (ws-008) ──────────────────────────────────────────
+// Set up an unhandled-rejection listener, trigger doom.onQuit() to stop the
+// sync interval, wait > 3 s, then assert no wasm/sync rejections fired.
+await ev(`window.__urj = []; window.addEventListener('unhandledrejection', e => window.__urj.push(String(e.reason)));`);
+// Trigger quit programmatically (same path as Quit Game → Y in the engine)
+await ev(`window.webdoom?.doom?.onQuit?.()`);
+await sleep(4500);  // wait > the 3 s interval to catch any orphaned firing
+const urjRaw = await ev(`JSON.stringify(window.__urj)`);
+const urjList = JSON.parse(urjRaw ?? '[]');
+const badRej = urjList.filter(r => /wasm|RuntimeError|abort|sync|save/i.test(r));
+if (badRej.length) fail(`unhandled rejections after quit: ${badRej.join(', ')}`);
+console.log(`teardown test: ${urjList.length} total unhandled rejections, ${badRej.length} wasm/sync related — OK`);
+
+console.log('PASS — savegame survives a page reload; interval stops cleanly on quit');
 chrome.kill(); process.exit(0);

@@ -91,6 +91,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
     // set it to false even if I_Error fires before the frame loop begins.
     // The assignment `running = true` below (after all setup) starts the loop.
     let running = false;
+    let syncHandle = null;   // set after startSync; referenced in onDoomError closure
     const doom = await createDoom({
         print: t => console.log(t),
         printErr: t => console.warn(t),
@@ -101,6 +102,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
             restoreOnFailure(canvas);
             status(`engine error: ${msg}`);
             try { window.doomAudio?.stop?.(); } catch { /* dead instance */ }
+            try { syncHandle?.stop?.(); } catch { /* dead instance */ }
         },
     });
 
@@ -134,7 +136,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
     }
     window.doomAudio = createAudio(doom);
     window.webdoom = { doom };              // debug/test handle
-    startSync(doom, wads[0].file);
+    syncHandle = startSync(doom, wads[0].file);
 
     const renderer = createRenderer(canvas);
     const fb = doom._web_framebuffer();
@@ -158,6 +160,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
         canvas.hidden = true;
         document.getElementById('landing').hidden = false;
         try { window.doomAudio?.stop?.(); } catch { /* dead instance */ }
+        try { syncHandle?.stop?.(); } catch { /* dead instance */ }
         onQuit?.();
     };
 

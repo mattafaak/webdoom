@@ -58,7 +58,9 @@ export function startSync(doom, iwad, intervalMs = 3000) {
     };
 
     async function sync() {
-        doom._web_save_defaults();      // flush live config into the Map
+        try {
+            doom._web_save_defaults();  // flush live config into the Map
+        } catch { return; }             // wasm aborted after quit — ignore
         const m = doom['fileMap'];
         if (!m) return;
         let d = null;
@@ -79,9 +81,14 @@ export function startSync(doom, iwad, intervalMs = 3000) {
         d?.close();
     }
 
-    setInterval(sync, intervalMs);
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') sync();
-    });
-    return { sync };
+    const timer = setInterval(sync, intervalMs);
+    const onHide = () => { if (document.visibilityState === 'hidden') sync(); };
+    document.addEventListener('visibilitychange', onHide);
+
+    function stop() {
+        clearInterval(timer);
+        document.removeEventListener('visibilitychange', onHide);
+    }
+
+    return { sync, stop };
 }

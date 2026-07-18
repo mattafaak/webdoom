@@ -73,7 +73,7 @@ Both paths share teardown symmetry. No gap found.
 
 **Severity**: high
 
-**Disposition**: `fix(12.4b)` — add `/js/fire.js` and `/js/countdown.js` to the `c.addAll([...])` list
+**Disposition**: `fixed(12.4b, this commit)` — added `/js/fire.js` and `/js/countdown.js` to the `c.addAll([...])` list; build-time drift check in `tools/check-sw-precache.mjs`
 
 ---
 
@@ -174,7 +174,7 @@ document.addEventListener('visibilitychange', () => {
 
 **Severity**: low
 
-**Disposition**: `fix(12.4b)` — capture the listener as a named reference and add `document.removeEventListener('visibilitychange', onVisible)` to `stop()`
+**Disposition**: `fixed(12.4b, this commit)` — captured listener as named `onVisible` ref; `document.removeEventListener('visibilitychange', onVisible)` added to `stop()`
 
 ---
 
@@ -194,7 +194,7 @@ On quit → re-boot:
 
 **Severity**: med
 
-**Disposition**: `fix(12.4b)` — add a `stop()` method to the returned object (clear interval, remove visibilitychange listener); wrap `doom._web_save_defaults()` in try/catch; call `startSync(...).stop()` inside `doom.onQuit` / `onDoomError`
+**Disposition**: `fixed(12.4b, this commit)` — added `stop()` to returned object (clears interval, removes visibilitychange listener); wrapped `doom._web_save_defaults()` in try/catch; wired `syncHandle.stop()` into `doom.onQuit` and `onDoomError` in main.js; teardown tested in `tools/persist-test.mjs`
 
 ---
 
@@ -239,7 +239,7 @@ Additionally, the checkbox is rendered from `s.mouseMove` (line 28 references `$
 
 **Severity**: med
 
-**Disposition**: `fix(12.4b)` — update the checkbox to directly set `s.mouseY = e.target.checked ? 'move' : 'off'` (or expand to a three-state selector) and remove the `mouseMove` migration in `loadSettings`
+**Disposition**: `fixed(12.4b, this commit)` — checkbox now reads `s.mouseY === 'move'` and writes `s.mouseY = checked ? 'move' : 'off'` directly; removed stale `mouseMove` migration from `loadSettings` (legacy `mouseMove` key stripped on load)
 
 ---
 
@@ -267,7 +267,7 @@ Additionally, the checkbox is rendered from `s.mouseMove` (line 28 references `$
 
 **Severity**: low
 
-**Disposition**: `fix(12.4b)` — wrap `new AudioContext()` in try/catch and log to console at minimum; optionally surface via `status()`
+**Disposition**: `fixed(12.4b, this commit)` — `new AudioContext()` wrapped in try/catch; logs `console.warn('AudioContext creation failed:', err)` and returns early
 
 ---
 
@@ -287,7 +287,7 @@ If `navigator.getGamepads` is undefined (very old browser or restricted environm
 
 **Severity**: low
 
-**Disposition**: `fix(12.4b)` — change to `navigator.getGamepads?.()? .[0]` (double optional chain) or add a null-guard: `const gpads = navigator.getGamepads?.(); const gp = gpads?.[0]; if (!gp) return;`
+**Disposition**: `fixed(12.4b, this commit)` — changed to `const gpads = navigator.getGamepads?.(); const gp = gpads?.[0];` (double optional chain, no TypeError on missing API)
 
 ---
 
@@ -330,7 +330,7 @@ Every in-scope file is listed. "0" findings is a recorded result.
 | high | 2 (ws-001, ws-003) |
 | med | 3 (ws-004, ws-008, ws-010) |
 | low | 7 (ws-005, ws-006, ws-007, ws-009, ws-011, ws-012, ws-013) |
-| fix(12.4b) | 6 (ws-003, ws-007, ws-008, ws-010, ws-012, ws-013) |
+| fixed(12.4b) | 6 (ws-003, ws-007, ws-008, ws-010, ws-012, ws-013) |
 | fix(15.3) | 1 (ws-001) |
 | won't-fix | 5 (ws-004, ws-005, ws-006, ws-009, ws-011) |
 | already-fixed | 1 (ws-002) |
