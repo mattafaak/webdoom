@@ -114,4 +114,11 @@ cycle-floor: $(OUT)
 cycle-attrib: $(OUT)
 	@bash cycle-attrib.sh
 
-.PHONY: all check check-all imports clean cycles cycle-floor cycle-attrib
+# ro-wad-check: 13.2c read-only-WAD proof (XIP feasibility).
+# Runs all 13 demos with WD_RO_WAD=1: WAD blob mprotect(PROT_READ) after load.
+# Any engine write into the blob → SIGSEGV → FAIL with faulting address.
+# DoD: 13/13 pass → WAD blob is read-only → XIP-viable.
+ro-wad-check: $(OUT)
+	@bash ro-wad-check.sh
+
+.PHONY: all check check-all imports clean cycles cycle-floor cycle-attrib ro-wad-check

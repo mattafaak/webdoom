@@ -28,10 +28,12 @@
 #include <fcntl.h>
 #include <linux/perf_event.h>
 #include <setjmp.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
@@ -172,6 +174,50 @@ static void emit_cycles_json(const char *path, int tics,
     fclose(f);
 }
 
+// ── WD_RO_WAD=1: read-only WAD blob (13.2c XIP feasibility proof) ────────────
+// When WD_RO_WAD=1, the WAD blob is loaded into an anonymous mmap region and
+// mprotect(PROT_READ)'d after load.  Any write into the blob triggers SIGSEGV,
+// which our handler catches, prints "WAD-BLOB WRITE" + faulting address, and
+// exits nonzero — so a violation is a named diagnosis, not a mystery crash.
+// This also doubles as a write trap for 13.4 wild-write triage.
+//
+// Engine/core: ZERO diff.  Shim-only change.
+
+static void  *wd_ro_wad_base = NULL; /* blob start, for handler range check */
+static size_t wd_ro_wad_size = 0;    /* blob byte count */
+
+/* Async-signal-safe: print unsigned long as 0x-prefixed hex to fd. */
+static void sig_write_hex(int fd, unsigned long v)
+{
+    /* "0x" + 8 hex digits (32-bit address in -m32 mode) */
+    char buf[10];
+    int  i;
+    buf[0] = '0'; buf[1] = 'x';
+    for (i = 9; i >= 2; i--) {
+        int d = (int)(v & 0xfUL);
+        buf[i] = (char)(d < 10 ? '0' + d : 'a' + d - 10);
+        v >>= 4;
+    }
+    write(fd, buf, 10);
+}
+
+static void wd_ro_wad_handler(int sig, siginfo_t *info, void *ctx)
+{
+    unsigned long fa = (unsigned long)(unsigned)(long)info->si_addr;
+    unsigned long base = (unsigned long)(unsigned)(long)wd_ro_wad_base;
+    const char hdr[]  = "\nWAD-BLOB WRITE: fault at ";
+    const char in[]   = " (write into PROT_READ WAD blob)\n";
+    const char out[]  = " (SIGSEGV outside WAD blob range)\n";
+    (void)sig; (void)ctx;
+    write(2, hdr, sizeof(hdr) - 1);
+    sig_write_hex(2, fa);
+    if (fa >= base && fa < base + (unsigned long)wd_ro_wad_size)
+        write(2, in,  sizeof(in)  - 1);
+    else
+        write(2, out, sizeof(out) - 1);
+    _exit(2);
+}
+
 // ── WAD blob loading (SHIM — the only file I/O in this translation unit) ──────
 static const char* path_basename(const char* path)
 {
@@ -184,6 +230,9 @@ static byte* load_wad(const char* path, int* lenout)
     int    fd;
     long   sz;
     byte*  buf;
+    int    use_ro;
+
+    use_ro = (getenv("WD_RO_WAD") && getenv("WD_RO_WAD")[0] == '1');
 
     fd = open(path, O_RDONLY);
     if (fd < 0) return NULL;
@@ -192,11 +241,20 @@ static byte* load_wad(const char* path, int* lenout)
     if (sz <= 0 || sz > 64 * 1024 * 1024L) { close(fd); return NULL; }
     lseek(fd, 0, SEEK_SET);
 
-    buf = (byte*)malloc((size_t)sz);
-    if (!buf) { close(fd); return NULL; }
+    if (use_ro) {
+        /* mmap returns page-aligned memory; mprotect will work on the full
+         * mapping without needing manual page rounding. */
+        buf = (byte*)mmap(NULL, (size_t)sz, PROT_READ | PROT_WRITE,
+                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (buf == (byte*)MAP_FAILED) { close(fd); return NULL; }
+    } else {
+        buf = (byte*)malloc((size_t)sz);
+        if (!buf) { close(fd); return NULL; }
+    }
 
     if ((long)read(fd, buf, (size_t)sz) != sz) {
-        free(buf);
+        if (use_ro) munmap(buf, (size_t)sz);
+        else free(buf);
         close(fd);
         return NULL;
     }
@@ -424,6 +482,27 @@ int main(int argc, char** argv)
     }
     // Hand the blob to files.c — no more file I/O below this point.
     fs_register_wad(path_basename(wad_path), wad_data, wad_len);
+
+    // WD_RO_WAD=1: install SIGSEGV handler then mprotect the blob PROT_READ.
+    // Must happen AFTER fs_register_wad (files.c has copied the pointer) and
+    // BEFORE D_DoomMain (engine must never write the blob after this point).
+    if (getenv("WD_RO_WAD") && getenv("WD_RO_WAD")[0] == '1') {
+        struct sigaction sa;
+        wd_ro_wad_base = (void*)wad_data;
+        wd_ro_wad_size = (size_t)wad_len;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_sigaction = wd_ro_wad_handler;
+        sa.sa_flags     = SA_SIGINFO;
+        sigaction(SIGSEGV, &sa, NULL);
+        if (mprotect(wad_data, (size_t)wad_len, PROT_READ) != 0) {
+            fprintf(stderr, "fs-doom: WD_RO_WAD=1: mprotect failed (errno %d)\n",
+                    errno);
+            return 1;
+        }
+        fprintf(stderr,
+                "fs-doom: WD_RO_WAD=1: WAD blob %p+%d locked PROT_READ\n",
+                (void*)wad_data, wad_len);
+    }
     // ══════════════════════════════════════════════════════════════════════════
 
     myargc = fwd_argc;

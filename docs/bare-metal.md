@@ -546,6 +546,26 @@ rather than returning a pointer. The zone-cache layer (`W_CacheLumpNum`)
 already handles caching on top of `W_ReadLump`; only the raw read path needs
 to change.
 
+#### (d) XIP from flash — feasibility verdict (13.2c)
+
+**WAD blob proven read-only over the 13-demo corpus [PROT_READ, 2026-07-18,
+commit TBD]; XIP-viable.** The engine never writes into the WAD blob. All lump
+accesses go through `W_CacheLumpNum` (`w_wad.c:398–422`) which allocates a
+zone copy via `Z_Malloc` and then calls `W_ReadLump` (`w_wad.c:376–389`)
+which does `memcpy(dest, (byte*)l->handle, l->size)` — reading FROM the blob
+into the zone copy. The suspect BLOCKMAP byte-swap in `P_LoadBlockMap`
+(`p_setup.c:494–509`) operates on `blockmaplump = W_CacheLumpNum(lump,
+PU_LEVEL)`, a zone copy, not the blob. On a big-endian target the swap is
+in-place within zone memory, so the WAD blob is untouched even there.
+
+Proof method: `tools/freestanding/ro-wad-check.sh` builds `fs-doom` with
+`WD_RO_WAD=1` which places the preloaded WAD blob in an anonymous `mmap`
+region and calls `mprotect(PROT_READ)` after load. A SIGSEGV handler
+intercepts any write, prints `WAD-BLOB WRITE: fault at <addr>`, and exits
+nonzero. Result: 13/13 demos complete bit-identical with zero WAD-blob writes.
+
+Reproduce: `make ro-wad-check` in `tools/freestanding/` (requires wads/lib/).
+
 ### 2.4 Palette and framebuffer summary
 
 | Buffer | Size | Location |
