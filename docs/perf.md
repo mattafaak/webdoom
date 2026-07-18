@@ -1581,3 +1581,18 @@ rank from `bench-baseline.json` (§A above).
 - **Sim identity confirmed**: both normal mode and `WD_CYCLES=1 -attrib` mode
   produce 13/13 bit-identical per-tic state hashes vs. committed goldens.
   Attribution does not perturb the simulation.
+
+---
+
+## Phase 14 optimization candidates
+
+The 13.1b attribution is the scoreboard for Phase 14 (vanilla-exact optimization,
+floor-driven). The ranked candidate ledger — with all five required fields per row
+(mechanism, predicted Δinstr/tic, axis, magic-data policy, kill rule) — is at:
+
+**[docs/optimization-ledger.md](optimization-ledger.md)**
+
+16 candidates evaluated; 7 survivors (14.2a–14.2g); 9 killed (including the
+verbatim Plans.md kill-list).  Wins are claimed in 13.1 units (instructions/tic)
+and CI/bare-metal throughput, NEVER browser fps (render = 1.71% of budget on wbox,
+per 12.2b; the framing error is documented in retrospective.md).
