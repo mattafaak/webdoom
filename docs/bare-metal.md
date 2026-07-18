@@ -931,7 +931,7 @@ The webdoom port touches `engine/core/` in **91 places** (measured:
 | Category | Approximate count | Examples |
 |----------|-------------------|---------|
 | Render interpolation snapshots | ~12 | `p_mobj.c:535`, `p_tick.c:148`, `r_main.c:835` |
-| Raised limits (overflow guards) | ~6 | `r_plane.c:52` (MAXVISPLANES restored to vanilla 128 by task 14.2d), `r_bsp.c:88` (MAXSEGS 32→64) |
+| Raised limits (overflow guards) | ~6 | `r_plane.c:74` (MAXVISPLANES restored to vanilla 128 by task 14.2d), `r_bsp.c:88` (MAXSEGS 32→64) |
 | Safety clamps for overflows | ~3 | `p_maputl.c:607,673` (intercepts), `p_map.c` (spechit) |
 | Net/timing additions | ~6 | `d_net.h:49,137,140,145`, `g_game.c:683` |
 | JS bridge declarations and platform hooks | ~5 | `m_fixed.h:26`, `i_system.h:47,94` |

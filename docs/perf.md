@@ -58,7 +58,7 @@ EXPORT +30 B, overhead). These exports are kept permanently for task 2.5 and
 
 ## 2. Z_Zone high-water mark per IWAD
 
-Zone pool: **32 MB** (hardcoded `ZONESIZE` in `engine/web/i_system.c`).
+Zone pool: **4 MB** (hardcoded `ZONESIZE` in `engine/web/web.h`; was 32 MB pre-14.2c).
 Measured by sampling `Z_FreeMemory()` once per unique gametic across all
 attract demos for each IWAD headless (`-nodraw`, `-timedemo`).
 

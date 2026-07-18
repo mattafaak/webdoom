@@ -137,9 +137,10 @@ INITIAL_MEMORY confirmed 32 MiB (buffer.byteLength = 33,554,432). fs build UNAFF
 |-------|-------|
 | **mechanism** | Reduce `MAXVISPLANES` in `engine/core/r_plane.c` from 1024 (webdoom-expanded) back to vanilla's 128. BSS delta: `sizeof(visplane_t)` from `engine/core/r_defs.h` = 5×int32 (20 B) + 1 pad + 320 top-bytes + 2 pads + 320 bottom-bytes + 1 pad = **664 bytes** (note: Plans.md seed says ≈569 KiB for 1024 entries, implying ~569 bytes/struct; actual struct from source = 664 bytes — discrepancy noted, use struct sizeof). 1024×664 = 679,936 bytes = 664 KiB current; 128×664 = 85,008 bytes = 83 KiB; **savings ≈ 581 KiB BSS**. `__heap_base` shifts; render golden regold required (same regold protocol as every BSS layout change per perf.md §2.5 note). |
 | **predicted Δinstr/tic** | 0. Static array size does not affect instruction count during rendering. |
+| **measured Δinstr/tic** | 0. Confirmed: cycle-floor within variance across all 13 demos (parallel d4b2747 verification). |
 | **axis** | RAM / portability |
 | **magic-data policy** | None. **COMPLIES.** |
-| **kill rule** | `I_Error("R_FindPlane: no more visplanes")` on any of 13 golden demos = kill. Evidence: task 2.3 measured peak visplane count = **68** (tnt-demo2); vanilla 128 provides 1.88× margin over measured worst case. |
+| **kill rule** | `I_Error("R_FindPlane: no more visplanes")` on any of 13 golden demos = kill. Evidence: task 2.3 measured peak visplane count = **68** (tnt-demo2); vanilla 128 provides 1.88× margin over measured worst case. **Kill rule NOT triggered: 13/13 demos PASS with no I_Error (verified in both parallel implementations).** |
 
 **Verdict: MEASURED (14.2d) — LANDED**
 
@@ -149,6 +150,13 @@ BSS delta measured exactly: wasm `__heap_base` 5,525,296 → 4,930,352 = **−59
 (= 896 × 664 bytes, bit-exact match to arithmetic prediction). fs-doom .bss likewise −581.0 KiB.
 Regold outcome: NOT NEEDED — post-3.2 layout unpinning proves that a pure BSS-size change is
 pixel-identical without regold (same pattern as 13.2a zone re-trial).
+
+Parallel-runner cross-verification (d4b2747 — a duplicate 14.2d implementation from a concurrent
+harness runner; engine diff vs c90fc10 is comment-only, so its gate results transfer): render-low
+13/13 pixel-identical unregolded, fuzz 20/20, cycle-floor within variance, wasm size independently
+reproduced at 356,206 B. Archaeology reconciled post-landing: rdr-005/rdr-006 expectations updated
+(c90fc10 landed without them — source-constant-verify was 37/40 on master until the reconcile
+commit) and perf-008 (ZONESIZE 4 MiB) healed from 14.2c.
 
 Notes: Task 2.3 (perf.md) measured peak visplanes = 68 (tnt-demo2). With vanilla 128, there
 is a 60-plane safety margin for the measured demo corpus. Custom PWADs with more open geometry

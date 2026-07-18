@@ -556,12 +556,12 @@ plane would be exceeded — a hard abort, same as a crash. Vanilla's `I_Error`
 exits via `longjmp`-like logic. Webdoom does the same: `I_Error` is called at
 r_plane.c:246.
 
-**Webdoom (MAXVISPLANES = 1024)**: the limit is raised 8× (r_plane.c:52). The
-overflow behavior is identical — `I_Error("R_FindPlane: no more visplanes")` at
-the same code path. The difference is that overflow requires more than 1024
-distinct (height, picnum, lightlevel) triples visible at once, which no shipped
-DOOM map achieves. The constant choice was verified: `grep MAXVISPLANES
-engine/core/r_plane.c` → `#define MAXVISPLANES 1024 // webdoom: was 128`.
+**Webdoom (MAXVISPLANES = 128)**: task 14.2d reverted the limit to vanilla (was
+1024 in an earlier webdoom build; reverted after task 2.3 instrumentation
+measured peak visplanes = 68 on the 13-demo corpus, giving 1.88× margin at 128).
+Overflow behavior is identical — `I_Error("R_FindPlane: no more visplanes")` at
+the same code path. The constant choice was verified: `grep MAXVISPLANES
+engine/core/r_plane.c` → `#define MAXVISPLANES 128 // vanilla; was 128`.
 
 **Demo-compat safety**: visplanes are entirely render-side. They encode nothing
 that enters the simulation. Raising `MAXVISPLANES` cannot affect P_Random calls,
@@ -1006,7 +1006,7 @@ upper sky texture.
 
 | limit | vanilla | webdoom | file:line | overflow: vanilla | overflow: webdoom |
 |-------|---------|---------|-----------|-------------------|-------------------|
-| `MAXVISPLANES` | 128 | 1024 | r_plane.c:52 | `I_Error` (hard abort) | `I_Error` (same) |
+| `MAXVISPLANES` | 128 | 128 | r_plane.c:74 | `I_Error` (hard abort) | `I_Error` (same) |
 | `MAXDRAWSEGS` | 256 | 2048 | r_defs.h:55 | see below | see below |
 | `MAXVISSPRITES` | 128 | 1024 | r_things.h:31 | `overflowsprite` silent | same |
 | `MAXSEGS` (solidsegs) | 32 | 64 | r_bsp.c:88 | silent array overwrite | silent array overwrite |

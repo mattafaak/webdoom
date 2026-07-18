@@ -66,8 +66,8 @@ const claims = [
       expected: 128,
       verify: () => grabByRegex('engine/core/r_plane.c', /was\s+(\d+)/) },
 
-    { id: 'rdr-006', desc: 'MAXVISPLANES webdoom = 1024',
-      expected: 1024,
+    { id: 'rdr-006', desc: 'MAXVISPLANES webdoom = 128 (reverted to vanilla, task 14.2d)',
+      expected: 128,
       verify: () => grabDefine('engine/core/r_plane.c', 'MAXVISPLANES') },
 
     { id: 'rdr-007', desc: 'MAXDRAWSEGS vanilla = 256',
@@ -242,8 +242,8 @@ const claims = [
       verify: () => grabDefine('engine/web/mus_opl.c', 'PERCUSSION_CH') },
 
     // ── perf ─────────────────────────────────────────────────────────────────
-    { id: 'perf-008', desc: 'ZONESIZE = 32 MB = 33554432 bytes',
-      expected: 32 * 1024 * 1024,
+    { id: 'perf-008', desc: 'ZONESIZE = 4 MiB = 4194304 bytes (14.2c; was 32 MB pre-14.2c)',
+      expected: 4 * 1024 * 1024,
       verify: () => grabDefine('engine/web/web.h', 'ZONESIZE') },
 ];
 

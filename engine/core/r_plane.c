@@ -71,7 +71,7 @@ planefunction_t		ceilingfunc;
 //
 
 // Here comes the obnoxious "visplane".
-#define MAXVISPLANES	128	// 14.2d: restored to vanilla 128 (was 1024 for limit-busting PWADs).
+#define MAXVISPLANES	128	// vanilla; was 128; webdoom raised to 1024, reverted 14.2d (peak 68).
 				// Measured peak = 68 visplanes (tnt-demo2, task 2.3) → 128 = 1.88×
 				// margin over 13-demo corpus. 1024 cost 581 KiB BSS (896 × 664 B);
 				// vanilla's I_Error at MAXVISPLANES (r_plane.c:274) is the correct
