@@ -56,7 +56,10 @@ byte* I_ZoneBase(int* size)
 // V_Init calls I_AllocLow once with SCREENWIDTH*SCREENHEIGHT*4 = 256,000 bytes.
 // I_InitGraphics (i_video.c) then overrides screens[0] with its own static buf.
 #define FS_ALLOCLOW_SIZE (SCREENWIDTH * SCREENHEIGHT * 4)
-static byte fs_screenbufs[FS_ALLOCLOW_SIZE];
+/* 4-byte alignment required: wipe code casts (byte*) to (short*) for column-
+ * major transform; if the buffer starts at an unaligned address the lhu/sh
+ * instructions trap on strict-alignment targets (MIPS, ARM Cortex-M). */
+static byte fs_screenbufs[FS_ALLOCLOW_SIZE] __attribute__((aligned(4)));
 
 byte* I_AllocLow(int length)
 {

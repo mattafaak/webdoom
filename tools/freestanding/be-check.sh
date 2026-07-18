@@ -26,12 +26,12 @@ GOLDEN_DIR="$REPO_ROOT/tools/golden"
 mkdir -p "$OUT_DIR"
 
 # ─── build ──────────────────────────────────────────────────────────────────
-BE_BIN="$SCRIPT_DIR/fs-doom-be"
+BE_BIN="${BE_BIN:-$SCRIPT_DIR/fs-doom-be}"
 echo "be-check.sh: building $BE_BIN ..."
 bash "$SCRIPT_DIR/be-build.sh" "$BE_BIN"
 
 # ─── qemu runner ─────────────────────────────────────────────────────────────
-QEMU="${QEMU_PPC:-}"
+QEMU="${QEMU_BE:-${QEMU_PPC:-}}"
 if [[ -z "$QEMU" ]]; then
     for candidate in qemu-ppc-static qemu-ppc; do
         if command -v "$candidate" >/dev/null 2>&1; then

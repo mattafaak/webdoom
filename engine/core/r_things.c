@@ -210,13 +210,17 @@ void R_InitSpriteDefs (char** namelist)
 	memset (sprtemp,-1, sizeof(sprtemp));
 		
 	maxframe = -1;
-	intname = *(int *)namelist[i];
-	
+	/* read_le32: sprite name literals may not be 4-byte-aligned in .rodata
+	 * (strict-alignment trap on MIPS).  Use byte-safe read on both sides so
+	 * the byte order matches.  On LE hosts the compiler generates a single
+	 * 4-byte load — wasm output is byte-identical to the original cast. */
+	intname = read_le32(namelist[i]);
+
 	// scan the lumps,
 	//  filling in the frames for whatever is found
 	for (l=start+1 ; l<end ; l++)
 	{
-	    if (*(int *)lumpinfo[l].name == intname)
+	    if (read_le32(lumpinfo[l].name) == intname)
 	    {
 		frame = lumpinfo[l].name[4] - 'A';
 		rotation = lumpinfo[l].name[5] - '0';

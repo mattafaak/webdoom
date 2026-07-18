@@ -820,6 +820,29 @@ All were found by `grep` against the source tree.
 `columnofs[]` access is the most pervasive: it is hit every frame for every
 visible wall column and sprite column.
 
+> **TESTED — strict-alignment trial (tasks 13.4a QEMU-ARM + 13.3b qemu-user
+> MIPS BE, 2026-07-18).** qemu-user mips DOES deliver SIGBUS on unaligned
+> access, so this list went on a real trial across the full 13-demo corpus.
+> Verdicts: **site r_data.c:522 (maptexture_t cast) FAULTED on both strict
+> ISAs** — fixed with byte-safe `read_le16`/`read_le32` helpers (m_swap.h)
+> plus a byte-wise name copy; the pervasive `columnofs` rows (r_data.c:277/
+> 345, r_things.c:440, v_video.c ×3) **never faulted over the corpus** —
+> id's IWAD lumps are 4-byte-aligned in practice, so `columnofs[]` at offset
+> 8 lands aligned (PWADs offer no such guarantee — the mitigation below still
+> applies to hardened ports). **Two site families the list MISSED, found by
+> the trial**: the sprite-name `*(int*)` string puns in `r_things.c`
+> (`.rodata` literals have alignment 1) — fixed with `read_le32` on both
+> sides of the compare — and the freestanding shim's static screen buffers
+> (cast to `short*` by the wipe transform) — fixed with
+> `__attribute__((aligned(4)))`. Helper-fix neutrality proven per the 13.4b
+> core-touch policy: sim 13/13 + render pixel-identical + cycle-floor mean
+> within 2.12% (documented variance 9.9%); the LE wasm is NOT byte-identical
+> (the compiler folds the helpers differently at 2 sites, +71 B) — the
+> (b)-class proofs above are the sanctioned evidence. MIPS BE result:
+> **13/13 bit-identical** (`BE_TARGET=mips-linux-musleabi bash
+> tools/freestanding/be-check.sh`); PowerPC BE re-verified 13/13 after the
+> fixes.
+
 **Mitigation on strict-alignment targets**:
 
 Option A (minimal change): replace the bare `LONG()` macro with a byte-by-byte
@@ -1127,6 +1150,7 @@ diffed from the doc.
 | **Zone: 4 MiB recommended** as credible first-pass minimum (§2.2; perf.md §3: "4–8 MiB first pass") | Rung 1 used **8 MiB** static arena (`ZONESIZE = 8 * 1024 * 1024` in `tools/freestanding/web.h`). All 13 goldens passed. The 4 MiB lower bound was not stress-tested by rung 1. | §7 ESP32 sketch updated to note the 8 MiB rung-1 arena. §2.2 reasoning (3× non-purgeable peak) is unchanged, but 4 MiB remains an untested extrapolation from rung 1's evidence. | gap (not validated) |
 | **§6.2 predicted**: simulation is independent of display and audio; headless bring-up first, display/audio added incrementally | **Confirmed.** 13/13 demos run to completion with `I_FinishUpdate` as a no-op and all sound functions as empty stubs. The freestanding platform layer never touches a display or audio device. | §6.2 prediction validated by rung 1. | held |
 | **§5.1 predicted**: implementing `SwapSHORT`/`SwapLONG` + defining `__BIG_ENDIAN__` suffices for a big-endian port (items 1–2) | **Tested on real BE hardware model (task 13.3a)**: PowerPC/qemu 13/13 bit-identical — but ONLY after adding `-fsigned-char`. The doctrine's swap items were correct and sufficient for byte order; the doctrine was INCOMPLETE — it did not predict the char-signedness dependency (§5.1 item 6, added). | §5.1 gains item 6 + the TESTED banner; §8 records the partial-hold honestly. | held-with-gap (missing char-signedness item) |
+| **§5.2 predicted**: 7 unaligned-access site families; `columnofs[]` "most pervasive" | **Tested (13.4a ARM + 13.3b MIPS BE)**: site r_data.c:522 faulted on BOTH strict ISAs (fixed, byte-safe helpers); the "most pervasive" `columnofs` rows never faulted over the corpus (IWAD lump alignment holds in practice); 2 site families the list missed were found and fixed (sprite-name string puns, shim screen buffers). MIPS BE 13/13. | §5.2 gains the TESTED banner with per-row verdicts. | held-with-gaps (1 confirmed of 7 predicted; 2 unpredicted found) |
 
 ### 8.2 The full libc surface: IMPORTS.md as porter's checklist
 

@@ -521,24 +521,36 @@ void R_InitTextures (void)
 	
 	mtexture = (maptexture_t *) ( (byte *)maptex + offset);
 
-	texture = textures[i] =
-	    Z_Malloc (sizeof(texture_t)
-		      + sizeof(texpatch_t)*(SHORT(mtexture->patchcount)-1),
-		      PU_STATIC, 0);
-	
-	texture->width = SHORT(mtexture->width);
-	texture->height = SHORT(mtexture->height);
-	texture->patchcount = SHORT(mtexture->patchcount);
+	/* Use byte-safe reads: maptex offset may not be 4-byte-aligned, so
+	 * the maptexture_t pointer can be misaligned on strict-alignment
+	 * targets (MIPS, ARM Cortex-M).  read_le16/read_le32 compile to a
+	 * single load on LE hosts (wasm/x86) — output is byte-identical. */
+	{
+	    short pcount = read_le16(&mtexture->patchcount);
+	    texture = textures[i] =
+		Z_Malloc (sizeof(texture_t)
+			  + sizeof(texpatch_t)*(pcount-1),
+			  PU_STATIC, 0);
+	    texture->width = read_le16(&mtexture->width);
+	    texture->height = read_le16(&mtexture->height);
+	    texture->patchcount = pcount;
+	}
 
-	memcpy (texture->name, mtexture->name, sizeof(texture->name));
+	/* memcpy would be optimised into lw (word) loads on MIPS, which SIGBUS on
+	 * a misaligned mtexture pointer.  Copy byte-by-byte to stay safe. */
+	{
+	    int k;
+	    for (k = 0; k < (int)sizeof(texture->name); k++)
+		texture->name[k] = mtexture->name[k];
+	}
 	mpatch = &mtexture->patches[0];
 	patch = &texture->patches[0];
 
 	for (j=0 ; j<texture->patchcount ; j++, mpatch++, patch++)
 	{
-	    patch->originx = SHORT(mpatch->originx);
-	    patch->originy = SHORT(mpatch->originy);
-	    patch->patch = patchlookup[SHORT(mpatch->patch)];
+	    patch->originx = read_le16(&mpatch->originx);
+	    patch->originy = read_le16(&mpatch->originy);
+	    patch->patch = patchlookup[(int)read_le16(&mpatch->patch)];
 	    if (patch->patch == -1)
 	    {
 		I_Error ("R_InitTextures: Missing patch in texture %s",

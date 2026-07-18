@@ -32,7 +32,7 @@ CORE_DIR="$REPO_ROOT/engine/core"
 
 OUT="${1:-$SCRIPT_DIR/fs-doom-be}"
 
-BE_TARGET="powerpc-linux-musleabi"
+BE_TARGET="${BE_TARGET:-powerpc-linux-musleabi}"
 ZIG_CC="zig cc -target $BE_TARGET"
 
 CFLAGS=(

@@ -41,6 +41,24 @@ long	SwapLONG(long);
 #define LONG(x)         (x)
 #endif
 
+// Byte-safe LE reads for strict-alignment targets (ARM Cortex-M, MIPS).
+// On LE hosts (x86, wasm) the compiler optimises b[0]|(b[1]<<8) back to a
+// single 16-bit load — wasm output is byte-identical to a plain dereference.
+// On BE hosts these assemble the value from bytes without issuing an unaligned
+// multi-byte load, avoiding SIGBUS / alignment abort.
+#include <stdint.h>
+static inline int16_t read_le16(const void *p)
+{
+    const uint8_t *b = (const uint8_t *)p;
+    return (int16_t)((uint16_t)b[0] | ((uint16_t)b[1] << 8));
+}
+static inline int32_t read_le32(const void *p)
+{
+    const uint8_t *b = (const uint8_t *)p;
+    return (int32_t)((uint32_t)b[0] | ((uint32_t)b[1] << 8)
+                   | ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24));
+}
+
 
 
 
