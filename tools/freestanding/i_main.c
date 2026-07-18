@@ -41,6 +41,7 @@
 #include "m_argv.h"
 #include "fs_platform.h"
 #include "web.h"
+#include "perf.h" /* fs_perf_instr_fd, web_perf_*_us — for attribution */
 
 extern int prndindex;
 
@@ -209,11 +210,132 @@ static byte* load_wad(const char* path, int* lenout)
 static int sim_trace[MAX_TRACE];
 static int trace_len;
 
-// ── Per-tic instruction counter buffer (WD_CYCLES=1 only) ────────────────────
-static long long tic_instr[MAX_TRACE]; /* per-tic instruction deltas */
+// ── Per-tic instruction counter buffers (WD_CYCLES=1 only) ───────────────────
+// tic_instr: whole-tic instruction deltas (13.1a whole-program floor).
+// tic_*_instr: per-stage deltas (13.1b attribution).  Populated by reading
+//   the stage accumulators (web_perf_*_us) at each tic boundary; these
+//   accumulate instruction deltas when web_perf_now() reads fs_perf_instr_fd.
+// tic_instr_len is the common length for all arrays (incremented once per tic).
+static long long tic_instr[MAX_TRACE];        /* whole-tic instruction deltas */
+static long long tic_sim_instr[MAX_TRACE];    /* sim (G_Ticker) per tic */
+static long long tic_bsp_instr[MAX_TRACE];    /* R_RenderBSPNode per tic */
+static long long tic_planes_instr[MAX_TRACE]; /* R_DrawPlanes per tic */
+static long long tic_masked_instr[MAX_TRACE]; /* R_DrawMasked per tic */
+static long long tic_frame_instr[MAX_TRACE];  /* frame setup per tic */
 static int       tic_instr_len = 0;
 static int       wd_cycles_fd  = -1;  /* perf fd; -1 = not measuring */
 static long long wd_last_count = 0;   /* cumulative count at last tic boundary */
+// Stage accumulator snapshots at the previous tic boundary (for delta).
+static double    snap_sim    = 0;
+static double    snap_bsp    = 0;
+static double    snap_planes = 0;
+static double    snap_masked = 0;
+static double    snap_frame  = 0;
+
+// ── Per-subsystem instruction attribution output (13.1b) ──────────────────────
+// Writes per-stage instruction stats (sim/frame/bsp/planes/masked/other + whole)
+// to -attrib <path>.  Requires WD_CYCLES=1 (otherwise all stages are zero).
+// "other" = whole-program − sum(stages); absorbs inter-bracket overhead.
+// Sorts each per-tic array in-place for p50/p99 (arrays no longer needed after).
+// The "other" array is heap-allocated since MAX_TRACE × 8 B = 2.4 MB on stack.
+// Defined AFTER the static arrays it references (C89 forward-reference rule).
+typedef struct {
+    double    mean;
+    long long p50;
+    long long p99;
+    long long max;
+} attrib_stats_t;
+
+static attrib_stats_t attrib_stats(long long *arr, int n)
+{
+    attrib_stats_t s = {0, 0, 0, 0};
+    long long total = 0;
+    int i;
+    if (n <= 0) return s;
+    for (i = 0; i < n; i++) {
+        if (arr[i] < 0) arr[i] = 0; /* clamp negative (perf read overhead) */
+        total += arr[i];
+        if (arr[i] > s.max) s.max = arr[i];
+    }
+    s.mean = (double)total / n;
+    qsort(arr, (size_t)n, sizeof(long long), cmp_llong);
+    s.p50 = percentile(arr, n, 50);
+    s.p99 = percentile(arr, n, 99);
+    return s;
+}
+
+static void emit_attrib_json(const char *path, int tics, int n)
+{
+    attrib_stats_t sim, bsp, planes, masked, frame, whole, other_s;
+    long long *other_arr;
+    double sum_stages_mean;
+    double delta_pct;
+    FILE *f;
+    int i;
+
+    if (n <= 0 || !path) return;
+
+    /* compute "other" per-tic before sorting destroys index correspondence */
+    other_arr = (long long *)malloc((size_t)n * sizeof(long long));
+    if (!other_arr) {
+        fprintf(stderr, "fs-doom: cannot allocate attribution buffer\n");
+        return;
+    }
+    for (i = 0; i < n; i++) {
+        other_arr[i] = tic_instr[i]
+            - tic_sim_instr[i] - tic_bsp_instr[i]
+            - tic_planes_instr[i] - tic_masked_instr[i]
+            - tic_frame_instr[i];
+    }
+
+    /* compute stats (sorts each array in-place) */
+    whole   = attrib_stats(tic_instr,        n);
+    sim     = attrib_stats(tic_sim_instr,    n);
+    bsp     = attrib_stats(tic_bsp_instr,    n);
+    planes  = attrib_stats(tic_planes_instr, n);
+    masked  = attrib_stats(tic_masked_instr, n);
+    frame   = attrib_stats(tic_frame_instr,  n);
+    other_s = attrib_stats(other_arr,        n);
+    free(other_arr);
+
+    /* reconciliation: by construction sum(stages)+other == whole (per-tic).
+     * Check the mean totals; residual > ~5% warrants a caveat. */
+    sum_stages_mean = sim.mean + bsp.mean + planes.mean
+                    + masked.mean + frame.mean + other_s.mean;
+    delta_pct = (whole.mean > 0)
+        ? (sum_stages_mean - whole.mean) / whole.mean * 100.0
+        : 0.0;
+    if (delta_pct < 0) delta_pct = -delta_pct;
+
+    f = fopen(path, "w");
+    if (!f) {
+        fprintf(stderr, "fs-doom: cannot write attrib output: %s\n", path);
+        return;
+    }
+    fprintf(f,
+        "{\"tics\":%d,"
+        "\"stages\":{"
+          "\"sim\":{\"mean\":%.1f,\"p50\":%lld,\"p99\":%lld,\"max\":%lld},"
+          "\"frame\":{\"mean\":%.1f,\"p50\":%lld,\"p99\":%lld,\"max\":%lld},"
+          "\"bsp\":{\"mean\":%.1f,\"p50\":%lld,\"p99\":%lld,\"max\":%lld},"
+          "\"planes\":{\"mean\":%.1f,\"p50\":%lld,\"p99\":%lld,\"max\":%lld},"
+          "\"masked\":{\"mean\":%.1f,\"p50\":%lld,\"p99\":%lld,\"max\":%lld},"
+          "\"other\":{\"mean\":%.1f,\"p50\":%lld,\"p99\":%lld,\"max\":%lld}"
+        "},"
+        "\"whole\":{\"mean\":%.1f,\"p50\":%lld,\"p99\":%lld,\"max\":%lld},"
+        "\"reconciliation_delta_pct\":%.4f"
+        "}\n",
+        tics,
+        sim.mean,     sim.p50,     sim.p99,     sim.max,
+        frame.mean,   frame.p50,   frame.p99,   frame.max,
+        bsp.mean,     bsp.p50,     bsp.p99,     bsp.max,
+        planes.mean,  planes.p50,  planes.p99,  planes.max,
+        masked.mean,  masked.p50,  masked.p99,  masked.max,
+        other_s.mean, other_s.p50, other_s.p99, other_s.max,
+        whole.mean,   whole.p50,   whole.p99,   whole.max,
+        delta_pct);
+    fclose(f);
+}
 
 // ── main ─────────────────────────────────────────────────────────────────────
 int main(int argc, char** argv)
@@ -221,6 +343,7 @@ int main(int argc, char** argv)
     const char* wad_path   = NULL;
     const char* sim_out    = NULL;
     const char* cycles_out = NULL;
+    const char* attrib_out = NULL; /* 13.1b: per-stage attribution output */
     static const char* fwd[64];
     int   fwd_argc = 0;
     int   i;
@@ -228,7 +351,7 @@ int main(int argc, char** argv)
     int   wad_len;
     byte* wad_data;
 
-    // Peel off the WAD positional arg, -sim, and -cycles flags; forward the rest.
+    // Peel off the WAD positional arg, -sim, -cycles, and -attrib flags; forward the rest.
     for (i = 0; i < argc && fwd_argc < 63; i++) {
         if (i == 0) { fwd[fwd_argc++] = argv[i]; continue; }
         if (strcmp(argv[i], "-sim") == 0 && i + 1 < argc) {
@@ -236,6 +359,9 @@ int main(int argc, char** argv)
         }
         if (strcmp(argv[i], "-cycles") == 0 && i + 1 < argc) {
             cycles_out = argv[++i]; continue;
+        }
+        if (strcmp(argv[i], "-attrib") == 0 && i + 1 < argc) {
+            attrib_out = argv[++i]; continue;
         }
         // First bare positional (non-flag) argument is the WAD path.
         if (argv[i][0] != '-' && wad_path == NULL) {
@@ -271,9 +397,11 @@ int main(int argc, char** argv)
     trace_len            = 0;
     tic_instr_len        = 0;
 
-    // Open instruction counter before init if WD_CYCLES=1 (shim-only, 13.1a).
+    // Open instruction counter before init if WD_CYCLES=1 (shim-only, 13.1a/b).
     // The counter is not started yet (disabled=1); we enable it after D_DoomMain
     // so that init instructions are excluded from the per-tic floor measurement.
+    // 13.1b: after opening, share the fd with perf.c via fs_perf_instr_fd so
+    // that web_perf_now() can read it inside stage brackets (d_main/r_main).
     if (getenv("WD_CYCLES") && getenv("WD_CYCLES")[0] == '1') {
         wd_cycles_fd = wd_perf_open_instructions();
         if (wd_cycles_fd < 0)
@@ -282,6 +410,7 @@ int main(int argc, char** argv)
                             " (<= 2 required for user-space self-measurement)\n",
                     errno);
     }
+    fs_perf_instr_fd = wd_cycles_fd; /* expose to perf.c's web_perf_now() */
 
     if (setjmp(fs_demo_jmp) != 0)
         goto done;
@@ -308,11 +437,27 @@ int main(int argc, char** argv)
             if (trace_len < MAX_TRACE)
                 sim_trace[trace_len++] = fs_state_hash();
 
-            // Record per-tic instruction delta at the same tic boundary.
+            // Record per-tic instruction deltas at the tic boundary (13.1a/b).
+            // All arrays share the same tic_instr_len index.
             if (wd_cycles_fd >= 0 && tic_instr_len < MAX_TRACE) {
                 long long now = wd_perf_read(wd_cycles_fd);
-                tic_instr[tic_instr_len++] = now - wd_last_count;
+                int n = tic_instr_len;
+                tic_instr[n]        = now - wd_last_count;
+                // 13.1b: stage deltas from accumulator snapshots.
+                // web_perf_*_us accumulate instruction deltas (not µs) when
+                // web_perf_now() reads fs_perf_instr_fd (same fd as wd_cycles_fd).
+                tic_sim_instr[n]    = (long long)(web_perf_sim_us    - snap_sim);
+                tic_bsp_instr[n]    = (long long)(web_perf_bsp_us    - snap_bsp);
+                tic_planes_instr[n] = (long long)(web_perf_planes_us - snap_planes);
+                tic_masked_instr[n] = (long long)(web_perf_masked_us - snap_masked);
+                tic_frame_instr[n]  = (long long)(web_perf_frame_us  - snap_frame);
                 wd_last_count = now;
+                snap_sim    = web_perf_sim_us;
+                snap_bsp    = web_perf_bsp_us;
+                snap_planes = web_perf_planes_us;
+                snap_masked = web_perf_masked_us;
+                snap_frame  = web_perf_frame_us;
+                tic_instr_len = n + 1;
             }
 
             last_tic = gametic;
@@ -348,7 +493,16 @@ done:
             }
         }
 
+        // Emit per-subsystem attribution if -attrib was given (13.1b).
+        // MUST be called before emit_cycles_json: both sort tic_instr in-place,
+        // and emit_attrib_json needs the original per-tic order to compute
+        // per-tic "other = whole - sum(stages)" before any sort.
+        if (attrib_out)
+            emit_attrib_json(attrib_out, tics, tic_instr_len);
+
         // Emit per-tic instruction stats if WD_CYCLES=1 and -cycles was given.
+        // If emit_attrib_json already ran, tic_instr is sorted; qsort on a
+        // sorted array is O(n log n) but harmless (stats are the same).
         if (cycles_out)
             emit_cycles_json(cycles_out, tics, tic_instr, tic_instr_len);
 

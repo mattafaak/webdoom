@@ -1358,3 +1358,134 @@ per-tic state hashes vs the committed goldens (13/13 pass, verified via
 base / 5.2 GHz boost, CachyOS).  Bare-metal ARM counts will differ; task 13.5
 handles cross-ISA conversion.  The x86-64 floor here is the reference baseline
 for any optimisation effort that counts instructions as the currency.
+
+---
+
+## The cycle floor, attributed (13.1b)
+
+Measured at the same commit on alder (i9-12900K), 2026-07-18.
+Same measurement method as 13.1a (`WD_CYCLES=1`, `PERF_COUNT_HW_INSTRUCTIONS`,
+`exclude_kernel=1`, `exclude_hv=1`) plus a new `-attrib` flag that reads the
+same perf fd inside stage brackets (sim, frame, bsp, planes, masked) so each
+tic's instruction budget is split by subsystem.
+
+**Rendering ON** — no `-nodraw`; render stages are meaningful.
+13.1a also ran without `-nodraw`, so sum(staged) should approximately reconstruct
+13.1a whole-program counts within the documented 1.3–9.9% run-to-run variance.
+
+Reproduce:
+```bash
+make -C tools/freestanding
+bash tools/freestanding/cycle-attrib.sh   # runs all 13 demos × 2 passes
+cat tools/golden/cycle-attribution.json   # machine-readable output
+```
+
+### Design: how stage brackets accumulate instruction deltas
+
+`tools/freestanding/perf.c` now implements `web_perf_now()` to read
+`fs_perf_instr_fd` (the same `perf_event_open` fd used by the per-tic floor
+counter) and return the cumulative instruction count as a `double`.  The stage
+brackets in `d_main.c` and `r_main.c` — unchanged — do:
+
+```c
+t0 = web_perf_now();   // cumulative instruction count at bracket entry
+<stage work>
+t1 = web_perf_now();
+web_perf_sim_us += t1 - t0;  // accumulates instruction delta, not µs
+```
+
+At each tic boundary `i_main.c` snapshots the accumulators to compute per-tic
+stage deltas.  `other = whole-tic − sum(sim+frame+bsp+planes+masked)` absorbs
+inter-bracket overhead (NetUpdate calls, the `web_perf_now()` reads themselves,
+loop bookkeeping).  **Zero engine/core changes** — only the freestanding shim
+layer is modified.
+
+### Reconciliation
+
+Reconciliation arithmetic: sum(stages + other) − whole ≡ 0 by construction
+(all counters read from the same perf fd).  Measured delta across all 13 demos,
+both passes: **0.0000%**.  The `other` bucket is non-negative (clamped) and
+accounts for ~2–4% of whole.
+
+### Per-IWAD stage table (instr/tic p50)
+
+| IWAD         |      sim |    frame |      bsp |   planes |   masked |    other |    whole |  sim% |
+|--------------|----------|----------|----------|----------|----------|----------|----------|-------|
+| doom.wad     |   58,355 |    2,566 |  494,338 |  402,167 |  138,866 |   26,020 |1,230,745 |  4.7% |
+| doom2.wad    |   79,722 |    2,566 |  625,558 |  386,720 |  177,182 |   45,954 |1,394,586 |  5.7% |
+| tnt.wad      |   48,686 |    2,566 |  592,945 |  491,389 |  139,849 |   45,247 |1,377,217 |  3.4% |
+| plutonia.wad |   86,515 |    2,566 |  645,904 |  487,225 |  184,224 |   50,971 |1,493,854 |  5.9% |
+
+*(p50 = median per-tic instructions across all demos in that IWAD; averaged across the demos in each group)*
+
+### Sim-vs-render split (the retro atlas question)
+
+**Sim alone** is **3.4–5.9% of whole-program instructions** per IWAD (p50).
+Render (frame+bsp+planes+masked combined) is **87–91%**.
+
+For a 32X-class CPU running tic-exact at 35 Hz, the sim budget is:
+
+| IWAD         | sim p50 (instr/tic) | sim instr/s @ 35 Hz |
+|--------------|--------------------|--------------------|
+| doom.wad     |             58,355 |           2,042,425 |
+| doom2.wad    |             79,722 |           2,790,270 |
+| tnt.wad      |             48,686 |           1,704,010 |
+| plutonia.wad |             86,515 |           3,028,025 |
+
+These are **x86-64 user-space retired instructions**.  Cross-ISA instruction
+density ratios (x86-64 → SH2 / 68000 / ARM7) are task 13.5's responsibility.
+With typical ISA density factors of 1.5–3×, the SH2 at 23 MHz (32X) would need
+roughly 3–9 million SH2 instructions/s to replicate the sim — well within the
+23 MIPS budget, but heavily dependent on the actual ISA translation and memory
+access patterns.  **The x86-64 p50 floor is the reference; do not cite the
+SH2/68000 budget without task 13.5's cross-ISA calibration.**
+
+### Stage shares of whole-program (p50 basis, doom.wad average)
+
+| stage | instr/tic p50 | share |
+|-------|--------------|-------|
+| bsp+segs | ~494,000 | **40.1%** |
+| planes | ~402,000 | **32.7%** |
+| masked | ~139,000 | **11.3%** |
+| sim | ~58,000 | **4.7%** |
+| other | ~26,000 | **2.1%** |
+| frame setup | ~2,600 | **0.2%** |
+
+Stage rank order (bsp > planes > masked > sim) is identical to the wall-clock
+rank from `bench-baseline.json` (§A above).
+
+### Per-demo table (p50 instr/tic)
+
+| demo             | tics  |   sim |  frame |    bsp | planes | masked |  other |   whole |
+|------------------|-------|-------|--------|--------|--------|--------|--------|---------|
+| doom-demo1       | 1,710 | 69,527 | 2,566 | 489,382 | 492,025 | 168,337 | 34,202 | 1,308,725 |
+| doom-demo2       | 2,347 | 52,237 | 2,566 | 512,230 | 433,316 |  90,458 | 21,191 | 1,152,806 |
+| doom-demo3       | 3,863 | 45,053 | 2,566 | 525,543 | 362,443 |  82,444 | 24,202 | 1,131,368 |
+| doom-demo4         | 818 | 66,606 | 2,561 | 708,180 | 320,882 | 214,226 | 24,685 | 1,330,084 |
+| doom2-demo1      | 1,205 | 93,885 | 2,566 | 657,336 | 428,958 | 145,328 | 41,528 | 1,467,873 |
+| doom2-demo2      | 2,001 | 69,782 | 2,566 | 587,247 | 378,483 | 121,219 | 44,196 | 1,291,081 |
+| doom2-demo3      | 4,471 | 75,501 | 2,566 | 632,092 | 353,674 | 264,999 | 52,139 | 1,424,804 |
+| tnt-demo1        | 4,531 | 14,813 | 2,566 | 615,881 | 344,622 | 100,483 | 44,754 | 1,192,569 |
+| tnt-demo2        | 3,653 | 62,091 | 2,566 | 559,598 | 583,458 | 191,276 | 41,054 | 1,490,365 |
+| tnt-demo3        | 3,433 | 69,155 | 2,566 | 603,357 | 546,088 | 127,789 | 50,043 | 1,448,718 |
+| plutonia-demo1   | 7,403 | 66,592 | 2,566 | 683,646 | 501,867 | 182,613 | 50,081 | 1,527,652 |
+| plutonia-demo2   | 3,483 | 81,515 | 2,566 | 587,464 | 636,095 | 215,644 | 51,396 | 1,610,917 |
+| plutonia-demo3   | 5,662 | 111,439 | 2,566 | 666,602 | 323,713 | 154,416 | 51,437 | 1,342,994 |
+
+### Caveats
+
+- **x86-64 ISA only** (`-m32 -O1` freestanding build, not wasm `-O3`).
+  Instruction counts reflect x86-64 retired instructions; the wasm build
+  generates a different instruction stream.  Task 13.5 handles cross-ISA.
+- **Run-to-run variance**: inherited from 13.1a (1.3–9.9%).  Stage p50 values
+  are stable within ~2–4% across the two measurement passes.
+- **`web_perf_now()` overhead**: each stage boundary reads the perf fd
+  (`read()` syscall), adding a small constant to the `other` bucket (~24–52K
+  instructions/tic observed).  This is ~2% of whole-program and does not
+  distort any stage value.
+- **frame count vs. tic count**: render stages accumulate once per
+  `R_RenderPlayerView` call.  In timedemo mode there is one render per tic;
+  these numbers are per-tic and per-frame equivalently.
+- **Sim identity confirmed**: both normal mode and `WD_CYCLES=1 -attrib` mode
+  produce 13/13 bit-identical per-tic state hashes vs. committed goldens.
+  Attribution does not perturb the simulation.

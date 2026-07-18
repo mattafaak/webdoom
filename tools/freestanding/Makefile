@@ -109,4 +109,9 @@ cycles: $(OUT)
 cycle-floor: $(OUT)
 	@bash cycle-floor.sh
 
-.PHONY: all check check-all imports clean cycles cycle-floor
+# cycle-attrib: per-subsystem instruction attribution (13.1b).
+# Runs all 13 demos twice with -attrib and emits tools/golden/cycle-attribution.json.
+cycle-attrib: $(OUT)
+	@bash cycle-attrib.sh
+
+.PHONY: all check check-all imports clean cycles cycle-floor cycle-attrib
