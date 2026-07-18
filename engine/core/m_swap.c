@@ -37,7 +37,7 @@ rcsid[] = "$Id: m_bbox.c,v 1.1 1997/02/03 22:45:10 b1 Exp $";
 // Swap 16bit, that is, MSB and LSB byte.
 unsigned short SwapSHORT(unsigned short x)
 {
-    // No masking with 0xFF should be necessary. 
+    // No masking with 0xFF should be necessary.
     return (x>>8) | (x<<8);
 }
 
@@ -52,6 +52,28 @@ unsigned long SwapLONG( unsigned long x)
 }
 
 
-#endif
+#else /* __BIG_ENDIAN__ — byte-swap WAD LE data to native BE order */
+
+/* WAD data is stored little-endian.  On a big-endian CPU the C compiler
+ * reads multi-byte fields with the byte order reversed, so we must swap
+ * them to recover the true LE value.  These functions are called via the
+ * SHORT()/LONG() macros defined in m_swap.h whenever __BIG_ENDIAN__ is set.
+ * Dead code on LE: the macros expand to identity there (9.2b verified). */
+short SwapSHORT(short x)
+{
+    unsigned short v = (unsigned short)x;
+    return (short)((v >> 8) | (v << 8));
+}
+
+long SwapLONG(long x)
+{
+    unsigned long v = (unsigned long)x;
+    return (long)(  ((v >> 24) & 0xffUL)
+                  | ((v >>  8) & 0xff00UL)
+                  | ((v <<  8) & 0xff0000UL)
+                  | ((v << 24) & 0xff000000UL));
+}
+
+#endif /* __BIG_ENDIAN__ */
 
 

@@ -777,6 +777,27 @@ Every map lump read and WAD directory parse goes through `SHORT()` / `LONG()`
    (formats.md §11.4).
 5. The MUS lump header is parsed with explicit `m[4] | (m[5] << 8)` bit
    arithmetic (`mus_opl.c:427–428`) — already endian-safe.
+6. **Force signed `char`** (`-fsigned-char`). Discovered by the trial below:
+   the engine inherits x86's signed-`char` default; PowerPC and ARM ABIs
+   default `char` to **unsigned**, which silently changes demo-byte and
+   table arithmetic. A per-site audit (explicit `signed char` at each use)
+   is future work; until then the flag is a port REQUIREMENT.
+
+> **TESTED — first big-endian execution (task 13.3a, 2026-07-18).** fs-doom
+> cross-built for **powerpc-linux-musleabi** (`zig cc`, static) and run under
+> `qemu-ppc-static`: **13/13 golden demos bit-identical** per-tic. Items 1–2
+> above were exactly sufficient for byte order (implementing the two swaps in
+> `m_swap.c`'s existing `#else` branch); item 3 is moot for read-only WAD
+> residency (13.2c: the BLOCKMAP swap operates on the zone copy, never the
+> blob). Item 6 (char signedness) was the missing doctrine — without
+> `-fsigned-char` the sim diverges at tics 0–25 with NO crash. Notably the
+> §4.1 trig boot-generation survived BE untouched: the armed `TABLES_CRC`
+> FNV-1a gate (defined unconditionally in `tables_fix.h`) verifies the tables
+> are canon on PPC musl — the checksum design did its job across a third
+> libm. Reproduce: `bash tools/freestanding/be-build.sh && bash
+> tools/freestanding/be-check.sh`. **Carry-forward for rung 2 (13.4b): the
+> QEMU ARM baremetal build must also add `-fsigned-char` (ARM defaults
+> unsigned) before demo hashes can match.**
 
 ### 5.2 Alignment — known unaligned access sites
 
@@ -1105,6 +1126,7 @@ diffed from the doc.
 | **§4.1 predicted**: trig tables (`finesine`, `finetangent`, `tantoangle`; 14,336 entries) boot-generated at startup via `sin`, `tan`, `atan` — called once, not in the render loop | **Confirmed.** `sin`, `tan`, `atan` appear as strong undefined symbols (IMPORTS.md category g), called from `tables.c:T_GenerateTables` (invoked by `d_main.c:723`). Zero runtime cost after the one-time fill. | §4.1 prediction correct — no change needed. | held |
 | **Zone: 4 MiB recommended** as credible first-pass minimum (§2.2; perf.md §3: "4–8 MiB first pass") | Rung 1 used **8 MiB** static arena (`ZONESIZE = 8 * 1024 * 1024` in `tools/freestanding/web.h`). All 13 goldens passed. The 4 MiB lower bound was not stress-tested by rung 1. | §7 ESP32 sketch updated to note the 8 MiB rung-1 arena. §2.2 reasoning (3× non-purgeable peak) is unchanged, but 4 MiB remains an untested extrapolation from rung 1's evidence. | gap (not validated) |
 | **§6.2 predicted**: simulation is independent of display and audio; headless bring-up first, display/audio added incrementally | **Confirmed.** 13/13 demos run to completion with `I_FinishUpdate` as a no-op and all sound functions as empty stubs. The freestanding platform layer never touches a display or audio device. | §6.2 prediction validated by rung 1. | held |
+| **§5.1 predicted**: implementing `SwapSHORT`/`SwapLONG` + defining `__BIG_ENDIAN__` suffices for a big-endian port (items 1–2) | **Tested on real BE hardware model (task 13.3a)**: PowerPC/qemu 13/13 bit-identical — but ONLY after adding `-fsigned-char`. The doctrine's swap items were correct and sufficient for byte order; the doctrine was INCOMPLETE — it did not predict the char-signedness dependency (§5.1 item 6, added). | §5.1 gains item 6 + the TESTED banner; §8 records the partial-hold honestly. | held-with-gap (missing char-signedness item) |
 
 ### 8.2 The full libc surface: IMPORTS.md as porter's checklist
 

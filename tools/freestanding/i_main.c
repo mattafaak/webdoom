@@ -43,10 +43,9 @@
 #include "m_argv.h"
 #include "fs_platform.h"
 #include "web.h"
+
+extern int prndindex; /* m_random.c — hashed per tic (fs_state_hash) */
 #include "perf.h" /* fs_perf_instr_fd, web_perf_*_us — for attribution */
-
-extern int prndindex;
-
 // ── Sim hash: identical algorithm to web_state_hash() and nat_state_hash() ───
 // Every field in exactly the same order — required for bit-identical comparison.
 static int fs_state_hash(void)
