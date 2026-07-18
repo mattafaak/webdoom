@@ -337,13 +337,46 @@ static void emit_attrib_json(const char *path, int tics, int n)
     fclose(f);
 }
 
+// ── zone stats emitter (task 13.2b, WEB_PERF_ZONE_STATS only) ────────────────
+// Write render-ON zone HWM + purge-pressure stats to -zonestats output file.
+// Reads the zone stat globals defined in z_zone.c (compiled with the flag).
+#ifdef WEB_PERF_ZONE_STATS
+static void emit_zonestats_json(const char *path, int tics, int zone_bytes)
+{
+    FILE *f;
+    if (!path) return;
+    f = fopen(path, "w");
+    if (!f) {
+        fprintf(stderr, "fs-doom: cannot write zonestats output: %s\n", path);
+        return;
+    }
+    fprintf(f,
+        "{\"tics\":%d,"
+        "\"zone_bytes\":%d,"
+        "\"hwm_total\":%ld,"
+        "\"hwm_nonpurgeable\":%ld,"
+        "\"hwm_purgeable\":%ld,"
+        "\"purge_count\":%ld,"
+        "\"purged_bytes\":%ld"
+        "}\n",
+        tics, zone_bytes,
+        web_perf_zone_hwm_total,
+        web_perf_zone_hwm_np,
+        web_perf_zone_hwm_p,
+        web_perf_zone_purge_count,
+        web_perf_zone_purged_bytes);
+    fclose(f);
+}
+#endif
+
 // ── main ─────────────────────────────────────────────────────────────────────
 int main(int argc, char** argv)
 {
-    const char* wad_path   = NULL;
-    const char* sim_out    = NULL;
-    const char* cycles_out = NULL;
-    const char* attrib_out = NULL; /* 13.1b: per-stage attribution output */
+    const char* wad_path      = NULL;
+    const char* sim_out       = NULL;
+    const char* cycles_out    = NULL;
+    const char* attrib_out    = NULL; /* 13.1b: per-stage attribution output */
+    const char* zonestats_out = NULL; /* 13.2b: zone HWM + purge stats output */
     static const char* fwd[64];
     int   fwd_argc = 0;
     int   i;
@@ -351,7 +384,8 @@ int main(int argc, char** argv)
     int   wad_len;
     byte* wad_data;
 
-    // Peel off the WAD positional arg, -sim, -cycles, and -attrib flags; forward the rest.
+    // Peel off the WAD positional arg, -sim, -cycles, -attrib, and -zonestats
+    // flags; forward the rest.
     for (i = 0; i < argc && fwd_argc < 63; i++) {
         if (i == 0) { fwd[fwd_argc++] = argv[i]; continue; }
         if (strcmp(argv[i], "-sim") == 0 && i + 1 < argc) {
@@ -362,6 +396,9 @@ int main(int argc, char** argv)
         }
         if (strcmp(argv[i], "-attrib") == 0 && i + 1 < argc) {
             attrib_out = argv[++i]; continue;
+        }
+        if (strcmp(argv[i], "-zonestats") == 0 && i + 1 < argc) {
+            zonestats_out = argv[++i]; continue;
         }
         // First bare positional (non-flag) argument is the WAD path.
         if (argv[i][0] != '-' && wad_path == NULL) {
@@ -505,6 +542,13 @@ done:
         // sorted array is O(n log n) but harmless (stats are the same).
         if (cycles_out)
             emit_cycles_json(cycles_out, tics, tic_instr, tic_instr_len);
+
+        // task 13.2b: emit zone HWM + purge-pressure stats if -zonestats given.
+        // Available only when built with -DWEB_PERF_ZONE_STATS.
+#ifdef WEB_PERF_ZONE_STATS
+        if (zonestats_out)
+            emit_zonestats_json(zonestats_out, tics, FS_ZONE_SIZE);
+#endif
 
         fprintf(stderr, "fs-doom: %d gametics, %d trace entries\n",
                 tics, trace_len);

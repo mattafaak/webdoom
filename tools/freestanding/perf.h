@@ -36,4 +36,17 @@ extern int    fs_perf_instr_fd;
 // fs_perf_instr_fd, or 0.0 if no fd is open.
 double web_perf_now(void);
 
+// task 13.2b: render-ON zone HWM + purge-pressure counters.
+// Defined in z_zone.c when compiled with -DWEB_PERF_ZONE_STATS.
+// i_main.c reads them directly at demo end; no EMSCRIPTEN_KEEPALIVE here.
+#ifdef WEB_PERF_ZONE_STATS
+extern long web_perf_zone_live_np;
+extern long web_perf_zone_live_p;
+extern long web_perf_zone_hwm_np;
+extern long web_perf_zone_hwm_p;
+extern long web_perf_zone_hwm_total;
+extern long web_perf_zone_purge_count;
+extern long web_perf_zone_purged_bytes;
+#endif
+
 #endif

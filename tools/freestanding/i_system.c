@@ -42,7 +42,8 @@ void fs_putc(int c)
 // ── (a) MEMORY: static zone arena — NO malloc ────────────────────────────────
 // 8 MiB: well above the 1.36 MiB peak non-purgeable figure from perf.md §2.
 // bare-metal.md §2 recommends 4 MiB minimum; we double it for headroom.
-#define FS_ZONE_SIZE (8 * 1024 * 1024)
+// FS_ZONE_SIZE is defined in fs_platform.h (shared with i_main.c).
+// Override at compile time with -DFS_ZONE_SIZE_OVERRIDE=(N) for zone sweeps.
 static byte fs_arena[FS_ZONE_SIZE];
 
 byte* I_ZoneBase(int* size)

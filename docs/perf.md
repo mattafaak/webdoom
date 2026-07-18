@@ -873,8 +873,72 @@ PU_CACHE use-after-purge.  The purge-pressure hypothesis (recorded above) is now
 falsified for the 13-IWAD attract-demo set: with OOB reads eliminated, 4 MiB passes
 13/13 render goldens pixel-identical.  **The recommended first-pass zone for
 bare-metal bring-up is 4 MiB** (see bare-metal.md §2.2).  A ZONESIZE change in
-the shipping build is a 14.x candidate, pending 13.2b render-ON HWM data to
-quantify the actual purgeable cache peak.
+the shipping build is a 14.x candidate; 13.2b (below) provides the render-ON HWM
+data that quantifies the purgeable cache peak and makes the 4 MiB recommendation
+defensible.
+
+##### Task 13.2b — Render-ON zone HWM + purge pressure (measured 2026-07-18)
+
+Flag-guarded instrumentation (`-DWEB_PERF_ZONE_STATS`) added to `engine/core/z_zone.c`
+tracks live non-purgeable (np) and purgeable (p) bytes at every `Z_Malloc`, `Z_Free`,
+and `Z_ChangeTag` call, plus purge events (PU_CACHE evictions in `Z_Malloc`).
+Vehicle: `tools/freestanding/fs-doom` (render path active, 13/13 golden demos).
+Two passes each at ZONESIZE = 32 MiB (baseline) and 4 MiB (production target).
+Results in `tools/golden/zone-stats.json`.
+
+**Byte-identity proof**: flag-off wasm built from modified source →
+md5 = `5d3464dcf58ced7ca6c1f1a044244393` (shipping) — confirmed.
+
+Reproduce: `bash tools/freestanding/zone-stats.sh`
+
+**Render-ON HWM at 32 MiB zone:**
+
+| demo | tics | hwm_np (MiB) | hwm_p (MiB) | hwm_total (MiB) |
+|------|------|-------------|------------|----------------|
+| doom-demo1 | 1710 | 0.557 | 4.844 | 5.341 |
+| doom-demo2 | 2347 | 0.726 | 4.979 | 5.646 |
+| doom-demo3 | 3863 | 0.683 | 4.859 | 5.479 |
+| doom-demo4 | 818 | 0.533 | 4.833 | 5.310 |
+| doom2-demo1 | 1205 | 0.644 | 7.700 | 8.297 |
+| doom2-demo2 | 2001 | 0.649 | 7.659 | 8.294 |
+| doom2-demo3 | 4471 | 0.663 | 7.759 | 8.357 |
+| tnt-demo1 | 4531 | 0.677 | 9.540 | 10.157 |
+| tnt-demo2 | 3653 | **0.981** | 9.479 | 10.398 |
+| tnt-demo3 | 3433 | 0.912 | **9.632** | **10.485** |
+| plutonia-demo1 | 7403 | 0.793 | 9.012 | 9.740 |
+| plutonia-demo2 | 3483 | 0.717 | 8.946 | 9.605 |
+| plutonia-demo3 | 5662 | 0.801 | 8.904 | 9.655 |
+
+Worst non-purgeable HWM: **0.981 MiB** (tnt-demo2).
+Worst total HWM: **10.485 MiB** (tnt-demo3).
+Zero purge events at 32 MiB (expected — zone is never stressed).
+
+**Purge pressure at 4 MiB zone (13/13 sim hash pass, zero golden divergence):**
+
+| demo | purge_count | purged_bytes (MiB) |
+|------|-------------|-------------------|
+| doom-demo1 | 257 | 1.534 |
+| doom-demo2 | 293 | 2.061 |
+| doom-demo3 | 271 | 1.732 |
+| doom-demo4 | 248 | 1.403 |
+| doom2-demo1 | 756 | 4.624 |
+| doom2-demo2 | 710 | 4.560 |
+| doom2-demo3 | 915 | 4.862 |
+| tnt-demo1 | 1235 | 6.957 |
+| tnt-demo2 | 1306 | 7.183 |
+| tnt-demo3 | 1344 | 7.271 |
+| plutonia-demo1 | **1397** | 7.218 |
+| plutonia-demo2 | 1051 | 6.265 |
+| plutonia-demo3 | 1387 | 7.177 |
+
+Purge range at 4 MiB: **248–1,397 evictions/demo**.
+Determinism: counts identical across both passes for all 13 demos.
+
+**The defensible minimum ZONESIZE is 4 MiB**: non-purgeable render-ON HWM = 0.981 MiB
+(tnt-demo2), purgeable working set peaks at 9.6 MiB at 32 MiB zone but the 4 MiB zone
+sustains 248–1,397 PU_CACHE purges/demo with zero golden divergence across all 13 demos.
+4 MiB is 4.1× the non-purgeable floor, providing adequate PU_CACHE working set for all
+13 golden demos despite aggressive eviction pressure.
 
 **What task 2.5 delivered**:
 - `WEB_ZONE_POOL_SIZE` duplicate removed; `ZONESIZE` is now the single define in

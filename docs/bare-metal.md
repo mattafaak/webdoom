@@ -455,6 +455,14 @@ increase zone size.
 all three gates (sim 13/13, render 13/13, 4-client net) on post-3.2 master —
 see `docs/perf.md` Q2 task 13.2a re-trial subsection for full results.
 
+*Render-ON evidence (task 13.2b, 2026-07-18)*: flag-guarded `z_zone.c`
+instrumentation (`-DWEB_PERF_ZONE_STATS`) measured render-ON HWM via
+`tools/freestanding/fs-doom` over all 13 demos.  Non-purgeable peak:
+**0.981 MiB** (tnt-demo2); total HWM at 32 MiB zone: **10.485 MiB** (tnt-demo3).
+At 4 MiB zone: 248–1,397 PU_CACHE evictions/demo, 13/13 sim hashes identical,
+counts deterministic across two passes.  The 4 MiB "credible minimum" is now
+a measured floor, not an estimate.  Full data: `tools/golden/zone-stats.json`.
+
 ### 2.3 WAD residency strategies
 
 w_wad.c's lump access pattern: `W_CacheLumpNum(lump, tag)` is called

@@ -25,6 +25,21 @@
 #include "i_system.h"
 #include "doomdef.h"
 
+// task 13.2b: render-ON zone HWM + purge-pressure counters.
+// All variables and tracking code are compiled only when -DWEB_PERF_ZONE_STATS
+// is set; the default build is byte-identical to shipping.
+// Declared extern in engine/web/perf.h and tools/freestanding/perf.h so that
+// getters (wasm) and i_main.c shim (fs-doom) can harvest them.
+#ifdef WEB_PERF_ZONE_STATS
+long web_perf_zone_live_np     = 0; // current non-purgeable live bytes (tag < PU_PURGELEVEL)
+long web_perf_zone_live_p      = 0; // current purgeable live bytes (tag >= PU_PURGELEVEL)
+long web_perf_zone_hwm_np      = 0; // peak non-purgeable live bytes ever seen
+long web_perf_zone_hwm_p       = 0; // peak purgeable live bytes ever seen
+long web_perf_zone_hwm_total   = 0; // peak total (np + p) live bytes ever seen
+long web_perf_zone_purge_count  = 0; // Z_Malloc PU_CACHE evictions (purge events)
+long web_perf_zone_purged_bytes = 0; // total bytes evicted by purge events
+#endif
+
 
 //
 // ZONE MEMORY ALLOCATION
@@ -105,13 +120,23 @@ void Z_Free (void* ptr)
     {
 	// smaller values are not pointers
 	// Note: OS-dependend?
-	
+
 	// clear the user's mark
 	*block->user = 0;
     }
 
+    // task 13.2b: update live-byte counters before clearing the tag.
+#ifdef WEB_PERF_ZONE_STATS
+    if (block->user) {
+        if (block->tag >= PU_PURGELEVEL)
+            web_perf_zone_live_p -= block->size;
+        else
+            web_perf_zone_live_np -= block->size;
+    }
+#endif
+
     // mark as free
-    block->user = NULL;	
+    block->user = NULL;
     block->tag = 0;
     block->id = 0;
 	
@@ -206,6 +231,12 @@ Z_Malloc
 
 		// the rover can be the base block
 		base = base->prev;
+		// task 13.2b: count purge events (PU_CACHE evictions by Z_Malloc).
+		// Capture size before Z_Free; Z_Free will decrement live_p.
+#ifdef WEB_PERF_ZONE_STATS
+		web_perf_zone_purge_count++;
+		web_perf_zone_purged_bytes += rover->size;
+#endif
 		Z_Free ((byte *)rover+sizeof(memblock_t));
 		base = base->next;
 		rover = base->next;
@@ -252,9 +283,28 @@ Z_Malloc
     }
     base->tag = tag;
 
+    // task 13.2b: update live-byte counters and HWMs after allocation.
+#ifdef WEB_PERF_ZONE_STATS
+    {
+	long total;
+	if (tag >= PU_PURGELEVEL) {
+	    web_perf_zone_live_p += base->size;
+	    if (web_perf_zone_live_p > web_perf_zone_hwm_p)
+		web_perf_zone_hwm_p = web_perf_zone_live_p;
+	} else {
+	    web_perf_zone_live_np += base->size;
+	    if (web_perf_zone_live_np > web_perf_zone_hwm_np)
+		web_perf_zone_hwm_np = web_perf_zone_live_np;
+	}
+	total = web_perf_zone_live_np + web_perf_zone_live_p;
+	if (total > web_perf_zone_hwm_total)
+	    web_perf_zone_hwm_total = total;
+    }
+#endif
+
     // next allocation will start looking here
-    mainzone->rover = base->next;	
-	
+    mainzone->rover = base->next;
+
     base->id = ZONEID;
     
     return (void *) ((byte *)base + sizeof(memblock_t));
@@ -340,6 +390,29 @@ Z_ChangeTag2
 
     if (tag >= PU_PURGELEVEL && (unsigned)block->user < 0x100)
 	I_Error ("Z_ChangeTag: an owner is required for purgable blocks");
+
+    // task 13.2b: keep np/p live split accurate when a block changes category.
+#ifdef WEB_PERF_ZONE_STATS
+    if (block->user) {
+	int was_p  = (block->tag >= PU_PURGELEVEL);
+	int will_p = (tag        >= PU_PURGELEVEL);
+	if (was_p != will_p) {
+	    if (was_p) {
+		/* purgeable -> non-purgeable */
+		web_perf_zone_live_p  -= block->size;
+		web_perf_zone_live_np += block->size;
+		if (web_perf_zone_live_np > web_perf_zone_hwm_np)
+		    web_perf_zone_hwm_np = web_perf_zone_live_np;
+	    } else {
+		/* non-purgeable -> purgeable */
+		web_perf_zone_live_np -= block->size;
+		web_perf_zone_live_p  += block->size;
+		if (web_perf_zone_live_p > web_perf_zone_hwm_p)
+		    web_perf_zone_hwm_p = web_perf_zone_live_p;
+	    }
+	}
+    }
+#endif
 
     block->tag = tag;
 }

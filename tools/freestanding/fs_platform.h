@@ -15,6 +15,17 @@ extern volatile int fs_timedemo_active;
 extern volatile int fs_timedemo_gametics;
 extern jmp_buf      fs_demo_jmp;
 
+// ── Zone arena size ──────────────────────────────────────────────────────────
+// task 13.2b: FS_ZONE_SIZE is defined here so both i_system.c (which allocates
+// the arena) and i_main.c (which reports it in -zonestats output) see the same
+// value.  Override at compile time with -DFS_ZONE_SIZE_OVERRIDE=(N) to sweep
+// different zone sizes without editing source (used by zone-stats.sh).
+#ifdef FS_ZONE_SIZE_OVERRIDE
+#define FS_ZONE_SIZE FS_ZONE_SIZE_OVERRIDE
+#else
+#define FS_ZONE_SIZE (8 * 1024 * 1024)
+#endif
+
 // ── The byte-out primitive (rung-1: write(1,...)) ────────────────────────────
 // All platform payload output funnels through fs_putc.
 // In rung 2 (bare-metal), replace the body with a UART/SWO write.

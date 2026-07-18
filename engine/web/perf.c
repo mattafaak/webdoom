@@ -191,3 +191,29 @@ EMSCRIPTEN_KEEPALIVE int web_heap_base (void)
 {
     return (int) &__heap_base;
 }
+
+// --- task 13.2b: zone HWM + purge-pressure getters ---
+// Compiled only when z_zone.c is built with -DWEB_PERF_ZONE_STATS.
+// The default wasm build (no flag) omits all code here → byte-identical binary.
+#ifdef WEB_PERF_ZONE_STATS
+EMSCRIPTEN_KEEPALIVE long web_perf_zone_hwm_np_get (void)
+{
+    return web_perf_zone_hwm_np;
+}
+EMSCRIPTEN_KEEPALIVE long web_perf_zone_hwm_p_get (void)
+{
+    return web_perf_zone_hwm_p;
+}
+EMSCRIPTEN_KEEPALIVE long web_perf_zone_hwm_total_get (void)
+{
+    return web_perf_zone_hwm_total;
+}
+EMSCRIPTEN_KEEPALIVE long web_perf_zone_purge_count_get (void)
+{
+    return web_perf_zone_purge_count;
+}
+EMSCRIPTEN_KEEPALIVE long web_perf_zone_purged_bytes_get (void)
+{
+    return web_perf_zone_purged_bytes;
+}
+#endif

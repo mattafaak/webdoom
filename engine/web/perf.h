@@ -42,6 +42,25 @@ extern long web_perf_teleport_calls; // successful player teleports per demo
 // p_map.c is compiled with -DWEB_PERF_SPECHIT_STATS.
 extern long web_perf_spechit_peak; // peak numspechit observed in any tic
 
+// task 13.2b: render-ON zone HWM + purge-pressure counters.
+// Defined in z_zone.c when compiled with -DWEB_PERF_ZONE_STATS; absent
+// otherwise so the default build is byte-identical to shipping.
+// Getters (EMSCRIPTEN_KEEPALIVE) are defined in perf.c under the same guard.
+#ifdef WEB_PERF_ZONE_STATS
+extern long web_perf_zone_live_np;      // current non-purgeable live bytes
+extern long web_perf_zone_live_p;       // current purgeable live bytes
+extern long web_perf_zone_hwm_np;       // HWM non-purgeable
+extern long web_perf_zone_hwm_p;        // HWM purgeable
+extern long web_perf_zone_hwm_total;    // HWM total (np + p)
+extern long web_perf_zone_purge_count;  // Z_Malloc PU_CACHE evictions
+extern long web_perf_zone_purged_bytes; // total bytes evicted
+long web_perf_zone_hwm_np_get (void);
+long web_perf_zone_hwm_p_get (void);
+long web_perf_zone_hwm_total_get (void);
+long web_perf_zone_purge_count_get (void);
+long web_perf_zone_purged_bytes_get (void);
+#endif
+
 // High-resolution µs timestamp.  Wraps emscripten_get_now() * 1000.
 // Defined in perf.c so core files need not include <emscripten.h>.
 double web_perf_now (void);
