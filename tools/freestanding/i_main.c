@@ -648,6 +648,9 @@ done:
 #ifdef WEB_PERF_DRAWSEG_STATS
         fprintf(stderr, "drawseg_peak: %ld\n", web_perf_drawseg_peak);
 #endif
+#ifdef WEB_PERF_OPENINGS_STATS
+        fprintf(stderr, "opening_peak: %ld\n", web_perf_opening_peak);
+#endif
         return 0;
     }
 }

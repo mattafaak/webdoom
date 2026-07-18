@@ -91,6 +91,7 @@ long web_perf_findplane_calls = 0;
 long web_perf_findplane_iters = 0;
 long web_perf_visplane_peak = 0;
 long web_perf_drawseg_peak = 0;  /* task 14.2e: peak drawsegs, updated by r_bsp.c */
+long web_perf_opening_peak = 0; /* task 14.2f: peak openings, updated by r_plane.c */
 
 EMSCRIPTEN_KEEPALIVE long web_perf_findplane_calls_get (void)
 {
@@ -110,6 +111,11 @@ EMSCRIPTEN_KEEPALIVE long web_perf_visplane_peak_get (void)
 EMSCRIPTEN_KEEPALIVE long web_perf_drawseg_peak_get (void)
 {
     return web_perf_drawseg_peak;
+}
+
+EMSCRIPTEN_KEEPALIVE long web_perf_opening_peak_get (void)
+{
+    return web_perf_opening_peak;
 }
 
 // task 6.2: teleport + spechit counters.
@@ -148,6 +154,7 @@ EMSCRIPTEN_KEEPALIVE void web_perf_reset (void)
     web_perf_findplane_iters = 0;
     web_perf_visplane_peak = 0;
     web_perf_drawseg_peak = 0;
+    web_perf_opening_peak = 0;
     web_perf_teleport_calls = 0;
     web_perf_spechit_peak = 0;
 }

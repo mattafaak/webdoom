@@ -407,7 +407,7 @@ sprites (r_segs.c:734-743).
 ### 4.3 `openings[]` — shared clip-array pool
 
 ```c
-#define MAXOPENINGS  SCREENWIDTH*256   // webdoom: was *64
+#define MAXOPENINGS  SCREENWIDTH*64   // vanilla; was *64; webdoom raised to *256, reverted 14.2f (peak 2527)
 short openings[MAXOPENINGS];
 short* lastopening;
 ```
@@ -418,11 +418,12 @@ or `maskedtexturecol` carves out a slice of `openings[]` via `lastopening`
 (r_segs.c:611, 721-732). The pointer is bumped but never freed within a frame
 (reset to `openings` at `R_ClearPlanes`, r_plane.c:198).
 
-Vanilla MAXOPENINGS was `SCREENWIDTH*64 = 20480`. Webdoom raises it to
-`SCREENWIDTH*256 = 81920`. Overflow is detected only in `RANGECHECK` mode
-(r_plane.c:384-387); in a release build, `lastopening` would write past the
-array end silently. The 4× increase covers complex maps with many two-sided
-lines.
+Vanilla MAXOPENINGS is `SCREENWIDTH*64 = 20480`. Webdoom raised it to
+`SCREENWIDTH*256 = 81920` as a robustness measure, then reverted to vanilla
+in task 14.2f after measuring peak usage of 2527 across the 13-demo corpus
+(8.1× margin). Overflow is guarded in r_segs.c (fail-soft: drops masked
+midtex or clears silhouette bit rather than writing past array end).
+The RANGECHECK path (r_plane.c:384-387) still I_Errors on overflow in debug builds.
 
 ### 4.4 `R_RenderSegLoop` — the inner wall draw
 
@@ -1010,7 +1011,7 @@ upper sky texture.
 | `MAXDRAWSEGS` | 256 | 256 | r_defs.h:55 | see below | see below (reverted to vanilla 14.2e; peak 205 across 13 demos) |
 | `MAXVISSPRITES` | 128 | 1024 | r_things.h:31 | `overflowsprite` silent | same |
 | `MAXSEGS` (solidsegs) | 32 | 64 | r_bsp.c:88 | silent array overwrite | silent array overwrite |
-| `MAXOPENINGS` | SCREENWIDTH×64 = 20480 | SCREENWIDTH×256 = 81920 | r_plane.c:59 | `I_Error` only in RANGECHECK build | same |
+| `MAXOPENINGS` | SCREENWIDTH×64 = 20480 | SCREENWIDTH×64 = 20480 (reverted 14.2f; peak 2527/20480 = 8.1× margin) | r_plane.h:36 | `I_Error` only in RANGECHECK build; r_segs.c guards fail-soft | same |
 
 **MAXDRAWSEGS overflow detail**: `R_StoreWallRange` checks
 `if (ds_p == &drawsegs[MAXDRAWSEGS]) return;` (r_segs.c:386) — it silently

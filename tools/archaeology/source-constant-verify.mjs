@@ -58,8 +58,8 @@ const claims = [
           return /was\s+\*64/.test(t) ? 320 * 64 : null;
       }},
 
-    { id: 'rdr-004', desc: 'MAXOPENINGS webdoom (SCREENWIDTH×256) = 81920',
-      expected: 81920,
+    { id: 'rdr-004', desc: 'MAXOPENINGS webdoom (SCREENWIDTH×64) = 20480 (reverted to vanilla, task 14.2f)',
+      expected: 20480,
       verify: () => grabDefine('engine/core/r_plane.h', 'MAXOPENINGS') },
 
     { id: 'rdr-005', desc: 'MAXVISPLANES vanilla = 128',

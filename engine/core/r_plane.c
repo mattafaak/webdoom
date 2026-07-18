@@ -62,6 +62,23 @@ rcsid[] = "$Id: r_plane.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 #define PERF_PLANE_PEAK()  ((void)0)
 #endif
 
+// webdoom task 14.2f: openings peak counter.
+// Compile with -DWEB_PERF_OPENINGS_STATS to enable; zero overhead otherwise.
+// Guard lastopening != NULL: first frame lastopening is 0 (uninitialised global) — skip.
+#ifdef WEB_PERF_OPENINGS_STATS
+#ifndef WEB_PERF_PLANE_STATS
+#include "perf.h"
+#endif
+#define PERF_OPENING_PEAK() do { \
+    if (lastopening) { \
+        long _n = (long)(lastopening - openings); \
+        if (_n > web_perf_opening_peak) web_perf_opening_peak = _n; \
+    } \
+} while (0)
+#else
+#define PERF_OPENING_PEAK() ((void)0)
+#endif
+
 
 planefunction_t		floorfunc;
 planefunction_t		ceilingfunc;
@@ -215,6 +232,9 @@ void R_ClearPlanes (void)
     // webdoom task 2.3: record peak visplane count from the just-completed
     // frame before the array is reset.  No-op in unflagged builds.
     PERF_PLANE_PEAK();
+    // webdoom task 14.2f: record peak openings usage from the just-completed
+    // frame before lastopening is reset.  No-op in unflagged builds.
+    PERF_OPENING_PEAK();
 
     // opening / clipping determination
     for (i=0 ; i<viewwidth ; i++)

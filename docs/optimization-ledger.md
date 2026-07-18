@@ -191,18 +191,45 @@ Render golden divergence would have been the overflow signal (silent drop, not c
 
 | field | value |
 |-------|-------|
-| **mechanism** | Reduce `MAXOPENINGS` in `engine/core/r_plane.h` from `SCREENWIDTH*256` (81,920 shorts = **160 KiB**) to vanilla's `SCREENWIDTH*64` (20,480 shorts = 40 KiB). **Savings: 120 KiB BSS**. `openings[]` is written during `R_StoreWallRange` as clipping bounds for masked sprites; usage is bounded by the number of visible wall segs × height. `__heap_base` shifts; render golden regold required. NOTE: peak openings usage was NOT instrumented in task 2.3 (only visplane count was measured). |
+| **mechanism** | Reduce `MAXOPENINGS` in `engine/core/r_plane.h` from `SCREENWIDTH*256` (81,920 shorts = **160 KiB**) to vanilla's `SCREENWIDTH*64` (20,480 shorts = 40 KiB). **Savings: 120 KiB BSS**. `openings[]` is written during `R_StoreWallRange` as clipping bounds for masked sprites; usage is bounded by the number of visible wall segs × height. |
 | **predicted Δinstr/tic** | 0. Static array. |
 | **axis** | RAM / portability |
 | **magic-data policy** | None. **COMPLIES.** |
-| **kill rule** | `lastopening - openings > MAXOPENINGS` overflow guard fires on any 13 golden demos = kill. **Measure-first sub-step required**: instrument peak openings usage before downsize (analogous to what 2.3 did for visplanes). |
+| **kill rule** | `lastopening - openings > MAXOPENINGS` overflow guard fires on any 13 golden demos = kill. Kill rule NOT triggered (see measurements below). |
+| **overflow behavior at ×64** | r_segs.c guards check `lastopening - openings + needed <= MAXOPENINGS` before each write. On overflow: (1) masked midtex dropped (maskedtexture=false), (2) sprtopclip nulled + SIL_TOP cleared, (3) sprbottomclip nulled + maskedtexture cleared. All fail-soft, demo-neutral. Deviates from vanilla: vanilla's RANGECHECK I_Error is a debug-only check; shipping vanilla has no guard at all (silent OOB write). webdoom's r_segs.c guards are strictly safer than vanilla's shipping behavior. |
 
-**Verdict: SURVIVES → task 14.2f (with measure-first sub-step)**
+**Measurements (task 14.2f, -DWEB_PERF_OPENINGS_STATS, 13-demo corpus):**
 
-Notes: The expansion from *64 to *256 (perf.md §1035: "was raised from SCREENWIDTH×64 to
-SCREENWIDTH×256 in webdoom") was a robustness measure. Reverting to *64 requires first
-instrumenting peak usage to confirm 64× coverage is sufficient for the 13-demo corpus. The
-overflow guards in r_segs.c (lines 630, 750, 770 per grep output) make this testable.
+| demo | opening_peak |
+|------|-------------|
+| doom-demo1 | 1,912 |
+| doom-demo2 | 906 |
+| doom-demo3 | 1,400 |
+| doom-demo4 | 2,455 |
+| doom2-demo1 | 1,636 |
+| doom2-demo2 | 1,373 |
+| doom2-demo3 | 1,984 |
+| tnt-demo1 | 1,783 |
+| tnt-demo2 | 1,220 |
+| tnt-demo3 | **2,527** ← corpus max |
+| plutonia-demo1 | 2,432 |
+| plutonia-demo2 | 1,954 |
+| plutonia-demo3 | 2,463 |
+
+**Corpus max: 2,527 / 20,480 limit = 8.1× margin. Kill rule not triggered. Downsize proceeds.**
+
+Margin-flag protocol: flag only if corpus max > ~13,650 (1.5× of 20,480). 2,527 << 13,650 — no flag needed.
+
+**Verdict: LANDED (14.2f)**
+
+BSS savings: (81,920 − 20,480) × 2 B = 122,880 B = **120 KiB exactly**.
+`__heap_base`: see commit message for before/after values.
+13/13 render goldens pass UNREGOLDED (consistent with 14.2d and 14.2e patterns).
+
+Notes: The expansion from *64 to *256 was a robustness measure applied before task 2.3.
+Peak measurement shows vanilla's *64 has 8.1× headroom over the 13-demo corpus.
+Overflow guards in r_segs.c (fail-soft) are the correct failure surface at *64 —
+strictly safer than vanilla's shipping behavior (no guard at all).
 
 ---
 
@@ -385,7 +412,7 @@ sanctioned by policy).**
 | C3 | ZONESIZE 32→4 MiB shipping | RAM | 0 instr/tic; -28 MiB zone pool; 64→32 MiB INITIAL_MEMORY | LANDED (14.2c) |
 | C4 | MAXVISPLANES 1024→128 | RAM / portability | 0 instr/tic; 581 KiB BSS savings (896 × 664 bytes) | LANDED (14.2d) |
 | C5 | MAXDRAWSEGS 2048→256 | RAM / portability | 0 instr/tic; 84 KiB BSS savings (1792 × 48 B); peak 205/256 ⚠️ thin 1.25× | LANDED — 14.2e |
-| C6 | MAXOPENINGS 320×256→320×64 | RAM / portability | 0 instr/tic; 120 KiB BSS savings (61,440 × 2 bytes) | SURVIVES → 14.2f (measure-first) |
+| C6 | MAXOPENINGS 320×256→320×64 | RAM / portability | 0 instr/tic; 120 KiB BSS savings (61,440 × 2 bytes); peak 2,527/20,480 = 8.1× margin | LANDED — 14.2f |
 | C7 | STACK_SIZE 4→1 MiB (bare-metal builds) | RAM / portability | 0 instr/tic; -3 MiB per build | SURVIVES → 14.2g |
 | K1 | R_DrawSpan u32 packing | cycle-floor | wbox +7.9% planes REGRESSION | KILLED |
 | K2 | wasm SIMD | cycle-floor | no gather in v128 | KILLED |

@@ -28,6 +28,7 @@ extern long   web_perf_findplane_calls;
 extern long   web_perf_findplane_iters;
 extern long   web_perf_visplane_peak;
 extern long   web_perf_drawseg_peak;    /* task 14.2e: peak drawsegs used in any frame */
+extern long   web_perf_opening_peak;   /* task 14.2f: peak openings used in any frame */
 
 // Instruction-counter fd shared between perf.c and i_main.c.
 // Set to the perf_event_open fd by i_main.c when WD_CYCLES=1; -1 otherwise.

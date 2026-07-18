@@ -141,7 +141,7 @@
     "rdr-004": {
       "family": "source-constant",
       "command": "node tools/archaeology/source-constant-verify.mjs",
-      "expected": "81920",
+      "expected": "20480",
       "status": "verified"
     },
     "rdr-005": {
@@ -964,21 +964,21 @@
     "size-001": {
       "family": "size-ledger",
       "command": "node tools/archaeology/size-ledger.mjs",
-      "expected": "356211",
+      "expected": "356216",
       "status": "verified",
-      "notes": "doom.wasm raw bytes at task 14.2e base. Hard budget ceiling enforced by size-ledger.mjs: FAIL if actual > doom_wasm_raw_budget in tools/archaeology/size-budget.json (360,448 B = 352 KiB). Expected here is the documented baseline; the gate is budget-relative, not exact-match. Note: BSS reduction (MAXDRAWSEGS 2048\u2192256) does not shrink wasm binary; __heap_base shifts -86,016 B but wasm data section unchanged."
+      "notes": "doom.wasm raw bytes at task 14.2f base (+5 B from web_perf_opening_peak_get getter vs 14.2e 356,211 B). Hard budget ceiling enforced by size-ledger.mjs: FAIL if actual > doom_wasm_raw_budget in tools/archaeology/size-budget.json (360,448 B = 352 KiB). Expected here is the documented baseline; the gate is budget-relative, not exact-match. Note: BSS reduction (MAXOPENINGS *256->*64) does not shrink wasm binary; __heap_base shifts -122,880 B."
     },
     "size-002": {
       "family": "size-ledger",
       "command": "node tools/archaeology/size-ledger.mjs",
-      "expected": "146352",
+      "expected": "146358",
       "status": "verified",
-      "notes": "doom.wasm gzip-9 bytes at task 14.2e base. Soft/informational \u2014 no hard ceiling. Tracked as a trend metric; drift is expected across commits. Expected here is the documented baseline."
+      "notes": "doom.wasm gzip-9 bytes at task 14.2f base (146,358 B; was 146,352 B at 14.2e base). Soft/informational \u2014 no hard ceiling. Tracked as a trend metric; drift is expected across commits. Expected here is the documented baseline."
     },
     "size-003": {
       "family": "size-ledger",
       "command": "node tools/archaeology/size-ledger.mjs",
-      "expected": "294721",
+      "expected": "294785",
       "status": "verified",
       "notes": "fs-doom .text bytes from tools/freestanding/fs-doom (locally built native i386 ELF; gitignored build product, NOT committed \u2014 see tools/freestanding/.gitignore). Soft/best-effort \u2014 no hard ceiling; size-ledger SKIPs when the binary is absent. Expected measured from a fresh make at task 14.3 base (31e436a): .text 294,721 B. Cross-check: this binary\u2019s .bss is exactly 594,944 B smaller than a pre-14.2d build \u2014 the 14.2d visplanes delta."
     },
