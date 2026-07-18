@@ -99,4 +99,14 @@ imports: $(OUT)
 clean:
 	rm -rf obj $(OUT) $(OUT_DIR)
 
-.PHONY: all check check-all imports clean
+# cycles: the same binary as 'all'; instruction counting is activated at
+# runtime by setting WD_CYCLES=1 and passing -cycles <out.json>.
+# cycle-floor.sh runs all 13 golden demos through the counting build and emits
+# tools/golden/cycle-floor.json with per-demo instruction stats.
+cycles: $(OUT)
+	@echo "Built $(OUT) — run with WD_CYCLES=1 -cycles <out.json> to measure."
+
+cycle-floor: $(OUT)
+	@bash cycle-floor.sh
+
+.PHONY: all check check-all imports clean cycles cycle-floor

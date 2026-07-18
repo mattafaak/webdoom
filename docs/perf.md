@@ -1282,3 +1282,79 @@ node tools/demo-test.mjs                 # 13/13 must pass
 # render gate
 node tools/demo-test.mjs --render        # 13/13 must pass
 ```
+
+---
+
+## The cycle floor (13.1a)
+
+Measured at commit 689dac8 (master after task 12.2b), 2026-07-17, on alder
+(i9-12900K).  All numbers are **user-space retired x86-64 instructions**
+(`PERF_COUNT_HW_INSTRUCTIONS`, `exclude_kernel=1`, `exclude_hv=1`) measured by
+the freestanding `fs-doom` binary with `WD_CYCLES=1` environment variable.
+Cross-ISA conversion factors (arm64, riscv, etc.) are task 13.5's job —
+NOT claimed here.
+
+Reproduce:
+```bash
+make -C tools/freestanding
+bash tools/freestanding/cycle-floor.sh   # runs all 13 demos × 2 passes
+cat tools/golden/cycle-floor.json        # machine-readable output
+```
+
+### Per-IWAD headline (mean instr/tic, averaged over all demos for that IWAD)
+
+| IWAD         | mean instr/tic | worst-demo p99 | max variance |
+|--------------|----------------|----------------|-------------|
+| doom.wad     |      1,218,022 |      2,693,222 |       8.1%  |
+| doom2.wad    |      1,305,794 |      2,303,684 |       6.6%  |
+| tnt.wad      |      1,307,707 |      2,441,358 |       3.6%  |
+| plutonia.wad |      1,353,868 |      2,471,568 |       9.9%  |
+
+**Worst-case demo**: `doom-demo4` — p99 = **2,693,222 instr/tic**
+
+### Per-demo table (mean of 2 passes, p50 / p99 / max from averaged pass data)
+
+| demo             | tics  |    mean |     p50 |     p99 |      max |  var% |
+|------------------|-------|---------|---------|---------|----------|-------|
+| doom-demo1       | 1,710 | 1,126,482 | 1,288,509 | 1,720,210 |  6,201,113 |  5.1% |
+| doom-demo2       | 2,347 | 1,100,697 | 1,150,277 | 1,920,401 | 26,862,640 |  2.3% |
+| doom-demo3       | 3,863 | 1,108,430 | 1,149,976 | 1,760,500 | 31,182,732 |  8.1% |
+| doom-demo4       |   818 | 1,536,480 | 1,336,799 | 2,693,222 | 27,582,008 |  4.3% |
+| doom2-demo1      | 1,205 | 1,348,071 | 1,466,177 | 1,826,212 | 31,492,490 |  5.3% |
+| doom2-demo2      | 2,001 | 1,185,939 | 1,291,713 | 2,000,047 | 15,120,135 |  1.8% |
+| doom2-demo3      | 4,471 | 1,383,371 | 1,430,090 | 2,303,684 | 23,584,551 |  6.6% |
+| tnt-demo1        | 4,531 | 1,168,582 | 1,212,116 | 1,880,404 | 10,991,660 |  1.4% |
+| tnt-demo2        | 3,653 | 1,383,215 | 1,461,143 | 2,157,134 | 18,396,296 |  2.2% |
+| tnt-demo3        | 3,433 | 1,371,324 | 1,462,298 | 2,441,358 |  9,620,990 |  3.6% |
+| plutonia-demo1   | 7,403 | 1,429,655 | 1,506,502 | 2,471,568 | 42,146,942 |  1.3% |
+| plutonia-demo2   | 3,483 | 1,346,436 | 1,555,838 | 2,136,296 | 16,189,345 |  9.9% |
+| plutonia-demo3   | 5,662 | 1,285,514 | 1,345,960 | 2,153,451 | 37,330,560 |  3.6% |
+
+### Variance note (honest, do not hide)
+
+The expectation for hardware instruction counters was < 1% run-to-run
+variance.  **Actual variance: 1.3% – 9.9%**, averaging ~4.7% across the corpus.
+
+The likely cause is that `PERF_COUNT_HW_INSTRUCTIONS` with `exclude_kernel=1`
+counts user-space instructions including OS-serviced paths that run in user
+mode (vDSO `clock_gettime()` calls from DOOM's `I_GetTime()` timing loop,
+user-space portions of context-switch return, etc.).  DOOM's `TryRunTics()`
+calls `I_GetTime()` once per frame even in timedemo mode; when the machine is
+under load these calls can accumulate extra iterations of the OS-determined
+waiting path.
+
+**Consequence**: use p50 (the median per-tic delta) as the more stable metric
+rather than mean.  p50 values are consistent within 1-3% across the two passes
+(verified in `tools/golden/cycle-floor.json`, `pass1` vs `pass2` fields).
+The `max` values in the table represent single tics with unusually heavy work
+(level-load boundary frames or AI state transitions) and should not be used as
+a steady-state floor.
+
+**Sim identity**: all 13 demos ran with `WD_CYCLES=1` and produced bit-identical
+per-tic state hashes vs the committed goldens (13/13 pass, verified via
+`run-check.sh`).  The instruction-counting path does not perturb the simulation.
+
+**Machine note**: these numbers are on alder (i9-12900K, P-core, 3.6 GHz
+base / 5.2 GHz boost, CachyOS).  Bare-metal ARM counts will differ; task 13.5
+handles cross-ISA conversion.  The x86-64 floor here is the reference baseline
+for any optimisation effort that counts instructions as the currency.

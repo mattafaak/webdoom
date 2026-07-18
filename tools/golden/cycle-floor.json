@@ -1,0 +1,351 @@
+{
+  "schema": "cycle-floor.v1",
+  "generated": "tools/freestanding/cycle-floor.sh",
+  "arch": "x86-64 (user-space retired instructions; PERF_COUNT_HW_INSTRUCTIONS)",
+  "note": "Cross-ISA conversion factors are task 13.5's job \u2014 NOT claimed here.",
+  "passes": 2,
+  "max_variance_pct": 9.857,
+  "worst_demo": "doom-demo4",
+  "worst_p99": 2693222,
+  "per_iwad": {
+    "doom.wad": {
+      "demos_measured": 4,
+      "mean_instr_per_tic": 1218022.4,
+      "worst_p99": 2693222,
+      "max_variance_pct": 8.076
+    },
+    "doom2.wad": {
+      "demos_measured": 3,
+      "mean_instr_per_tic": 1305793.7,
+      "worst_p99": 2303684,
+      "max_variance_pct": 6.641
+    },
+    "tnt.wad": {
+      "demos_measured": 3,
+      "mean_instr_per_tic": 1307706.9,
+      "worst_p99": 2441358,
+      "max_variance_pct": 3.556
+    },
+    "plutonia.wad": {
+      "demos_measured": 3,
+      "mean_instr_per_tic": 1353868.2,
+      "worst_p99": 2471568,
+      "max_variance_pct": 9.857
+    }
+  },
+  "demos": [
+    {
+      "demo": "doom-demo1",
+      "tics": 1710,
+      "total_instr": 1926284237,
+      "instr_per_tic": {
+        "mean": 1126482.0,
+        "p50": 1288509,
+        "p99": 1720210,
+        "max": 6201113
+      },
+      "variance_pct": 5.125,
+      "pass1": {
+        "mean": 1155347.3,
+        "p50": 1291497,
+        "p99": 1731545,
+        "max": 6201113
+      },
+      "pass2": {
+        "mean": 1097616.7,
+        "p50": 1285521,
+        "p99": 1708876,
+        "max": 1944086
+      }
+    },
+    {
+      "demo": "doom-demo2",
+      "tics": 2347,
+      "total_instr": 2583335498,
+      "instr_per_tic": {
+        "mean": 1100696.9,
+        "p50": 1150277,
+        "p99": 1920401,
+        "max": 26862640
+      },
+      "variance_pct": 2.331,
+      "pass1": {
+        "mean": 1113526.5,
+        "p50": 1156288,
+        "p99": 1942872,
+        "max": 26862637
+      },
+      "pass2": {
+        "mean": 1087867.2,
+        "p50": 1144266,
+        "p99": 1897931,
+        "max": 26862640
+      }
+    },
+    {
+      "demo": "doom-demo3",
+      "tics": 3863,
+      "total_instr": 4281866792,
+      "instr_per_tic": {
+        "mean": 1108430.4,
+        "p50": 1149976,
+        "p99": 1760500,
+        "max": 31182732
+      },
+      "variance_pct": 8.076,
+      "pass1": {
+        "mean": 1153189.5,
+        "p50": 1161776,
+        "p99": 1766056,
+        "max": 31182732
+      },
+      "pass2": {
+        "mean": 1063671.4,
+        "p50": 1138176,
+        "p99": 1754945,
+        "max": 31179557
+      }
+    },
+    {
+      "demo": "doom-demo4",
+      "tics": 818,
+      "total_instr": 1256841044,
+      "instr_per_tic": {
+        "mean": 1536480.4,
+        "p50": 1336799,
+        "p99": 2693222,
+        "max": 27582008
+      },
+      "variance_pct": 4.274,
+      "pass1": {
+        "mean": 1569316.4,
+        "p50": 1347806,
+        "p99": 2693222,
+        "max": 27575263
+      },
+      "pass2": {
+        "mean": 1503644.5,
+        "p50": 1325792,
+        "p99": 2693223,
+        "max": 27582008
+      }
+    },
+    {
+      "demo": "doom2-demo1",
+      "tics": 1205,
+      "total_instr": 1624425505,
+      "instr_per_tic": {
+        "mean": 1348071.0,
+        "p50": 1466177,
+        "p99": 1826212,
+        "max": 31492490
+      },
+      "variance_pct": 5.25,
+      "pass1": {
+        "mean": 1383455.8,
+        "p50": 1466641,
+        "p99": 1826212,
+        "max": 31492488
+      },
+      "pass2": {
+        "mean": 1312686.1,
+        "p50": 1465713,
+        "p99": 1826212,
+        "max": 31492490
+      }
+    },
+    {
+      "demo": "doom2-demo2",
+      "tics": 2001,
+      "total_instr": 2373064128,
+      "instr_per_tic": {
+        "mean": 1185939.1,
+        "p50": 1291713,
+        "p99": 2000047,
+        "max": 15120135
+      },
+      "variance_pct": 1.772,
+      "pass1": {
+        "mean": 1175433.5,
+        "p50": 1286660,
+        "p99": 1994911,
+        "max": 15120132
+      },
+      "pass2": {
+        "mean": 1196444.7,
+        "p50": 1296766,
+        "p99": 2005183,
+        "max": 15120135
+      }
+    },
+    {
+      "demo": "doom2-demo3",
+      "tics": 4471,
+      "total_instr": 6185051594,
+      "instr_per_tic": {
+        "mean": 1383371.0,
+        "p50": 1430090,
+        "p99": 2303684,
+        "max": 23584551
+      },
+      "variance_pct": 6.641,
+      "pass1": {
+        "mean": 1337433.9,
+        "p50": 1429045,
+        "p99": 2297907,
+        "max": 23584551
+      },
+      "pass2": {
+        "mean": 1429308.1,
+        "p50": 1431135,
+        "p99": 2309461,
+        "max": 23580959
+      }
+    },
+    {
+      "demo": "tnt-demo1",
+      "tics": 4531,
+      "total_instr": 5294845791,
+      "instr_per_tic": {
+        "mean": 1168582.2,
+        "p50": 1212116,
+        "p99": 1880404,
+        "max": 10991660
+      },
+      "variance_pct": 1.411,
+      "pass1": {
+        "mean": 1176826.0,
+        "p50": 1209420,
+        "p99": 1875756,
+        "max": 10991660
+      },
+      "pass2": {
+        "mean": 1160338.4,
+        "p50": 1214813,
+        "p99": 1885052,
+        "max": 10991660
+      }
+    },
+    {
+      "demo": "tnt-demo2",
+      "tics": 3653,
+      "total_instr": 5052882657,
+      "instr_per_tic": {
+        "mean": 1383214.6,
+        "p50": 1461143,
+        "p99": 2157134,
+        "max": 18396296
+      },
+      "variance_pct": 2.204,
+      "pass1": {
+        "mean": 1398461.0,
+        "p50": 1465648,
+        "p99": 2164072,
+        "max": 18393480
+      },
+      "pass2": {
+        "mean": 1367968.1,
+        "p50": 1456639,
+        "p99": 2150196,
+        "max": 18396296
+      }
+    },
+    {
+      "demo": "tnt-demo3",
+      "tics": 3433,
+      "total_instr": 4707755117,
+      "instr_per_tic": {
+        "mean": 1371324.0,
+        "p50": 1462298,
+        "p99": 2441358,
+        "max": 9620990
+      },
+      "variance_pct": 3.556,
+      "pass1": {
+        "mean": 1346939.8,
+        "p50": 1462084,
+        "p99": 2444904,
+        "max": 9620990
+      },
+      "pass2": {
+        "mean": 1395708.1,
+        "p50": 1462513,
+        "p99": 2437812,
+        "max": 2738676
+      }
+    },
+    {
+      "demo": "plutonia-demo1",
+      "tics": 7403,
+      "total_instr": 10583734155,
+      "instr_per_tic": {
+        "mean": 1429654.8,
+        "p50": 1506502,
+        "p99": 2471568,
+        "max": 42146942
+      },
+      "variance_pct": 1.307,
+      "pass1": {
+        "mean": 1438997.1,
+        "p50": 1512113,
+        "p99": 2475693,
+        "max": 42143813
+      },
+      "pass2": {
+        "mean": 1420312.4,
+        "p50": 1500891,
+        "p99": 2467444,
+        "max": 42146942
+      }
+    },
+    {
+      "demo": "plutonia-demo2",
+      "tics": 3483,
+      "total_instr": 4689635863,
+      "instr_per_tic": {
+        "mean": 1346435.8,
+        "p50": 1555838,
+        "p99": 2136296,
+        "max": 16189345
+      },
+      "variance_pct": 9.857,
+      "pass1": {
+        "mean": 1280078.0,
+        "p50": 1516485,
+        "p99": 2097732,
+        "max": 13609445
+      },
+      "pass2": {
+        "mean": 1412793.6,
+        "p50": 1595192,
+        "p99": 2174861,
+        "max": 16189345
+      }
+    },
+    {
+      "demo": "plutonia-demo3",
+      "tics": 5662,
+      "total_instr": 7278580953,
+      "instr_per_tic": {
+        "mean": 1285514.1,
+        "p50": 1345960,
+        "p99": 2153451,
+        "max": 37330560
+      },
+      "variance_pct": 3.611,
+      "pass1": {
+        "mean": 1262304.8,
+        "p50": 1341452,
+        "p99": 2099347,
+        "max": 37330560
+      },
+      "pass2": {
+        "mean": 1308723.5,
+        "p50": 1350469,
+        "p99": 2207556,
+        "max": 37330557
+      }
+    }
+  ],
+  "skipped": []
+}

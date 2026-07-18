@@ -223,12 +223,17 @@ and inline `*(not machine-verified)*` markers for the 16 unverifiable claims.
 | perf-058 | perf.md:§v1-fps | pi5 v1 fps (pre-int64) | 79,377 tics/s | measurement | bench-baseline.json (v1.frameThroughput.pi5.before) | verified |
 | perf-059 | perf.md:966 | worst PWAD combo peak heap (tnt.wad + tnt31.wad) | 54.83 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
 | perf-060 | perf.md:978 | headroom vs 64 MB for worst PWAD combo | 9.17 MB | derived | 64 − 54.83 = 9.17 MB | verified |
+| perf-061 | perf.md:1308 | doom.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,218,022 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | verified |
+| perf-062 | perf.md:1309 | doom2.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,305,794 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | verified |
+| perf-063 | perf.md:1310 | tnt.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,307,707 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | verified |
+| perf-064 | perf.md:1311 | plutonia.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,353,868 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | verified |
+| perf-065 | perf.md:1313 | worst-case demo p99 instr/tic (doom-demo4, alder, 13.1a) | 2,693,222 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | verified |
 
 ---
 
 ## Summary
 
-**Total claims: 188**
+**Total claims: 193**
 
 | type | count |
 |------|-------|
