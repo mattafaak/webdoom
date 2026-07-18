@@ -451,6 +451,10 @@ monsters) may need 8 MiB.
 golden demos (§6.3). If any demo triggers `I_Error` from `Z_Malloc`,
 increase zone size.
 
+*Cross-reference*: task 13.2a re-trial (2026-07-18) confirmed 4 MiB passes
+all three gates (sim 13/13, render 13/13, 4-client net) on post-3.2 master —
+see `docs/perf.md` Q2 task 13.2a re-trial subsection for full results.
+
 ### 2.3 WAD residency strategies
 
 w_wad.c's lump access pattern: `W_CacheLumpNum(lump, tag)` is called

@@ -12,7 +12,9 @@
 // - 4 MB test: confirmed zero I_Error failures across all 13 demos + 2p/4p net
 // - 8 MB: 2× safety margin over 4 MB worst-case, 5.9× over HWM
 // Do not change without re-running demo-test.mjs (13/13) + net-test.mjs.
+#ifndef ZONESIZE
 #define ZONESIZE (32 * 1024 * 1024)
+#endif
 
 // d_main.c (webdoom patches)
 void D_DoomFrame (void);

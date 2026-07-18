@@ -612,8 +612,11 @@ Findings from perf.md §2 and §3:
 **Risk**: zone size reduction is safe iff all 13 demo passes complete.
 The four-client net hash test (net gate) must also pass (zone backs
 thinker allocations that multiply with player count).  Render-gate
-failures appeared at both 4 MB and 8 MB in task 2.5 testing — see Q2
-task 2.5 results above for the full measurement and decision.
+failures appeared at both 4 MB and 8 MB in task 2.5 testing but were
+caused by the `dc_texheight` OOB reads (fixed in tasks 3.1/3.2), not
+PU_CACHE pressure.  **Task 13.2a re-trial (2026-07-18) on post-3.2 master
+confirms both 4 MiB and 8 MiB pass all three gates (sim, render, net)
+with zero failing goldens** — see Q2 task 13.2a re-trial subsection above.
 
 ---
 
@@ -842,11 +845,36 @@ doom.wad shows 0 purges at 8 MB (sim path) but still fails the render gate at 8 
 — confirming that the render path fills the texture cache far beyond the sim-only
 measurement.  The true cache floor for the render path is between 8 MB and 32 MB.
 
-**Conclusion**: ZONESIZE stays at **32 MB** until a render-path measurement (with
-rendering enabled) characterises the actual peak.  The §2 non-purgeable HWM (1.36 MB)
-is a lower bound on zone usage, not the safe floor for a rendering build.  The PSRAM
-economy (bare-metal) argument for a smaller zone is valid but requires measuring
-actual texture cache peak with `-nodraw` off before committing a reduction.
+**Conclusion (task 2.5)**: ZONESIZE stays at **32 MB** until a render-path measurement
+(with rendering enabled) characterises the actual peak.  The §2 non-purgeable HWM
+(1.36 MB) is a lower bound on zone usage, not the safe floor for a rendering build.
+The PSRAM economy (bare-metal) argument for a smaller zone is valid but requires
+measuring actual texture cache peak with `-nodraw` off before committing a reduction.
+
+##### Task 13.2a re-trial — ZONESIZE 4/8 MiB post-3.2 (measured 2026-07-18)
+
+Tasks 3.1 and 3.2 eliminated the `dc_texheight` OOB reads that caused render goldens
+to be layout-pinned to heap layout.  With that fix in place on master (f434699), the
+4 MiB and 8 MiB zone sizes were re-tested against all three gates using out-of-tree
+builds (`build-z4/`, `build-z8/`) via `EXTRA_CFLAGS=-DZONESIZE=<N>` and a new
+`--build-dir` flag added to `tools/net-test.mjs` (the only harness code change).
+
+| ZONESIZE | sim gate (13/13) | render gate (13/13) | net gate (4-client) | verdict |
+|----------|-----------------|---------------------|---------------------|---------|
+| 4 MiB | **PASS** | **PASS — 0 failures** | **PASS** | **SAFE post-3.2** |
+| 8 MiB | **PASS** | **PASS — 0 failures** | **PASS** | **SAFE post-3.2** |
+
+No failing goldens at either zone size.  Shipping build (`build/doom.wasm`) md5 was
+unchanged throughout (5d3464dcf58ced7ca6c1f1a044244393).
+
+**Conclusion (task 13.2a)**: 4 MiB is demo-proven safe post-3.2 — the task 2.5
+render failures were the OOB reads (`dc_texheight` heap-layout pinning), not
+PU_CACHE use-after-purge.  The purge-pressure hypothesis (recorded above) is now
+falsified for the 13-IWAD attract-demo set: with OOB reads eliminated, 4 MiB passes
+13/13 render goldens pixel-identical.  **The recommended first-pass zone for
+bare-metal bring-up is 4 MiB** (see bare-metal.md §2.2).  A ZONESIZE change in
+the shipping build is a 14.x candidate, pending 13.2b render-ON HWM data to
+quantify the actual purgeable cache peak.
 
 **What task 2.5 delivered**:
 - `WEB_ZONE_POOL_SIZE` duplicate removed; `ZONESIZE` is now the single define in

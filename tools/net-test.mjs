@@ -15,12 +15,16 @@ process.on('uncaughtException', e => {
 });
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const N = Math.min(4, Math.max(1, +(process.argv[2] ?? 2)));
+const buildDirIdx = process.argv.indexOf('--build-dir');
+const buildDir = buildDirIdx >= 0 ? process.argv[buildDirIdx + 1] : 'build';
+const positionalArgs = process.argv.slice(2).filter((a, i, arr) =>
+    a !== '--build-dir' && (i === 0 || arr[i - 1] !== '--build-dir'));
+const N = Math.min(4, Math.max(1, +(positionalArgs[0] ?? 2)));
 const PORT = 8667;
 const base = `ws://127.0.0.1:${PORT}`;
 
 const { connectLobby, attachRelay, launchArgs } = await import(join(root, 'client/js/net.js'));
-const createDoom = (await import(join(root, 'build/doom.js'))).default;
+const createDoom = (await import(join(root, buildDir, 'doom.js'))).default;
 const wadBytes = readFileSync(join(root, 'wads/lib/doom.wad'));
 
 const server = spawn('node', [join(root, 'server/serve.js')], {
