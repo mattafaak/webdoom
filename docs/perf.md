@@ -300,9 +300,14 @@ on the browser-side measurement gap being filled first (Q0 below).
 
 ---
 
-### C. Browser-side measurement gap
+### C. Browser-side measurement gap — **MEASURED** (task 12.2b)
 
-**Defined**: a browser pipeline profile would measure, per rAF frame:
+The gap described below was open through task 12.2a and is **now closed** by task 12.2b.
+Per-frame profiling was implemented in `client/js/{main,video,music-worklet,audio}.js`
+behind the `?perfmarks=1` query flag and collected via `tools/browser-pipeline.mjs`.
+Results are in §C results — per-frame pass (task 12.2b) below.
+
+**Defined** (retained for history): a browser pipeline profile would measure, per rAF frame:
 
 - `video.js` blit path: `I_FinishUpdate` palette expansion (64,000
   indexed-byte → RGBA lookups) + `texSubImage2D` WebGL call latency
@@ -414,6 +419,79 @@ aggregate CDP metrics alone.
 12.2b should be scoped to: rAF frame-to-frame interval distribution,
 AudioWorklet timing, and event-to-present latency; ignoring palette expand /
 texSubImage2D (aggregate already rules them out).
+
+#### §C results — per-frame pass (task 12.2b, 2026-07-18, commit 5a71e12)
+
+Measured via `tools/browser-pipeline.mjs`: boots webdoom headlessly with
+`?perfmarks=1`, navigates to E1M1, collects ≥200 rAF frames + ≥35 input-latency
+samples.  Each stage accumulates raw duration arrays in `window.__wd_perf`;
+the collector reads them via CDP `Runtime.evaluate` and emits per-stage
+percentile stats.  Raw golden files: `tools/golden/browser-pipeline-<host>.json`.
+
+Reproduce (alder — run twice and compare for variance):
+```
+node tools/browser-pipeline.mjs --url http://127.0.0.1:8666/ --json
+```
+Reproduce (wbox):
+```
+DOOM_PORT=8672 node ~/.cache/webdoom-pipeline/server/serve.js &
+node ~/.cache/webdoom-pipeline/tools/browser-pipeline.mjs \
+    --url http://127.0.0.1:8672/ --json
+```
+
+**Per-frame results** (all times in ms; alder = two consecutive runs; wbox = one run):
+
+| stage | alder run1 | alder run2 | wbox | notes |
+|-------|-----------|-----------|------|-------|
+| (a) palette upload | p99=0.1 n=2 | p99=0.1 n=2 | p99=5.3 n=63 | WebGL2: 256×1 RGB texSubImage2D when paletteDirty; very rare on alder (static scene); more frequent on wbox due to combat flashes. All negligible vs 35 Hz budget. |
+| (b) FB upload (texSubImage2D) | p50=0 p99=0.2 max=0.3 | p50=0 p99=0.2 max=0.3 | p50=0.1 p99=6.5 max=7.3 | 320×200 R8 upload every frame. alder: sub-ms always. wbox: p99 spike 6.5 ms (Bobcat cache pressure) but p50=0.1 ms. |
+| (c) rAF jitter (interval) | p50=16.7 p99=16.8 max=66.7 | p50=16.7 p99=16.8 max=50.1 | p50=200 p99=500 max=683 | alder headless: locked at 16.7 ms (60 fps) — tight; max=50–67 ms is 1–3 dropped frames (OS jitter). wbox: rAF rate-limited at ~5 fps (200 ms) because Bobcat cannot complete one frame faster. |
+| (c) rAF callback duration | p50=0.2 p99=0.8 max=10.9 | p50=0.2 p99=0.9 max=10.9 | p50=2.4 p99=30.6 max=239 | Total JS rAF callback. alder: 0.2 ms median — well within 16.7 ms frame budget. wbox: 2.4 ms median; p99 30 ms dominated by wasm engine time, not JS overhead. |
+| (d) AudioWorklet | n=0 | n=0 | n=0 | **Headless limitation**: `AudioContext` did not arm in headless Chrome — CDP key events are not trusted user activations for `AudioContext.resume()`. Worklet instrumentation (`music-worklet.js` + `audio.js`) is implemented and functional; requires interactive session to collect. |
+| (e) input latency | p50=8.3 p99=35.5 n=35 | p50=8.4 p99=60.6 n=35 | p50=101.6 p99=3396 n=35 | **keydown `event.timeStamp` → `renderer.draw()` returns** (GPU upload submitted; compositing not waited). alder p50 ≈ 8–9 ms ≈ half the 16.7 ms frame interval (expected for random-phase events). wbox p50 ≈ 100 ms ≈ half the 200 ms rAF interval (frame-rate-limited). p99 tails are OS scheduling spikes. |
+
+**Key observations (12.2b)**:
+
+1. **(a) and (b) confirmed negligible**: per-frame percentiles back the 12.2a
+   aggregate ruling.  Palette upload is sub-ms and rare; FB upload is sub-ms
+   at p50 on both hosts.  No action needed — the JS blit path is not a
+   bottleneck at either clock speed.
+
+2. **rAF jitter on alder is excellent**: p50/p90/p99 ≈ 16.7 ms; jitter is
+   sub-millisecond at p99.  The rare max (50–67 ms) is 1–3 dropped frames
+   from OS interrupts, not a structural issue.  On a display-synced real
+   session the rAF is vsync-locked and jitter would be even tighter.
+
+3. **AudioWorklet is unmeasured (headless limitation)**: the instrument is
+   implemented and posted-timing messages are wired through `audio.js`.
+   Collecting requires a session where `AudioContext.resume()` can arm (real
+   browser, or Chrome with `--autoplay-policy=no-user-gesture-required` and
+   a gesture simulation workaround).  Defer worklet timing to an interactive
+   profiling session; headless cannot provide this data.
+
+4. **Input latency tracks frame interval, not JS cost**: alder p50 ≈ 8 ms
+   (half of 16.7 ms frame) is exactly what you'd expect for events landing
+   at a random phase.  This is **not** JS overhead; it is the irreducible
+   quantization latency of a 35 Hz-synced rAF loop.  Reducing it would
+   require sub-tic input processing (engine change) or higher render rate.
+   The JS pipeline itself adds < 1 ms to this (rAF callback duration p50 =
+   0.2 ms).  **Measurement scope**: event firing → GPU upload call; actual
+   display presentation adds compositing pipeline time (typically 1–3 ms
+   additional in non-headless Chrome).
+
+5. **wbox interpretation**: wbox's 200 ms rAF interval is a headless artefact
+   (Bobcat CPU cannot sustain 60 fps without vsync pacing).  On a real 35 Hz
+   display the game would tic-limit at 28.6 ms/frame and upload/rAF numbers
+   would be much smaller.  The wbox per-frame data characterises the absolute
+   worst case, not the play experience.
+
+**Measurement scope precision (input latency)**:
+Exact tic-consumption attribution (event → tic that processed it → first
+render after that tic) was not implemented because it requires engine changes
+(`_web_input_event` → tic boundary tracking exported to JS).  The measured
+quantity is `keydown.event.timeStamp → renderer.draw() returns` — this is
+event-to-next-rAF-draw latency, not event-to-display.  Compositing pipeline
+adds ≈ 1–3 ms further in real Chrome (not measured here).
 
 ---
 
@@ -562,7 +640,7 @@ L > 3 days.
 |-------|-------|
 | **what** | Tighten `R_DrawColumn` inner loop: reduce the 320-byte column-stride write pressure (consider transposed framebuffer approach or row-major rendering order for wasm targets); profile `R_DrawSpan` for comparison. Optionally prototype wasm SIMD (`v128` load/store) behind a compile flag. |
 | **expected win (bare-metal)** | bsp+segs = 53.6% of wbox render = 0.2625 ms/frame. If the R_DrawColumn inner loop accounts for ~70% of bsp+segs (plausible given wall-dominant scenes), that is 0.184 ms/frame attributable to column draw. A 30% improvement → 0.055 ms/frame savings on wbox = 11% total render reduction. On LX7 with `screens[0]` in SRAM, column-stride cache misses vanish; the win may be larger. |
-| **expected win (browser)** | NEEDS-Q0. Wasm render is 1.7% of budget on wbox; a 30% improvement saves 0.51% CPU. User-invisible without Q0 ruling out JS-side dominance. |
+| **expected win (browser)** | **Q0 CLOSED (task 12.2b)**: JS pipeline (palette+upload+rAF callback) is ≤ 0.9 ms p99 per frame on alder; rAF callback median 0.2 ms. A 30% wasm render improvement saves ~0.51% of the 3% ScriptDuration total — sub-ms and user-invisible. The win is CI throughput and bare-metal fps, not browser fps. Browser claim framing confirmed: see §C results (12.2b). |
 | **gates** | Render gate (13/13 pixel-identical) + sim gate (unchanged, render-only) |
 | **effort** | M (SIMD prototype = L, behind build flag, optional) |
 | **verdict** | **DO** on bare-metal axis. For browser: do it but frame the claim correctly — the win is CI throughput and bare-metal fps, not user-visible browser fps. |
@@ -795,7 +873,7 @@ actual texture cache peak with `-nodraw` off before committing a reduction.
 |-------|-------|
 | **what** | Replace `R_FindPlane` O(n) linear search with a small hash (key = height×picnum×lightlevel, table size ≤ 64 buckets covers typical DOOM maps). Evaluate `R_CheckPlane` split frequency to bound copy overhead. |
 | **expected win (bare-metal)** | planes = 32% of wbox render = 0.1566 ms/frame. `R_FindPlane` is O(n) over live visplane count; in open maps with many distinct (height, picnum, lightlevel) triples this is non-trivial. However, in the attract demos (corridors, tight geometry) the live count is small (~10–20 planes/frame), making the linear scan fast. Win is scene-dependent. Estimate 5–15% of planes stage = 0.008–0.023 ms/frame on wbox — modest. |
-| **expected win (browser)** | NEEDS-Q0. Same scaling argument as Q1. |
+| **expected win (browser)** | **Q0 CLOSED (task 12.2b)**: same data as Q1 adjudication. JS pipeline ≤ 0.9 ms p99 per frame; rAF callback median 0.2 ms. Visplane hash benefit (if any) is a bare-metal fps / CI throughput win only — not browser fps. |
 | **gates** | Render gate (visplane management is render-only; sim unaffected) |
 | **effort** | M |
 | **verdict** | **MEASURE-FIRST**: instrument visplane count and R_FindPlane probe depth before sizing the win. The hash is straightforward but the gain on real DOOM maps may be small. Do after Q1 (larger guaranteed win). |

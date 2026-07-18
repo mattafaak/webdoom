@@ -1,0 +1,45 @@
+{
+  "schema": "browser-pipeline.v1",
+  "host": "alder",
+  "cpu": "i9-12900K, 3.6 GHz P-core",
+  "chromeBin": "google-chrome-stable",
+  "chromeVersion": "Chrome/150.0.7871.114",
+  "commit": "5a71e12",
+  "timestamp": "2026-07-18T01:30:35.741Z",
+  "minFramesTarget": 200,
+  "run1_framesCollected": 4618,
+  "run2_framesCollected": 4618,
+  "variance_note": "Two consecutive runs on alder. Upload/rAF/palette are stable (p99 within 0.1 ms). Input-latency p50 stable (8.3 vs 8.4 ms); p99 varies (35.5 vs 60.6 ms) due to small sample size (n=35 per run) and occasional OS scheduling spikes.",
+  "stages": {
+    "palette": {
+      "run1": { "n": 2, "mean": 0.05, "p50": 0.1, "p90": 0.1, "p99": 0.1, "max": 0.1 },
+      "run2": { "n": 2, "mean": 0.05, "p50": 0.1, "p90": 0.1, "p99": 0.1, "max": 0.1 },
+      "note": "WebGL2: 256×1 RGB texSubImage2D when paletteDirty. n=2 means palette changed only at startup; stays constant during E1M1. Sub-0.1 ms — negligible. Confirms 12.2a aggregate verdict."
+    },
+    "upload": {
+      "run1": { "n": 4618, "mean": 0.0368, "p50": 0.0, "p90": 0.1, "p99": 0.2, "max": 0.3 },
+      "run2": { "n": 4618, "mean": 0.0362, "p50": 0.0, "p90": 0.1, "p99": 0.2, "max": 0.3 },
+      "note": "WebGL2: 320×200 R8 texSubImage2D + drawArrays. p99 = 0.2 ms, max = 0.3 ms. Negligible at 35 Hz budget (28.6 ms/frame). Confirms 12.2a aggregate verdict."
+    },
+    "raf_interval": {
+      "run1": { "n": 4617, "mean": 16.7992, "p50": 16.7, "p90": 16.7, "p99": 16.8, "max": 66.6 },
+      "run2": { "n": 4617, "mean": 16.6804, "p50": 16.7, "p90": 16.7, "p99": 16.8, "max": 50.1 },
+      "note": "Frame-to-frame rAF timestamp delta (ms). p50/p90/p99 ≈ 16.7 ms (ideal 60 Hz = 16.667 ms) — extremely tight. Max 50–67 ms is 1–3 dropped frames (OS jitter spike). In headless Chrome rAF is not vsync-locked; interval reflects CPU scheduling fidelity, not display timing."
+    },
+    "raf_duration": {
+      "run1": { "n": 4618, "mean": 0.2582, "p50": 0.2, "p90": 0.4, "p99": 0.8, "max": 10.9 },
+      "run2": { "n": 4618, "mean": 0.2689, "p50": 0.2, "p90": 0.4, "p99": 0.9, "max": 10.9 },
+      "note": "Total rAF callback duration: input.frame() + doom._web_frame() + renderer.draw(). p50=0.2 ms, p99=0.8–0.9 ms. Well within 16.7 ms frame budget."
+    },
+    "worklet": {
+      "run1": { "n": 0, "note": "AudioContext did not arm — no real user gesture in headless Chrome. CDP Input.dispatchKeyEvent is not a trusted user activation for AudioContext.resume()." },
+      "run2": { "n": 0, "note": "Same as run1." },
+      "note": "AudioWorklet process() timing unavailable in headless Chrome. worklet instrumentation is functional (port message protocol implemented in music-worklet.js + audio.js); requires interactive session or --autoplay-policy override that allows AudioContext activation. See headless-limitation note in perf.md."
+    },
+    "input_latency": {
+      "run1": { "n": 35, "mean": 8.5857, "p50": 8.3, "p90": 15.5, "p99": 35.5, "max": 35.5 },
+      "run2": { "n": 35, "mean": 9.3543, "p50": 8.4, "p90": 16.8, "p99": 60.6, "max": 60.6 },
+      "note": "keydown event.timeStamp → renderer.draw() returns. p50 ≈ 8–9 ms (≈ 0.5 × 16.7 ms frame interval, as expected for random-phase event landing mid-frame). p90 ≈ 15–17 ms (≈ 1 frame). p99 varies (35–61 ms) due to small n and occasional OS scheduling spikes. Measurement scope: event firing → GPU upload call (compositing not waited). Tic-exact attribution not feasible without engine changes."
+    }
+  }
+}

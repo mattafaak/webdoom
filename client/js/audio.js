@@ -31,7 +31,14 @@ export function createAudio(doom) {
             musicNode = new AudioWorkletNode(ctx, 'music-sink', {
                 outputChannelCount: [2],
             });
-            musicNode.port.onmessage = e => { musicQueued = e.data.queued; };
+            // (d) per-frame AudioWorklet timing: when ?perfmarks=1 is active,
+            // send the enable signal and collect procMs from process() replies.
+            if (window.__wd_perf) musicNode.port.postMessage({ perfmarks: true });
+            musicNode.port.onmessage = e => {
+                musicQueued = e.data.queued;
+                if (e.data.procMs !== undefined && window.__wd_perf)
+                    window.__wd_perf.worklet.push(e.data.procMs);
+            };
             musicNode.connect(ctx.destination);
             musicScratch = doom._malloc(4 * 2 * 16384);
             pumpTimer = setInterval(pump, PUMP_MS);

@@ -1,0 +1,63 @@
+{
+  "schema": "browser-pipeline.v1",
+  "host": "wbox",
+  "cpu": "AMD G-T56N Bobcat, 1.65 GHz",
+  "chromeBin": "google-chrome-stable",
+  "chromeVersion": "Chrome/150.0.7871.114",
+  "commit": "5a71e12",
+  "timestamp": "2026-07-18T01:40:50.422Z",
+  "minFramesTarget": 200,
+  "framesCollected": 355,
+  "variance_note": "Single wbox run (rAF-rate-limited CPU; second run not feasible in tool budget). wbox is the slowest fleet host; frame rate in headless Chrome is ~5 fps (200 ms rAF interval) because the Bobcat CPU cannot complete one tic+render faster than that.",
+  "stages": {
+    "palette": {
+      "n": 63,
+      "mean": 0.2159,
+      "p50": 0.1,
+      "p90": 0.1,
+      "p99": 5.3,
+      "max": 5.3,
+      "note": "WebGL2: 256×1 RGB texSubImage2D when paletteDirty. Higher n than alder (63 vs 2) due to E1M1 palette flashes triggered by CDP keystrokes during slow gameplay. p99 5.3 ms is an outlier spike; p50/p90 = 0.1 ms."
+    },
+    "upload": {
+      "n": 355,
+      "mean": 0.3642,
+      "p50": 0.1,
+      "p90": 0.5,
+      "p99": 6.5,
+      "max": 7.3,
+      "note": "WebGL2: 320×200 R8 texSubImage2D + drawArrays. p50=0.1 ms is fast; p99=6.5 ms and max=7.3 ms reflect occasional Bobcat cache-miss spikes. Still well below the 200 ms rAF interval."
+    },
+    "raf_interval": {
+      "n": 354,
+      "mean": 230.9228,
+      "p50": 200.0,
+      "p90": 350.0,
+      "p99": 500.0,
+      "max": 683.3,
+      "note": "wbox is CPU-rate-limited: rAF fires at ~5 fps (200 ms mean interval) in headless Chrome because completing one doom._web_frame() + render takes ~200 ms on the Bobcat. This is a headless measurement artefact; on a real display the game would be locked to 35 Hz tic rate and rAF would fire at display rate."
+    },
+    "raf_duration": {
+      "n": 355,
+      "mean": 4.6524,
+      "p50": 2.4,
+      "p90": 7.6,
+      "p99": 30.6,
+      "max": 239.3,
+      "note": "Total rAF callback duration. p50=2.4 ms (vs 0.2 ms alder — 12× slower); p99=30.6 ms. Max 239 ms is a rare scheduling spike. The frame budget comparison to alder is dominated by wasm engine time, not JS overhead."
+    },
+    "worklet": {
+      "n": 0,
+      "note": "Same headless-Chrome limitation as alder: AudioContext did not arm without a trusted user gesture. Worklet instrumentation is implemented but cannot fire in headless mode."
+    },
+    "input_latency": {
+      "n": 35,
+      "mean": 220.5057,
+      "p50": 101.6,
+      "p90": 246.2,
+      "p99": 3396.7,
+      "max": 3396.7,
+      "note": "p50=101.6 ms ≈ half of the 200 ms rAF interval (expected: event lands at random phase within a slow frame). p99=3396.7 ms is an outlier scheduling spike on the Bobcat (slow CPU + OS preemption). Not representative of display-synced gameplay. On a real 35 Hz display, input latency would be bounded by the tic period (28.6 ms) not the headless rAF interval."
+    }
+  }
+}

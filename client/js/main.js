@@ -62,6 +62,34 @@ function restoreOnFailure(canvas) {
     document.getElementById('landing').hidden = false;
 }
 
+// Per-frame profiling via ?perfmarks=1 query flag.
+// When enabled, window.__wd_perf is created and the rAF frame loop populates
+// it with raw duration arrays.  tools/browser-pipeline.mjs reads the arrays
+// via CDP Runtime.evaluate at the end of a run to compute per-stage stats.
+// All overhead is gated behind a single null-check — zero cost otherwise.
+const _perfmarks = typeof location !== 'undefined' &&
+    new URLSearchParams(location.search).has('perfmarks');
+if (_perfmarks) {
+    window.__wd_perf = {
+        frames: 0,          // rAF callbacks counted
+        raf: [],            // (c) frame-to-frame interval (ms) — rAF jitter
+        rafDur: [],         // (c) rAF callback duration (ms)
+        palette: [],        // (a) palette upload duration (ms); only when dirty
+        upload: [],         // (b) FB texSubImage2D / putImageData duration (ms)
+        inputLat: [],       // (e) keydown.timeStamp → renderer.draw() returns (ms)
+        worklet: [],        // (d) AudioWorklet process() duration (ms) posted via port
+        _lastRafTime: 0,
+        _frameCallStart: 0,
+        _pendingInputTime: undefined,
+    };
+    // (e) input latency: capture event.timeStamp on the first untracked keydown
+    window.addEventListener('keydown', e => {
+        const perf = window.__wd_perf;
+        if (perf && perf._pendingInputTime === undefined)
+            perf._pendingInputTime = e.timeStamp;
+    }, { capture: true });
+}
+
 // wads: [{file, sha}] — first entry is the IWAD, the rest are PWADs.
 // net: {slot, numplayers, jitterMs} or null for single player.
 // onQuit: called when the player quits in-game (Quit Game → Y).
@@ -164,8 +192,17 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
         onQuit?.();
     };
 
-    const frame = () => {
+    // rafTime: DOMHighResTimeStamp provided by requestAnimationFrame — used for
+    // jitter measurement (interval between consecutive rAF invocations).
+    const frame = (rafTime) => {
         if (!running) return;
+        const perf = window.__wd_perf;
+        if (perf) {
+            // (c) rAF jitter: interval since last frame
+            if (perf.frames > 0) perf.raf.push(rafTime - perf._lastRafTime);
+            perf._lastRafTime = rafTime;
+            perf._frameCallStart = performance.now();
+        }
         try {
             input.frame();
             doom._web_frame();
@@ -177,6 +214,16 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
             v !== palVersion,
         );
         palVersion = v;
+        if (perf) {
+            // (c) rAF callback total duration
+            perf.rafDur.push(performance.now() - perf._frameCallStart);
+            // (e) input latency: event.timeStamp → renderer.draw() returns
+            if (perf._pendingInputTime !== undefined) {
+                perf.inputLat.push(performance.now() - perf._pendingInputTime);
+                perf._pendingInputTime = undefined;
+            }
+            perf.frames++;
+        }
         if (running) requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);

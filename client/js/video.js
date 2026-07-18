@@ -1,6 +1,11 @@
 // WebGL2 renderer: the engine's 8-bit indexed framebuffer is uploaded as
 // an R8 texture and palettized in the fragment shader (palette flashes
 // cost a 256x1 texture upload, nothing more). Canvas2D fallback included.
+//
+// Per-frame timing is collected when window.__wd_perf is set (enabled by the
+// ?perfmarks=1 query flag in main.js).  The perf object must be initialised
+// before createRenderer() is called, but the draw() hot-path only pays for a
+// single null-check per frame when profiling is disabled.
 
 const VS = `#version 300 es
 layout(location=0) in vec2 pos;
@@ -59,13 +64,21 @@ export function createRenderer(canvas) {
     return {
         kind: 'webgl2',
         draw(framebuffer, palette, paletteDirty) {
+            // (a) palette upload — only when palette changes (WebGL2: GPU does
+            // the 64K indexed→RGBA expansion; JS side uploads 256×1 RGB texture).
+            const perf = window.__wd_perf;
             if (paletteDirty) {
+                const t0 = perf ? performance.now() : 0;
                 gl.activeTexture(gl.TEXTURE1);
                 gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 1, gl.RGB, gl.UNSIGNED_BYTE, palette);
+                if (perf) perf.palette.push(performance.now() - t0);
             }
+            // (b) framebuffer texture upload + GPU draw
+            const t1 = perf ? performance.now() : 0;
             gl.activeTexture(gl.TEXTURE0);
             gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 320, 200, gl.RED, gl.UNSIGNED_BYTE, framebuffer);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
+            if (perf) perf.upload.push(performance.now() - t1);
         },
     };
 }
@@ -78,12 +91,20 @@ function createRenderer2D(canvas) {
     return {
         kind: 'canvas2d',
         draw(framebuffer, palette, paletteDirty) {
-            if (paletteDirty)
+            // (a) palette expand — Canvas2D does the 64K indexed→RGBA lookup in JS
+            const perf = window.__wd_perf;
+            if (paletteDirty) {
+                const t0 = perf ? performance.now() : 0;
                 for (let i = 0; i < 256; i++)
                     lut[i] = 0xff000000 | (palette[i*3+2] << 16) | (palette[i*3+1] << 8) | palette[i*3];
+                if (perf) perf.palette.push(performance.now() - t0);
+            }
+            // (b) pixel expansion + putImageData upload
+            const t1 = perf ? performance.now() : 0;
             for (let i = 0; i < 64000; i++)
                 rgba[i] = lut[framebuffer[i]];
             ctx.putImageData(img, 0, 0);
+            if (perf) perf.upload.push(performance.now() - t1);
         },
     };
 }
