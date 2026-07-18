@@ -959,7 +959,7 @@
       "command": null,
       "expected": "44580",
       "status": "unverifiable",
-      "notes": "Total tic count across 13 IWAD demos cross-validated against instrumented Chocolate Doom. Quoted in README.md and magic-data.md. Not gateable in CI without external Chocolate Doom binary + WAD files. Source: tools/build-choco-reference.sh + node tools/demo-test.mjs --cross <binary>."
+      "notes": "Total tic count across 13 IWAD demos cross-validated against instrumented Chocolate Doom. Quoted in README.md and magic-data.md. Not gateable in CI without external Chocolate Doom binary + WAD files. Source: tools/build-choco-reference.sh + node tools/demo-test.mjs --cross <binary>. Re-verified 2026-07-17 (task 12.5): sdl2-compat 2.32.70 on CachyOS host; build RC=0; 13/13 demos PASS, 44580 tics confirmed; expected value unchanged."
     }
   },
   "_summary": {

@@ -18,7 +18,7 @@ magic-data.md figures (new PUBLIC_HINTS entries). Run the drift checker to
 verify all machine-checkable figures; the qualitative promises below are indexed
 here with dispositions.
 
-**28 promises: 5 gated, 5 evidenced, 18 flagged**
+**28 promises: 5 gated, 7 evidenced, 16 flagged**
 
 ---
 
@@ -43,7 +43,7 @@ here with dispositions.
 | rme-004 | README:10–11 | "rebindable keys, analog twin-stick gamepad" | **FLAGGED(browser-resilience-test covers gamepad REMOVAL only; rebind UI and twin-stick analog path have no automated test — 12.3)** |
 | rme-005 | README:24–25 | "second load is instant, single player works offline" | **FLAGGED(sw-cache sub-check asserts WAD cached but never goes offline and boots; KNOWN LATENT BUG: sw.js SHELL precache omits fire.js and countdown.js — both imported by lobby.js — offline works only via runtime-cache accident. Fix scope: 12.4b/15.1)** |
 | rme-006 | README:17–18 | "measured < 1 ms/tick on the weakest network host" (fire) | **EVIDENCED** — perf.md §fire: wbox 0.0722 ms/tick (best-of-10 × 2000, 2026-07-16); ~14× under budget. Node microbench (not browser). Committed in perf.md; not CI-automated (requires JS bench). |
-| rme-007 | README:67–70 | "cross-validated tic-for-tic against an instrumented Chocolate Doom... 44,580 tics identical" | **FLAGGED(requires external Chocolate Doom binary + WAD files; not gateable in CI — `md-tic-001` in claims.json marks expected value; reproducer: tools/build-choco-reference.sh + node tools/demo-test.mjs --cross)** |
+| rme-007 | README:67–70 | "cross-validated tic-for-tic against an instrumented Chocolate Doom... 44,580 tics identical" | **EVIDENCED** — re-verified 2026-07-17 (task 12.5): SDL2 packages present on CachyOS host; `bash tools/build-choco-reference.sh` RC=0; `node tools/demo-test.mjs --cross` 13/13 demos PASS, 44,580 tics identical. Expected value in claims.json md-tic-001=44580 unchanged. Not gateable in CI (requires external binary + WADs); run on demand via the two commands above. |
 | rme-008 | README:22–24 | "Server carries the WAD library (Ultimate Doom, Doom II, Final Doom, SIGIL, Master Levels, NRFTL, Chex Quest, HACX)" | **FLAGGED(demo gates cover only 4 demo-bearing IWADs; SIGIL, Master Levels, NRFTL, Chex, HACX have no automated smoke test — 15.3)** |
 | rme-009 | README:41 | "`webdoom.service` is a ready systemd unit" | **FLAGGED(untested in CI; no boot or service-file validation gate — 15.1)** |
 | rme-010 | README:86–87 | "T07 menu-nav is a pre-existing timing flake on some CI hosts — ~1/3 pass rate" | **EVIDENCED** — documented explicitly in README.md; docs/state-machine.md claims "25/25 edges covered" but T07-routed edges are ~1/3 enforced. FLAGGED(15.4 will fix the T07 flake and restore edge enforcement). |
@@ -60,7 +60,7 @@ here with dispositions.
 | spc-004 | spec.md:99 | "browser-composited and negligible" (putImageData blit cost) | **FLAGGED(sim cost measured node-side only; blit cost asserted not measured — 12.2b will measure browser-pipeline cost including blit)** |
 | spc-005 | spec.md:27 | "web platform layer, client, and server stay small enough to read in a sitting" | **FLAGGED(no LOC budget or gate; purely subjective — 12.3 may add a LOC ceiling check as a soft gate)** |
 | spc-006 | spec.md:48–49 | "The browser-pipeline baseline (per-frame JS/GPU/audio cost, input latency) joins this gate once Phase 12 lands" | **FLAGGED(not yet implemented; 12.2b)** |
-| spc-007 | spec.md:17–20 | "all 13 IWAD demos replay tic-identical against golden traces and cross-validate against instrumented Chocolate Doom (44,580 tics)" | **GATED** — sim gate (demo-test.mjs) is live CI. Cross-validation tic count FLAGGED (needs Chocolate Doom external run; see rme-007). |
+| spc-007 | spec.md:17–20 | "all 13 IWAD demos replay tic-identical against golden traces and cross-validate against instrumented Chocolate Doom (44,580 tics)" | **GATED** — sim gate (demo-test.mjs) is live CI. Cross-validation re-verified 2026-07-17 (task 12.5): 44,580 tics confirmed; see rme-007. |
 | spc-008 | spec.md:64–67 | Reference hardware fleet host names (wbox/tank/pi5/alder) | **EVIDENCED** — fleet is documented in spec.md table and bench-baseline.json column headers match exactly. No drift gate; names are configuration, not numeric. |
 
 ---
@@ -75,7 +75,7 @@ enumerated below with its reason and disposition.
 | prf-001 | 143 | "Minimum safe `INITIAL_MEMORY`: 56 MB" | requires emcc INITIAL_MEMORY sweep build; no current CI script | **FLAGGED(2.6 emcc knob sweep will re-run this; 56 MB confirmed in task 2.6 trial but CI script not committed)** |
 | prf-002 | 193 | "177.7 KB gzip" (total wire payload) | requires all deliverable assets built — no current CI script | **FLAGGED(no CI script computes total gzip payload; 12.2b or later will add a size-audit CI step)** |
 | prf-003 | 196 | "35 KB gzip" (JS+CSS+HTML surface) | requires JS+CSS+HTML assets — no current CI script | **FLAGGED(same CI gap as prf-002; 12.2b)** |
-| prf-004 | 427 | "44,580 Chocolate Doom tics" cross-validation | external Chocolate Doom instrumented run; no current script in repo | **FLAGGED(same as rme-007; requires external tooling — md-tic-001 in claims.json)** |
+| prf-004 | 427 | "44,580 Chocolate Doom tics" cross-validation | external Chocolate Doom instrumented run; tools/build-choco-reference.sh + tools/demo-test.mjs --cross | **EVIDENCED** — re-verified 2026-07-17 (task 12.5): 44,580 tics confirmed; see rme-007 for full evidence. Not gateable in CI; run on demand. |
 | prf-005 | 548 | "unroll-4 verdict −3.5%" (wbox bsp+segs) | historical experiment requiring specific commit comparison; no current CI script | **EVIDENCED** — result is archived in perf.md §2.2 optimization log with A/B reps. Historical; no CI reproduction path (would require regressing the unroll). |
 | prf-006 | 555 | "total render −1.5%" (B vs A) | same historical experiment | **EVIDENCED** — same A/B log as prf-005; table at perf.md §2.2 shows 0.4927→0.4851 ms. |
 | prf-007 | 887 | "−33.0%" CODE section shrink under `-Os` | requires separate -Os emcc build; no current CI script | **FLAGGED(killed optimization; result archived in perf.md §axis-1; not worth CI-reproducing given KILL verdict — 14.3 may revisit if flash pressure appears)** |
@@ -108,10 +108,10 @@ family). Two figures remain ungateable.
 | mda-012 | "mean 128.85" (rndtable) | ea-007 | **GATED** — PUBLIC_HINTS (task 12.1); expected 128.85. |
 | mda-013 | "only 166 of 256 values distinct" | ea-008 | **GATED** — PUBLIC_HINTS (task 12.1); expected 166. |
 | mda-014 | "90 of the 256 possible byte values never appear" | ea-009 | **GATED** — PUBLIC_HINTS (task 12.1); expected 90. |
-| mda-015 | "44,580 tics identical" (Chocolate Doom cross-val) | md-tic-001 | **FLAGGED(ungateable in CI: requires external Chocolate Doom binary + WAD files. Expected value committed in claims.json md-tic-001=44580. Reproducer: tools/build-choco-reference.sh + node tools/demo-test.mjs --cross)** |
+| mda-015 | "44,580 tics identical" (Chocolate Doom cross-val) | md-tic-001 | **EVIDENCED** — re-verified 2026-07-17 (task 12.5): `bash tools/build-choco-reference.sh` RC=0 (sdl2-compat 2.32.70 on CachyOS); `node tools/demo-test.mjs --cross` 13/13 PASS, 44,580 tics. Expected value in claims.json md-tic-001=44580 confirmed unchanged. Ungateable in CI; reproducer committed. |
 | mda-016 | "2×10⁹ random in-domain pairs + 1.8×10⁶ adversarial" (FixedDiv) | none | **FLAGGED(approximate counts stated in scientific notation; no exact claim in claims.json; FixedDiv correctness gated via ea-005/006 at a different granularity; these prose figures serve as documentation context only)** |
 
-**magic-data.md summary**: 14 of 16 figures gated via PUBLIC_HINTS; 2 ungateable (tic cross-val requires external tool; FixedDiv test-count is approximate).
+**magic-data.md summary**: 14 of 16 figures gated via PUBLIC_HINTS; 1 evidenced (mda-015 re-verified 2026-07-17, task 12.5); 1 ungateable (mda-016: FixedDiv test-count is approximate scientific notation).
 
 ---
 
@@ -119,18 +119,18 @@ family). Two figures remain ungateable.
 
 | category | total | gated | evidenced | flagged |
 |----------|-------|-------|-----------|---------|
-| README.md | 10 | 1 | 2 | 7 |
+| README.md | 10 | 1 | 3 | 6 |
 | spec.md | 8 | 3 | 1 | 4 |
-| perf.md (not-machine-verified) | 10 | 1 | 2 | 7 |
-| magic-data.md | 16 | 14 | 0 | 2 |
-| **Total** | **28** (excl. magic-data) / **44** (incl.) | **5** / **19** | **5** / **5** | **18** / **20** |
+| perf.md (not-machine-verified) | 10 | 1 | 3 | 6 |
+| magic-data.md | 16 | 14 | 1 | 1 |
+| **Total** | **28** (excl. magic-data) / **44** (incl.) | **5** / **19** | **7** / **8** | **16** / **17** |
 
 > Note: magic-data.md figures are separately tracked because they have their own
 > gate mechanism (PUBLIC_HINTS). The "28 promises" headline count covers Parts A–C
 > (README + spec + perf); Part D adds 16 magic-data figures for a full inventory
 > of 44 entries.
 
-**28 promises (Parts A–C): 5 gated, 5 evidenced, 18 flagged.**
+**28 promises (Parts A–C): 5 gated, 7 evidenced, 16 flagged.**
 
 ### Flagged promises by future task
 
@@ -144,4 +144,3 @@ family). Two figures remain ungateable.
 | 15.3 | rme-008 (SIGIL/MasterLevels/NRFTL/Chex/HACX smoke) |
 | 15.4 | rme-010 (T07 flake fix + edge enforcement) |
 | 15.5 | spc-002 (HOL blocking measurement) |
-| external tooling | rme-007/prf-004/mda-015 (Chocolate Doom cross-val; md-tic-001 in claims.json) |
