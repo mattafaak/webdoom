@@ -929,7 +929,7 @@
     "readme-001": {
       "family": "unverifiable",
       "command": null,
-      "expected": "352",
+      "expected": "348",
       "status": "unverifiable",
       "notes": "Wasm binary size in README.md, in KB (binary, rounded to nearest integer). Source: CURRENT shipping artifact (359,566 bytes per node tools/archaeology/stamp-check.mjs on master, 2026-07-17); 359566/1024=351.14\u2192351. NOT derived from perf.md \u00a71 commit-pinned table (perf-001=357,978 is pinned to commit 6de6256 and legitimately drifts). Update command: node tools/archaeology/stamp-check.mjs \u2192 read actual wasm_size_bytes \u2192 divide by 1024, round to nearest integer \u2192 update expected here and README.md. Checked by doc-drift.mjs README_HINTS (hard fail on divergence)."
     },
