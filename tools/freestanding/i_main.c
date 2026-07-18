@@ -41,8 +41,13 @@
 #include "doomstat.h"
 #include "d_player.h"
 #include "m_argv.h"
+#include "r_main.h"
 #include "fs_platform.h"
 #include "web.h"
+
+/* Vanilla globals: defined in m_menu.c; used for WD_DETAIL opt-in (14.2b). */
+extern int detailLevel;
+extern int screenblocks;
 
 extern int prndindex; /* m_random.c — hashed per tic (fs_state_hash) */
 #include "perf.h" /* fs_perf_instr_fd, web_perf_*_us — for attribution */
@@ -531,6 +536,16 @@ int main(int argc, char** argv)
         goto done;
 
     D_DoomMain(); // init + loads WAD via fs_register_wad/W_WebFile; no disk I/O
+
+    // WD_DETAIL=1: opt-in low-detail mode for bare-metal/freestanding (14.2b).
+    // Routes through the vanilla R_SetViewSize mechanism so R_ExecuteSetViewSize
+    // rebuilds view tables with detailshift=1 on the first D_DoomFrame.
+    // Do NOT poke detailshift directly (view tables must be rebuilt vanilla's way).
+    if (getenv("WD_DETAIL") && getenv("WD_DETAIL")[0] == '1') {
+        R_SetViewSize(screenblocks, 1);
+        fprintf(stderr, "fs-doom: WD_DETAIL=1: low-detail mode enabled"
+                        " (R_DrawColumnLow/R_DrawSpanLow)\n");
+    }
 
     // Disable smooth render interpolation (non-deterministic wall-clock drift).
     smoothrender = false;

@@ -293,6 +293,7 @@ void R_DrawColumnLow (void)
     byte*		dest2;
     fixed_t		frac;
     fixed_t		fracstep;
+    int			screen_x; /* 14.2a/14.2b: local doubled-x; do NOT modify dc_x (global) */
 
     count = dc_yh - dc_yl;
 
@@ -311,11 +312,14 @@ void R_DrawColumnLow (void)
 
     PERF_COL_INC(count);
 
-    // Blocky mode, need to multiply by 2.
-    dc_x <<= 1;
-    
-    dest = ylookup[dc_yl] + columnofs[dc_x];
-    dest2 = ylookup[dc_yl] + columnofs[dc_x+1];
+    // Blocky mode: double to screen x (0..SCREENWIDTH-1) via LOCAL var.
+    // 14.2b: do NOT modify the global dc_x — callers iterate dc_x in
+    // viewwidth coords (0..viewwidth-1); modifying dc_x here causes
+    // exponential growth of the outer loop counter across iterations.
+    screen_x = dc_x << 1;
+
+    dest = ylookup[dc_yl] + columnofs[screen_x];
+    dest2 = ylookup[dc_yl] + columnofs[screen_x+1];
     
     fracstep = dc_iscale; 
     frac = dc_texturemid + (dc_yl-centery)*fracstep;
@@ -786,17 +790,22 @@ void R_DrawSpanLow (void)
 //	dscount++; 
 #endif 
 	 
-    xfrac = ds_xfrac; 
-    yfrac = ds_yfrac; 
+    xfrac = ds_xfrac;
+    yfrac = ds_yfrac;
 
     // Blocky mode, need to multiply by 2.
+    // 14.2a bug-fix: compute count BEFORE the shift.
+    // After ds_x1 <<= 1 and ds_x2 <<= 1, both are doubled, so (ds_x2 - ds_x1)
+    // would be 2× the original span width. Each loop iteration advances by
+    // 2*SCREENHEIGHT (two adjacent columns), so count must be the ORIGINAL
+    // (pre-shift) span width; otherwise the loop runs 2× and overruns the buffer.
+    count = ds_x2 - ds_x1;
+
     ds_x1 <<= 1;
     ds_x2 <<= 1;
-    
+
     dest = ylookup[ds_y] + columnofs[ds_x1];
-  
-    
-    count = ds_x2 - ds_x1;
+
     do
     {
 	spot = ((yfrac>>(16-6))&(63*64)) + ((xfrac>>16)&63);

@@ -17,6 +17,7 @@ import { dirname, join } from 'node:path';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const record = process.argv.includes('--record');
 const renderMode = process.argv.includes('--render');
+const lowDetail = process.argv.includes('--low-detail'); // 14.2b: low-detail render goldens
 const crossIdx = process.argv.indexOf('--cross');
 const chocoBin = crossIdx >= 0 ? process.argv[crossIdx + 1] : null;
 const buildDirIdx = process.argv.indexOf('--build-dir');
@@ -81,6 +82,11 @@ if (renderMode) {
         return h >>> 0;
     }
 
+    // 14.2b: --low-detail records/verifies separate -render-low.json goldens.
+    // High-detail goldens (-render.json) are never touched by --low-detail runs.
+    const goldenSuffix = lowDetail ? '-render-low' : '-render';
+    const detailTag    = lowDetail ? '[low-detail] ' : '';
+
     let failures = 0;
 
     for (const [wad, engineName, demos] of MATRIX) {
@@ -109,6 +115,11 @@ if (renderMode) {
                 // Pin fractic=FRACUNIT so renders are deterministic end-of-tic
                 // snapshots with no wall-clock (emscripten_get_now) contribution.
                 doom._web_set_smooth(0);
+                // 14.2b: opt-in low-detail mode — routes through R_SetViewSize so
+                // R_ExecuteSetViewSize rebuilds view tables with detailshift=1.
+                // Must be called AFTER callMain (engine must be initialised).
+                // Detail is render-only; sim hashes are unaffected.
+                if (lowDetail) doom._web_set_detail(1);
                 // Stable pointer into wasm memory for screens[0]; valid for this
                 // doom instance's lifetime and does not move between frames.
                 const fbPtr = doom._web_framebuffer();
@@ -134,21 +145,21 @@ if (renderMode) {
 
             const name = `${wad.replace('.wad', '')}-${demo}`;
             if (typeof done !== 'number') {
-                console.log(`FAIL ${name} render: ${done ?? 'never finished'}`);
+                console.log(`FAIL ${name} ${detailTag}render: ${done ?? 'never finished'}`);
                 failures++;
                 continue;
             }
 
-            const goldenPath = join(goldenDir, `${name}-render.json`);
+            const goldenPath = join(goldenDir, `${name}${goldenSuffix}.json`);
             if (record || !existsSync(goldenPath)) {
                 writeFileSync(goldenPath, JSON.stringify({ tics: done, trace }));
-                console.log(`recorded ${name} render: ${done} gametics, ${trace.length} hashes`);
+                console.log(`recorded ${name} ${detailTag}render: ${done} gametics, ${trace.length} hashes`);
                 continue;
             }
 
             const golden = JSON.parse(readFileSync(goldenPath));
             if (golden.tics !== done) {
-                console.log(`FAIL ${name} render: ran ${done} gametics, golden ${golden.tics}`);
+                console.log(`FAIL ${name} ${detailTag}render: ran ${done} gametics, golden ${golden.tics}`);
                 failures++;
                 continue;
             }
@@ -157,17 +168,17 @@ if (renderMode) {
                 if (golden.trace[i] !== trace[i]) { diverged = i; break; }
             }
             if (diverged >= 0) {
-                console.log(`FAIL ${name} render: PIXEL DESYNC at tic ${diverged} of ${golden.trace.length} (wad=${wad} demo=${demo})`);
+                console.log(`FAIL ${name} ${detailTag}render: PIXEL DESYNC at tic ${diverged} of ${golden.trace.length} (wad=${wad} demo=${demo})`);
                 failures++;
             } else {
-                console.log(`PASS ${name} render: ${done} gametics pixel-identical`);
+                console.log(`PASS ${name} ${detailTag}render: ${done} gametics pixel-identical`);
             }
         }
     }
 
-    if (failures) { console.log(`${failures} render golden(s) failed`); process.exit(1); }
-    console.log(record ? 'render golden traces written'
-                       : 'PASS — all render goldens pixel-identical');
+    if (failures) { console.log(`${failures} ${detailTag}render golden(s) failed`); process.exit(1); }
+    console.log(record ? `${detailTag}render golden traces written`
+                       : `PASS — all ${detailTag}render goldens pixel-identical`);
     process.exit(0);
 }
 

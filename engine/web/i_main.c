@@ -11,8 +11,13 @@
 #include "d_main.h"
 #include "d_player.h"
 #include "m_argv.h"
+#include "r_main.h"
 #include "web.h"
 #include "perf.h" // webdoom: per-stage timing
+
+/* Vanilla globals for web_set_detail (14.2b). */
+extern int detailLevel;
+extern int screenblocks;
 
 int main (int argc, char** argv)
 {
@@ -162,6 +167,19 @@ extern boolean smoothrender;
 EMSCRIPTEN_KEEPALIVE void web_set_smooth (int on)
 {
     smoothrender = on;
+}
+
+//
+// web_set_detail (14.2b): opt-in detail level for bare-metal/testing use.
+// Routes through the vanilla R_SetViewSize mechanism so R_ExecuteSetViewSize
+// rebuilds view tables with the new detailshift on the next D_DoomFrame.
+// detail=0 → high-detail (R_DrawColumn/R_DrawSpan, default).
+// detail=1 → low-detail  (R_DrawColumnLow/R_DrawSpanLow, halved h-res).
+// Do NOT poke detailshift directly — view tables must be rebuilt vanilla's way.
+//
+EMSCRIPTEN_KEEPALIVE void web_set_detail (int detail)
+{
+    R_SetViewSize (screenblocks, detail);
 }
 
 //
