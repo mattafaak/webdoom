@@ -42,6 +42,23 @@ rcsid[] = "$Id: r_bsp.c,v 1.4 1997/02/03 22:45:12 b1 Exp $";
 
 //#include "r_local.h"
 
+// webdoom task 14.2e: drawseg peak counter.
+// Compile with -DWEB_PERF_DRAWSEG_STATS to enable; zero overhead otherwise.
+// perf.h lives in engine/web/ — include it only when the stats flag is set
+// so that an unflagged build of engine/core/ has no dependency on engine/web/.
+#ifdef WEB_PERF_DRAWSEG_STATS
+#include "perf.h"
+// Sample peak drawseg count for this frame (call before ds_p is reset).
+// Guard ds_p != NULL: first frame ds_p is 0 (uninitialised global) — skip.
+#define PERF_DRAWSEG_PEAK() do { \
+    if (ds_p) { \
+        long _n = (long)(ds_p - drawsegs); \
+        if (_n > web_perf_drawseg_peak) web_perf_drawseg_peak = _n; \
+    } \
+} while (0)
+#else
+#define PERF_DRAWSEG_PEAK() ((void)0)
+#endif
 
 
 seg_t*		curline;
@@ -67,6 +84,7 @@ R_StoreWallRange
 //
 void R_ClearDrawSegs (void)
 {
+    PERF_DRAWSEG_PEAK();
     ds_p = drawsegs;
 }
 

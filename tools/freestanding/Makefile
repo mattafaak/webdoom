@@ -16,6 +16,9 @@
 #   make clean
 
 CC      := gcc
+# Optional extra compile-time defines for instrumented builds.
+# Usage: make EXTRA_CFLAGS="-DWEB_PERF_DRAWSEG_STATS"
+EXTRA_CFLAGS ?=
 CFLAGS  := -m32 -O1 -g \
             -std=gnu89 -DNORMALUNIX \
             -Dalloca=__builtin_alloca \
@@ -29,7 +32,8 @@ CFLAGS  := -m32 -O1 -g \
             -Wno-unused-value \
             -Wno-pointer-sign \
             -I../../engine/core \
-            -I.
+            -I. \
+            $(EXTRA_CFLAGS)
 
 LDFLAGS := -m32 -lm
 

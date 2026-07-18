@@ -403,7 +403,7 @@ From `docs/perf.md §3` (wasm linear memory layout):
 The large BSS is dominated by renderer scratch arrays: `visplanes[128]`
 (~83 KiB at sizeof = 664 B; task 14.2d restored vanilla 128 from 1024,
 saving 581 KiB), `openings[81920]` (160 KiB × 2 B),
-`drawsegs[2048]` (~120 KiB), `vissprites[1024]` (~50 KiB). The screen
+`drawsegs[256]` (~12 KiB; task 14.2e reverted from 2048×48 = 96 KiB to vanilla 256×48 = 12 KiB, saving 84 KiB BSS), `vissprites[1024]` (~50 KiB). The screen
 buffers (`screens[0..3]`, 250 KiB total) are **not** in static BSS; they
 are allocated at runtime by `I_AllocLow` and point into whichever memory
 region the port selects (see §1.5).

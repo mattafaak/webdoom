@@ -74,8 +74,8 @@ const claims = [
       expected: 256,
       verify: () => grabByRegex('engine/core/r_defs.h', /was\s+(\d+)/) },
 
-    { id: 'rdr-008', desc: 'MAXDRAWSEGS webdoom = 2048',
-      expected: 2048,
+    { id: 'rdr-008', desc: 'MAXDRAWSEGS webdoom = 256 (reverted to vanilla, task 14.2e)',
+      expected: 256,
       verify: () => grabDefine('engine/core/r_defs.h', 'MAXDRAWSEGS') },
 
     { id: 'rdr-009', desc: 'MAXVISSPRITES vanilla = 128',

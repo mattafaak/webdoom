@@ -31,6 +31,7 @@ extern long web_perf_span_pixels; // total pixels drawn by span func
 extern long web_perf_findplane_calls; // calls to R_FindPlane (all frames)
 extern long web_perf_findplane_iters; // linear-search comparison iterations
 extern long web_perf_visplane_peak;   // peak live visplanes seen in any frame
+extern long web_perf_drawseg_peak;    // task 14.2e: peak drawsegs used in any frame
 
 // task 6.2: teleport counter — always declared; incremented only when
 // p_telept.c is compiled with -DWEB_PERF_TELEPORT_STATS.  Byte-unaffected in

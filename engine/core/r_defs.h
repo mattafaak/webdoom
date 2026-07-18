@@ -52,7 +52,7 @@
 #define SIL_TOP			2
 #define SIL_BOTH		3
 
-#define MAXDRAWSEGS		2048	// webdoom: was 256
+#define MAXDRAWSEGS		256	// vanilla; was 256; webdoom raised to 2048, reverted 14.2e (peak 205/256 — thin 1.25× margin; doom-demo4 witness)
 
 
 

@@ -28,6 +28,7 @@ long   web_perf_span_pixels = 0;
 long   web_perf_findplane_calls = 0;
 long   web_perf_findplane_iters = 0;
 long   web_perf_visplane_peak   = 0;
+long   web_perf_drawseg_peak    = 0; /* task 14.2e */
 
 // Read the current cumulative instruction count from the perf fd.
 // Returns 0 on failure or when fd is not open.

@@ -165,7 +165,7 @@
     "rdr-008": {
       "family": "source-constant",
       "command": "node tools/archaeology/source-constant-verify.mjs",
-      "expected": "2048",
+      "expected": "256",
       "status": "verified"
     },
     "rdr-009": {
@@ -964,16 +964,16 @@
     "size-001": {
       "family": "size-ledger",
       "command": "node tools/archaeology/size-ledger.mjs",
-      "expected": "356206",
+      "expected": "356211",
       "status": "verified",
-      "notes": "doom.wasm raw bytes at task 14.2d base (31e436a). Hard budget ceiling enforced by size-ledger.mjs: FAIL if actual > doom_wasm_raw_budget in tools/archaeology/size-budget.json (360,448 B = 352 KiB). Expected here is the documented baseline; the gate is budget-relative, not exact-match."
+      "notes": "doom.wasm raw bytes at task 14.2e base. Hard budget ceiling enforced by size-ledger.mjs: FAIL if actual > doom_wasm_raw_budget in tools/archaeology/size-budget.json (360,448 B = 352 KiB). Expected here is the documented baseline; the gate is budget-relative, not exact-match. Note: BSS reduction (MAXDRAWSEGS 2048\u2192256) does not shrink wasm binary; __heap_base shifts -86,016 B but wasm data section unchanged."
     },
     "size-002": {
       "family": "size-ledger",
       "command": "node tools/archaeology/size-ledger.mjs",
-      "expected": "146346",
+      "expected": "146352",
       "status": "verified",
-      "notes": "doom.wasm gzip-9 bytes at task 14.2d base (31e436a). Soft/informational \u2014 no hard ceiling. Tracked as a trend metric; drift is expected across commits. Expected here is the documented baseline."
+      "notes": "doom.wasm gzip-9 bytes at task 14.2e base. Soft/informational \u2014 no hard ceiling. Tracked as a trend metric; drift is expected across commits. Expected here is the documented baseline."
     },
     "size-003": {
       "family": "size-ledger",

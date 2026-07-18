@@ -1007,7 +1007,7 @@ upper sky texture.
 | limit | vanilla | webdoom | file:line | overflow: vanilla | overflow: webdoom |
 |-------|---------|---------|-----------|-------------------|-------------------|
 | `MAXVISPLANES` | 128 | 128 | r_plane.c:74 | `I_Error` (hard abort) | `I_Error` (same) |
-| `MAXDRAWSEGS` | 256 | 2048 | r_defs.h:55 | see below | see below |
+| `MAXDRAWSEGS` | 256 | 256 | r_defs.h:55 | see below | see below (reverted to vanilla 14.2e; peak 205 across 13 demos) |
 | `MAXVISSPRITES` | 128 | 1024 | r_things.h:31 | `overflowsprite` silent | same |
 | `MAXSEGS` (solidsegs) | 32 | 64 | r_bsp.c:88 | silent array overwrite | silent array overwrite |
 | `MAXOPENINGS` | SCREENWIDTH×64 = 20480 | SCREENWIDTH×256 = 81920 | r_plane.c:59 | `I_Error` only in RANGECHECK build | same |
@@ -1015,8 +1015,10 @@ upper sky texture.
 **MAXDRAWSEGS overflow detail**: `R_StoreWallRange` checks
 `if (ds_p == &drawsegs[MAXDRAWSEGS]) return;` (r_segs.c:386) — it silently
 skips storing the drawseg and returns without drawing. This means walls past the
-limit become invisible, no crash. Same behavior in vanilla and webdoom; the
-limit difference is 256 vs 2048.
+limit become invisible, no crash. Same behavior in vanilla and webdoom. Task
+14.2e reverted the webdoom expansion (2048→256); measured peak across 13 golden
+demos is 205 (doom-demo4 witness), giving a 1.25× margin over 256. **FLAG**:
+thin margin — a complex PWAD scene could exceed 256.
 
 **MAXVISSPRITES overflow detail**: `R_NewVisSprite` returns `&overflowsprite`
 (a file-scope global, external linkage, r_things.c:328, 332) when the pool is

@@ -169,17 +169,21 @@ but was not required — the unpinning (post-3.2) eliminated layout sensitivity.
 
 | field | value |
 |-------|-------|
-| **mechanism** | Reduce `MAXDRAWSEGS` in `engine/core/r_defs.h` from 2048 (webdoom-expanded) to 256 (vanilla). `sizeof(drawseg_t)` from `engine/core/r_defs.h`: seg_t*(4) + int×2(8) + fixed_t×3(12) + int(4) + fixed_t×2(8) + short*×3(12) = **48 bytes** (wasm32, 4-byte pointers). Current: 2048×48 = 98,304 bytes ≈ 96 KiB. Target: 256×48 = 12,288 bytes ≈ 12 KiB. **Savings ≈ 84 KiB BSS** (Plans.md seed says "drawsegs 120 KiB" — that figure likely uses a larger sizeof; actual struct sizeof=48 in wasm32). `__heap_base` shifts; render golden regold required. |
+| **mechanism** | Reduce `MAXDRAWSEGS` in `engine/core/r_defs.h` from 2048 (webdoom-expanded) to 256 (vanilla). `sizeof(drawseg_t)` from `engine/core/r_defs.h`: seg_t*(4) + int×2(8) + fixed_t×3(12) + int(4) + fixed_t×2(8) + short*×3(12) = **48 bytes** (wasm32, 4-byte pointers). Before: 2048×48 = 98,304 bytes ≈ 96 KiB. After: 256×48 = 12,288 bytes ≈ 12 KiB. **Savings = 84 KiB BSS** (Plans.md seed said "120 KiB" — incorrect sizeof assumption; actual sizeof=48). `__heap_base` shifts −86,016 B (exact, confirmed 14.2e). Render golden regold not required (13/13 UNREGOLDED pass). |
 | **predicted Δinstr/tic** | 0. Static array. |
 | **axis** | RAM / portability |
 | **magic-data policy** | None. **COMPLIES.** |
-| **kill rule** | `R_StoreWallRange` overflow guard fires on any 13 golden demos = kill. Evidence: perf.md §539 "~30–50 drawsegs/frame" from renderer.md §4.4; 256 provides ≥5× margin over typical scene. |
+| **kill rule** | `R_StoreWallRange` overflow guard fires on any 13 golden demos = kill. Overflow is silent (renderer.md §10); render-golden pixel divergence is the detector. |
+| **measured peak drawsegs** | doom-demo1=59, doom-demo2=46, doom-demo3=62, **doom-demo4=205**, doom2-demo1=104, doom2-demo2=58, doom2-demo3=115, tnt-demo1=95, tnt-demo2=112, tnt-demo3=108, plutonia-demo1=180, plutonia-demo2=161, plutonia-demo3=157. **Corpus max: 205 (doom-demo4)**. |
+| **margin** | 256/205 = **1.25×** ⚠️ THIN MARGIN — doom-demo4 is 51 segs below the cap. Complex PWAD scenes could exceed 256; flag for lead judgment before re-raising C6 (MAXOPENINGS). |
+| **wasm size** | Before: 356,211 B raw. After: see size-ledger below. `__heap_base` −86,016 B. |
+| **gates** | 13/13 sim PASS · 13/13 render PASS (unregolded) · 13/13 render-low PASS · 20/20 fuzz PASS · 13/13 fs-doom PASS · verify-all.sh rc=0 · size-ledger rc=0 |
 
-**Verdict: SURVIVES → task 14.2e**
+**Verdict: LANDED — task 14.2e** ⚠️ NOTE thin 1.25× margin at doom-demo4; lead should evaluate before further BSS reduction candidates that share render limits.
 
-Notes: drawsegs overflow guard is already in r_bsp.c (webdoom added it), so the kill criterion
-is deterministically testable. The 2048 expansion was done for PWAD robustness; vanilla 256
-covers the measured 13-demo corpus.
+Notes: Instrumented build (`-DWEB_PERF_DRAWSEG_STATS`) run across all 13 demos before downsize to
+validate peak. Peak 205 < 256 → no overflow in golden corpus → kill rule not triggered.
+Render golden divergence would have been the overflow signal (silent drop, not crash).
 
 ---
 
@@ -380,7 +384,7 @@ sanctioned by policy).**
 | C2 | Low-detail mode (bare-metal option) | cycle-floor / simplicity | MEASURED: whole-program −19.5…−28.3% instr/tic (bsp −22.1% mean, planes −41.5% mean); exposed+fixed 2 latent 14.2a Low-path bugs | LANDED (14.2b) |
 | C3 | ZONESIZE 32→4 MiB shipping | RAM | 0 instr/tic; -28 MiB zone pool; 64→32 MiB INITIAL_MEMORY | LANDED (14.2c) |
 | C4 | MAXVISPLANES 1024→128 | RAM / portability | 0 instr/tic; 581 KiB BSS savings (896 × 664 bytes) | LANDED (14.2d) |
-| C5 | MAXDRAWSEGS 2048→256 | RAM / portability | 0 instr/tic; 84 KiB BSS savings (1792 × 48 bytes) | SURVIVES → 14.2e |
+| C5 | MAXDRAWSEGS 2048→256 | RAM / portability | 0 instr/tic; 84 KiB BSS savings (1792 × 48 B); peak 205/256 ⚠️ thin 1.25× | LANDED — 14.2e |
 | C6 | MAXOPENINGS 320×256→320×64 | RAM / portability | 0 instr/tic; 120 KiB BSS savings (61,440 × 2 bytes) | SURVIVES → 14.2f (measure-first) |
 | C7 | STACK_SIZE 4→1 MiB (bare-metal builds) | RAM / portability | 0 instr/tic; -3 MiB per build | SURVIVES → 14.2g |
 | K1 | R_DrawSpan u32 packing | cycle-floor | wbox +7.9% planes REGRESSION | KILLED |
