@@ -116,13 +116,18 @@ horizontal resolution)." This confirms the mechanism is documented and intention
 | **magic-data policy** | None. **COMPLIES.** |
 | **kill rule** | Sim golden failure, render golden failure, or net golden failure at 4 MiB zone = kill. Source: 13.2b proven safe (zone-stats.json: 248–1,397 purges/demo, 13/13 golden, zero divergence at 4 MiB). |
 
-**Verdict: SURVIVES → task 14.2c**
+**Verdict: MEASURED (14.2c) — LANDED**
 
 Notes: 13.2b provided the evidence that was missing when task 2.5 tried and failed at 4 MiB
 (that failure was dc_texheight OOB, now fixed by 3.1). The zone-stats.json defensible_min_statement
 confirms: "The defensible minimum ZONESIZE is 4 MiB: non-purgeable render-ON HWM = 0.981 MiB
 (tnt-demo2)... zero golden divergence across 13 demos." The win: wasm linear memory floor drops
 from 64 MiB to 32 MiB (~50% reduction in INITIAL_MEMORY).
+
+14.2c landing evidence: sim 13/13 PASS, render-high 13/13 PASS, render-low 13/13 PASS, net PASS,
+invariant-build 13/13 PASS, fuzz 20-seeds PASS. web_heap_base = 5.269 MiB (static floor);
+zone = 4.000 MiB; peak estimate = 5.269 + 4.000 + 17.353 (tnt.wad) = 26.622 MiB < 32 MiB.
+INITIAL_MEMORY confirmed 32 MiB (buffer.byteLength = 33,554,432). fs build UNAFFECTED (own zone config).
 
 ---
 
@@ -357,7 +362,7 @@ sanctioned by policy).**
 |----|-----------|------|------------|---------|
 | C1 | Framebuffer transposition | cycle-floor / portability | MEASURED: −2.77…−5.12% mean instr/tic (within variance band, direction consistently negative); bare-metal PSRAM wall-clock win still UNMEASURED | LANDED (14.2a) |
 | C2 | Low-detail mode (bare-metal option) | cycle-floor / simplicity | MEASURED: whole-program −19.5…−28.3% instr/tic (bsp −22.1% mean, planes −41.5% mean); exposed+fixed 2 latent 14.2a Low-path bugs | LANDED (14.2b) |
-| C3 | ZONESIZE 32→4 MiB shipping | RAM | 0 instr/tic; -28 MiB zone pool; 64→32 MiB INITIAL_MEMORY | SURVIVES → 14.2c |
+| C3 | ZONESIZE 32→4 MiB shipping | RAM | 0 instr/tic; -28 MiB zone pool; 64→32 MiB INITIAL_MEMORY | LANDED (14.2c) |
 | C4 | MAXVISPLANES 1024→128 | RAM / portability | 0 instr/tic; 581 KiB BSS savings (896 × 664 bytes) | SURVIVES → 14.2d |
 | C5 | MAXDRAWSEGS 2048→256 | RAM / portability | 0 instr/tic; 84 KiB BSS savings (1792 × 48 bytes) | SURVIVES → 14.2e |
 | C6 | MAXOPENINGS 320×256→320×64 | RAM / portability | 0 instr/tic; 120 KiB BSS savings (61,440 × 2 bytes) | SURVIVES → 14.2f (measure-first) |
