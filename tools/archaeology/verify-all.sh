@@ -207,9 +207,13 @@ if [ "$FULL" = "1" ]; then
     if [ -f "build/doom.wasm" ]; then
         capture_run "measurement-stamp / wasm-stamp (3 claims)" \
             node tools/archaeology/wasm-stamp.mjs
+
+        capture_run "size-ledger (4 claims: size-001..004; budget gate + README KB)" \
+            node tools/archaeology/size-ledger.mjs
     else
         echo ""
         echo "SKIP  wasm-stamp: build/doom.wasm not found (run make first)"
+        echo "SKIP  size-ledger: build/doom.wasm not found (run make first)"
     fi
 fi
 
@@ -230,7 +234,7 @@ FAST_CLAIMS=107  # source-constant(40) + wad-data(23) + recipe-crack(38) + deriv
                  # fixeddiv-proof(3) + fixedmul-proof(2) + aprox-dist(5) +
                  # angle-roundtrip(2) + colormap(4) + colormap-invuln(4) +
                  # checkcoord(1) + zlight(1) + ledger(5)
-FULL_CLAIMS=25   # + runtime-stat(15) + measurement-stamp(10)
+FULL_CLAIMS=29   # + runtime-stat(15) + measurement-stamp(10) + size-ledger(4)
 UNVERIFIABLE=13  # ea-004..006 retired from unverifiable (superseded by proof)
 
 if [ "$FULL" = "1" ]; then

@@ -1,0 +1,5 @@
+{
+  "_note": "Hard ceiling for doom.wasm raw bytes. Enforced by tools/archaeology/size-ledger.mjs (called from tools/run-tests.sh). Raise only with a documented regression investigation in Plans.md. Tighten the ratchet after any sustained size reduction.",
+  "doom_wasm_raw_budget": 360448,
+  "doom_wasm_raw_budget_justification": "352 KiB (352 × 1024 = 360,448 B). Current shipping size at task 14.2d base (31e436a) is 356,206 B (347.9 KiB). Headroom: 4,242 B (≈1.2%); enough to absorb normal linker drift without false alarms. 352 KiB is a round binary multiple of 1 KiB."
+}

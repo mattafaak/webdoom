@@ -927,11 +927,11 @@
       "status": "verified"
     },
     "readme-001": {
-      "family": "unverifiable",
-      "command": null,
+      "family": "measurement-stamp",
+      "command": "node tools/archaeology/size-ledger.mjs",
       "expected": "348",
-      "status": "unverifiable",
-      "notes": "Wasm binary size in README.md, in KB (binary, rounded to nearest integer). Source: CURRENT shipping artifact (359,566 bytes per node tools/archaeology/stamp-check.mjs on master, 2026-07-17); 359566/1024=351.14\u2192351. NOT derived from perf.md \u00a71 commit-pinned table (perf-001=357,978 is pinned to commit 6de6256 and legitimately drifts). Update command: node tools/archaeology/stamp-check.mjs \u2192 read actual wasm_size_bytes \u2192 divide by 1024, round to nearest integer \u2192 update expected here and README.md. Checked by doc-drift.mjs README_HINTS (hard fail on divergence)."
+      "status": "verified",
+      "notes": "Wasm binary size in README.md, in KB (round(raw_bytes/1024)). Source: build/doom.wasm at task 14.2d base (31e436a); 356,206 B \u2192 round/1024 = 348 KB. NOT derived from perf.md \u00a71 commit-pinned table (perf-001=357,978 is pinned to 6de6256 and legitimately drifts). Machine-verified by size-ledger.mjs (task 14.3): checks README.md KB == round(actual_build_bytes/1024) and claims.json expected == same value; hard fail on any divergence. doc-drift.mjs README_HINTS also hard-fails if README diverges from this expected value. Update command: (cd engine && make) && node tools/archaeology/size-ledger.mjs \u2014 FAIL output shows the correct KB value; update README.md and this expected field to match."
     },
     "spec-001": {
       "family": "unverifiable",
@@ -960,23 +960,52 @@
       "expected": "44580",
       "status": "unverifiable",
       "notes": "Total tic count across 13 IWAD demos cross-validated against instrumented Chocolate Doom. Quoted in README.md and magic-data.md. Not gateable in CI without external Chocolate Doom binary + WAD files. Source: tools/build-choco-reference.sh + node tools/demo-test.mjs --cross <binary>. Re-verified 2026-07-17 (task 12.5): sdl2-compat 2.32.70 on CachyOS host; build RC=0; 13/13 demos PASS, 44580 tics confirmed; expected value unchanged."
+    },
+    "size-001": {
+      "family": "size-ledger",
+      "command": "node tools/archaeology/size-ledger.mjs",
+      "expected": "356206",
+      "status": "verified",
+      "notes": "doom.wasm raw bytes at task 14.2d base (31e436a). Hard budget ceiling enforced by size-ledger.mjs: FAIL if actual > doom_wasm_raw_budget in tools/archaeology/size-budget.json (360,448 B = 352 KiB). Expected here is the documented baseline; the gate is budget-relative, not exact-match."
+    },
+    "size-002": {
+      "family": "size-ledger",
+      "command": "node tools/archaeology/size-ledger.mjs",
+      "expected": "146346",
+      "status": "verified",
+      "notes": "doom.wasm gzip-9 bytes at task 14.2d base (31e436a). Soft/informational \u2014 no hard ceiling. Tracked as a trend metric; drift is expected across commits. Expected here is the documented baseline."
+    },
+    "size-003": {
+      "family": "size-ledger",
+      "command": "node tools/archaeology/size-ledger.mjs",
+      "expected": "294721",
+      "status": "verified",
+      "notes": "fs-doom .text bytes from tools/freestanding/fs-doom (locally built native i386 ELF; gitignored build product, NOT committed \u2014 see tools/freestanding/.gitignore). Soft/best-effort \u2014 no hard ceiling; size-ledger SKIPs when the binary is absent. Expected measured from a fresh make at task 14.3 base (31e436a): .text 294,721 B. Cross-check: this binary\u2019s .bss is exactly 594,944 B smaller than a pre-14.2d build \u2014 the 14.2d visplanes delta."
+    },
+    "size-004": {
+      "family": "size-ledger",
+      "command": "node tools/archaeology/size-ledger.mjs",
+      "expected": "348",
+      "status": "verified",
+      "notes": "README.md KB figure as verified by size-ledger.mjs. Must equal round(actual doom.wasm raw bytes / 1024). Hard fail if README.md or claims.json readme-001.expected diverges from the computed KB. This closes the 12.1 seed: the README figure can never go stale again without the gate failing."
     }
   },
   "_summary": {
-    "_note": "computed from claims by tools/archaeology (task 6.3) \u2014 do not hand-edit; ea-042..047 added by task 7.2; readme-001/spec-001..003/md-tic-001 added by task 12.1 (published-promise gate); counts recomputed 2026-07-17",
-    "total_in_manifest": 150,
+    "_note": "computed from claims by tools/archaeology (task 6.3) \u2014 do not hand-edit; ea-042..047 added by task 7.2; readme-001/spec-001..003/md-tic-001 added by task 12.1 (published-promise gate); size-001..004 added by task 14.3 (size-ledger gate); readme-001 promoted from unverifiable to measurement-stamp/verified; counts recomputed 2026-07-18",
+    "total_in_manifest": 154,
     "by_status": {
-      "verified": 132,
-      "unverifiable": 18
+      "verified": 136,
+      "unverifiable": 17
     },
     "by_family": {
       "recipe-crack": 40,
-      "unverifiable": 18,
+      "unverifiable": 17,
       "wad-data": 23,
       "source-constant": 40,
       "runtime-stat": 15,
       "derived-check": 4,
-      "measurement-stamp": 10
+      "measurement-stamp": 11,
+      "size-ledger": 4
     }
   }
 }

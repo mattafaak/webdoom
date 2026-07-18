@@ -10,6 +10,9 @@ bash tools/lint.sh
 echo "── archaeology drift (doc figures == manifest == script) "
 bash tools/archaeology/verify-all.sh
 
+echo "── size ledger (doom.wasm budget + README KB gate) ─────"
+node tools/archaeology/size-ledger.mjs
+
 echo "── engine smoke (doom, doom2) ──────────────────────────"
 node tools/smoke-test.mjs doom.wad 700 | tail -2
 node tools/smoke-test.mjs doom2.wad 1100 | tail -2
