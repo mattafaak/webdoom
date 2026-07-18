@@ -141,11 +141,19 @@ INITIAL_MEMORY confirmed 32 MiB (buffer.byteLength = 33,554,432). fs build UNAFF
 | **magic-data policy** | None. **COMPLIES.** |
 | **kill rule** | `I_Error("R_FindPlane: no more visplanes")` on any of 13 golden demos = kill. Evidence: task 2.3 measured peak visplane count = **68** (tnt-demo2); vanilla 128 provides 1.88× margin over measured worst case. |
 
-**Verdict: SURVIVES → task 14.2d**
+**Verdict: MEASURED (14.2d) — LANDED**
+
+14.2d landing evidence: sim 13/13 PASS, render-high 13/13 PASS (NO REGOLD — unpinning holds;
+ledger "regold required" prediction corrected), invariant-build 13/13 PASS, fs 13/13 PASS.
+BSS delta measured exactly: wasm `__heap_base` 5,525,296 → 4,930,352 = **−594,944 bytes = −581.0 KiB**
+(= 896 × 664 bytes, bit-exact match to arithmetic prediction). fs-doom .bss likewise −581.0 KiB.
+Regold outcome: NOT NEEDED — post-3.2 layout unpinning proves that a pure BSS-size change is
+pixel-identical without regold (same pattern as 13.2a zone re-trial).
 
 Notes: Task 2.3 (perf.md) measured peak visplanes = 68 (tnt-demo2). With vanilla 128, there
 is a 60-plane safety margin for the measured demo corpus. Custom PWADs with more open geometry
-might hit higher counts; the kill rule covers this. Regold is the primary cost.
+might hit higher counts; the kill rule covers this. Regold was predicted as the primary cost
+but was not required — the unpinning (post-3.2) eliminated layout sensitivity.
 
 ---
 
@@ -363,7 +371,7 @@ sanctioned by policy).**
 | C1 | Framebuffer transposition | cycle-floor / portability | MEASURED: −2.77…−5.12% mean instr/tic (within variance band, direction consistently negative); bare-metal PSRAM wall-clock win still UNMEASURED | LANDED (14.2a) |
 | C2 | Low-detail mode (bare-metal option) | cycle-floor / simplicity | MEASURED: whole-program −19.5…−28.3% instr/tic (bsp −22.1% mean, planes −41.5% mean); exposed+fixed 2 latent 14.2a Low-path bugs | LANDED (14.2b) |
 | C3 | ZONESIZE 32→4 MiB shipping | RAM | 0 instr/tic; -28 MiB zone pool; 64→32 MiB INITIAL_MEMORY | LANDED (14.2c) |
-| C4 | MAXVISPLANES 1024→128 | RAM / portability | 0 instr/tic; 581 KiB BSS savings (896 × 664 bytes) | SURVIVES → 14.2d |
+| C4 | MAXVISPLANES 1024→128 | RAM / portability | 0 instr/tic; 581 KiB BSS savings (896 × 664 bytes) | LANDED (14.2d) |
 | C5 | MAXDRAWSEGS 2048→256 | RAM / portability | 0 instr/tic; 84 KiB BSS savings (1792 × 48 bytes) | SURVIVES → 14.2e |
 | C6 | MAXOPENINGS 320×256→320×64 | RAM / portability | 0 instr/tic; 120 KiB BSS savings (61,440 × 2 bytes) | SURVIVES → 14.2f (measure-first) |
 | C7 | STACK_SIZE 4→1 MiB (bare-metal builds) | RAM / portability | 0 instr/tic; -3 MiB per build | SURVIVES → 14.2g |

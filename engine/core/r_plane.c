@@ -71,7 +71,11 @@ planefunction_t		ceilingfunc;
 //
 
 // Here comes the obnoxious "visplane".
-#define MAXVISPLANES	1024	// webdoom: was 128; limit-busting maps crashed
+#define MAXVISPLANES	128	// 14.2d: restored to vanilla 128 (was 1024 for limit-busting PWADs).
+				// Measured peak = 68 visplanes (tnt-demo2, task 2.3) → 128 = 1.88×
+				// margin over 13-demo corpus. 1024 cost 581 KiB BSS (896 × 664 B);
+				// vanilla's I_Error at MAXVISPLANES (r_plane.c:274) is the correct
+				// failure surface — fail loudly, not silently on OOB overrun.
 visplane_t		visplanes[MAXVISPLANES];
 visplane_t*		lastvisplane;
 visplane_t*		floorplane;

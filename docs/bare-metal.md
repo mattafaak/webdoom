@@ -400,8 +400,9 @@ From `docs/perf.md §3` (wasm linear memory layout):
 | Zero-initialized BSS | ~1,163 KiB (static + BSS total = 1,237 KiB, perf.md §3) |
 | **`__heap_base`** | **5.21 MiB** |
 
-The large BSS is dominated by renderer scratch arrays: `visplanes[1024]`
-(~569 KiB at sizeof ≈ 556 B each), `openings[81920]` (160 KiB × 2 B),
+The large BSS is dominated by renderer scratch arrays: `visplanes[128]`
+(~83 KiB at sizeof = 664 B; task 14.2d restored vanilla 128 from 1024,
+saving 581 KiB), `openings[81920]` (160 KiB × 2 B),
 `drawsegs[2048]` (~120 KiB), `vissprites[1024]` (~50 KiB). The screen
 buffers (`screens[0..3]`, 250 KiB total) are **not** in static BSS; they
 are allocated at runtime by `I_AllocLow` and point into whichever memory
@@ -930,7 +931,7 @@ The webdoom port touches `engine/core/` in **91 places** (measured:
 | Category | Approximate count | Examples |
 |----------|-------------------|---------|
 | Render interpolation snapshots | ~12 | `p_mobj.c:535`, `p_tick.c:148`, `r_main.c:835` |
-| Raised limits (overflow guards) | ~6 | `r_plane.c:52` (MAXVISPLANES 128→1024), `r_bsp.c:88` (MAXSEGS 32→64) |
+| Raised limits (overflow guards) | ~6 | `r_plane.c:52` (MAXVISPLANES restored to vanilla 128 by task 14.2d), `r_bsp.c:88` (MAXSEGS 32→64) |
 | Safety clamps for overflows | ~3 | `p_maputl.c:607,673` (intercepts), `p_map.c` (spechit) |
 | Net/timing additions | ~6 | `d_net.h:49,137,140,145`, `g_game.c:683` |
 | JS bridge declarations and platform hooks | ~5 | `m_fixed.h:26`, `i_system.h:47,94` |
