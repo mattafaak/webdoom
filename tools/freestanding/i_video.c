@@ -58,6 +58,10 @@ void I_ReadScreen(byte* scr)
 // FNV-1a 32-bit: hash screens[0] then fold palette version as 4 LE bytes.
 // Algorithm identical to fnv1aRender() in tools/demo-test.mjs and
 // native-sanitize/i_video.c — ensures apples-to-apples golden comparison.
+//
+// 14.2a column-major: screens[0] stores pixel(x,y) at [x*SCREENHEIGHT+y].
+// Walk in VISUAL row-major order (y outer, x inner) so the hash sequence
+// matches the goldens that were computed from row-major storage.
 int fs_palette_version_get(void)
 {
     return fs_palette_version;
@@ -65,13 +69,14 @@ int fs_palette_version_get(void)
 
 unsigned fs_render_hash(void)
 {
-    unsigned   h   = 0x811c9dc5u;
-    const byte* fb = screens[0];
-    int        i;
-    int        pv  = fs_palette_version;
+    unsigned    h   = 0x811c9dc5u;
+    const byte* fb  = screens[0];
+    int         x, y;
+    int         pv  = fs_palette_version;
 
-    for (i = 0; i < SCREENWIDTH * SCREENHEIGHT; i++)
-        h = (h ^ (unsigned)fb[i]) * 0x01000193u;
+    for (y = 0; y < SCREENHEIGHT; y++)
+        for (x = 0; x < SCREENWIDTH; x++)
+            h = (h ^ (unsigned)fb[x * SCREENHEIGHT + y]) * 0x01000193u;
 
     h = (h ^ (unsigned)(pv        & 0xff)) * 0x01000193u;
     h = (h ^ (unsigned)((pv >>  8) & 0xff)) * 0x01000193u;

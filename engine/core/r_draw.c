@@ -190,7 +190,7 @@ void R_DrawColumn (void)
         while (count-- >= 0)
         {
             *dest = colormap[source[frac >> FRACBITS]];
-            dest += SCREENWIDTH;
+            dest++;  /* 14.2a: column-major — next row is +1 byte (was +SCREENWIDTH) */
             if ((frac += fracstep) >= heightmask)
                 frac -= heightmask;
         }
@@ -199,18 +199,17 @@ void R_DrawColumn (void)
     {
         // Power-of-2 fast path (walls — the bulk of pixels).
         // webdoom task 2.2: unrolled 4-wide inner loop.
-        // Independent texture reads per iteration allow the CPU's load pipeline
-        // to overlap the four table lookups.
-        // Tail handles the remaining 0-3 pixels with the original scalar loop.
+        // 14.2a column-major: sequential pixel writes (dest[0..3]) replace
+        // the stride-SCREENWIDTH writes; dest += 4 advances four rows.
         const unsigned mask = (unsigned)(dc_texheight - 1);
 
         while (count >= 3)
         {
-            dest[0]                = colormap[source[((frac              )>>FRACBITS)&mask]];
-            dest[SCREENWIDTH]      = colormap[source[((frac+fracstep  )>>FRACBITS)&mask]];
-            dest[SCREENWIDTH*2]    = colormap[source[((frac+fracstep*2)>>FRACBITS)&mask]];
-            dest[SCREENWIDTH*3]    = colormap[source[((frac+fracstep*3)>>FRACBITS)&mask]];
-            dest  += SCREENWIDTH*4;
+            dest[0] = colormap[source[((frac              )>>FRACBITS)&mask]];
+            dest[1] = colormap[source[((frac+fracstep  )>>FRACBITS)&mask]];
+            dest[2] = colormap[source[((frac+fracstep*2)>>FRACBITS)&mask]];
+            dest[3] = colormap[source[((frac+fracstep*3)>>FRACBITS)&mask]];
+            dest  += 4;
             frac  += fracstep*4;
             count -= 4;
         }
@@ -220,7 +219,7 @@ void R_DrawColumn (void)
         while (count-- >= 0)
         {
             *dest = colormap[source[(frac>>FRACBITS)&mask]];
-            dest += SCREENWIDTH;
+            dest++;  /* column-major: +1 byte = next row in same column */
             frac += fracstep;
         }
     }
@@ -333,8 +332,8 @@ void R_DrawColumnLow (void)
         do
         {
             *dest2 = *dest = dc_colormap[dc_source[frac >> FRACBITS]];
-            dest  += SCREENWIDTH;
-            dest2 += SCREENWIDTH;
+            dest++;   /* 14.2a column-major */
+            dest2++;
             if ((frac += fracstep) >= heightmask)
                 frac -= heightmask;
         } while (count--);
@@ -346,8 +345,8 @@ void R_DrawColumnLow (void)
         {
             // Hack. Does not work corretly.
             *dest2 = *dest = dc_colormap[dc_source[(frac>>FRACBITS)&mask]];
-            dest  += SCREENWIDTH;
-            dest2 += SCREENWIDTH;
+            dest++;   /* 14.2a column-major */
+            dest2++;
             frac  += fracstep;
         } while (count--);
     }
@@ -358,7 +357,8 @@ void R_DrawColumnLow (void)
 // Spectre/Invisibility.
 //
 #define FUZZTABLE		50 
-#define FUZZOFF	(SCREENWIDTH)
+/* 14.2a column-major: adjacent fuzz pixel is 1 byte away (next row in column) */
+#define FUZZOFF	1
 
 
 int	fuzzoffset[FUZZTABLE] =
@@ -456,16 +456,16 @@ void R_DrawFuzzColumn (void)
 	//  a pixel that is either one column
 	//  left or right of the current one.
 	// Add index from colormap to index.
-	*dest = colormaps[6*256+dest[fuzzoffset[fuzzpos]]]; 
+	*dest = colormaps[6*256+dest[fuzzoffset[fuzzpos]]];
 
 	// Clamp table lookup index.
-	if (++fuzzpos == FUZZTABLE) 
+	if (++fuzzpos == FUZZTABLE)
 	    fuzzpos = 0;
-	
-	dest += SCREENWIDTH;
 
-	frac += fracstep; 
-    } while (count--); 
+	dest++;  /* 14.2a column-major */
+
+	frac += fracstep;
+    } while (count--);
 } 
  
   
@@ -546,7 +546,7 @@ void R_DrawTranslatedColumn (void)
         do
         {
             *dest = dc_colormap[dc_translation[dc_source[frac >> FRACBITS]]];
-            dest += SCREENWIDTH;
+            dest++;  /* 14.2a column-major */
             if ((frac += fracstep) >= heightmask)
                 frac -= heightmask;
         } while (count--);
@@ -562,7 +562,7 @@ void R_DrawTranslatedColumn (void)
             // Thus the "green" ramp of the player 0 sprite
             //  is mapped to gray, red, black/indigo.
             *dest = dc_colormap[dc_translation[dc_source[(frac>>FRACBITS)&mask]]];
-            dest += SCREENWIDTH;
+            dest++;  /* 14.2a column-major */
             frac += fracstep;
         } while (count--);
     }
@@ -677,7 +677,9 @@ void R_DrawSpan (void)
 
 	// Lookup pixel from flat texture tile,
 	//  re-index using light/colormap.
-	*dest++ = ds_colormap[ds_source[spot]];
+	// 14.2a column-major: moving right one pixel = +SCREENHEIGHT bytes.
+	*dest = ds_colormap[ds_source[spot]];
+	dest += SCREENHEIGHT;
 
 	// Next step in u,v.
 	xfrac += ds_xstep;
@@ -794,19 +796,23 @@ void R_DrawSpanLow (void)
     dest = ylookup[ds_y] + columnofs[ds_x1];
   
     
-    count = ds_x2 - ds_x1; 
-    do 
-    { 
+    count = ds_x2 - ds_x1;
+    do
+    {
 	spot = ((yfrac>>(16-6))&(63*64)) + ((xfrac>>16)&63);
-	// Lowres/blocky mode does it twice,
-	//  while scale is adjusted appropriately.
-	*dest++ = ds_colormap[ds_source[spot]]; 
-	*dest++ = ds_colormap[ds_source[spot]];
-	
-	xfrac += ds_xstep; 
-	yfrac += ds_ystep; 
+	// Lowres/blocky mode writes two adjacent columns.
+	// 14.2a column-major: adjacent columns are SCREENHEIGHT bytes apart.
+	{
+	    byte v = ds_colormap[ds_source[spot]];
+	    *dest = v;
+	    *(dest + SCREENHEIGHT) = v;
+	    dest += 2*SCREENHEIGHT;
+	}
 
-    } while (count--); 
+	xfrac += ds_xstep;
+	yfrac += ds_ystep;
+
+    } while (count--);
 }
 
 //
@@ -828,19 +834,22 @@ R_InitBuffer
     //  with border and/or status bar.
     viewwindowx = (SCREENWIDTH-width) >> 1; 
 
-    // Column offset. For windows.
-    for (i=0 ; i<width ; i++) 
-	columnofs[i] = viewwindowx + i;
+    // 14.2a column-major layout: screens[n][x*SCREENHEIGHT + y].
+    // columnofs[x] = byte offset of column (viewwindowx+x) from screens[0] base.
+    // ylookup[y]   = screens[0] + (viewwindowy+y), the row offset within any column.
+    // pixel(x,y)   = ylookup[y] + columnofs[x]  (same formula, different values).
+    for (i=0 ; i<width ; i++)
+	columnofs[i] = (viewwindowx + i) * SCREENHEIGHT;
 
-    // Samw with base row offset.
-    if (width == SCREENWIDTH) 
-	viewwindowy = 0; 
-    else 
-	viewwindowy = (SCREENHEIGHT-SBARHEIGHT-height) >> 1; 
+    // Same with base row offset.
+    if (width == SCREENWIDTH)
+	viewwindowy = 0;
+    else
+	viewwindowy = (SCREENHEIGHT-SBARHEIGHT-height) >> 1;
 
-    // Preclaculate all row offsets.
-    for (i=0 ; i<height ; i++) 
-	ylookup[i] = screens[0] + (i+viewwindowy)*SCREENWIDTH; 
+    // Precalculate all row offsets into screens[0].
+    for (i=0 ; i<height ; i++)
+	ylookup[i] = screens[0] + (i+viewwindowy);
 } 
  
  
@@ -876,23 +885,16 @@ void R_FillBackScreen (void)
     else
 	name = name1;
     
-    src = W_CacheLumpName (name, PU_CACHE); 
-    dest = screens[1]; 
-	 
-    for (y=0 ; y<SCREENHEIGHT-SBARHEIGHT ; y++) 
-    { 
-	for (x=0 ; x<SCREENWIDTH/64 ; x++) 
-	{ 
-	    memcpy (dest, src+((y&63)<<6), 64); 
-	    dest += 64; 
-	} 
-
-	if (SCREENWIDTH&63) 
-	{ 
-	    memcpy (dest, src+((y&63)<<6), SCREENWIDTH&63); 
-	    dest += (SCREENWIDTH&63); 
-	} 
-    } 
+    src = W_CacheLumpName (name, PU_CACHE);
+    /* 14.2a column-major: fill screens[1] column by column.
+       screens[1] pixel at (x,y) lives at screens[1] + x*SCREENHEIGHT + y.
+       Flat tile is 64x64; src[((y&63)<<6)+(x&63)] gives the tile pixel. */
+    for (x=0 ; x<SCREENWIDTH ; x++)
+    {
+	dest = screens[1] + x * SCREENHEIGHT;
+	for (y=0 ; y<SCREENHEIGHT-SBARHEIGHT ; y++)
+	    *dest++ = src[((y&63)<<6) + (x&63)];
+    }
 	
     patch = W_CacheLumpName ("brdr_t",PU_CACHE);
 
@@ -936,20 +938,23 @@ void R_FillBackScreen (void)
  
 
 //
-// Copy a screen buffer.
+// Copy a screen buffer — column-major version (14.2a).
+// Copies rectangle (x, y, width, height) from screens[1] to screens[0].
+// In column-major storage the copy is one memcpy per column.
 //
 void
 R_VideoErase
-( unsigned	ofs,
-  int		count ) 
-{ 
-  // LFB copy.
-  // This might not be a good idea if memcpy
-  //  is not optiomal, e.g. byte by byte on
-  //  a 32bit CPU, as GNU GCC/Linux libc did
-  //  at one point.
-    memcpy (screens[0]+ofs, screens[1]+ofs, count); 
-} 
+( int		x,
+  int		y,
+  int		width,
+  int		height )
+{
+    int cx;
+    for (cx = x; cx < x + width; cx++)
+        memcpy (screens[0] + cx * SCREENHEIGHT + y,
+                screens[1] + cx * SCREENHEIGHT + y,
+                (size_t)height);
+}
 
 
 //
@@ -964,38 +969,28 @@ V_MarkRect
   int		width,
   int		height ); 
  
-void R_DrawViewBorder (void) 
-{ 
+void R_DrawViewBorder (void)
+{
     int		top;
     int		side;
-    int		ofs;
-    int		i; 
- 
-    if (scaledviewwidth == SCREENWIDTH) 
-	return; 
-  
-    top = ((SCREENHEIGHT-SBARHEIGHT)-viewheight)/2; 
-    side = (SCREENWIDTH-scaledviewwidth)/2; 
- 
-    // copy top and one line of left side 
-    R_VideoErase (0, top*SCREENWIDTH+side); 
- 
-    // copy one line of right side and bottom 
-    ofs = (viewheight+top)*SCREENWIDTH-side; 
-    R_VideoErase (ofs, top*SCREENWIDTH+side); 
- 
-    // copy sides using wraparound 
-    ofs = top*SCREENWIDTH + SCREENWIDTH-side; 
-    side <<= 1;
-    
-    for (i=1 ; i<viewheight ; i++) 
-    { 
-	R_VideoErase (ofs, side); 
-	ofs += SCREENWIDTH; 
-    } 
 
-    // ? 
-    V_MarkRect (0,0,SCREENWIDTH, SCREENHEIGHT-SBARHEIGHT); 
-} 
+    if (scaledviewwidth == SCREENWIDTH)
+	return;
+
+    top  = ((SCREENHEIGHT-SBARHEIGHT)-viewheight)/2;
+    side = (SCREENWIDTH-scaledviewwidth)/2;
+
+    // 14.2a column-major: express border as four explicit axis-aligned rects.
+    // Top border: full width, rows [0, top)
+    R_VideoErase (0, 0, SCREENWIDTH, top);
+    // Bottom border: full width, rows [viewheight+top, viewheight+2*top)
+    R_VideoErase (0, viewheight+top, SCREENWIDTH, top);
+    // Left side: columns [0, side), rows [top, viewheight+top)
+    R_VideoErase (0, top, side, viewheight);
+    // Right side: columns [SCREENWIDTH-side, SCREENWIDTH), rows [top, viewheight+top)
+    R_VideoErase (SCREENWIDTH-side, top, side, viewheight);
+
+    V_MarkRect (0, 0, SCREENWIDTH, SCREENHEIGHT-SBARHEIGHT);
+}
  
  

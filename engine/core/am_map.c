@@ -1001,7 +1001,9 @@ AM_drawFline
 	return;
     }
 
-#define PUTDOT(xx,yy,cc) fb[(yy)*f_w+(xx)]=(cc)
+/* 14.2a column-major: fb = screens[0]; pixel(x,y) = fb[x*SCREENHEIGHT+y].
+   f_w = SCREENWIDTH, f_h <= SCREENHEIGHT; SCREENHEIGHT is the column stride. */
+#define PUTDOT(xx,yy,cc) fb[(xx)*SCREENHEIGHT+(yy)]=(cc)
 
     dx = fl->b.x - fl->a.x;
     ax = 2 * (dx<0 ? -dx : dx);
@@ -1325,7 +1327,9 @@ void AM_drawMarks(void)
 
 void AM_drawCrosshair(int color)
 {
-    fb[(f_w*(f_h+1))/2] = color; // single point for now
+    /* 14.2a column-major: center of (f_w × f_h) view = (f_w/2, f_h/2).
+       pixel(cx,cy) = fb[cx*SCREENHEIGHT+cy] where SCREENHEIGHT is column stride. */
+    fb[(f_w/2)*SCREENHEIGHT + (f_h/2)] = color; /* single point for now */
 
 }
 

@@ -53,15 +53,24 @@ wipe_shittyColMajorXform
   int		width,
   int		height )
 {
-    int		x;
+    /* 14.2a: screens[] are column-major (pixel(x,y) = base[x*height+y]),
+       so the input is no longer row-major shorts.  Rebuild the short-
+       column-major layout doMelt expects — dest[i*height+y] = the pixel
+       pair (2i,y),(2i+1,y) — by packing the two byte columns explicitly.
+       Packing and unpacking (doMelt) are both explicit lo=2i / hi=2i+1,
+       so the transform is endian-independent (vanilla relied on LE
+       short punning). */
+    const byte*	src = (const byte*) array;
+    int		i;
     int		y;
     short*	dest;
 
     dest = (short*) Z_Malloc(width*height*2, PU_STATIC, 0);
 
-    for(y=0;y<height;y++)
-	for(x=0;x<width;x++)
-	    dest[x*height+y] = array[y*width+x];
+    for(i=0;i<width;i++)
+	for(y=0;y<height;y++)
+	    dest[i*height+y] = (short)(src[(2*i)*height+y]
+				       | (src[(2*i+1)*height+y] << 8));
 
     memcpy(array, dest, width*height*2);
 
@@ -177,10 +186,10 @@ wipe_doMelt
     int		i;
     int		j;
     int		dy;
-    int		idx;
-    
+
     short*	s;
-    short*	d;
+    byte*	dlo;
+    byte*	dhi;
     boolean	done = true;
 
     width/=2;
@@ -198,21 +207,27 @@ wipe_doMelt
 		dy = (y[i] < 16) ? y[i]+1 : 8;
 		if (y[i]+dy >= height) dy = height - y[i];
 		s = &((short *)wipe_scr_end)[i*height+y[i]];
-		d = &((short *)wipe_scr)[y[i]*width+i];
-		idx = 0;
+		/* 14.2a column-major wipe_scr: short-column i row r is the
+		   byte pair (2i,r),(2i+1,r) = wipe_scr[(2i)*height+r] and
+		   wipe_scr[(2i+1)*height+r].  Unpack lo/hi explicitly to
+		   match the explicit pack in wipe_shittyColMajorXform. */
+		dlo = wipe_scr + (2*i)*height + y[i];
+		dhi = dlo + height;
 		for (j=dy;j;j--)
 		{
-		    d[idx] = *(s++);
-		    idx += width;
+		    short v = *(s++);
+		    *dlo++ = (byte)(v & 0xff);
+		    *dhi++ = (byte)((v >> 8) & 0xff);
 		}
 		y[i] += dy;
 		s = &((short *)wipe_scr_start)[i*height];
-		d = &((short *)wipe_scr)[y[i]*width+i];
-		idx = 0;
+		dlo = wipe_scr + (2*i)*height + y[i];
+		dhi = dlo + height;
 		for (j=height-y[i];j;j--)
 		{
-		    d[idx] = *(s++);
-		    idx += width;
+		    short v = *(s++);
+		    *dlo++ = (byte)(v & 0xff);
+		    *dhi++ = (byte)((v >> 8) & 0xff);
 		}
 		done = false;
 	    }
@@ -254,7 +269,10 @@ wipe_EndScreen
 {
     wipe_scr_end = screens[3];
     I_ReadScreen(wipe_scr_end);
-    V_DrawBlock(x, y, 0, width, height, wipe_scr_start); // restore start scr.
+    /* 14.2a: wipe_scr_start is a raw copy of column-major screens[0]
+       (I_ReadScreen), so restoring it is a raw copy back — V_DrawBlock
+       now expects a row-major source block and would transpose it. */
+    memcpy(screens[0], wipe_scr_start, width*height); // restore start scr.
     return 0;
 }
 

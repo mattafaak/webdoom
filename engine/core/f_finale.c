@@ -271,21 +271,13 @@ void F_TextWrite (void)
     int		cy;
     
     // erase the entire screen to a tiled background
+    // 14.2a column-major: fill screens[0] column by column.
     src = W_CacheLumpName ( finaleflat , PU_CACHE);
-    dest = screens[0];
-	
-    for (y=0 ; y<SCREENHEIGHT ; y++)
+    for (x=0 ; x<SCREENWIDTH ; x++)
     {
-	for (x=0 ; x<SCREENWIDTH/64 ; x++)
-	{
-	    memcpy (dest, src+((y&63)<<6), 64);
-	    dest += 64;
-	}
-	if (SCREENWIDTH&63)
-	{
-	    memcpy (dest, src+((y&63)<<6), SCREENWIDTH&63);
-	    dest += (SCREENWIDTH&63);
-	}
+	dest = screens[0] + x * SCREENHEIGHT;
+	for (y=0 ; y<SCREENHEIGHT ; y++)
+	    *dest++ = src[((y&63)<<6) + (x&63)];
     }
 
     V_MarkRect (0, 0, SCREENWIDTH, SCREENHEIGHT);
@@ -619,21 +611,22 @@ F_DrawPatchCol
     int		count;
 	
     column = (column_t *)((byte *)patch + LONG(patch->columnofs[col]));
-    desttop = screens[0]+x;
+    /* 14.2a column-major: start of column x = screens[0] + x*SCREENHEIGHT. */
+    desttop = screens[0] + x * SCREENHEIGHT;
 
     // step through the posts in a column
-    while (column->topdelta != 0xff )
+    while (column->topdelta != 0xff)
     {
 	source = (byte *)column + 3;
-	dest = desttop + column->topdelta*SCREENWIDTH;
+	dest = desttop + column->topdelta;  /* row offset within column */
 	count = column->length;
-		
+
 	while (count--)
 	{
 	    *dest = *source++;
-	    dest += SCREENWIDTH;
+	    dest++;  /* next row in same column */
 	}
-	column = (column_t *)(  (byte *)column + column->length + 4 );
+	column = (column_t *)((byte *)column + column->length + 4);
     }
 }
 

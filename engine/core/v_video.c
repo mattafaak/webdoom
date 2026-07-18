@@ -40,8 +40,9 @@ rcsid[] = "$Id: v_video.c,v 1.5 1997/02/03 22:45:13 b1 Exp $";
 #include "v_video.h"
 
 
-// Each screen is [SCREENWIDTH*SCREENHEIGHT]; 
-byte*				screens[5];	
+// 14.2a column-major layout: screens[n] pixel (x,y) = screens[n][x*SCREENHEIGHT+y].
+// All screens[0..4] share this stride for coherent V_CopyRect / V_DrawBlock usage.
+byte*				screens[5];
  
 int				dirtybox[4]; 
 
@@ -182,17 +183,18 @@ V_CopyRect
 	I_Error ("Bad V_CopyRect");
     }
 #endif 
-    V_MarkRect (destx, desty, width, height); 
-	 
-    src = screens[srcscrn]+SCREENWIDTH*srcy+srcx; 
-    dest = screens[destscrn]+SCREENWIDTH*desty+destx; 
+    V_MarkRect (destx, desty, width, height);
 
-    for ( ; height>0 ; height--) 
-    { 
-	memcpy (dest, src, width); 
-	src += SCREENWIDTH; 
-	dest += SCREENWIDTH; 
-    } 
+    /* 14.2a column-major: each column is contiguous; copy column by column. */
+    {
+	int cx;
+	for (cx = 0; cx < width; cx++)
+	{
+	    src  = screens[srcscrn]  + (srcx  + cx) * SCREENHEIGHT + srcy;
+	    dest = screens[destscrn] + (destx + cx) * SCREENHEIGHT + desty;
+	    memcpy (dest, src, (size_t)height);
+	}
+    }
 } 
  
 
@@ -235,32 +237,36 @@ V_DrawPatch
     if (!scrn)
 	V_MarkRect (x, y, SHORT(patch->width), SHORT(patch->height)); 
 
-    col = 0; 
-    desttop = screens[scrn]+y*SCREENWIDTH+x; 
-	 
-    w = SHORT(patch->width); 
+    col = 0;
+    /* 14.2a column-major: desttop points to start of column x.
+       Moving to the next column = +SCREENHEIGHT bytes.
+       Moving down one pixel within a column = +1 byte.
+       DOOM patches are already stored column-by-column, so this
+       simplifies the inner loops (patch->topdelta is a row offset). */
+    desttop = screens[scrn] + x * SCREENHEIGHT + y;
 
-    for ( ; col<w ; x++, col++, desttop++)
-    { 
-	column = (column_t *)((byte *)patch + LONG(patch->columnofs[col])); 
- 
-	// step through the posts in a column 
-	while (column->topdelta != 0xff ) 
-	{ 
-	    source = (byte *)column + 3; 
-	    dest = desttop + column->topdelta*SCREENWIDTH; 
-	    count = column->length; 
-			 
-	    while (count--) 
-	    { 
-		*dest = *source++; 
-		dest += SCREENWIDTH; 
-	    } 
-	    column = (column_t *)(  (byte *)column + column->length 
-				    + 4 ); 
-	} 
-    }			 
-} 
+    w = SHORT(patch->width);
+
+    for ( ; col<w ; x++, col++, desttop += SCREENHEIGHT)
+    {
+	column = (column_t *)((byte *)patch + LONG(patch->columnofs[col]));
+
+	// step through the posts in a column
+	while (column->topdelta != 0xff)
+	{
+	    source = (byte *)column + 3;
+	    dest = desttop + column->topdelta;  /* row offset within column */
+	    count = column->length;
+
+	    while (count--)
+	    {
+		*dest = *source++;
+		dest++;  /* next row in same column */
+	    }
+	    column = (column_t *)((byte *)column + column->length + 4);
+	}
+    }
+}
  
 //
 // V_DrawPatchFlipped 
@@ -300,32 +306,32 @@ V_DrawPatchFlipped
     if (!scrn)
 	V_MarkRect (x, y, SHORT(patch->width), SHORT(patch->height)); 
 
-    col = 0; 
-    desttop = screens[scrn]+y*SCREENWIDTH+x; 
-	 
-    w = SHORT(patch->width); 
+    col = 0;
+    /* 14.2a column-major (same as V_DrawPatch but columns read in reverse). */
+    desttop = screens[scrn] + x * SCREENHEIGHT + y;
 
-    for ( ; col<w ; x++, col++, desttop++) 
-    { 
-	column = (column_t *)((byte *)patch + LONG(patch->columnofs[w-1-col])); 
- 
-	// step through the posts in a column 
-	while (column->topdelta != 0xff ) 
-	{ 
-	    source = (byte *)column + 3; 
-	    dest = desttop + column->topdelta*SCREENWIDTH; 
-	    count = column->length; 
-			 
-	    while (count--) 
-	    { 
-		*dest = *source++; 
-		dest += SCREENWIDTH; 
-	    } 
-	    column = (column_t *)(  (byte *)column + column->length 
-				    + 4 ); 
-	} 
-    }			 
-} 
+    w = SHORT(patch->width);
+
+    for ( ; col<w ; x++, col++, desttop += SCREENHEIGHT)
+    {
+	column = (column_t *)((byte *)patch + LONG(patch->columnofs[w-1-col]));
+
+	// step through the posts in a column
+	while (column->topdelta != 0xff)
+	{
+	    source = (byte *)column + 3;
+	    dest = desttop + column->topdelta;
+	    count = column->length;
+
+	    while (count--)
+	    {
+		*dest = *source++;
+		dest++;
+	    }
+	    column = (column_t *)((byte *)column + column->length + 4);
+	}
+    }
+}
  
 
 
@@ -423,16 +429,23 @@ V_DrawBlock
     }
 #endif 
  
-    V_MarkRect (x, y, width, height); 
- 
-    dest = screens[scrn] + y*SCREENWIDTH+x; 
+    V_MarkRect (x, y, width, height);
 
-    while (height--) 
-    { 
-	memcpy (dest, src, width); 
-	src += width; 
-	dest += SCREENWIDTH; 
-    } 
+    /* 14.2a column-major: the src block stays ROW-major (width pixels/row,
+       the classic V_DrawBlock/V_GetBlock pair contract) while screens[scrn]
+       is column-major, so this transposes on the fly.  Do NOT pass raw
+       I_ReadScreen output here — that is a column-major capture and would
+       be double-transposed (f_wipe.c restores its capture with memcpy for
+       exactly this reason). */
+    {
+	int cx, ry;
+	for (cx = 0; cx < width; cx++)
+	{
+	    dest = screens[scrn] + (x + cx) * SCREENHEIGHT + y;
+	    for (ry = 0; ry < height; ry++)
+		*dest++ = src[ry * width + cx];
+	}
+    }
 } 
  
 
@@ -463,14 +476,16 @@ V_GetBlock
     }
 #endif 
  
-    src = screens[scrn] + y*SCREENWIDTH+x; 
-
-    while (height--) 
-    { 
-	memcpy (dest, src, width); 
-	src += SCREENWIDTH; 
-	dest += width; 
-    } 
+    /* 14.2a column-major: screens[scrn] column-major → dest row-major. */
+    {
+	int cx, ry;
+	for (cx = 0; cx < width; cx++)
+	{
+	    src = screens[scrn] + (x + cx) * SCREENHEIGHT + y;
+	    for (ry = 0; ry < height; ry++)
+		dest[ry * width + cx] = *src++;
+	}
+    }
 } 
 
 

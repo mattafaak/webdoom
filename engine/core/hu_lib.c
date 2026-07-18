@@ -144,7 +144,6 @@ void HUlib_eraseTextLine(hu_textline_t* l)
 {
     int			lh;
     int			y;
-    int			yoffset;
     static boolean	lastautomapactive = true;
 
     // Only erases when NOT in automap and the screen is reduced,
@@ -155,15 +154,16 @@ void HUlib_eraseTextLine(hu_textline_t* l)
 	viewwindowx && l->needsupdate)
     {
 	lh = SHORT(l->f[0]->height) + 1;
-	for (y=l->y,yoffset=y*SCREENWIDTH ; y<l->y+lh ; y++,yoffset+=SCREENWIDTH)
+	/* 14.2a column-major: R_VideoErase now takes (x, y, width, height).
+	   Each call erases a 1-row-tall horizontal strip from screens[1]. */
+	for (y=l->y ; y<l->y+lh ; y++)
 	{
 	    if (y < viewwindowy || y >= viewwindowy + viewheight)
-		R_VideoErase(yoffset, SCREENWIDTH); // erase entire line
+		R_VideoErase(0, y, SCREENWIDTH, 1); /* erase entire row */
 	    else
 	    {
-		R_VideoErase(yoffset, viewwindowx); // erase left border
-		R_VideoErase(yoffset + viewwindowx + viewwidth, viewwindowx);
-		// erase right border
+		R_VideoErase(0,                          y, viewwindowx, 1); /* left border */
+		R_VideoErase(viewwindowx + viewwidth,    y, viewwindowx, 1); /* right border */
 	    }
 	}
     }

@@ -60,15 +60,20 @@ int nat_palette_version (void)
 
 // FNV-1a 32-bit: hash screens[0] then fold paletteversion as 4 LE bytes.
 // Must produce the same value as fnv1aRender() in tools/demo-test.mjs.
+//
+// 14.2a column-major: walk in visual row-major order (y outer, x inner)
+// indexing fb[x*SCREENHEIGHT+y] so the hash matches goldens built from
+// row-major storage (same pixel visitation sequence, different storage).
 unsigned nat_render_hash (void)
 {
     unsigned h = 0x811c9dc5u;
     const byte* fb = screens[0];
-    int i;
+    int x, y;
     int pv = paletteversion;
 
-    for (i = 0; i < SCREENWIDTH * SCREENHEIGHT; i++)
-        h = (h ^ (unsigned) fb[i]) * 0x01000193u;
+    for (y = 0; y < SCREENHEIGHT; y++)
+        for (x = 0; x < SCREENWIDTH; x++)
+            h = (h ^ (unsigned) fb[x * SCREENHEIGHT + y]) * 0x01000193u;
 
     // Fold palette version as 4 little-endian bytes.
     h = (h ^ (unsigned) ( pv        & 0xff)) * 0x01000193u;

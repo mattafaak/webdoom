@@ -1,9 +1,14 @@
-// webdoom i_video: the engine composes into screens[0]; JS reads the
-// framebuffer and palette straight out of wasm memory after each
-// D_DoomFrame and palettizes on the GPU. Nothing to do here but export
-// pointers and a palette-dirty flag.
+// webdoom i_video: the engine composes into screens[0] (column-major after
+// 14.2a); JS reads a row-major untransposed copy via web_framebuffer().
+//
+// Layout after 14.2a: screens[0][x*SCREENHEIGHT + y] = pixel(x,y).
+// I_FinishUpdate untransposes into web_rowmajor_buf[] which JS hashes and
+// palettizes; the pointer returned by web_framebuffer() is stable across
+// frames (same static buffer address every call).
+//
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <emscripten.h>
+#include <string.h>
 
 #include "doomdef.h"
 #include "doomstat.h"
@@ -12,6 +17,9 @@
 
 static byte webpalette[256 * 3];
 static int paletteversion; // bumped on every I_SetPalette
+
+// Row-major presentation buffer: JS reads this.  Populated by I_FinishUpdate.
+static byte web_rowmajor_buf[SCREENWIDTH * SCREENHEIGHT];
 
 void I_InitGraphics (void) {}
 
@@ -27,13 +35,23 @@ void I_SetPalette (byte* palette)
 
 void I_UpdateNoBlit (void) {}
 
+// Untranspose screens[0] (column-major) → web_rowmajor_buf (row-major).
+// JS reads the row-major buffer for palette-indexed rendering and hashing.
 void I_FinishUpdate (void)
 {
-    // JS blits after D_DoomFrame returns; nothing to flush.
+    const byte* src = screens[0];
+    int x, y;
+    for (x = 0; x < SCREENWIDTH; x++)
+    {
+        const byte* col = src + x * SCREENHEIGHT;
+        for (y = 0; y < SCREENHEIGHT; y++)
+            web_rowmajor_buf[y * SCREENWIDTH + x] = col[y];
+    }
 }
 
 void I_ReadScreen (byte* scr)
 {
+    // Copy raw column-major bytes; callers (wipe, screenshot) handle layout.
     memcpy (scr, screens[0], SCREENWIDTH * SCREENHEIGHT);
 }
 
@@ -41,7 +59,10 @@ void I_ReadScreen (byte* scr)
 
 EMSCRIPTEN_KEEPALIVE byte* web_framebuffer (void)
 {
-    return screens[0];
+    // Return the stable row-major buffer populated by I_FinishUpdate.
+    // fnv1aRender() in demo-test.mjs hashes this buffer linearly (row-major
+    // order = visual row-major order) so golden hashes are preserved.
+    return web_rowmajor_buf;
 }
 EMSCRIPTEN_KEEPALIVE byte* web_palette (void)
 {

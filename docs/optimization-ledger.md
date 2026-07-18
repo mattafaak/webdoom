@@ -73,7 +73,7 @@ kill rule. Final column: verdict (SURVIVES → follow-up task | KILLED → reaso
 | field | value |
 |-------|-------|
 | **mechanism** | Change `screens[0]` layout from row-major (column stride = SCREENWIDTH = 320 bytes) to column-major (column stride = 1 byte). `R_DrawColumn` writes become sequential; wasm SIMD v128 stores become possible without gather; bare-metal PSRAM round-trip latency per column-pixel eliminated. |
-| **predicted Δinstr/tic** | UNMEASURED on x86-64. Retired-instruction count (`PERF_COUNT_HW_INSTRUCTIONS`) does not capture stall cycles from 320-byte stride cache misses; the icount of the inner loop body is identical before/after transposition. Arithmetic: bsp+segs p50 doom.wad = 494,338 instr/tic (cycle-attribution.json); R_DrawColumn estimated ≈70% of bsp per perf.md §Q1 ("If the R_DrawColumn inner loop accounts for ~70% of bsp+segs") = ~346K instr/tic attributable to column draw. Stride penalty is a wall-clock effect (PSRAM latency), not an icount effect. **Must run cycle-floor.sh before/after on the fs-doom build with transposed layout to get an honest Δ**; bare-metal LX7+PSRAM will show a much larger wall-clock win than x86-64 icount predicts. |
+| **predicted Δinstr/tic** | **MEASURED (14.2a landed)**: cycle-floor.sh before/after on the transposed fs-doom build — doom.wad −2.77%, doom2.wad −4.63%, tnt.wad −5.12%, plutonia.wad −4.25% mean instr/tic (before: committed cycle-floor.json 13.1a baseline 1.226–1.370M; after: 1.192–1.312M). All four deltas are inside the documented 1.3–9.9% run-to-run variance band, so the honest claim is "icount-neutral-to-slightly-better", direction consistently negative across all IWADs (plausibly better codegen from the `dest++` column inner loop). The predicted bare-metal PSRAM wall-clock win remains UNMEASURED — icount cannot capture stride-latency stalls; that measurement is bare-metal hardware's job. The committed tools/golden/cycle-floor.json keeps the 13.1a pre-transposition baseline (cited by perf.md §13.1a and the atlas); regenerating it against the shipped 14.2a engine is 14.4 release-gate work. |
 | **axis** | cycle-floor / portability |
 | **magic-data policy** | None required. No precomputed tables introduced. **COMPLIES.** |
 | **kill rule** | Any sim golden mismatch (13/13 hash diff) = kill. Any render golden pixel delta before explicit regold = kill. wasm byte-identity regression without justification = kill. |
@@ -355,7 +355,7 @@ sanctioned by policy).**
 
 | id | mechanism | axis | Δinstr/tic | verdict |
 |----|-----------|------|------------|---------|
-| C1 | Framebuffer transposition | cycle-floor / portability | UNMEASURED on x86-64; bare-metal wall-clock win expected proportional to R_DrawColumn call rate (~346K instr/tic in bsp stage) | SURVIVES → 14.2a |
+| C1 | Framebuffer transposition | cycle-floor / portability | MEASURED: −2.77…−5.12% mean instr/tic (within variance band, direction consistently negative); bare-metal PSRAM wall-clock win still UNMEASURED | LANDED (14.2a) |
 | C2 | Low-detail mode (bare-metal option) | cycle-floor / simplicity | ~173–196K instr/tic bsp-side savings (~14–16%; FLOOR); plus ~200K planes-side (UNMEASURED); combined ceiling ~30–32% of whole-program | SURVIVES → 14.2b |
 | C3 | ZONESIZE 32→4 MiB shipping | RAM | 0 instr/tic; -28 MiB zone pool; 64→32 MiB INITIAL_MEMORY | SURVIVES → 14.2c |
 | C4 | MAXVISPLANES 1024→128 | RAM / portability | 0 instr/tic; 581 KiB BSS savings (896 × 664 bytes) | SURVIVES → 14.2d |

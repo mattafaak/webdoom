@@ -504,12 +504,19 @@ WritePCXfile
 void M_ScreenShot (void)
 {
     int		i;
+    int		x;
+    int		y;
     byte*	linear;
     char	lbmname[12];
-    
+
     // munge planar buffer to linear
+    /* 14.2a: screens[0] is column-major but WritePCXfile packs rows
+       (bytes_per_line = SCREENWIDTH), so untranspose here — a raw
+       I_ReadScreen copy would produce a spatially transposed PCX. */
     linear = screens[2];
-    I_ReadScreen (linear);
+    for (x=0 ; x<SCREENWIDTH ; x++)
+	for (y=0 ; y<SCREENHEIGHT ; y++)
+	    linear[y*SCREENWIDTH+x] = screens[0][x*SCREENHEIGHT+y];
     
     // find a file name to save it to
     strcpy(lbmname,"DOOM00.pcx");
