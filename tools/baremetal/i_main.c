@@ -13,7 +13,7 @@
 //   arm-none-eabi-objcopy -I binary -O elf32-littlearm -B arm \
 //       wads/lib/doom.wad wad.o
 // (run from the repo root so symbol names stay clean):
-//   _binary_wads_lib_doom_wad_start / _binary_wads_lib_doom_wad_end
+//   _binary_obj_bm_wad_bin_start / _binary_obj_bm_wad_bin_end
 //
 // Per-tic hash algorithm: identical to fs_state_hash() in freestanding/i_main.c
 // and to web_state_hash() in the web layer — required for bit-identical golden
@@ -33,8 +33,8 @@
 extern int prndindex;
 
 // ── Baked WAD symbols (from objcopy wad.o) ───────────────────────────────────
-extern unsigned char _binary_wads_lib_doom_wad_start[];
-extern unsigned char _binary_wads_lib_doom_wad_end[];
+extern unsigned char _binary_obj_bm_wad_bin_start[];
+extern unsigned char _binary_obj_bm_wad_bin_end[];
 
 // ── Sim hash ─────────────────────────────────────────────────────────────────
 // Identical algorithm to freestanding/i_main.c fs_state_hash() and
@@ -92,13 +92,13 @@ static int bm_trace_len;
 static int bm_last_tic;
 
 // ── argv for DOOM (-timedemo demo1, no WAD path since files.c serves it) ─────
-static const char* bm_argv[] = { "bm-doom", "-timedemo", "demo1" };
+static const char* bm_argv[] = { "bm-doom", "-timedemo", BM_DEMO };
 
 // ── bm_main: C entry called from crt0.S ──────────────────────────────────────
 void bm_main(void)
 {
-    int wad_len = (int)(_binary_wads_lib_doom_wad_end
-                        - _binary_wads_lib_doom_wad_start);
+    int wad_len = (int)(_binary_obj_bm_wad_bin_end
+                        - _binary_obj_bm_wad_bin_start);
 
     // (1) Announce.
     bm_puts("BM-DOOM-BOOT\n");
@@ -109,8 +109,8 @@ void bm_main(void)
     setvbuf(stderr, NULL, _IONBF, 0);
 
     // (2) Register baked WAD blob with files.c.
-    fs_register_wad("doom.wad",
-                    (byte*)_binary_wads_lib_doom_wad_start,
+    fs_register_wad(BM_WAD_NAME,
+                    (byte*)_binary_obj_bm_wad_bin_start,
                     wad_len);
 
     // (3) Set up DOOM args.

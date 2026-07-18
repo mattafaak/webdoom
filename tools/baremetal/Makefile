@@ -42,7 +42,10 @@ LDFLAGS_POST := -Wl,--start-group -lc -lm -lgcc -Wl,--end-group
 CORE_DIR := ../../engine/core
 OUT      := bm-doom.elf
 REPO_ROOT := ../..
-WAD_SRC  := $(REPO_ROOT)/wads/lib/doom.wad
+BM_WAD_SRC  ?= $(REPO_ROOT)/wads/lib/doom.wad
+BM_WAD_NAME ?= doomu.wad
+BM_DEMO     ?= demo1
+CFLAGS += -DBM_WAD_NAME='"$(BM_WAD_NAME)"' -DBM_DEMO='"$(BM_DEMO)"'
 
 # engine/core sources (same excludes as freestanding — we provide our own).
 CORE_EXCLUDE := $(CORE_DIR)/i_main.c \
@@ -65,13 +68,14 @@ OBJ := obj/crt0.o \
 
 all: $(OUT)
 
-# ── baked WAD (objcopy from repo root for clean symbol names) ─────────────────
-# Symbol: _binary_wads_lib_doom_wad_start / _end
-obj/wad.o: $(WAD_SRC)
+# ── baked WAD (canonical intermediate ⇒ stable symbols for ANY IWAD) ─────────
+# Symbol: _binary_obj_bm_wad_bin_start / _end
+obj/bm_wad.bin: $(BM_WAD_SRC)
 	@mkdir -p obj
-	cd $(REPO_ROOT) && $(OBJCOPY) \
-	    -I binary -O elf32-littlearm -B arm \
-	    wads/lib/doom.wad $(abspath obj/wad.o)
+	cp $(BM_WAD_SRC) obj/bm_wad.bin
+
+obj/wad.o: obj/bm_wad.bin
+	$(OBJCOPY) -I binary -O elf32-littlearm -B arm obj/bm_wad.bin obj/wad.o
 
 # ── startup ───────────────────────────────────────────────────────────────────
 obj/crt0.o: crt0.S

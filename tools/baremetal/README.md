@@ -178,3 +178,36 @@ the baked WAD region at an odd offset and the PC will map to one of those
    ARM defaults `char` to unsigned; the engine inherits x86's signed-char
    assumption. Add `-fsigned-char` to `CFLAGS` before demo hashes can match
    the golden corpus.
+
+## 13.4b state capture (2026-07-18) — OS-less boot COMPLETE; demo hashes deferred
+
+**RESOLVED**: the 11.1b R_InitData stall (alignment abort at §5.2 site #7,
+captured by 13.4a's vectors) no longer occurs — 13.3b's read_le16/read_le32
+core fixes carry to ARM. **Full D_DoomMain init completes OS-less** (evidence:
+bmrun3 boot log — V_Init → W_Init → R_Init/R_InitData → P_Init → S_Init →
+HU_Init → ST_Init → "BM:D_DoomMain-done").
+
+**Landed here**: -fsigned-char + -fno-short-enums + -mno-unaligned-access in
+CFLAGS; BM_WAD_SRC/BM_WAD_NAME/BM_DEMO parameterization end-to-end (Makefile
+-D injection → i_main.c macros → bm_argv + fs_register_wad; canonical
+obj/bm_wad.bin intermediate gives stable objcopy symbols for any IWAD).
+
+**Two remaining blockers, precisely characterized**:
+1. Prebuilt newlib (thumb/v7) memcpy/str* use unaligned word loads — data-abort
+   under MMU-off Strongly-Ordered memory (observed: abort on first D_DoomFrame,
+   PC symbolized near __call_exitprocs/memcpy, DFAR in the baked WAD).
+   Alignment-safe overrides are drafted in git history (O0-attributed to defeat
+   gcc's memcpy-pattern self-recursion) but see blocker 2.
+2. All CLEAN builds with -mno-unaligned-access garble P_InitPicAnims texture
+   names (bad-cycle I_Error with binary garbage in %s output) — under BOTH
+   override states, so the overrides are exonerated. The one fully-green boot
+   (bmrun3) was an INCREMENTAL build whose objects mostly lacked the flag.
+   Suspect: -mno-unaligned-access changes struct/varargs lowering somewhere
+   that corrupts either animdefs reads or newlib vsnprintf %s handling.
+
+**Discriminating next experiment** (not yet run): clean build WITHOUT
+-mno-unaligned-access + WITH the O0 mem overrides — matches bmrun3 semantics
+(our objects assume unaligned-capable, which qemu -M virt tolerates for our
+code paths since 13.3b removed the real offenders) while replacing the one
+component that actually faulted (newlib memcpy). If green through demo
+playback: stream JSON → bm-check.sh 13-demo sweep (machinery ready).
