@@ -419,13 +419,28 @@ void P_LoadLineDefs (int lump)
 	ld->sidenum[0] = SHORT(mld->sidenum[0]);
 	ld->sidenum[1] = SHORT(mld->sidenum[1]);
 
+	/* tenet-4 fail-soft: reject adversarial WADs with out-of-range sidedef
+	   indices before they cause a heap-buffer-overflow in sides[]. The check
+	   runs after P_LoadSideDefs so numsides is valid. */
 	if (ld->sidenum[0] != -1)
+	{
+	    /* < 0 too: only -1 means "no side"; any other negative is a
+	       malformed index that would read sides[] out of bounds. */
+	    if (ld->sidenum[0] < 0 || ld->sidenum[0] >= numsides)
+		I_Error ("P_LoadLineDefs: linedef %d has out-of-range front sidenum %d (0..%d)",
+			 i, ld->sidenum[0], numsides - 1);
 	    ld->frontsector = sides[ld->sidenum[0]].sector;
+	}
 	else
 	    ld->frontsector = 0;
 
 	if (ld->sidenum[1] != -1)
+	{
+	    if (ld->sidenum[1] < 0 || ld->sidenum[1] >= numsides)
+		I_Error ("P_LoadLineDefs: linedef %d has out-of-range back sidenum %d (0..%d)",
+			 i, ld->sidenum[1], numsides - 1);
 	    ld->backsector = sides[ld->sidenum[1]].sector;
+	}
 	else
 	    ld->backsector = 0;
     }
@@ -453,12 +468,20 @@ void P_LoadSideDefs (int lump)
     sd = sides;
     for (i=0 ; i<numsides ; i++, msd++, sd++)
     {
+	int sectoridx;
 	sd->textureoffset = SHORT(msd->textureoffset)<<FRACBITS;
 	sd->rowoffset = SHORT(msd->rowoffset)<<FRACBITS;
 	sd->toptexture = R_TextureNumForName(msd->toptexture);
 	sd->bottomtexture = R_TextureNumForName(msd->bottomtexture);
 	sd->midtexture = R_TextureNumForName(msd->midtexture);
-	sd->sector = &sectors[SHORT(msd->sector)];
+	/* tenet-4 fail-soft: reject adversarial WADs with out-of-range sector
+	   indices before they cause a heap-buffer-overflow (F5c unguarded-index
+	   surface). Valid WADs always have sector < numsectors. */
+	sectoridx = (short)SHORT(msd->sector);
+	if (sectoridx < 0 || sectoridx >= numsectors)
+	    I_Error ("P_LoadSideDefs: sidedef %d references out-of-range sector %d (0..%d)",
+		     i, sectoridx, numsectors - 1);
+	sd->sector = &sectors[sectoridx];
     }
 	
     Z_Free (data);
@@ -663,8 +686,11 @@ P_SetupLevel
 
     bodyqueslot = 0;
     deathmatch_p = deathmatchstarts;
+    /* tenet-4 fail-soft: zero playerstarts so a level transition cannot carry
+       over starts from the previous map and mask a missing-start in this one. */
+    memset (playerstarts, 0, sizeof(playerstarts));
     P_LoadThings (lumpnum+ML_THINGS);
-    
+
     // if deathmatch, randomly spawn the active players
     if (deathmatch)
     {
@@ -674,7 +700,17 @@ P_SetupLevel
 		players[i].mo = NULL;
 		G_DeathMatchSpawnPlayer (i);
 	    }
-			
+
+    }
+    else
+    {
+	/* tenet-4 fail-soft: detect missing player starts at map-setup time so
+	   P_PlayerThink never null-derefs players[i].mo mid-sim. playerstarts[i]
+	   type is 0 (zeroed above) if the map contained no start for player i+1.
+	   Check every in-game player before the sim begins. */
+	for (i=0 ; i<MAXPLAYERS ; i++)
+	    if (playeringame[i] && playerstarts[i].type == 0)
+		I_Error ("no player %d start in %s", i+1, lumpname);
     }
 
     // clear special respawning que

@@ -218,7 +218,7 @@ randomness.
 The blockmap divides the map into a grid of 128×128 unit blocks
 (`MAPBLOCKUNITS = 128`, `MAPBLOCKSIZE = 128*FRACUNIT` — p_local.h:38–39).
 
-It is loaded from the WAD `BLOCKMAP` lump by `P_LoadBlockMap` (called at p_setup.c:651).
+It is loaded from the WAD `BLOCKMAP` lump by `P_LoadBlockMap` (called at p_setup.c:672).
 Key globals set at load time:
 
 | variable | meaning |
@@ -858,7 +858,7 @@ in firing actions.
 
 ### 12.1 Lump loading order
 
-`P_SetupLevel` (p_setup.c:585) loads map lumps in this order (p_setup.c:651–666):
+`P_SetupLevel` (p_setup.c:607) loads map lumps in this order (p_setup.c:672–690):
 
 ```
 BLOCKMAP → VERTEXES → SECTORS → SIDEDEFS → LINEDEFS
@@ -886,6 +886,30 @@ zone memory) will crash or corrupt. Every lump is trusted.
 | REJECT | loaded as raw bytes; bits are indexed by `s1*numsectors + s2`; no range check on s1/s2 | if sector indices are wrong, arbitrary bits are read from the reject matrix |
 
 These are **3.2 overflow audit candidates**: any one could be triggered by a crafted WAD.
+
+Two of the most exploitable surfaces were closed in task 12.3 (tenet-4 robustness
+closure):
+
+**OOB sidedef sector index** (`P_LoadSideDefs`, p_setup.c): the sidedef record's
+`sector` field is now bounds-checked against `numsectors` before indexing `sectors[]`.
+An out-of-range value triggers `I_Error("P_LoadSideDefs: sidedef N references
+out-of-range sector M (0..K)")` rather than a heap-buffer-overflow.
+
+**OOB linedef sidenum** (`P_LoadLineDefs`, p_setup.c): `sidenum[0]` and `sidenum[1]`
+are checked against `numsides` before indexing `sides[]`, with the same I_Error pattern.
+
+**No player-N start** (`P_SetupLevel`, p_setup.c): after `P_LoadThings`, non-deathmatch
+mode now verifies that every `playeringame[i]` player has a loaded start
+(`playerstarts[i].type != 0`). If not, `I_Error("no player N start in MAPNAME")` fires
+before `P_PlayerThink` can null-deref `players[i].mo`. The `playerstarts[]` array is
+also zeroed at the start of each `P_SetupLevel` call to prevent stale values from a
+previous level masking a missing start.
+
+The adversarial corpus gate (30 seeds, `node tools/fuzz/run-map-fuzz.mjs
+--adversarial-gate`) verifies that the remaining adversarial map cases produce only
+`clean` or `I_Error` exits and zero ASan/UBSan sanitizer reports.
+
+*Reproduce:* `node tools/fuzz/run-map-fuzz.mjs --adversarial-gate [--build-dir build-test]`
 
 ### 12.3 Things filter
 

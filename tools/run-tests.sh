@@ -55,6 +55,12 @@ node tools/churn-test.mjs | tail -1
 echo "── net fuzz + abuse (malformed/hostile clients) ────────"
 node tools/net-fuzz-test.mjs | tail -1
 
+echo "── adversarial map gate (tenet-4: 0 sanitizer reports) ─"
+# Gate: run 30 adversarial map seeds against nat-doom ASan build.
+# Exit 0 iff all results are {clean | I_Error}; exit 1 on any ASan/UBSan hit.
+# Reproduce: node tools/fuzz/run-map-fuzz.mjs --adversarial-gate [--build-dir build-test]
+node tools/fuzz/run-map-fuzz.mjs --adversarial-gate | tail -4
+
 echo "── browser (SP gate + 2-tab multiplayer) ───────────────"
 DOOM_PORT=8668 DOOM_HOST=127.0.0.1 node server/serve.js & SRV=$!
 trap "kill $SRV 2>/dev/null" EXIT
@@ -66,5 +72,6 @@ node tools/persist-test.mjs http://127.0.0.1:8668/ | tail -1
 node tools/browser-resilience-test.mjs http://127.0.0.1:8668/ | tail -2
 node tools/browser-lobby-test.mjs http://127.0.0.1:8668/ | tail -2
 node tools/browser-fire-test.mjs http://127.0.0.1:8668/ /tmp | tail -3
+node tools/browser-ierror-test.mjs http://127.0.0.1:8668/ | tail -1
 
 echo "ALL SUITES PASS"

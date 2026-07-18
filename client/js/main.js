@@ -87,10 +87,21 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
     // --------------------------------------------------------------------------
 
     loading.set('BOOTING…', 1);
+    // running is declared here (before createDoom) so the onDoomError closure can
+    // set it to false even if I_Error fires before the frame loop begins.
+    // The assignment `running = true` below (after all setup) starts the loop.
+    let running = false;
     const doom = await createDoom({
         print: t => console.log(t),
         printErr: t => console.warn(t),
-        onDoomError: msg => { loading.hide(); status(`engine error: ${msg}`); },
+        // tenet-4 fail-soft: engine death (I_Error → abort()) ⇒ landing page
+        // restored + user-visible error + canvas/game state torn down.
+        onDoomError: msg => {
+            running = false;
+            restoreOnFailure(canvas);
+            status(`engine error: ${msg}`);
+            try { window.doomAudio?.stop?.(); } catch { /* dead instance */ }
+        },
     });
 
     // no filesystem: WADs live once in the heap, small files in a JS Map
@@ -140,7 +151,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
     // Quit Game → Y calls I_Quit → this hook: stop the loop, tear down,
     // and let the front end return to the main menu (a fresh wasm boots
     // on the next PLAY — this instance force-exits).
-    let running = true;
+    running = true;
     doom.onQuit = () => {
         running = false;
         document.exitPointerLock?.();
