@@ -56,7 +56,7 @@ CORE_SRC := $(filter-out $(CORE_EXCLUDE),$(wildcard $(CORE_DIR)/*.c))
 
 # Bare-metal platform files (this directory).
 PLAT_SRC := i_main.c i_system.c i_video.c i_sound.c d_net.c files.c perf.c \
-            syscalls.c
+            syscalls.c abort_handler.c
 
 OBJ := obj/crt0.o \
        $(patsubst $(CORE_DIR)/%.c,obj/core/%.o,$(filter $(CORE_DIR)/%,$(CORE_SRC))) \
