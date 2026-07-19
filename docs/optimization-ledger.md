@@ -237,18 +237,23 @@ strictly safer than vanilla's shipping behavior (no guard at all).
 
 | field | value |
 |-------|-------|
-| **mechanism** | Reduce `STACK_SIZE` linker flag from 4 MiB to 1 MiB for bare-metal / freestanding builds (not the universal wasm artifact, where the change would require a regold of three layout-pinned goldens). C stack depth analysis from perf.md §Q2/Axis 3: BSP recursion max depth ≈15 frames × 64 bytes = 960 bytes; emscripten runtime overhead ~16–32 KB; 1 MiB provides ~30× margin. For bare-metal (tools/freestanding), the C stack lives in a fixed region; 1 MiB is sufficient per the analysis and frees 3 MiB of precious SRAM/PSRAM. |
-| **predicted Δinstr/tic** | 0. Linker constant; no runtime compute change. |
+| **mechanism** | Prove and gate that 1 MiB of process stack is sufficient for the freestanding (i386 ELF) build. The wasm artifact (`-sSTACK_SIZE=4MB` in engine/Makefile) is **unchanged** — any reduction there shifts `__heap_base` and requires a conscious regold step (perf.md §Q2/Axis 3). For tools/baremetal/doom.ld, no explicit 4 MiB reservation exists; the ARM stack is implicitly top-of-26 MiB RAM minus heap, with a comment estimating ~64 KB actual use. The 4→1 MiB saving is a statement about portability: a future bare-metal target that reserved 4 MiB could safely cap at 1 MiB. |
+| **predicted Δinstr/tic** | 0. No runtime compute change. |
 | **axis** | RAM / portability |
 | **magic-data policy** | None. **COMPLIES.** |
-| **kill rule** | Stack overflow (crash or sanitizer report) on any 13 golden demos after size change = kill. |
+| **kill rule** | Stack overflow (crash or sanitizer report) on any 13 golden demos = kill. |
+| **measured peak stack** | fs-doom binary alone: ≈14 KiB (ulimit floor at 15 KiB passes doom-demo3; 14 KiB fails). Full run-check.sh including python3 comparator: floor at 128 KiB. At 1 MiB: 13/13 pass, 0 ASan hits. The §Q2 estimate of "960 B BSP + 32 KB runtime" was correct in direction; actual is lower (~14 KiB total with glibc startup overhead). |
+| **gate wired** | `make check-stack-1m` in tools/freestanding/Makefile. Runs `ulimit -s 1024` in the same shell as run-check.sh so fs-doom and python3 both inherit the limit. 13/13 PASS confirmed. |
+| **RAM Δ** | Wasm: 0 (unchanged). tools/baremetal/doom.ld: 0 (no explicit reservation; stack is implicit top-of-RAM). Portability saving: a bare-metal target with a 4 MiB explicit stack reservation could reduce to 1 MiB, saving 3 MiB of SRAM/PSRAM. |
 
-**Verdict: SURVIVES → task 14.2g**
+**Verdict: LANDED (14.2g)**
 
-Notes: perf.md §Q2/Axis 3 explicitly documented this as "almost certainly sufficient" and
-"document only; no change" specifically because the wasm STACK_SIZE change shifts __heap_base.
-For bare-metal builds (tools/freestanding), the stack is separate from the wasm linear memory
-layout; the regold concern does not apply. This is a portability win, not a web-artifact change.
+Notes: The wasm `STACK_SIZE=4MB` is NOT changed — perf.md §Q2/Axis 3 verdict "keep 4 MB" stands.
+The tools/baremetal linker (doom.ld) has no explicit 4 MiB stack block; stack is whatever RAM
+remains above .bss (implicitly ~several MiB of headroom in QEMU, practically ≪1 MiB used).
+The task lands as a **proof-and-gate** step: 1 MiB is proven sufficient for all 13 golden demos
+and wired as a repeatable `make check-stack-1m` gate. The ASan build at the same 1 MiB limit
+reports 0 stack-overflow hits across all 13 demos. Wasm artifact md5 unchanged: `1931aa623bd0e90e408d1ddd9c9b3c28`.
 
 ---
 
@@ -413,7 +418,7 @@ sanctioned by policy).**
 | C4 | MAXVISPLANES 1024→128 | RAM / portability | 0 instr/tic; 581 KiB BSS savings (896 × 664 bytes) | LANDED (14.2d) |
 | C5 | MAXDRAWSEGS 2048→256 | RAM / portability | 0 instr/tic; 84 KiB BSS savings (1792 × 48 B); peak 205/256 ⚠️ thin 1.25× | LANDED — 14.2e |
 | C6 | MAXOPENINGS 320×256→320×64 | RAM / portability | 0 instr/tic; 120 KiB BSS savings (61,440 × 2 bytes); peak 2,527/20,480 = 8.1× margin | LANDED — 14.2f |
-| C7 | STACK_SIZE 4→1 MiB (bare-metal builds) | RAM / portability | 0 instr/tic; -3 MiB per build | SURVIVES → 14.2g |
+| C7 | STACK_SIZE 4→1 MiB (bare-metal builds) | RAM / portability | 0 instr/tic; measured peak ≈14 KiB (fs-doom) / ≈128 KiB (harness); 1 MiB = 70×/8× margin; wasm unchanged | LANDED (14.2g) |
 | K1 | R_DrawSpan u32 packing | cycle-floor | wbox +7.9% planes REGRESSION | KILLED |
 | K2 | wasm SIMD | cycle-floor | no gather in v128 | KILLED |
 | K3 | Visplane hash | cycle-floor | ceiling 2.9% of planes, probe depth 6.6 | KILLED |
