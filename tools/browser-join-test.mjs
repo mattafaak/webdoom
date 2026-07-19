@@ -4,6 +4,10 @@
 // catches up, and lands in the running game. Exercises the full client join
 // path (inprogress summary → join → catch-up boot).
 // usage: node tools/browser-join-test.mjs [url] [outdir]
+//
+// State-machine edge coverage (docs/state-machine.md):
+//   T18 DROP-IN-OFFER → DROP-IN-LOADING  (click DROP IN → lobby.send join → server welcome+launch)
+//   T19 DROP-IN-LOADING → IN-GAME-MP     (catch-up done, relay goes live)
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';

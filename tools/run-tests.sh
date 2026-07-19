@@ -10,6 +10,9 @@ bash tools/lint.sh
 echo "── archaeology drift (doc figures == manifest == script) "
 bash tools/archaeology/verify-all.sh
 
+echo "── state-machine edge↔test coverage (static check) ─────"
+node tools/check-state-machine.mjs
+
 echo "── size ledger (doom.wasm budget + README KB gate) ─────"
 node tools/archaeology/size-ledger.mjs
 

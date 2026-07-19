@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // Browser resilience tests: 5 failure-path subtests.
 // usage: node tools/browser-resilience-test.mjs [url] [outdir]
+//
+// State-machine edge coverage (docs/state-machine.md):
+//   T05 SP-LOADING → LANDING  (bootDoom rejects: WAD fetch / engine fail)
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';

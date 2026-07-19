@@ -4,6 +4,11 @@
 // lands in the lobby; tab B joins, types a custom name, picks a free
 // color (slot change → sparse-slot launch path); A starts; both must
 // end up in-game. usage: node tools/browser-net-test.mjs [url] [outdir]
+//
+// State-machine edge coverage (docs/state-machine.md):
+//   T14 MP-COUNTDOWN → MP-LOADING  (server launch → menu.hide() + bootDoom starts)
+//   T15 MP-LOADING → IN-GAME-MP    (bootDoom resolves)
+//   T17 IN-GAME-MP → LANDING       (Quit Game → Y → onQuit → returnToMenu)
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';

@@ -3,6 +3,10 @@
 // built-in WebSocket). Boots the full client against a running server,
 // screenshots the title screen, opens the menu with Escape, screenshots
 // again. usage: node tools/browser-test.mjs [url] [outdir]
+//
+// State-machine edge coverage (docs/state-machine.md):
+//   T03 SP-PICK → SP-LOADING  (click game title → bootDoom starts)
+//   T04 SP-LOADING → IN-GAME-SP  (bootDoom resolves)
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
