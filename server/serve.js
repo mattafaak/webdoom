@@ -35,9 +35,14 @@ function send(res, code, body, headers = {}) {
     res.end(body);
 }
 
+// Optional per-request logging for smoke tests: set LOG_REQUESTS=1 in env.
+// Logs to stderr so stdout (used by some callers for structured output) is unaffected.
+const LOG_REQ = !!process.env.LOG_REQUESTS;
+
 const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
     let path = normalize(url.pathname);
+    if (LOG_REQ) process.stderr.write(`${req.method} ${path} ${req.headers['user-agent'] ?? '-'}\n`);
     if (path.includes('..')) return send(res, 400, 'bad path');
 
     if (path === '/api/wads')

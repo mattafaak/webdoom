@@ -108,6 +108,42 @@ composited and negligible on top).
 - The only sanctioned table transform is shipped-blob → boot-generation.
   Runtime lookup → runtime transcendental is forbidden (measured slower).
 
+## Browser matrix (task 15.2 decision record, 2026-07-19)
+
+### Firefox — smoke-tested and kept
+
+Verified on alder (Firefox 152.0.6, headless):
+- Firefox headless loads the page, executes JS, registers the service
+  worker, fetches `/api/wads` (lobby JS entry point), and fetches
+  `doom.js` + `doom.wasm` via the service worker prefetch chain.
+- Smoke assertion: `LOG_REQUESTS=1` server + Firefox headless on a
+  dedicated port; gate checks Firefox UA + `/api/wads` in request log.
+- Leg wired in `tools/run-tests.sh` (SKIP loudly when `/usr/bin/firefox`
+  absent, so CI without Firefox is valid).
+
+Limits of the smoke leg (honest):
+- Does not assert game-boots-to-lobby in Firefox (no CDP equivalent for
+  Firefox in this repo's tooling; geckodriver not present).
+- Does not assert WebGL2 renders a frame; only proves JS executed and
+  the WASM module was requested.
+- AudioWorklet: Firefox headless does NOT arm AudioContext without a
+  real user gesture — same headless limitation as Chrome. AudioWorklet
+  timing is therefore n=0 in any headless run (either browser). See
+  §C residual note in `docs/perf.md`.
+
+Decision: README claim "stock Chrome / Edge / Firefox" is kept.
+Gate: `run-tests.sh` firefox smoke leg.
+
+### Safari / iOS — explicit non-goal
+
+Safari and iOS are untested and not promised. No future task will add
+Safari/iOS support without a separate decision record in this file.
+Reason: WebKit's WebAudio and AudioWorklet behavior differ; testing
+Safari would require macOS/iOS hardware not in the fleet; the target
+audience is LAN/tailnet DOOM-night players who have Chrome/Firefox
+available. This non-goal is recorded explicitly so the absence of
+Safari coverage is documented policy, not oversight.
+
 ## Explicit non-goals
 
 - Regenerating COLORMAP/gammatable at runtime (breaks PWADs / no gain).
@@ -121,5 +157,5 @@ composited and negligible on top).
   hardware, each row concluding feasible / infeasible / feasible-with-
   named-cuts, arithmetic shown. Running on the hardware is a future
   project that starts from the atlas.
-- Safari/iOS and mobile/touch support (untested; not promised). Firefox
-  status is decided by task 15.2 and recorded here.
+- Safari/iOS and mobile/touch support — explicit non-goal; see
+  browser matrix decision above.

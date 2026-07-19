@@ -466,12 +466,18 @@ node ~/.cache/webdoom-pipeline/tools/browser-pipeline.mjs \
    from OS interrupts, not a structural issue.  On a display-synced real
    session the rAF is vsync-locked and jitter would be even tighter.
 
-3. **AudioWorklet is unmeasured (headless limitation)**: the instrument is
-   implemented and posted-timing messages are wired through `audio.js`.
-   Collecting requires a session where `AudioContext.resume()` can arm (real
-   browser, or Chrome with `--autoplay-policy=no-user-gesture-required` and
-   a gesture simulation workaround).  Defer worklet timing to an interactive
-   profiling session; headless cannot provide this data.
+3. **AudioWorklet is unmeasured (headless limitation — §C residual, task 15.2)**:
+   The instrument is implemented and posted-timing messages are wired through
+   `audio.js`.  Verified disposition (2026-07-19): headless Firefox (152.0.6)
+   was tested alongside headless Chrome during task 15.2 — Firefox headless
+   also does NOT arm AudioContext without a real user gesture; worklet n=0 in
+   Firefox headless is identical to Chrome headless.  The headless limitation
+   is browser-independent, not a Chrome quirk.  Collecting worklet timing
+   requires an interactive session where `AudioContext.resume()` can arm.
+   **Deferred with owner**: requires interactive run; no automated CI path
+   exists without a trusted user-activation API (none available in either
+   browser's headless mode).  Residual remains open as a future interactive
+   profiling task.
 
 4. **Input latency tracks frame interval, not JS cost**: alder p50 ≈ 8 ms
    (half of 16.7 ms frame) is exactly what you'd expect for events landing
