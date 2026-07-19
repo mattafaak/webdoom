@@ -172,9 +172,9 @@ and inline `*(not machine-verified)*` markers for the 16 unverifiable claims.
 | perf-007 | perf.md:83 | peak zone HWM across all 13 golden demos | 1.36 MB (plutonia demo3) | measurement | tools/zone-measure.mjs | verified |
 | perf-008 | perf.md:52 | ZONESIZE (hardcoded zone pool) | 32 MB | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | perf-009 | perf.md:114 | __heap_base (static data end, heap start) | 5,461,072 bytes | measurement | tools/archaeology/wasm-stamp.mjs | verified |
-| perf-010 | perf.md:115 | zone pool malloc size | 33,554,432 bytes | derived | 32 × 1024 × 1024 = 33,554,432 | verified |
+| perf-010 | perf.md:115 | zone pool malloc size | 4,194,304 bytes | derived | 4 × 1024 × 1024 = 4,194,304 (32 MB pre-14.2c) | verified |
 | perf-011 | perf.md:122 | plutonia.wad file size (worst single IWAD) | 17,420,824 bytes | measurement | tools/archaeology/stamp-check.mjs | verified |
-| perf-012 | perf.md:117 | peak heap address worst-case single IWAD | ~53.82 MB | derived | 5,461,072 + 33,554,432 + 17,420,824 = 56,436,328 B ≈ 53.82 MB | verified |
+| perf-012 | perf.md:117 | peak heap address worst-case single IWAD | ~25.12 MB | derived | 4,721,456 + 4,194,304 + 17,420,824 = 26,336,584 B ≈ 25.12 MB | verified |
 | perf-013 | perf.md:118 | headroom vs 64 MB (single IWAD) | ~10.18 MB | derived | 64 MB − 53.82 MB ≈ 10.18 MB | verified |
 | perf-014 | perf.md:131 | INITIAL_MEMORY floor (tested pass/fail boundary) | 56 MB | measurement | requires emcc INITIAL_MEMORY sweep build; no current script | unverifiable |
 | perf-015 | perf.md:174 | all deliverables total gzip-9 wire size | 177.7 KB | measurement | requires all deliverable assets (JS+CSS+HTML+wasm); no current script | unverifiable |

@@ -60,6 +60,12 @@ Per-IWAD planes range: 353K (doom2-demo3) – 636K (plutonia-demo2) p50.
 > exactly from the JSON. The discrepancy is flagged per spec tenet #6 (honest uncertainty); the
 > 13.1b source conflict is deferred to the task that first depends on the bsp number. Where C2's
 > arithmetic uses bsp, both bounds are stated.
+>
+> **RESOLVED (14.4):** 494,338 reproduces under NO aggregation of the committed JSON (doom.wad
+> per-demo bsp p50s 489,382/512,230/525,543/708,180 → mean 558,834, median 518,886) — verdict:
+> transcription/method error in the §13.1b prose; the JSON artifact is authoritative (perf.md
+> §13.1b now carries the correction). Superseded by the 14.4 regenerated baseline: doom.wad bsp
+> 503,704, all-13 mean 551,615.
 
 ---
 

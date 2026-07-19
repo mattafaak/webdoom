@@ -594,20 +594,23 @@ const DOC_HINTS = {
                   transform: (_v, m) => normalize(m[1] || m[2]) },
 
     // Commit-pinned measurements: soft (they legitimately drift across commits)
-    'perf-001': { soft: true, reason: 'commit-pinned size (6de6256), drift is expected' },
-    'perf-002': { soft: true, reason: 'commit-pinned size (6de6256), drift is expected' },
-    'perf-003': { soft: true, reason: 'commit-pinned size (6de6256), drift is expected' },
-    'perf-004': { soft: true, reason: 'commit-pinned size (6de6256), drift is expected' },
-    'perf-005': { soft: true, reason: 'commit-pinned size (6de6256), drift is expected' },
+    'perf-001': { soft: true, pinned: true, reason: 'commit-pinned size (6de6256), drift is expected' },
+    'perf-002': { soft: true, pinned: true, reason: 'commit-pinned size (6de6256), drift is expected' },
+    'perf-003': { soft: true, pinned: true, reason: 'commit-pinned size (6de6256), drift is expected' },
+    'perf-004': { soft: true, pinned: true, reason: 'commit-pinned size (6de6256), drift is expected' },
+    'perf-005': { soft: true, pinned: true, reason: 'commit-pinned size (6de6256), drift is expected' },
 
     'perf-011': { doc_file: 'perf.md',
                   needle: 'plutonia.wad',
                   extract_re: /plutonia\.wad[^\d]+([\d,]+)\s+bytes/ },
 
     'perf-059': { doc_file: 'perf.md',
-                  needle: '54.83 MB',
-                  extract_re: /([\d.]+)\s*MB.*?worst.*?PWAD|worst.*?PWAD[^|]*?([\d.]+)\s*MB/s,
-                  transform: (_v, m) => m[1] || m[2] },
+                  // "Worst real combo: **tnt.wad + tnt31.wad** at 26.12 MB peak"
+                  // (old whole-file dot-all regex matched section-3's "4 MB" rows first
+                  //  — broken since the layout table gained MB rows; anchored 14.4)
+                  needle: 'Worst real combo',
+                  extract_re: /Worst real combo[^\n]*?([\d.]+)\s*MB peak/,
+                  transform: (_v, m) => m[1] },
 
     // Derived (doc has table with values)
     'perf-036': { doc_file: 'perf.md',
@@ -749,7 +752,7 @@ function checkPublicDoc(claimId, manifestExpected) {
 function extractDocFigure(claimId, expected) {
     const hint = DOC_HINTS[claimId] || {};
 
-    if (hint.soft) return { soft: true, reason: hint.reason || 'no doc pattern' };
+    if (hint.soft) return { soft: true, pinned: hint.pinned, reason: hint.reason || 'no doc pattern' };
 
     const docInfo = docIndex[claimId];
     const docFile = hint.doc_file || (docInfo && docInfo.doc_file);
@@ -803,6 +806,14 @@ function threeWayCheck(claimId, manifestExpected, docResult, scriptActual) {
     if (docResult.soft) {
         // Two-way: manifest vs script only
         if (sn !== null && sn !== mn) {
+            // pinned: manifest is a commit-pinned historical stamp — current-build
+            // drift is EXPECTED and non-fatal (live size truth is owned by
+            // size-ledger.mjs since 14.3). Non-pinned soft claims (e.g.
+            // runtime-stat) keep manifest-vs-script as their real check.
+            if (docResult.pinned) {
+                return { verdict: 'SOFT',
+                         message: `pinned '${mn}' vs current '${sn}' — ${docResult.reason}` };
+            }
             return {
                 verdict: 'FAIL',
                 type: 'MANIFEST_STALE',

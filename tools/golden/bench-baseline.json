@@ -52,167 +52,167 @@
   "perStage": {
     "note": "Per-stage ms/frame from the render pass (doom.wad attract demos, best-of-3, no -nodraw). stages: frame-setup+clears, bsp+segs (R_RenderBSPNode, interleaved), planes (R_DrawPlanes), masked (R_DrawMasked). sim: G_Ticker ms/tic. Recorded by bench.mjs schemaVersion 2.",
     "alder-i9-12900K": {
-      "commit": "f8de315",
-      "date": "2026-07-16",
+      "commit": "1f18bcf",
+      "date": "2026-07-18",
       "reps": 3,
-      "wasmBytes": 358653,
+      "wasmBytes": 356216,
       "demos": {
         "demo1": {
           "frames": 1709,
-          "frame_ms": 0.0009,
-          "bsp_ms": 0.0415,
-          "planes_ms": 0.0278,
+          "frame_ms": 0.0006,
+          "bsp_ms": 0.0329,
+          "planes_ms": 0.0233,
           "masked_ms": 0.0164,
-          "sum_ms": 0.0865,
-          "sim_ms_per_tic": 0.0149
+          "sum_ms": 0.0732,
+          "sim_ms_per_tic": 0.0126
         },
         "demo2": {
           "frames": 2346,
-          "frame_ms": 0.0006,
-          "bsp_ms": 0.0312,
-          "planes_ms": 0.0215,
-          "masked_ms": 0.01,
-          "sum_ms": 0.0632,
-          "sim_ms_per_tic": 0.0091
+          "frame_ms": 0.0012,
+          "bsp_ms": 0.0276,
+          "planes_ms": 0.0212,
+          "masked_ms": 0.0108,
+          "sum_ms": 0.0607,
+          "sim_ms_per_tic": 0.0082
         },
         "demo3": {
           "frames": 3862,
-          "frame_ms": 0.0005,
-          "bsp_ms": 0.0245,
-          "planes_ms": 0.0161,
-          "masked_ms": 0.008,
-          "sum_ms": 0.049,
-          "sim_ms_per_tic": 0.0055
+          "frame_ms": 0.0004,
+          "bsp_ms": 0.023,
+          "planes_ms": 0.0155,
+          "masked_ms": 0.01,
+          "sum_ms": 0.0489,
+          "sim_ms_per_tic": 0.0053
         }
       },
       "simFpsNodraw": {
-        "demo1": 138944.0,
-        "demo2": 191190.0,
-        "demo3": 250846.0,
-        "avg": 193660.0
+        "demo1": 131507.0,
+        "demo2": 184832.0,
+        "demo3": 246488.0,
+        "avg": 187609.0
       }
     },
     "wbox-amd-g-t56n": {
-      "commit": "f8de315",
-      "date": "2026-07-16",
+      "commit": "1f18bcf",
+      "date": "2026-07-18",
       "reps": 3,
-      "wasmBytes": 358653,
+      "wasmBytes": 356216,
       "demos": {
         "demo1": {
           "frames": 1709,
-          "frame_ms": 0.0068,
-          "bsp_ms": 0.2628,
-          "planes_ms": 0.1795,
-          "masked_ms": 0.0725,
-          "sum_ms": 0.5216,
-          "sim_ms_per_tic": 0.0942
+          "frame_ms": 0.0095,
+          "bsp_ms": 0.2692,
+          "planes_ms": 0.1939,
+          "masked_ms": 0.0835,
+          "sum_ms": 0.5562,
+          "sim_ms_per_tic": 0.1047
         },
         "demo2": {
           "frames": 2346,
-          "frame_ms": 0.0074,
-          "bsp_ms": 0.2505,
-          "planes_ms": 0.1537,
-          "masked_ms": 0.0573,
-          "sum_ms": 0.4689,
-          "sim_ms_per_tic": 0.0687
+          "frame_ms": 0.0082,
+          "bsp_ms": 0.2576,
+          "planes_ms": 0.1604,
+          "masked_ms": 0.0678,
+          "sum_ms": 0.4941,
+          "sim_ms_per_tic": 0.0819
         },
         "demo3": {
           "frames": 3862,
-          "frame_ms": 0.0073,
-          "bsp_ms": 0.2487,
-          "planes_ms": 0.1364,
-          "masked_ms": 0.0582,
-          "sum_ms": 0.4507,
-          "sim_ms_per_tic": 0.0528
+          "frame_ms": 0.0088,
+          "bsp_ms": 0.2537,
+          "planes_ms": 0.1483,
+          "masked_ms": 0.0707,
+          "sum_ms": 0.4815,
+          "sim_ms_per_tic": 0.068
         }
       },
       "simFpsNodraw": {
-        "demo1": 16961.0,
-        "demo2": 18543.0,
-        "demo3": 22694.0,
-        "avg": 19399.0
+        "demo1": 17314.0,
+        "demo2": 19396.0,
+        "demo3": 23375.0,
+        "avg": 20028.0
       }
     },
     "tank-i5-8350U": {
-      "commit": "2992e02",
-      "date": "2026-07-16",
-      "reps": 1,
-      "wasmBytes": 358194,
+      "commit": "1f18bcf",
+      "date": "2026-07-18",
+      "reps": 3,
+      "wasmBytes": 356216,
       "demos": {
         "demo1": {
           "frames": 1709,
-          "frame_ms": 0.0015,
-          "bsp_ms": 0.0603,
-          "planes_ms": 0.0462,
-          "masked_ms": 0.0217,
-          "sum_ms": 0.1296,
-          "sim_ms_per_tic": 0.0219
+          "frame_ms": 0.0011,
+          "bsp_ms": 0.0508,
+          "planes_ms": 0.0383,
+          "masked_ms": 0.0209,
+          "sum_ms": 0.1111,
+          "sim_ms_per_tic": 0.0193
         },
         "demo2": {
           "frames": 2346,
-          "frame_ms": 0.001,
-          "bsp_ms": 0.0514,
-          "planes_ms": 0.0337,
-          "masked_ms": 0.0152,
-          "sum_ms": 0.1012,
-          "sim_ms_per_tic": 0.0143
+          "frame_ms": 0.0017,
+          "bsp_ms": 0.0485,
+          "planes_ms": 0.032,
+          "masked_ms": 0.0167,
+          "sum_ms": 0.0989,
+          "sim_ms_per_tic": 0.014
         },
         "demo3": {
           "frames": 3862,
-          "frame_ms": 0.0011,
-          "bsp_ms": 0.0557,
-          "planes_ms": 0.0336,
-          "masked_ms": 0.0163,
-          "sum_ms": 0.1067,
-          "sim_ms_per_tic": 0.0119
+          "frame_ms": 0.0012,
+          "bsp_ms": 0.0487,
+          "planes_ms": 0.0291,
+          "masked_ms": 0.0173,
+          "sum_ms": 0.0963,
+          "sim_ms_per_tic": 0.0106
         }
       },
       "simFpsNodraw": {
-        "demo1": 66504.0,
-        "demo2": 90164.0,
-        "demo3": 108605.0,
-        "avg": 88425.0
+        "demo1": 82518.0,
+        "demo2": 98042.0,
+        "demo3": 125856.0,
+        "avg": 102139.0
       }
     },
     "pi5-aarch64": {
-      "commit": "f8de315",
-      "date": "2026-07-16",
+      "commit": "1f18bcf",
+      "date": "2026-07-18",
       "reps": 3,
-      "wasmBytes": 358653,
+      "wasmBytes": 356216,
       "demos": {
         "demo1": {
           "frames": 1709,
-          "frame_ms": 0.0029,
-          "bsp_ms": 0.0832,
-          "planes_ms": 0.0683,
-          "masked_ms": 0.0254,
-          "sum_ms": 0.1797,
-          "sim_ms_per_tic": 0.026
+          "frame_ms": 0.0018,
+          "bsp_ms": 0.0749,
+          "planes_ms": 0.0665,
+          "masked_ms": 0.0272,
+          "sum_ms": 0.1705,
+          "sim_ms_per_tic": 0.0246
         },
         "demo2": {
           "frames": 2346,
           "frame_ms": 0.0016,
-          "bsp_ms": 0.0673,
-          "planes_ms": 0.0463,
-          "masked_ms": 0.0196,
-          "sum_ms": 0.1348,
-          "sim_ms_per_tic": 0.015
+          "bsp_ms": 0.0679,
+          "planes_ms": 0.0464,
+          "masked_ms": 0.0216,
+          "sum_ms": 0.1375,
+          "sim_ms_per_tic": 0.0154
         },
         "demo3": {
           "frames": 3862,
-          "frame_ms": 0.0017,
-          "bsp_ms": 0.0679,
-          "planes_ms": 0.0413,
-          "masked_ms": 0.0191,
-          "sum_ms": 0.13,
-          "sim_ms_per_tic": 0.0117
+          "frame_ms": 0.0018,
+          "bsp_ms": 0.0681,
+          "planes_ms": 0.0415,
+          "masked_ms": 0.0226,
+          "sum_ms": 0.134,
+          "sim_ms_per_tic": 0.0124
         }
       },
       "simFpsNodraw": {
-        "demo1": 66632.0,
-        "demo2": 72697.0,
-        "demo3": 93178.0,
-        "avg": 77502.0
+        "demo1": 66161.0,
+        "demo2": 75187.0,
+        "demo3": 95218.0,
+        "avg": 78855.0
       }
     }
   }

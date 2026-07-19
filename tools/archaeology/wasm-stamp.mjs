@@ -11,7 +11,7 @@
 // Claims:
 //   perf-002  wasm CODE section size  = 281,277 bytes [commit-pinned]
 //   perf-003  wasm DATA section size  =  75,283 bytes [commit-pinned]
-//   perf-009  __heap_base (static data end) = 5,461,072 bytes [linker constant]
+//   perf-009  __heap_base (static data end) = 4,721,456 bytes [linker constant, post-14.2f BSS diets]
 //
 // Usage: node tools/archaeology/wasm-stamp.mjs [path/to/doom.wasm]
 // Exits 0 when wasm exists and __heap_base matches; 1 on hard failure.
@@ -127,7 +127,7 @@ if (dataSize === null) {
         console.log('FAIL  perf-009  could not parse __heap_base from GLOBAL section');
     } else {
         checkHard('perf-009', `__heap_base = ${heapBase} bytes (static data end)`,
-                  5461072, heapBase);
+                  4721456, heapBase);
     }
 }
 

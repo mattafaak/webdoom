@@ -107,9 +107,9 @@ committed bytes when purgeable caches are large at peak.
 
 ---
 
-## 3. Heap headroom vs 64 MB
+## 3. Heap headroom vs 32 MB
 
-`INITIAL_MEMORY=64MB`, `ALLOW_MEMORY_GROWTH=0` (Makefile). Memory is a flat
+`INITIAL_MEMORY=32MB` (since task 14.2c; was 64 MB), `ALLOW_MEMORY_GROWTH=0` (Makefile). Memory is a flat
 wasm linear region; the allocator is emmalloc (`-sMALLOC=emmalloc`).
 
 Command: `node tools/zone-measure.mjs` (reports `__heap_base` + peak formula)
@@ -119,17 +119,21 @@ Command: `node tools/zone-measure.mjs` (reports `__heap_base` + peak formula)
 | Region | Size | Notes |
 |--------|------|-------|
 | C shadow stack | 4 MB | `STACK_SIZE=4MB` in `engine/Makefile`; lives at start of linear memory |
-| Static data (DATA + BSS) | 1,237 KB | initialized tables + zero-init; measured via `__heap_base − 4 MB` |
-| **Stack + static total (`__heap_base`)** | **5.21 MB** | = 5,461,072 bytes; heap begins here |
-| Zone pool (one `malloc(ZONESIZE)`) | 32 MB | `I_ZoneBase()` in `engine/web/i_system.c` |
+| Static data (DATA + BSS) | 515 KB | initialized tables + zero-init; measured via `__heap_base − 4 MB`; was 1,237 KB before the phase-14 BSS diets (14.2d/e/f) |
+| **Stack + static total (`__heap_base`)** | **4.50 MB** | = 4,721,456 bytes; heap begins here |
+| Zone pool (one `malloc(ZONESIZE)`) | 4 MB | `ZONESIZE` in `engine/web/web.h` (32 MB pre-14.2c); `I_ZoneBase()` in `engine/web/i_system.c` |
 | WAD copy (one `malloc(wad.length)`) | up to 16.61 MB | plutonia.wad, worst case |
-| **Peak heap address** | **~53.82 MB** | = heap_base + zone + worst WAD |
-| **Headroom vs 64 MB** | **~10.18 MB** | slack above worst-case single-IWAD load |
+| **Peak heap address** | **~25.12 MB** | = heap_base + zone + worst WAD |
+| **Headroom vs 32 MB** | **~6.88 MB** | slack above worst-case single-IWAD load |
 
 ### INITIAL_MEMORY floor experiment
 
-Measured `__heap_base` = 5,461,072 B.  Worst-case WAD = plutonia.wad
-(17,420,824 B).  Zone = 33,554,432 B.  Peak = 56,436,328 B ≈ 53.82 MB.
+Measured `__heap_base` = 4,721,456 B (post-14.2f).  Worst-case WAD = plutonia.wad
+(17,420,824 bytes).  Zone = 4,194,304 B.  Peak = 26,336,584 B ≈ 25.12 MB.
+
+The floor-experiment table below is the original pre-14.2c record (64 MB /
+32 MB-zone era). Task 14.2c re-established the shipping floor at 32 MiB
+(`buffer.byteLength` = 33,554,432 confirmed on the artifact).
 
 Tested by rebuilding the link step with each target and running the full
 plutonia demo3 (5,662 tics, worst-case IWAD):
@@ -1227,21 +1231,22 @@ stack allocations is 64 KB; 1 MB leaves 15× margin.
 
 ### Axis 4: INITIAL_MEMORY — worst PWAD combo analysis
 
-Single-IWAD floor was established in §3: 56 MB (2.18 MB margin above the
-53.82 MB peak for plutonia.wad + 32 MB zone + 5.21 MB static).
+Single-IWAD peak was established in §3: 25.12 MB (6.88 MB headroom under
+the 32 MB linear memory: plutonia.wad + 4 MB zone + 4.50 MB static).
 
 **PWAD combos** (both IWAD + PWAD malloc'd simultaneously, from
 `wads/manifest.json`):
 
 | combo | IWAD (bytes) | PWAD (bytes) | combined | total peak (+ zone + static) |
 |-------|-------------|-------------|---------|------------------------------|
-| tnt.wad + tnt31.wad | 18,195,736 | 282,000 | 18,477,736 (17.62 MB) | 5.21 + 32 + 17.62 = **54.83 MB** |
-| doom2.wad + nerve.wad | 14,604,584 | 3,819,855 | 18,424,439 (17.57 MB) | 5.21 + 32 + 17.57 = **54.78 MB** |
-| doom.wad + sigil.wad | 12,408,292 | 4,640,210 | 17,048,502 (16.27 MB) | 5.21 + 32 + 16.27 = **53.48 MB** |
-| plutonia.wad (no PWAD) | 17,420,824 | — | 17,420,824 (16.61 MB) | **53.82 MB** (§3 baseline) |
+| tnt.wad + tnt31.wad | 18,195,736 | 282,000 | 18,477,736 (17.62 MB) | 4.50 + 4 + 17.62 = **26.12 MB** |
+| doom2.wad + nerve.wad | 14,604,584 | 3,819,855 | 18,424,439 (17.57 MB) | 4.50 + 4 + 17.57 = **26.07 MB** |
+| doom.wad + sigil.wad | 12,408,292 | 4,640,210 | 17,048,502 (16.27 MB) | 4.50 + 4 + 16.27 = **24.77 MB** |
+| plutonia.wad (no PWAD) | 17,420,824 | — | 17,420,824 (16.61 MB) | **25.12 MB** (§3 baseline) |
 
-Worst real combo: **tnt.wad + tnt31.wad** at 54.83 MB peak.
-Reproduce (54.83 MB peak): `node tools/archaeology/stamp-check.mjs`
+Worst real combo: **tnt.wad + tnt31.wad** at 26.12 MB peak — fits the 32 MB
+linear memory with 5.88 MB headroom.
+Reproduce (26.12 MB peak): `node tools/archaeology/stamp-check.mjs`
 
 Note: `tnt.wad` at 18.20 MB is slightly larger than `plutonia.wad` at
 17.42 MB, making it the worst single IWAD, not plutonia.wad as stated in §3.
@@ -1510,6 +1515,14 @@ accounts for ~2–4% of whole.
 
 *(p50 = median per-tic instructions across all demos in that IWAD; averaged across the demos in each group)*
 
+> **Correction (task 14.4):** the doom.wad `bsp` cell (494,338) and `other` cell (26,020)
+> do not reproduce from the committed `cycle-attribution.json` under any recorded aggregation
+> (mean of doom.wad per-demo bsp p50s = 558,834; per-demo values 489,382 / 512,230 / 525,543 /
+> 708,180; median 518,886). All other cells reproduce exactly. Verdict: transcription/method
+> error at 13.1b write time — the JSON artifact is authoritative. Superseded by the 14.4
+> regenerated baseline (post-phase-14 engine): doom.wad bsp mean-of-p50s = 503,704 (−9.9%),
+> all-13-demo bsp mean = 551,615 (was 602,197 in the 13.1b artifact, −8.4%).
+
 ### Sim-vs-render split (the retro atlas question)
 
 **Sim alone** is **3.4–5.9% of whole-program instructions** per IWAD (p50).
@@ -1596,3 +1609,63 @@ floor-driven). The ranked candidate ledger — with all five required fields per
 verbatim Plans.md kill-list).  Wins are claimed in 13.1 units (instructions/tic)
 and CI/bare-metal throughput, NEVER browser fps (render = 1.71% of budget on wbox,
 per 12.2b; the framing error is documented in retrospective.md).
+
+## §14.4 Phase-14 release gate (2026-07-18)
+
+Named commit: the 14.4 landing commit (docs/tools/goldens only; engine content
+byte-identical to `4ff6407` — doom.wasm md5 `1931aa623bd0e90e408d1ddd9c9b3c28`,
+356,216 B, rebuilt and re-verified identical after the lint-only reformat of
+engine/web/perf.{c,h}).
+
+### Gates (all lead-run at the named content)
+
+| gate | result |
+|------|--------|
+| fuzz FULL (1000 seeds, --require-native) | 1000/1000 bit-identical, rc=0 |
+| invariant build (-DWEBDOOM_INVARIANTS) | 13/13 bit-identical, rc=0 |
+| sim / render / render-low goldens | 13/13 each, pixel-identical, rc=0 |
+| net lockstep 2p / 4p (drop+rejoin) | PASS / PASS (4p: 1,387 tics, 0 mismatches) |
+| verify-all fast tier | rc=0 ALL PASS |
+| verify-all --full tier | rc=0 ALL PASS (first full-tier green of phase 14) |
+| size-ledger (budget 360,448 B) | 356,216 B, rc=0 |
+| lint (clang-format + node --check) | rc=0 (perf.c/h reformatted, wasm md5-identical) |
+| freestanding stack gate (1 MiB) | 13/13, rc=0 |
+| fleet bench 4 hosts × 3 reps | alder / wbox / tank / pi5 all measured |
+
+### Phase-14 memory before/after
+
+| metric | phase start (14.2c-era measurement) | release | Δ |
+|--------|-------------------------------------|---------|---|
+| `__heap_base` | 5,525,296 B | 4,721,456 B | −803,840 B |
+| BSS diets (14.2d/e/f) | — | — | −594,944 − 86,016 − 122,880 = −803,840 B |
+| wasm linear memory | 64 MiB (pre-14.2c) | 32 MiB | −50% |
+| zone pool | 32 MiB (pre-14.2c) | 4 MiB | −87.5% |
+| worst single-IWAD peak | 53.82 MB (64 MiB era) | 25.12 MB | fits 32 MiB, 6.88 MB headroom |
+| worst PWAD-combo peak (tnt+tnt31) | 54.83 MB | 26.12 MB | fits 32 MiB, 5.88 MB headroom |
+
+(The −803,840 B heap_base delta equals the three BSS diets exactly; the phase's
++64 KiB additions — `web_rowmajor_buf` untranspose buffer et al. — predate the
+14.2c-era 5,525,296 measurement.)
+
+### Regenerated baselines (this commit)
+
+- `tools/golden/cycle-floor.json` — whole-program p50 floors down 7–9% vs the
+  13.1a record (e.g. 1,305,576 → 1,210,153).
+- `tools/golden/cycle-attribution.json` — all-13 bsp mean-of-p50s 602,197 →
+  551,615 (−8.4%); doom.wad bsp 558,834 → 503,704 (−9.9%). Reconciliation
+  delta 0.0000% across both passes.
+- `tools/golden/bench-baseline.json` — 4-host fleet, 3-rep interleaved. Weakest
+  host (wbox-amd-g-t56n) worst demo render SUM = 0.556 ms/frame ≈ 1.9% of the
+  28.57 ms tic budget; pi5 0.170 ms/frame; alder 0.073 ms/frame.
+
+### Stamp re-verification
+
+perf-009 (`__heap_base`) restamped 5,461,072 → 4,721,456. perf-011 doc figure
+restored (`plutonia.wad (17,420,824 bytes)` in §3). perf-059 recomputed under
+the post-diet layout (54.83 → 26.12 MB) and its doc-drift hint re-anchored to
+the sentence it verifies (the old whole-file dot-all regex had matched the
+layout table's first "N MB" cell since that table gained MB rows). perf-001..005
+remain 6de6256-pinned history: doc-drift now carries a `pinned` flag so their
+expected drift is SOFT, while current-size truth is owned by the live
+size-ledger gate (14.3).
+
