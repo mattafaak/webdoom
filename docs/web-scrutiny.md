@@ -17,7 +17,7 @@ Tenets cited: T3 = simplicity, T4 = robustness.
 
 **Severity**: high
 
-**Disposition**: `fix(15.3)` — panel classification; requires coordinated rAF error-surface design
+**Disposition**: `fixed(15.3)` — catch block now surfaces error via `restoreOnFailure(canvas)` + `status(engine error: …)` + audio/sync teardown, mirroring the `onDoomError` pattern; idempotency guard on `running` prevents double-restore when I_Error/abort also fires; verified by `tools/browser-rafdeath-test.mjs` (RED on unfixed, GREEN on fixed)
 
 ---
 
@@ -331,7 +331,7 @@ Every in-scope file is listed. "0" findings is a recorded result.
 | med | 3 (ws-004, ws-008, ws-010) |
 | low | 7 (ws-005, ws-006, ws-007, ws-009, ws-011, ws-012, ws-013) |
 | fixed(12.4b) | 6 (ws-003, ws-007, ws-008, ws-010, ws-012, ws-013) |
-| fix(15.3) | 1 (ws-001) |
+| fixed(15.3) | 1 (ws-001) |
 | won't-fix | 5 (ws-004, ws-005, ws-006, ws-009, ws-011) |
 | already-fixed | 1 (ws-002) |
 
@@ -339,7 +339,7 @@ Every in-scope file is listed. "0" findings is a recorded result.
 
 ## Notable findings (top 5)
 
-1. **ws-001** (high): per-frame `catch {}` in main.js silently freezes canvas on any JS exception — frozen with no recovery path (fix: 15.3)
+1. **ws-001** (high): per-frame `catch {}` in main.js silently freezes canvas on any JS exception — frozen with no recovery path (fixed: 15.3)
 2. **ws-003** (high): sw.js SHELL precache omits `fire.js` and `countdown.js`, both imported by lobby.js — breaks offline SP promise (rme-005) (fix: 12.4b)
 3. **ws-008** (med): `startSync()` in persist.js leaks its interval and visibilitychange listener; orphaned interval pokes dead wasm after quit→reboot, emitting unhandled promise rejections (fix: 12.4b)
 4. **ws-010** (med): settings.js saves `mouseMove` but input.js reads `mouseY`; checkbox toggle has no effect in the current session (fix: 12.4b)

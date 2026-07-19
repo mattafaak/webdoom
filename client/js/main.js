@@ -206,7 +206,19 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
         try {
             input.frame();
             doom._web_frame();
-        } catch { running = false; return; }   // I_Quit/I_Error aborted
+        } catch (err) {
+            // ws-001 fix: surface the error, restore landing, tear down.
+            // Guard on running: onDoomError (I_Error/abort) may have already
+            // cleaned up before the throw propagates here — do not double-restore.
+            if (running) {
+                running = false;
+                try { restoreOnFailure(canvas); } catch { /* DOM torn down */ }
+                try { status(`engine error: ${err?.message ?? String(err)}`); } catch { /* DOM unavailable */ }
+                try { window.doomAudio?.stop?.(); } catch { /* dead instance */ }
+                try { syncHandle?.stop?.(); } catch { /* dead instance */ }
+            }
+            return;
+        }
         const v = doom._web_palette_version();
         renderer.draw(
             doom.HEAPU8.subarray(fb, fb + 320 * 200),
