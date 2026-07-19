@@ -18,7 +18,7 @@ magic-data.md figures (new PUBLIC_HINTS entries). Run the drift checker to
 verify all machine-checkable figures; the qualitative promises below are indexed
 here with dispositions.
 
-**28 promises: 5 gated, 7 evidenced, 16 flagged**
+**28 promises: 5 gated, 8 evidenced, 15 flagged**
 
 ---
 
@@ -55,7 +55,7 @@ here with dispositions.
 | id | source | promise | disposition |
 |----|--------|---------|-------------|
 | spc-001 | spec.md:98 | "alder 0.008 ms, pi5 0.022 ms, **wbox 0.072 ms**" (fire CPU cost per tick) | **GATED** — `spec-001/002/003` in claims.json; `doc-drift.mjs` SPEC_HINTS fails if spec.md diverges from committed expected values. Source: perf.md §fire (0.0078/0.0222/0.0722 ms, rounded). Not CI-reproduced (node bench, not browser). |
-| spc-002 | spec.md:76 | "transport remains a single WebSocket port; head-of-line blocking remains unmeasurably small" | **FLAGGED(asserted, never measured; 15.5 will measure round-trip latency and jitter under LAN/tailnet conditions)** |
+| spc-002 | spec.md:76 | "transport remains a single WebSocket port; head-of-line blocking remains unmeasurably small" | **EVIDENCED** — task 15.5 (2026-07-19): measured inter-bundle gap distribution. Localhost: p50=30.6 ms, p99=33.5 ms, max=40.3 ms. wbox→alder via Tailscale: p50=33.8 ms, p99=83.9 ms, max=142.7 ms (n=440/424 gaps). Stall at grace boundary (graceful-close path, n=5): mean 26 ms, max 33 ms; hard-drop grace bound = 300 ms from `GRACE_MS=250`+`sealSweep=50`. Catch-up on wbox (weakest host, tailnet, n=3): 125–149 ms for 436–505 tics. HOL verdict: no-WebRTC safe; observed variance bounded by sealSweep (50 ms), not TCP retransmit. spec.md:76 updated with measured numbers. Full data: docs/netcode-numbers.md. |
 | spc-003 | spec.md:91 | "`prefers-reduced-motion` gets a static frame" | **FLAGGED(browser-fire-test.mjs does not check prefers-reduced-motion media query; no automated gate — 12.3 or 15.2)** |
 | spc-004 | spec.md:99 | "browser-composited and negligible" (putImageData blit cost) | **EVIDENCED** — task 12.2b (2026-07-18, commit 5a71e12): per-frame profile via `?perfmarks=1` shows (b) FB upload p99=0.2 ms (alder) / p99=6.5 ms (wbox Bobcat spike) vs 35 Hz budget 28.6 ms. WebGL2 path: `texSubImage2D` 320×200 + `drawArrays`; Canvas2D: 64K pixel-expand + `putImageData`. Both sub-ms at p50; "browser-composited and negligible" confirmed. Reproduce: `node tools/browser-pipeline.mjs --url http://127.0.0.1:8666/ --json`. Golden: `tools/golden/browser-pipeline-alder.json`. |
 | spc-005 | spec.md:27 | "web platform layer, client, and server stay small enough to read in a sitting" | **FLAGGED(no LOC budget or gate; purely subjective — 12.3 may add a LOC ceiling check as a soft gate)** |
@@ -120,18 +120,18 @@ family). Two figures remain ungateable.
 | category | total | gated | evidenced | flagged |
 |----------|-------|-------|-----------|---------|
 | README.md | 10 | 1 | 3 | 6 |
-| spec.md | 8 | 3 | 3 | 2 |
+| spec.md | 8 | 3 | 4 | 1 |
 | perf.md (not-machine-verified) | 10 | 1 | 3 | 6 |
 | magic-data.md | 16 | 14 | 1 | 1 |
-| **Total** | **28** (excl. magic-data) / **44** (incl.) | **5** / **19** | **9** / **10** | **14** / **15** |
+| **Total** | **28** (excl. magic-data) / **44** (incl.) | **5** / **19** | **10** / **11** | **13** / **14** |
 
 > Note: magic-data.md figures are separately tracked because they have their own
 > gate mechanism (PUBLIC_HINTS). The "28 promises" headline count covers Parts A–C
 > (README + spec + perf); Part D adds 16 magic-data figures for a full inventory
 > of 44 entries.
 
-**28 promises (Parts A–C): 5 gated, 9 evidenced, 14 flagged.**
-(spc-004 and spc-006 moved from FLAGGED to EVIDENCED by task 12.2b.)
+**28 promises (Parts A–C): 5 gated, 10 evidenced, 13 flagged.**
+(spc-004 and spc-006 moved from FLAGGED to EVIDENCED by task 12.2b; spc-002 moved by task 15.5.)
 
 ### Flagged promises by future task
 
@@ -144,4 +144,4 @@ family). Two figures remain ungateable.
 | 15.2 | rme-002 (Firefox/Edge CI) |
 | 15.3 | rme-008 (SIGIL/MasterLevels/NRFTL/Chex/HACX smoke) |
 | 15.4 | rme-010 (T07 flake fix + edge enforcement) |
-| 15.5 | spc-002 (HOL blocking measurement) |
+| 15.5 | ~~spc-002~~ EVIDENCED (HOL blocking measured 2026-07-19) |

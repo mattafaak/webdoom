@@ -84,6 +84,8 @@ clients.forEach((c, i) => c.doom._web_input_event(0, KEYS[i % 4], 0, 0));
 
 const t0 = performance.now();
 let dropTic = 0;
+let tDrop = 0;   // wall-clock ms when victim dropped
+let tFirstAdvance = 0;  // wall-clock ms when survivor first advanced past dropTic
 const victim = clients[N - 1];
 
 for (;;) {
@@ -96,9 +98,13 @@ for (;;) {
     }
     const elapsed = performance.now() - t0;
     if (N > 1 && elapsed > 10000 && !dropTic) {
+        tDrop = performance.now();
         victim.relay.quit(); victim.lobby.close(); victim.dead = true;
         dropTic = clients[0].doom._web_gametic();
         console.log(`${victim.name} dropped at gametic ${dropTic}`);
+    }
+    if (dropTic && !tFirstAdvance && clients[0].doom._web_gametic() > dropTic) {
+        tFirstAdvance = performance.now();
     }
     if (elapsed > 17000) break;
 }
@@ -112,7 +118,11 @@ for (const c of clients.slice(1)) {
 }
 const final = clients[0].doom._web_gametic();
 console.log(`tics compared: ${compared}, mismatches: ${bad}`);
-if (dropTic) console.log(`survivors advanced ${final - dropTic} tics after drop (final ${final})`);
+if (dropTic) {
+    console.log(`survivors advanced ${final - dropTic} tics after drop (final ${final})`);
+    const stallMs = tFirstAdvance ? (tFirstAdvance - tDrop).toFixed(1) : 'n/a';
+    console.log(`stall_ms: ${stallMs} (graceful-close drop; grace boundary = GRACE_MS 250 ms)`);
+}
 
 if (N > 1 && compared < 200 * (N - 1)) fail(`too few comparable tics (${compared})`);
 if (bad) fail(`DESYNC on ${bad} tics`);

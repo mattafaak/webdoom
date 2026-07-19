@@ -72,8 +72,12 @@ Deterministic lockstep over a server tic relay (docs/netcode.md is the
 protocol SSOT). Modernizations (jitter buffer, drop-in, fabricated-cmd
 grace) never touch the simulation: clients execute sealed bundles only,
 so desync stays impossible by construction. Transport remains a single
-WebSocket port; a transport rewrite (WebRTC/UDP) is out of scope while
-LAN/tailnet head-of-line blocking remains unmeasurably small.
+WebSocket port; a transport rewrite (WebRTC/UDP) is out of scope.
+Measured 2026-07-19 (task 15.5, docs/netcode-numbers.md §3): inter-bundle
+gap p99 = 33 ms (localhost) / 84 ms (wbox→alder via Tailscale) vs 28.57 ms
+tic period; no TCP retransmit stalls observed; packet loss ≈ 0% on
+LAN/Tailscale. HOL verdict: **no-WebRTC safe** — observed variance is
+bounded by sealSweep (50 ms) and client processing, not TCP retransmit.
 
 ## Launcher fire background (visual contract)
 
