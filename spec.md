@@ -112,6 +112,60 @@ composited and negligible on top).
 - The only sanctioned table transform is shipped-blob → boot-generation.
   Runtime lookup → runtime transcendental is forbidden (measured slower).
 
+## Deployment reality: insecure origins (decision record, 2026-07-21)
+
+The primary player environment is plain-HTTP on a LAN/tailnet address
+(`http://<host>:8666/` — exactly what `start.sh` advertises). That is an
+**insecure context**: browsers withhold `navigator.serviceWorker` and
+`AudioContext.audioWorklet` there. Contract:
+
+- Every player-facing feature either works on insecure origins or
+  degrades **loudly** (user-visible status line, never a swallowed
+  `console.warn`). Music and WAD caching must work there via
+  secure-context-free paths (IndexedDB, non-worklet audio sink).
+- CI gains a dedicated insecure-origin leg (headless Chrome with
+  `--host-resolver-rules="MAP insecure.test 127.0.0.1"`), because every
+  existing browser gate runs on `127.0.0.1` — a secure context — and is
+  structurally blind to this failure class (root cause of the 2026-07-21
+  field reports: silent music, WAD redownloads).
+
+## Music contract (decision record, 2026-07-21)
+
+- **Default backend**: the in-engine MUS sequencer + Nuked OPL3 core
+  programmed from the IWAD's own GENMIDI lump (zero-asset, DMX-faithful).
+  An OPL2-voice (mono, 9 voices, authentic 1993) vs OPL3-mode (stereo,
+  18 voices) toggle is render-side audio flavor; neither reads game state.
+- **SoundFont GM backend** (optional, lazy-loaded): mus2mid + a worklet
+  soundfont synth. Default font is GeneralUser GS (clean license) served
+  from this project's own server with its license text alongside —
+  **never a CDN**. User-loadable .sf2 via the local WAD/asset library.
+  This is the project's first third-party JS runtime dependency; it is
+  lazy-loaded, excluded from the SHELL precache unless deliberately
+  added, and its size lands as an explicit size-budget line item.
+- **GUS flavor** is decision-gated on licensing (Gravis patches are
+  tolerated-but-unlicensed); no task ships it without a record here.
+- **Never bundled**: Microsoft GS wavetable, Roland ROMs/Nuked-SC55,
+  provenance-unclear soundfonts. User-supplied files are fine.
+- Determinism rule (unchanged): engine music state changes only via
+  `S_*` calls driven by gamestate; sample generation only via JS pulls.
+  A peer with no audio at all stays tic-identical.
+
+## Widescreen view (decision record, 2026-07-21)
+
+Sanctioned the same way freelook was: **render-side only, opt-in**.
+Crispy-style Hor+ (vanilla vertical FOV and world scale; extra columns
+are true rays). A wide player sees more of the world, including in MP —
+accepted and recorded, like freelook. Hard rules:
+
+- The 320×200 default path stays **byte-identical** (render goldens are
+  never regolded for this; if they move, the change is wrong).
+- Wide mode gets its own golden family per aspect bucket.
+- Mixed-width netgames must remain per-tic sync-identical.
+- The status bar keeps 4:3 proportions (centered, flat-filled flanks).
+- Any client-side projection remap (progressive Panini/cylindrical for
+  very wide aspects) is a post-process on the palettized image,
+  off-by-default and outside all goldens.
+
 ## Browser matrix (task 15.2 decision record, 2026-07-19)
 
 ### Firefox — smoke-tested and kept
@@ -155,11 +209,19 @@ Safari coverage is documented policy, not oversight.
 - Rewriting the core in another language.
 - Gameplay-visible "enhancements" beyond vanilla (freelook/interpolation
   stay render-side only; vanilla mode toggle preserved).
-- Actual retro-console ports (SNES/32X/GBA-class hardware). The
-  deliverable is the **retro feasibility atlas**: measured cycle/RAM/
-  storage floors of the vanilla-exact core mapped against period
-  hardware, each row concluding feasible / infeasible / feasible-with-
-  named-cuts, arithmetic shown. Running on the hardware is a future
-  project that starts from the atlas.
+- ~~Actual retro-console ports~~ **Amended 2026-07-21 (floor campaign)**:
+  the atlas remains the doctrine — no hardware target is attempted
+  before its atlas row exists with arithmetic — but real-hardware
+  **test beds are now sanctioned** where the row supports them:
+  N64/VR4300 (owned hardware: SummerCart64 + Analogue 3D; emulator leg
+  is the repeatable gate, hardware runs are committed evidence),
+  386-class (86Box/real hardware), and a sub-100 MHz MCU floor
+  measurement (RP2040-class, underclocked — deliverable is the measured
+  minimum clock at which 13/13 demos stay tic-exact, not a promised
+  record). Genesis+Sega CD stays **parked**: its atlas row concludes
+  infeasible for tic-exact 35 Hz at native res by ~10× (external anchor:
+  krikzz doom-68k, 1–2 fps FPGA-assisted); any future bring-up is a
+  named-cuts stunt, not a promise of this project. SNES/GBA-class
+  verdicts unchanged (infeasible, atlas rows closed).
 - Safari/iOS and mobile/touch support — explicit non-goal; see
   browser matrix decision above.
