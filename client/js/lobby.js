@@ -10,6 +10,8 @@ import { loadDoomFont } from './doomfont.js';
 import { createMenu } from './menu.js';
 import { createCountdown } from './countdown.js';
 import { createFire } from './fire.js';
+import { identifyWad, WadError } from './wad-import.js';
+import { libraryAdd, libraryList } from './wad-library.js';
 
 const $ = id => document.getElementById(id);
 const status = msg => { $('status').textContent = msg; };
@@ -62,8 +64,45 @@ function rootScreen() {
         items: [
             { label: 'SINGLE PLAYER', action: () => menu.push(spGameScreen()) },
             { label: 'MULTIPLAYER', action: enterMultiplayer },
+            { label: 'IMPORT WAD', action: () => document.getElementById('wad-file-input')?.click() },
         ],
     };
+}
+
+// Handle a WAD file import from either drag-drop or file picker.
+// Reads file.arrayBuffer(), identifies the WAD, stores in local library,
+// and adds the entry to the in-memory manifest.
+async function handleWadImport(file) {
+    // MAXWEBFILES=40: engine only accepts 40 files per boot;
+    // cap the local library to prevent pathological stacks.
+    if (manifest.length >= 40) {
+        status('WAD library full (max 40 files)');
+        return;
+    }
+    try {
+        status('Reading WAD…');
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const entry = await identifyWad(bytes, file.name);
+
+        // Deduplicate by sha256 (same file imported twice → skip)
+        if (manifest.find(m => m.sha256 === entry.sha256)) {
+            status(`Already imported: ${entry.title}`);
+            return;
+        }
+
+        await libraryAdd(entry, bytes);
+        manifest.push(entry);
+        status(`Imported: ${entry.title}`);
+
+        // Refresh the menu so the new entry appears immediately.
+        if (menu.depth() <= 1) menu.reset(rootScreen());
+        else menu.refresh(spGameScreen());
+    } catch (err) {
+        const msg = err instanceof WadError
+            ? `Rejected: ${err.message}`
+            : `Import error: ${err.message ?? String(err)}`;
+        status(msg);
+    }
 }
 
 // Quit Game (→ Y) inside the engine returns here.
@@ -432,6 +471,15 @@ function leaveLobby() {
     }
     try {
         manifest = (await (await fetch('/api/wads')).json()).wads;
+
+        // Merge local-library entries into the manifest.
+        // Entries already on the server (same sha256) are skipped.
+        const serverShas = new Set(manifest.map(e => e.sha256));
+        const localEntries = await libraryList().catch(() => []);
+        for (const e of localEntries) {
+            if (!serverShas.has(e.sha256)) manifest.push(e);
+        }
+
         font = await loadDoomFont();
         // onTransition: single hook for every real screen change in the launcher
         // menu. Full-flare (peak 36) on return-to-root; subtle nav flare (peak 28)
@@ -450,6 +498,40 @@ function leaveLobby() {
         status('cannot reach server');
         return;
     }
+
+    // --- WAD import: file picker (for keyboard/test access) + drag-drop ------
+    // Hidden file input — triggered by "IMPORT WAD" menu item or programmatically.
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.wad';
+    fileInput.id = 'wad-file-input';
+    fileInput.style.cssText = 'position:absolute;left:-9999px;top:-9999px;';
+    document.body.appendChild(fileInput);
+    fileInput.addEventListener('change', e => {
+        const f = e.target.files[0];
+        if (f) { fileInput.value = ''; handleWadImport(f); }
+    });
+
+    // Drag-and-drop on #landing (the full landing menu area).
+    const landing = $('landing');
+    landing.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        landing.classList.add('drop-hover');
+    });
+    landing.addEventListener('dragleave', e => {
+        if (!landing.contains(e.relatedTarget)) landing.classList.remove('drop-hover');
+    });
+    landing.addEventListener('drop', e => {
+        e.preventDefault();
+        landing.classList.remove('drop-hover');
+        const f = e.dataTransfer.files[0];
+        if (f) handleWadImport(f);
+    });
+
+    // Expose for test injection and external tooling.
+    window.__handleWadImport = handleWadImport;
+    window.__wadImport = { identifyWad, WadError };
 
     // PSX DOOM fire background. Inserted into #stage so it sits behind
     // the menu and is invisible during gameplay (paused while game runs).

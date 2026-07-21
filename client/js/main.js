@@ -7,6 +7,7 @@ import { createSettingsUI } from './settings.js';
 import { attachRelay } from './net.js';
 import { loadPersisted, startSync } from './persist.js';
 import { wadCacheGet, wadCachePut } from './wad-cache.js';
+import { libraryGetBytes } from './wad-library.js';
 
 const status = msg => { document.getElementById('status').textContent = msg; };
 
@@ -45,6 +46,17 @@ function swActive() {
 
 async function fetchWad(file, sha) {
     const sw = swActive();
+
+    // Local library tier — user-imported WADs live only in IDB, never on the
+    // server.  Check this first, regardless of SW/origin context, so imported
+    // PWADs boot without a network request even on secure origins.
+    if (sha) {
+        const local = await libraryGetBytes(sha).catch(() => null);
+        if (local) {
+            loading.set(`LOADING ${file} (local)…`, 1);
+            return local;
+        }
+    }
 
     // IDB fallback tier — consulted only when the SW cache is absent.
     // On secure origins with an active SW the fetch below goes through the

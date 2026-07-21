@@ -1,7 +1,7 @@
 // webdoom service worker: WADs are content-hashed (?v=sha8) → cache-first
 // forever; everything else network-first with cache fallback, so repeat
 // loads are instant and single player works offline once a WAD is cached.
-const SHELL = 'webdoom-shell-v3';
+const SHELL = 'webdoom-shell-v4';
 const WADS = 'webdoom-wads-v1';
 
 self.addEventListener('install', e => {
@@ -11,6 +11,7 @@ self.addEventListener('install', e => {
         '/js/audio.js', '/js/settings.js', '/js/net.js', '/js/music-worklet.js',
         '/js/menu.js', '/js/doomfont.js', '/js/persist.js', '/js/wad-cache.js',
         '/js/fire.js', '/js/countdown.js',
+        '/js/wad-import.js', '/js/wad-library.js',
         '/engine/doom.js', '/engine/doom.wasm',
     ])).then(() => self.skipWaiting()));
 });
