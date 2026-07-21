@@ -6,6 +6,7 @@ import { createAudio } from './audio.js';
 import { createSettingsUI } from './settings.js';
 import { attachRelay } from './net.js';
 import { loadPersisted, startSync } from './persist.js';
+import { wadCacheGet, wadCachePut } from './wad-cache.js';
 
 const status = msg => { document.getElementById('status').textContent = msg; };
 
@@ -32,7 +33,32 @@ const ENGINE_NAME = {
     'chex.wad': 'doomu.wad',    // 4-episode doom-shaped TC (has DEMO4)
 };
 
+// Is the service worker currently active as the page's controller?
+// Returns false on insecure origins (plain http://<LAN-IP>) where
+// navigator.serviceWorker is undefined, and also in the brief window
+// before a newly-installed SW claims the page.
+function swActive() {
+    return typeof navigator !== 'undefined' &&
+        'serviceWorker' in navigator &&
+        !!navigator.serviceWorker.controller;
+}
+
 async function fetchWad(file, sha) {
+    const sw = swActive();
+
+    // IDB fallback tier — consulted only when the SW cache is absent.
+    // On secure origins with an active SW the fetch below goes through the
+    // SW's cache-first handler (webdoom-wads-v1); we never read IDB in that
+    // case to avoid stale-data surprises, and we skip IDB writes entirely
+    // to avoid duplicate storage (design rule: one store per WAD, not two).
+    if (!sw && sha) {
+        const cached = await wadCacheGet(sha);
+        if (cached) {
+            loading.set(`LOADING ${file} (cached)…`, 1);
+            return cached;
+        }
+    }
+
     const res = await fetch(`/wads/${file}?v=${(sha ?? '').slice(0, 8)}`);
     if (!res.ok) throw new Error(`wad fetch failed: ${file} (${res.status})`);
     const total = +res.headers.get('content-length') || 0;
@@ -51,6 +77,14 @@ async function fetchWad(file, sha) {
     const buf = new Uint8Array(got);
     let o = 0;
     for (const p of parts) { buf.set(p, o); o += p.length; }
+
+    // Write to IDB only on insecure origins without an active SW.
+    // On secure origins (active SW) the SW cache-first handler already stored
+    // the WAD in webdoom-wads-v1; no IDB write needed.
+    if (!sw && sha) {
+        wadCachePut(sha, buf).catch(() => {}); // fire-and-forget; non-fatal
+    }
+
     return buf;
 }
 

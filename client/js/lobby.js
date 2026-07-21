@@ -464,4 +464,11 @@ function leaveLobby() {
 
     menu.reset(rootScreen());   // triggers onTransition('reset') → fire.flare()
     status('');
+    // On insecure origins (plain http://<LAN-IP>) navigator.serviceWorker is
+    // absent — the SW never engages and its WAD cache is unavailable.
+    // Surface a non-silent notice so players know WADs are cached locally via
+    // IndexedDB instead. This replaces the previous silent no-op.
+    if (!('serviceWorker' in navigator)) {
+        status('offline caching unavailable (insecure origin) — WADs cached locally instead');
+    }
 })();

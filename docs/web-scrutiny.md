@@ -291,6 +291,31 @@ If `navigator.getGamepads` is undefined (very old browser or restricted environm
 
 ---
 
+### ws-014 — main.js / lobby.js : WAD cache absent on insecure origins — silent re-download every session
+
+**File/function**: `client/js/main.js`, `fetchWad()` (line 35); `client/js/lobby.js`, boot block (line 423); `client/sw.js`
+
+**What**: The service worker (`sw.js`) is the only WAD cache, keyed by `?v=sha8` in the `webdoom-wads-v1` cache. SW registration requires a secure context. Players connecting via plain `http://<LAN-IP>:8666` (the documented and default mode — see `start.sh`, `server/serve.js:84-92`) get no SW: `navigator.serviceWorker` is absent, the guard in lobby.js line 423 (`if ('serviceWorker' in navigator)`) silently skips registration, and the `fetchWad` fetch hits the server on every session. The degradation was never surfaced to the user.
+
+**Dimensions**:
+- No WAD caching on LAN-IP origins: WAD re-downloads on every page load (4–17 MB per game, per session).
+- Silent degradation: `status('')` left blank; user had no indication that offline caching was unavailable.
+- No `navigator.storage.persist()` call anywhere in the client; IDB data (savegames) subject to eviction.
+
+**Storage arithmetic** (IDB fallback tier added by 16.3):
+- Typical WAD sizes: doom.wad ~12 MB, doom2.wad ~14 MB, sigil.wad ~4 MB, nerve.wad ~4 MB, tnt.wad ~17 MB, plutonia.wad ~17 MB, chex.wad ~6 MB.
+- Full library (8 IWADs + PWADs): ~80–120 MB.
+- Chrome IDB quota: up to ~60% of available disk; 80–120 MB is well within quota on any modern device.
+- Eviction story: without `storage.persist()`, the browser may evict IDB data under storage pressure; the IDB WAD cache is then cold and the next session re-downloads (same as pre-fix behaviour). With `persist()` (requested after first successful IDB WAD write), the data is preserved until the user explicitly clears site data.
+
+**Why it matters** (T4): the whole point of the WAD cache (SW or IDB) is to avoid repeated multi-MB downloads on a LAN server that may have limited bandwidth. Silent failure defeats this purpose.
+
+**Severity**: high
+
+**Disposition**: `fixed(16.3)` — `client/js/wad-cache.js` adds an IDB fallback store keyed by full sha256. `fetchWad()` in `main.js` detects SW presence via `navigator.serviceWorker.controller`; on insecure origins it reads IDB before network and writes IDB after a network fetch. On secure origins with an active SW the IDB write is skipped (no duplicate storage). `lobby.js` surfaces a non-silent status: `"offline caching unavailable (insecure origin) — WADs cached locally instead"`. `navigator.storage.persist()` is requested after the first successful IDB WAD write. `wad-cache.js` added to `sw.js` SHELL precache so the module is available offline. Verified by `tools/browser-insecure-test.mjs` (session 2 zero /wads/ server hits from IDB).
+
+---
+
 ## Coverage Table
 
 Every in-scope file is listed. "0" findings is a recorded result.
@@ -302,15 +327,16 @@ Every in-scope file is listed. "0" findings is a recorded result.
 | client/js/doomfont.js | 0 |
 | client/js/fire.js | 0 |
 | client/js/input.js | ws-013 |
-| client/js/lobby.js | 0 (ws-002 already-fixed referenced here; no new findings) |
-| client/js/main.js | ws-001, ws-002 (already-fixed) |
+| client/js/lobby.js | ws-014 (degraded-mode status) |
+| client/js/main.js | ws-001, ws-002 (already-fixed), ws-014 (fetchWad IDB fallback) |
+| client/js/wad-cache.js | (new — ws-014 fix implementation) |
 | client/js/menu.js | 0 |
 | client/js/music-worklet.js | 0 |
 | client/js/net.js | ws-009 |
 | client/js/persist.js | ws-008 |
 | client/js/settings.js | ws-010 |
 | client/js/video.js | 0 |
-| client/sw.js | ws-003, ws-004 |
+| client/sw.js | ws-003, ws-004, ws-014 (precache updated) |
 | client/index.html | 0 |
 | server/serve.js | ws-005 |
 | server/game.js | ws-006, ws-011 |
@@ -324,14 +350,15 @@ Every in-scope file is listed. "0" findings is a recorded result.
 
 | dimension | count |
 |-----------|-------|
-| total entries | 13 |
-| active findings | 12 |
+| total entries | 14 |
+| active findings | 13 |
 | already-fixed | 1 (ws-002) |
-| high | 2 (ws-001, ws-003) |
+| high | 3 (ws-001, ws-003, ws-014) |
 | med | 3 (ws-004, ws-008, ws-010) |
 | low | 7 (ws-005, ws-006, ws-007, ws-009, ws-011, ws-012, ws-013) |
 | fixed(12.4b) | 6 (ws-003, ws-007, ws-008, ws-010, ws-012, ws-013) |
 | fixed(15.3) | 1 (ws-001) |
+| fixed(16.3) | 1 (ws-014) |
 | won't-fix | 5 (ws-004, ws-005, ws-006, ws-009, ws-011) |
 | already-fixed | 1 (ws-002) |
 
@@ -341,6 +368,7 @@ Every in-scope file is listed. "0" findings is a recorded result.
 
 1. **ws-001** (high): per-frame `catch {}` in main.js silently freezes canvas on any JS exception — frozen with no recovery path (fixed: 15.3)
 2. **ws-003** (high): sw.js SHELL precache omits `fire.js` and `countdown.js`, both imported by lobby.js — breaks offline SP promise (rme-005) (fix: 12.4b)
-3. **ws-008** (med): `startSync()` in persist.js leaks its interval and visibilitychange listener; orphaned interval pokes dead wasm after quit→reboot, emitting unhandled promise rejections (fix: 12.4b)
+3. **ws-014** (high): WAD cache absent on insecure LAN-IP origins — SW never engages; WADs re-download every session; silent degradation (fix: 16.3)
+4. **ws-008** (med): `startSync()` in persist.js leaks its interval and visibilitychange listener; orphaned interval pokes dead wasm after quit→reboot, emitting unhandled promise rejections (fix: 12.4b)
 4. **ws-010** (med): settings.js saves `mouseMove` but input.js reads `mouseY`; checkbox toggle has no effect in the current session (fix: 12.4b)
 5. **ws-004** (med): `skipWaiting()` + `clients.claim()` evicts the old shell cache mid-game; handled by controllerchange banner but subtle for offline SP (won't-fix with existing banner)

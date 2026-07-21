@@ -9,7 +9,7 @@ self.addEventListener('install', e => {
         '/', '/css/webdoom.css',
         '/js/lobby.js', '/js/main.js', '/js/video.js', '/js/input.js',
         '/js/audio.js', '/js/settings.js', '/js/net.js', '/js/music-worklet.js',
-        '/js/menu.js', '/js/doomfont.js', '/js/persist.js',
+        '/js/menu.js', '/js/doomfont.js', '/js/persist.js', '/js/wad-cache.js',
         '/js/fire.js', '/js/countdown.js',
         '/engine/doom.js', '/engine/doom.wasm',
     ])).then(() => self.skipWaiting()));
