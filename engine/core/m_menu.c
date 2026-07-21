@@ -62,6 +62,7 @@ rcsid[] = "$Id: m_menu.c,v 1.7 1997/02/03 22:45:10 b1 Exp $";
 #include "sounds.h"
 
 #include "m_menu.h"
+#include "web.h"	// webdoom file bridge
 
 
 
@@ -512,8 +513,6 @@ menu_t  SaveDef =
 //
 void M_ReadSaveStrings(void)
 {
-    int             handle;
-    int             count;
     int             i;
     char    name[256];
 	
@@ -524,15 +523,15 @@ void M_ReadSaveStrings(void)
 	else
 	    sprintf(name,SAVEGAMENAME"%d.dsg",i);
 
-	handle = open (name, O_RDONLY | 0, 0666);
-	if (handle == -1)
+	// webdoom: POSIX open/read/close are dead stubs under -sFILESYSTEM=0.
+	// Route through the JS small-file bridge instead.
+	if (Web_FileLen(name) < SAVESTRINGSIZE)
 	{
 	    strcpy(&savegamestrings[i][0],EMPTYSTRING);
 	    LoadMenu[i].status = 0;
 	    continue;
 	}
-	count = read (handle, &savegamestrings[i], SAVESTRINGSIZE);
-	close (handle);
+	Web_FileCopyN(name, (byte*)&savegamestrings[i], SAVESTRINGSIZE);
 	LoadMenu[i].status = 1;
     }
 }

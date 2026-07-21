@@ -21,7 +21,7 @@ function db() {
 const tx = (d, mode, fn) => new Promise((res, rej) => {
     const t = d.transaction(STORE, mode);
     const out = fn(t.objectStore(STORE));
-    t.oncomplete = () => res(out?.result ?? out);
+    t.oncomplete = () => res(out?.result);
     t.onerror = () => rej(t.error);
 });
 
@@ -38,7 +38,7 @@ export async function loadPersisted(iwad) {
         for (const name of [...SAVES, CONFIG]) {
             const bytes = await tx(d, 'readonly', s => s.get(keyFor(iwad, name)))
                 ?? await tx(d, 'readonly', s => s.get(legacyKeyFor(iwad, name)));
-            if (bytes) files.set(name, bytes);
+            if (bytes instanceof Uint8Array) files.set(name, bytes);
         }
         d.close();
     } catch (err) {

@@ -79,6 +79,16 @@ EMSCRIPTEN_KEEPALIVE int web_ui_mode (void)
     return menuactive || gamestate != GS_LEVEL;
 }
 
+// webdoom: test-support export — 1 when any menu is open, 0 otherwise.
+// Used by persist-test.mjs Phase 2b to discriminate selectable vs.
+// unselectable load-game slots: a status-1 slot triggers M_LoadSelect →
+// M_ClearMenus → menuactive=0; a status-0 slot does nothing and the
+// menu stays open.
+EMSCRIPTEN_KEEPALIVE int web_menu_active (void)
+{
+    return menuactive;
+}
+
 //
 // web_set_console
 // Repoint the console/display player. A drop-in boots as its own (not-yet-

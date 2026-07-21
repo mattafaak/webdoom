@@ -70,7 +70,31 @@ await bootSP();
 const restored = await ev(`window.webdoom.doom['fileMap']?.get('doomsav0.dsg')?.length ?? 0`);
 console.log('savegame bytes restored after reload:', restored);
 if (!restored) fail('savegame not restored after reload');
-console.log('savegame bytes restored after reload:', restored);
+// ── Phase 2b: Load Game slot visibility (task 16.1) ──────────────────────────
+// After reload the six Load-Game slots must be populated via the web bridge
+// (M_ReadSaveStrings → Web_FileLen / Web_FileCopyN).  Slot 0 was saved above
+// so it must be selectable (status 1).
+//
+// Discriminator: web_menu_active() (exported from i_main.c).
+//   • A status-1 slot triggers M_LoadSelect → M_ClearMenus → menuactive=0.
+//   • A status-0 (unselectable) slot does nothing; menuactive stays 1.
+// This is exact vanilla semantics — no timing heuristics.
+await key('F3', 0x72);   // open Load Game menu (menuactive → 1)
+await sleep(400);
+const menuOpenedAfterF3 = await ev(`window.webdoom?.doom?.ccall('web_menu_active','number',[],[]) === 1`);
+console.log('menu active after F3:', menuOpenedAfterF3);
+if (!menuOpenedAfterF3) fail('Load Game menu did not open after F3 (web_menu_active !== 1)');
+await key('Enter', 13);  // select slot 0
+// poll up to 2 s for menuactive to drop to 0 (slot was selectable → loaded)
+let slotLoaded = false;
+for (let i = 0; i < 20; i++) {
+    await sleep(100);
+    if (await ev(`window.webdoom?.doom?.ccall('web_menu_active','number',[],[]) === 0`)) {
+        slotLoaded = true; break;
+    }
+}
+console.log('load-game slot 0 selectable (menuactive cleared):', slotLoaded);
+if (!slotLoaded) fail('Load Game slot 0 was not selectable after reload — menuactive did not clear (M_ReadSaveStrings bridge not working)');
 
 // ── Phase 3: teardown test (ws-008) ──────────────────────────────────────────
 // Set up an unhandled-rejection listener, trigger doom.onQuit() to stop the
@@ -85,5 +109,5 @@ const badRej = urjList.filter(r => /wasm|RuntimeError|abort|sync|save/i.test(r))
 if (badRej.length) fail(`unhandled rejections after quit: ${badRej.join(', ')}`);
 console.log(`teardown test: ${urjList.length} total unhandled rejections, ${badRej.length} wasm/sync related — OK`);
 
-console.log('PASS — savegame survives a page reload; interval stops cleanly on quit');
+console.log('PASS — savegame survives a page reload; load slots visible; interval stops cleanly on quit');
 chrome.kill(); process.exit(0);

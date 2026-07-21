@@ -37,6 +37,10 @@ EM_JS (void, js_file_copy, (const char* name, unsigned char* dest), {
     var b = Module["fileMap"].get(UTF8ToString(name));
     if (b) HEAPU8.set(b, dest);
 });
+EM_JS (void, js_file_copy_n, (const char* name, unsigned char* dest, int maxlen), {
+    var b = Module["fileMap"].get(UTF8ToString(name));
+    if (b) HEAPU8.set(b.length <= maxlen ? b : b.subarray(0, maxlen), dest);
+});
 EM_JS (void, js_file_write, (const char* name, unsigned char* data, int len), {
     if (!Module["fileMap"]) Module["fileMap"] = new Map();
     var n = UTF8ToString(name);
@@ -106,6 +110,11 @@ int Web_FileLen (const char* path)
 void Web_FileCopy (const char* path, byte* dest)
 {
     js_file_copy (web_basename (path), dest);
+}
+
+void Web_FileCopyN (const char* path, byte* dest, int maxlen)
+{
+    js_file_copy_n (web_basename (path), dest, maxlen);
 }
 
 void Web_FileWrite (const char* path, byte* data, int len)
