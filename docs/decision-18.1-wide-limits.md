@@ -25,7 +25,7 @@ Three peak counters now always accumulate in the wasm build (zero overhead witho
 | Counter | Guard flag | Getter | Updated in |
 |---------|-----------|--------|-----------|
 | `web_perf_visplane_peak` | `-DWEB_PERF_PLANE_STATS` | `_web_perf_visplane_peak_get` | `r_plane.c R_ClearPlanes` (pre-existing) |
-| `web_perf_drawseg_peak` | `-DWEB_PERF_DRAWSEG_STATS` | `_web_perf_drawseg_peak_get` | `r_bsp.c R_ClearSegs` (task 14.2e) |
+| `web_perf_drawseg_peak` | `-DWEB_PERF_DRAWSEG_STATS` | `_web_perf_drawseg_peak_get` | `r_bsp.c R_ClearDrawSegs` (task 14.2e) |
 | `web_perf_opening_peak` | `-DWEB_PERF_OPENINGS_STATS` | `_web_perf_opening_peak_get` | `r_plane.c R_ClearPlanes` (task 14.2f) |
 
 Both `web_perf_drawseg_peak_get` and `web_perf_opening_peak_get` added to `EXPORTED_FUNCTIONS`
@@ -140,15 +140,15 @@ At W=854, two BSS arrays grow with SCREENWIDTH:
 | Array | W=320 size | W=854 size | Delta |
 |-------|----------:|----------:|------:|
 | `visplanes[128]` (top/bottom each W bytes) | 85.5 KB | 222.2 KB | +136.7 KB |
-| `openings[W×64]` (MAXOPENINGS×2 bytes) | 40.0 KB | 109.3 KB | +69.3 KB |
+| `openings[W×64]` (MAXOPENINGS×2 bytes) | 41.0 KB | 109.3 KB | +68.4 KB |
 | `drawsegs[256]` (width-independent) | 12.0 KB | 12.0 KB | — |
-| **BSS delta** | | | **+206 KB** |
+| **BSS delta** | | | **+205 KB** |
 
-Estimated `web_heap_base` at W=854: 4.50 MB + 0.206 MB = **~4.71 MB**
+Estimated `web_heap_base` at W=854: 4.50 MB + 0.205 MB = **~4.71 MB**
 
 | Component | Size | Note |
 |-----------|-----:|------|
-| web_heap_base (static floor, W=854) | ~4.71 MB | +206 KB BSS vs W=320 |
+| web_heap_base (static floor, W=854) | ~4.71 MB | +205 KB BSS vs W=320 |
 | Zone (`malloc(ZONESIZE)`) | 4.00 MB | unchanged |
 | WAD peak (`malloc` via W_WebFile) | 17.35 MB | unchanged |
 | **Total peak** | **~26.06 MB** | |
@@ -160,7 +160,7 @@ both the current W=320 build and the future W=854 setblocks=11 path.
 
 ### 5.5 BSS strategy decision: static-max
 
-Runtime alloc was considered but rejected. BSS delta at W=854 is only +206 KB vs W=320,
+Runtime alloc was considered but rejected. BSS delta at W=854 is only +205 KB vs W=320,
 and both widths fit within 32 MB with ~6 MB headroom. Static compile-time arrays (current
 approach) have zero runtime overhead, simpler code, and no alloc-failure path. Chosen: **static-max**.
 
@@ -176,7 +176,8 @@ Limit=128: margin = 1.08×.
 
 peak=118, limit=128: margin 1.08× — too thin for production.
 Limit-busting community WADs routinely exceed 128 visplanes per frame.
-Revert to 1024 (margin 8.7×) was correct.
+(Historical note: the round-3 branch revert to 1024 was motivated by this thin
+margin; current master retains 128 as the vanilla floor per §7.)
 
 **Verdict**: 14.2d revert to MAXVISPLANES=128 is validated by the 1.08× margin being
 insufficient headroom for community content. The current 128 limit is the vanilla floor;
@@ -219,7 +220,7 @@ at `r_plane.c:437` applies. Current verdict: retained.
 - [x] Permanent drawseg and opening peak counters committed with NULL-safe guard
 - [x] Both getters exported via EXPORTED_FUNCTIONS (Makefile)
 - [x] Measurements across 13-demo suite (doom, doom2, tnt, plutonia) in table above
-- [x] BSS strategy decision: static-max, justified by +206 KB delta and headroom analysis
+- [x] BSS strategy decision: static-max, justified by +205 KB delta and headroom analysis
 - [x] RAM arithmetic against 32 MiB INITIAL_MEMORY (correct post-14.2c baseline)
 - [x] 14.2d/e/f vanilla-limit reverts reviewed with witness peaks
 - [x] Sanity re-measurement on current master confirms peak values unchanged by 14.2c/d/e/f
