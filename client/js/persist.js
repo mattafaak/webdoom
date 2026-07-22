@@ -8,6 +8,7 @@ const DB = 'webdoom';
 const STORE = 'files';
 const SAVES = [...Array(6).keys()].map(i => `doomsav${i}.dsg`);
 const CONFIG = '.doomrc';
+const ALL_FILES = [...SAVES, CONFIG];
 
 function db() {
     return new Promise((res, rej) => {
@@ -35,7 +36,7 @@ export async function loadPersisted(iwad) {
     const files = new Map();
     try {
         const d = await db();
-        for (const name of [...SAVES, CONFIG]) {
+        for (const name of ALL_FILES) {
             const bytes = await tx(d, 'readonly', s => s.get(keyFor(iwad, name)))
                 ?? await tx(d, 'readonly', s => s.get(legacyKeyFor(iwad, name)));
             if (bytes instanceof Uint8Array) files.set(name, bytes);
@@ -47,7 +48,27 @@ export async function loadPersisted(iwad) {
     return files;
 }
 
-// mirror fileMap changes out every few seconds (+ on tab hide)
+// Flush fileMap → IDB directly, no wasm calls — safe even when the engine
+// has died (onQuit / onDoomError path).
+export async function flushDirect(doom, iwad) {
+    const m = doom['fileMap'];
+    if (!m) return;
+    let d = null;
+    try {
+        for (const name of ALL_FILES) {
+            const bytes = m.get(name);
+            if (!(bytes instanceof Uint8Array)) continue;
+            d ??= await db();
+            await tx(d, 'readwrite', s => s.put(bytes, keyFor(iwad, name)));
+        }
+    } catch (err) {
+        console.warn('flush-direct failed:', err);
+    } finally {
+        d?.close();
+    }
+}
+
+// mirror fileMap changes out every few seconds (+ on tab hide + on file write)
 export function startSync(doom, iwad, intervalMs = 3000) {
     const lastFp = new Map();
 
@@ -60,11 +81,11 @@ export function startSync(doom, iwad, intervalMs = 3000) {
     async function sync() {
         try {
             doom._web_save_defaults();  // flush live config into the Map
-        } catch { return; }             // wasm aborted after quit — ignore
+        } catch { /* wasm aborted after quit — fileMap still readable, continue */ }
         const m = doom['fileMap'];
         if (!m) return;
         let d = null;
-        for (const name of [...SAVES, CONFIG]) {
+        for (const name of ALL_FILES) {
             const bytes = m.get(name);
             if (!bytes) continue;
             const fp = fingerprint(bytes);
@@ -75,20 +96,46 @@ export function startSync(doom, iwad, intervalMs = 3000) {
                 lastFp.set(name, fp);
             } catch (err) {
                 console.warn('save sync failed:', err);
-                return;
+                break;
             }
         }
         d?.close();
     }
 
+    // Write-through: called immediately when the engine writes any file
+    // (js_file_write in files.c sets fileMap then calls Module.onFileWrite).
+    // This ensures saves reach IDB at write time, not just at the next interval.
+    doom['onFileWrite'] = name => {
+        if (!ALL_FILES.includes(name)) return;
+        const m = doom['fileMap'];
+        if (!m) return;
+        const bytes = m.get(name);
+        if (!(bytes instanceof Uint8Array)) return;
+        // Update fingerprint so the interval skips this entry (already persisted).
+        lastFp.set(name, fingerprint(bytes));
+        db().then(d =>
+            tx(d, 'readwrite', s => s.put(bytes, keyFor(iwad, name)))
+            .then(() => d.close())
+            .catch(err => { console.warn('onFileWrite IDB write failed:', err); try { d.close(); } catch {} })
+        ).catch(err => console.warn('onFileWrite db open failed:', err));
+    };
+
     const timer = setInterval(sync, intervalMs);
     const onHide = () => { if (document.visibilityState === 'hidden') sync(); };
     document.addEventListener('visibilitychange', onHide);
 
+    // Final flush: read fileMap directly without any wasm calls.
+    // Safe to call from onQuit / onDoomError (engine may be dead).
+    // Returns a Promise that always resolves (never rejects).
+    function flush() {
+        return flushDirect(doom, iwad);
+    }
+
     function stop() {
         clearInterval(timer);
         document.removeEventListener('visibilitychange', onHide);
+        doom['onFileWrite'] = null;
     }
 
-    return { sync, stop };
+    return { sync, flush, stop };
 }

@@ -96,6 +96,61 @@ for (let i = 0; i < 20; i++) {
 console.log('load-game slot 0 selectable (menuactive cleared):', slotLoaded);
 if (!slotLoaded) fail('Load Game slot 0 was not selectable after reload — menuactive did not clear (M_ReadSaveStrings bridge not working)');
 
+// ── Phase 4: quit-within-3s durability (task 16.2) ───────────────────────────
+// Scenario: player saves, then quits before the 3-second sync interval fires.
+// The save must survive via write-through (doom.onFileWrite) and/or the final
+// flush triggered in doom.onQuit. Without the fix the save is lost.
+//
+// We reload for a fresh engine so slot-1 is guaranteed empty pre-save.
+await cdp('Page.reload');
+await bootSP();
+// Start a new game to reach E1M1 again
+for (const [k, vk] of [['Escape', 27], ['Enter', 13], ['Enter', 13], ['Enter', 13]]) await key(k, vk);
+await sleep(3000);   // wait for map to load
+
+// Verify write-through is wired: check that doom.onFileWrite is a function
+const hasOnFileWrite = await ev(`typeof window.webdoom?.doom?.onFileWrite === 'function'`);
+console.log('doom.onFileWrite wired:', hasOnFileWrite);
+if (!hasOnFileWrite) fail('doom.onFileWrite not wired — write-through missing');
+
+// Save to slot 1: F2, arrow-down (slot 1), Enter, type 'b', Enter
+await key('F2', 0x71);
+await sleep(200);
+await key('ArrowDown', 40);
+await sleep(100);
+await key('Enter', 13);
+await key('b', 66);
+await key('Enter', 13);
+// Wait 500ms — long enough for write-through IDB write, SHORT enough to be
+// well within the 3s interval (so this tests write-through, not the interval).
+await sleep(500);
+
+// Assert the save is in IDB immediately after write-through (not via interval)
+const inIdbWriteThrough = await ev(`(async () => {
+    const d = await new Promise((res, rej) => { const r = indexedDB.open('webdoom', 1);
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    const v = await new Promise(res => { const t = d.transaction('files');
+        const g = t.objectStore('files').get('doom.wad:doomsav1.dsg');
+        t.oncomplete = () => res(g.result); });
+    d.close(); return v ? v.length : 0;
+})()`);
+console.log('savegame bytes in IDB via write-through (< 3s after save):', inIdbWriteThrough);
+if (!inIdbWriteThrough) fail('write-through did not persist doomsav1.dsg within 500ms — doom.onFileWrite not working');
+
+// Now trigger quit immediately (simulating "Quit Game → Y" within 3s of save).
+// The interval has NOT fired (< 3s since save).  The final flush in onQuit
+// must ensure the save is still durable.
+await ev(`window.webdoom?.doom?.onQuit?.()`);
+await sleep(300);   // let the async flush complete
+
+// Reload and verify the save survived the quick quit
+await cdp('Page.reload');
+await bootSP();
+const restoredAfterQuickQuit = await ev(`window.webdoom.doom['fileMap']?.get('doomsav1.dsg')?.length ?? 0`);
+console.log('savegame bytes restored after quit-within-3s:', restoredAfterQuickQuit);
+if (!restoredAfterQuickQuit) fail('save lost after quit-within-3s — write-through or final flush broken');
+console.log('quit-within-3s test: PASS');
+
 // ── Phase 3: teardown test (ws-008) ──────────────────────────────────────────
 // Set up an unhandled-rejection listener, trigger doom.onQuit() to stop the
 // sync interval, wait > 3 s, then assert no wasm/sync rejections fired.
@@ -109,5 +164,5 @@ const badRej = urjList.filter(r => /wasm|RuntimeError|abort|sync|save/i.test(r))
 if (badRej.length) fail(`unhandled rejections after quit: ${badRej.join(', ')}`);
 console.log(`teardown test: ${urjList.length} total unhandled rejections, ${badRej.length} wasm/sync related — OK`);
 
-console.log('PASS — savegame survives a page reload; load slots visible; interval stops cleanly on quit');
+console.log('PASS — savegame survives a page reload; load slots visible; quit-within-3s durable; interval stops cleanly on quit');
 chrome.kill(); process.exit(0);

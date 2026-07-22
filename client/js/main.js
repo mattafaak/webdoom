@@ -161,6 +161,8 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
         // restored + user-visible error + canvas/game state torn down.
         onDoomError: msg => {
             running = false;
+            // Final flush reads fileMap directly — no wasm calls, safe after abort().
+            syncHandle?.flush?.();
             restoreOnFailure(canvas);
             status(`engine error: ${msg}`);
             try { window.doomAudio?.stop?.(); } catch { /* dead instance */ }
@@ -218,6 +220,11 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
     running = true;
     doom.onQuit = () => {
         running = false;
+        // Final flush: I_Quit already called M_SaveDefaults() so fileMap is
+        // fully up-to-date. Read it directly — no wasm calls needed (engine
+        // is about to force-exit).  Fire-and-forget; IDB write completes
+        // asynchronously even after wasm exits.
+        syncHandle?.flush?.();
         document.exitPointerLock?.();
         canvas.hidden = true;
         document.getElementById('landing').hidden = false;
