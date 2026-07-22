@@ -57,6 +57,17 @@ const sortedGames = () => manifest.filter(w => !w.patch && !w.group)
     });
 const groups = () => [...new Set(manifest.filter(w => w.group).map(w => w.group))];
 
+// MP gating: local WADs (imported by the user, local:true) are SP-only.
+// The server never knows about local shas, so they must not appear in the
+// MP game picker — a client that selects one would send a sha the other
+// players cannot fetch.  serverGames() is the canonical list for all MP paths.
+// _serverGamesFilter is togglable via window.__testSetServerGamesFilter for
+// browser tests that need to red-prove the filter is load-bearing.
+let _serverGamesFilter = true;
+const serverGames = () => _serverGamesFilter
+    ? sortedGames().filter(w => !w.local)
+    : sortedGames();
+
 // --- screens -----------------------------------------------------------------
 
 function rootScreen() {
@@ -262,14 +273,17 @@ const setParams = p => {
 const pickWad = w => setParams({ wad: w.file, episode: 1, map: singleMap(w) ?? 1 });
 
 function gamePick() {
-    return picker('CHOOSE GAME', sortedGames().map(w => ({
+    // serverGames() excludes local:true WADs — MP requires the server library
+    // because the server coordinates WAD distribution; local shas are unknown
+    // to other players.
+    return picker('CHOOSE GAME', serverGames().map(w => ({
         label: w.title,
         thumb: font.titleThumb(w.file, 52),
         apply: () => pickWad(w),
     })).concat(groups().map(g => ({
         label: g,
         action: () => menu.push(picker(g,
-            manifest.filter(w => w.group === g).map(w => ({
+            manifest.filter(w => w.group === g && !w.local).map(w => ({
                 label: w.title,
                 apply: () => pickWad(w),
             })), 2)),
@@ -386,7 +400,7 @@ function lobbyScreen() {
     const refresh = () => menu.refresh(lobbyScreen());
 
     const cycleGame = dir => {
-        const files = sortedGames().map(w => w.file);
+        const files = serverGames().map(w => w.file);
         setParams({ wad: cyc(files, p.wad, dir), episode: 1, map: 1 });
         refresh();
     };
@@ -420,7 +434,7 @@ function lobbyScreen() {
         items: [
             { label: 'START GAME', action: () => lobby.start() },
             { label: 'GAME: ', value: entry(p.wad)?.title ?? p.wad,
-              maxValue: sortedGames().reduce((a, b) => b.title.length > a.length ? b.title : a, ''),
+              maxValue: serverGames().reduce((a, b) => b.title.length > a.length ? b.title : a, ''),
               action: () => menu.push(gamePick()), cycle: cycleGame },
             { label: 'MAP: ', value: mapName(p), maxValue: 'MAP00',
               action: () => menu.push(mapPick()), cycle: cycleMap },
@@ -532,6 +546,14 @@ function leaveLobby() {
     // Expose for test injection and external tooling.
     window.__handleWadImport = handleWadImport;
     window.__wadImport = { identifyWad, WadError };
+
+    // Test hooks (browser test use only):
+    //   __testInjectManifest(entry) — push a fake manifest entry (bypasses IDB)
+    //   __testSetServerGamesFilter(bool) — toggle the local-WAD filter in serverGames()
+    //     false = disable (red-proof: local WADs appear in MP picker)
+    //     true  = restore (green state: local WADs absent from MP picker)
+    window.__testInjectManifest = entry => manifest.push(entry);
+    window.__testSetServerGamesFilter = enabled => { _serverGamesFilter = enabled; };
 
     // PSX DOOM fire background. Inserted into #stage so it sits behind
     // the menu and is invisible during gameplay (paused while game runs).
