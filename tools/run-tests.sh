@@ -59,6 +59,13 @@ node tools/demo-test.mjs --render-wide | tail -2
 echo "── sim-invariance gate (wide ENABLED, traces match sim goldens) ─"
 node tools/demo-test.mjs --sim-wide | tail -2
 
+# ── 18.4 exactness artillery: sprite-edge witness + mixed-width netgame ──────
+echo "── sprite-edge witness (r_things cull pin, 320+854) ────"
+node tools/sprite-witness-test.mjs | tail -1
+
+echo "── mixed-width netgame (P0=320 vs P1=854 per-tic hash) ─"
+node tools/mixed-width-net-test.mjs | tail -1
+
 echo "── netplay determinism (2p, 4p) ────────────────────────"
 node tools/net-test.mjs 2 | tail -2
 node tools/net-test.mjs 4 | tail -2
