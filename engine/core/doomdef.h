@@ -120,9 +120,11 @@ typedef enum
 //(int)(SCREEN_MUL*BASE_WIDTH*INV_ASPECT_RATIO) //200
 #endif
 
-// Runtime screen width — initialized to MAXSCREENWIDTH, future hook for
-// variable-width support.  Loop bounds, column indices, and stride
-// comparisons use this; static array declarations use MAXSCREENWIDTH.
+// Runtime screen width — initialized to DOOM_ORIGWIDTH (320) by default.
+// MAXSCREENWIDTH is the compile-time array-size cap, not the startup value.
+// web_set_wide(W) changes this at runtime for Hor+ widescreen (task 18.2c).
+// Loop bounds, column indices, and stride comparisons use this; static array
+// declarations use MAXSCREENWIDTH.
 extern int screenwidth;
 
 // Hor+ widescreen: original Doom 4:3 design width and half-width.

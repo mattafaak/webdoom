@@ -751,11 +751,16 @@ void R_ExecuteSetViewSize (void)
 	
     R_InitTextureMapping ();
     
-    // psprite scales — Hor+ (18.2b): relate weapon projection to the 4:3
-    // focal length so weapon sprites scale proportionally with screen width.
-    // At W=320: centerxfrac == centerxfrac_nonwide → both == FRACUNIT (identity).
-    pspritescale = FixedDiv(centerxfrac, centerxfrac_nonwide);
-    pspriteiscale = FixedDiv(centerxfrac_nonwide, centerxfrac);
+    // psprite scales — Hor+ (18.2b/18.2c fix): weapon sprites always render at
+    // vanilla 4:3 scale.  Use DOOM_ORIGHALF (160) as the reference half-width so
+    // both standard and low-detail modes produce the vanilla ratio.
+    //   W=320 standard: centerxfrac_nonwide=160F → pspritescale=FRACUNIT ✓
+    //   W=320 low-detail: centerxfrac_nonwide=80F → pspritescale=FRACUNIT/2 ✓
+    //   W=854 wide: centerxfrac_nonwide=160F (capped) → pspritescale=FRACUNIT ✓
+    // Previous formula FixedDiv(centerxfrac, centerxfrac_nonwide) was identity for
+    // standard 320px but gave FRACUNIT (wrong) in low-detail (broke render-low goldens).
+    pspritescale  = FixedDiv(centerxfrac_nonwide, DOOM_ORIGHALF << FRACBITS);
+    pspriteiscale = FixedDiv(DOOM_ORIGHALF << FRACBITS, centerxfrac_nonwide);
     
     // thing clipping
     for (i=0 ; i<viewwidth ; i++)

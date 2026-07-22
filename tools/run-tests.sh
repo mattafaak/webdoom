@@ -46,6 +46,19 @@ node tools/demo-test.mjs | tail -2
 echo "── render goldens (per-tic framebuffer hashes) ─────────"
 node tools/demo-test.mjs --render | tail -2
 
+# ── wide render goldens (854-px Hor+ per-tic hashes, task 18.2c) ─────────────
+# One bucket at W=854 (the compile-time cap and only UI-exposed widescreen
+# width).  web_set_wide(854) → setblocks=11 → Hor+ full-width render.
+# RED-PROOF: modify any wide-path pixel draw → this leg fails, 320-px gate above stays green.
+echo "── wide render goldens (854-px Hor+) ───────────────────"
+node tools/demo-test.mjs --render-wide | tail -2
+
+# ── sim-invariance gate (wide ENABLED, must match existing sim goldens) ───────
+# Proves wide mode does not perturb game logic (P_Random, player state, etc.).
+# Assert: screenwidth > 320 during run.  Compare traces to standard sim goldens.
+echo "── sim-invariance gate (wide ENABLED, traces match sim goldens) ─"
+node tools/demo-test.mjs --sim-wide | tail -2
+
 echo "── netplay determinism (2p, 4p) ────────────────────────"
 node tools/net-test.mjs 2 | tail -2
 node tools/net-test.mjs 4 | tail -2
