@@ -23,10 +23,10 @@
 #include "z_zone.h"
 #include "opl3.h"
 
-#define MUS_RATE      140
-#define OPL_CHANNELS  9     // OPL2 voice count (9 two-op channels)
-#define OPL3_CHANNELS 18    // OPL3 voice count (18 two-op channels)
-#define MUS_CHANNELS  16
+#define MUS_RATE 140
+#define OPL_CHANNELS 9   // OPL2 voice count (9 two-op channels)
+#define OPL3_CHANNELS 18 // OPL3 voice count (18 two-op channels)
+#define MUS_CHANNELS 16
 #define PERCUSSION_CH 15
 
 // 0 = OPL2 authentic mono 9-voice (default, byte-identical to pre-17.1)
@@ -115,11 +115,20 @@ static const int op1off[OPL_CHANNELS] = {0x00, 0x01, 0x02, 0x08, 0x09,
 // vch(v)    — channel within bank: 0-8 for both ranges
 // Used ONLY in OPL3 mode; in OPL2 mode v is always < OPL_CHANNELS so
 // vbank(v)=0 and vch(v)=v, preserving identical register addresses.
-static int vbank (int v) { return (v >= OPL_CHANNELS) ? 0x100 : 0x000; }
-static int vch   (int v) { return (v >= OPL_CHANNELS) ? v - OPL_CHANNELS : v; }
+static int vbank (int v)
+{
+    return (v >= OPL_CHANNELS) ? 0x100 : 0x000;
+}
+static int vch (int v)
+{
+    return (v >= OPL_CHANNELS) ? v - OPL_CHANNELS : v;
+}
 
 // Active voice ceiling: 9 in OPL2, 18 in OPL3
-static int opl_nvoices (void) { return opl_mode ? OPL3_CHANNELS : OPL_CHANNELS; }
+static int opl_nvoices (void)
+{
+    return opl_mode ? OPL3_CHANNELS : OPL_CHANNELS;
+}
 
 // OPL frequency for a midi-ish note + bend (1/64 semitones off center).
 // fnum table for one octave starting at block boundary; computed from
@@ -129,7 +138,7 @@ static const unsigned short fnumtab[12] = {
     0x1e5, 0x202, 0x220, 0x241, 0x263, 0x287,
 };
 
-static __attribute__((noinline)) void voice_freq (int v, boolean keyon)
+static __attribute__ ((noinline)) void voice_freq (int v, boolean keyon)
 {
     int note = voice[v].basenote;
     int bend = ch_bend[voice[v].muschan] - 128; // ±128 = ±2 semitones
@@ -160,7 +169,8 @@ static __attribute__((noinline)) void voice_freq (int v, boolean keyon)
         block = 7;
 
     opl_write (vbank (v) | 0xa0 | vch (v), fnum & 0xff);
-    opl_write (vbank (v) | 0xb0 | vch (v), (keyon ? 0x20 : 0) | (block << 2) | (fnum >> 8));
+    opl_write (vbank (v) | 0xb0 | vch (v),
+               (keyon ? 0x20 : 0) | (block << 2) | (fnum >> 8));
 }
 
 static int op2off (int v)
@@ -212,7 +222,7 @@ static void voice_volume (int v)
     }
 }
 
-static __attribute__((noinline)) void voice_program (int v)
+static __attribute__ ((noinline)) void voice_program (int v)
 {
     const genmidi_voice_t* gv = voice[v].gv;
     int bk = vbank (v);
@@ -240,7 +250,8 @@ static void voice_off (int v)
 {
     if (voice[v].muschan < 0)
         return;
-    opl_write (vbank (v) | 0xb0 | vch (v), 0); // key off, keep freq bits harmless
+    opl_write (vbank (v) | 0xb0 | vch (v),
+               0); // key off, keep freq bits harmless
     voice[v].muschan = -1;
 }
 

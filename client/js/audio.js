@@ -402,9 +402,11 @@ export function createAudio(doom) {
             }
         },
 
-        // Load the DMXGUS WAD lump for GUS-flavored instrument mapping.
-        // bytes: Uint8Array (exactly 175 bytes) from W_CheckNumForName("DMXGUS").
-        // After this call, musToMidi() applies GUS patch remapping automatically.
+        // Set the GUS-flavor instrument map: a PRE-PARSED Uint8Array[175]
+        // (index = MUS instrument, value = remapped GM program). The raw DMXGUS
+        // WAD lump is TEXT-format — the future engine wiring must parse it into
+        // this table first; raw lump bytes here would be garbage.
+        // After this call, musToMidi() applies the remap automatically.
         // Pass null to clear the map (reverts to default GM program numbers).
         setDmxgus(bytes) {
             dmxgusMap = (bytes instanceof Uint8Array && bytes.length >= 175)

@@ -80,12 +80,18 @@ Audio synthesis is handled by the existing SF2 stack (SpessaSynth + GeneralUser 
 The GUS flavor and the GM flavor share the same synthesizer; they differ only in which
 GM program numbers are written into the MIDI stream.
 
-**Delivery**: the `DMXGUS` lump bytes flow from the engine (C side, `W_CheckNumForName`)
-to JS via a new `audio.setDmxgus(bytes)` API, which stores the map and passes it to
+**Delivery**: `audio.setDmxgus(map)` accepts a **pre-parsed** `Uint8Array[175]` lookup
+table (index = MUS instrument number, value = remapped GM program) and passes it to
 `musToMidi()`. This API is parallel to `audio.setGmMode()` and `audio.musToMidi`.
+Note: the raw `DMXGUS` lump is **text-format** (175 comma-separated lines) — feeding raw
+lump bytes to `setDmxgus()` would be garbage. The future engine wiring
+(`W_CheckNumForName` → text parse → `setDmxgus`) must include that parse step.
 
 ## Non-decisions (explicitly parked)
 
+- Engine-side wiring (`W_CheckNumForName("DMXGUS")` → text-format parse →
+  `setDmxgus()` call): deferred to a follow-on task, mirroring the 17.2b
+  operator-deferral pattern. `setDmxgus()` is test-injection-only until then.
 - A `.pat`-file synthesizer path (FreePats or user-supplied `.pat` files): parked pending
   demand; would require a timidity-style `.pat` renderer.
 - Bundling or auto-fetching any GUS patch files: explicitly prohibited by the licensing
