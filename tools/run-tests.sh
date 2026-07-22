@@ -95,7 +95,7 @@ node tools/fuzz/run-map-fuzz.mjs --adversarial-gate | tail -4
 
 echo "── browser (SP gate + 2-tab multiplayer) ───────────────"
 DOOM_PORT=8668 DOOM_HOST=127.0.0.1 node server/serve.js & SRV=$!
-trap "kill $SRV 2>/dev/null" EXIT
+trap "kill $SRV 2>/dev/null || true" EXIT
 sleep 1
 node tools/browser-test.mjs http://127.0.0.1:8668/ | tail -2
 node tools/browser-net-test.mjs http://127.0.0.1:8668/ | tail -1
@@ -126,7 +126,7 @@ node tools/browser-insecure-test.mjs | tail -1
 # localhost) as the unit-level check for the BufferSink fallback in audio.js.
 echo "── browser music-fallback unit check (audioWorklet=undefined, synthetic, secure ctx) ──"
 DOOM_PORT=8669 DOOM_HOST=127.0.0.1 node server/serve.js >/dev/null 2>&1 & _MF_SRV=$!
-trap "kill $SRV 2>/dev/null; kill $_MF_SRV 2>/dev/null" EXIT
+trap "kill $SRV 2>/dev/null || true; kill $_MF_SRV 2>/dev/null || true" EXIT
 sleep 1
 node tools/browser-music-fallback-test.mjs http://127.0.0.1:8669/ | tail -1
 kill "$_MF_SRV" 2>/dev/null; wait "$_MF_SRV" 2>/dev/null || true
@@ -153,7 +153,7 @@ if [ ! -f "$_BP_BASELINE" ]; then
     echo "SKIP: no browser-pipeline baseline for host '${_BP_HOST}' — add tools/golden/browser-pipeline-${_BP_HOST}.json to gate this host"
 else
     DOOM_PORT=8677 DOOM_HOST=127.0.0.1 node server/serve.js >/dev/null 2>&1 & _BP_SRV=$!
-    trap "kill $SRV 2>/dev/null; kill $_BP_SRV 2>/dev/null" EXIT
+    trap "kill $SRV 2>/dev/null || true; kill $_BP_SRV 2>/dev/null || true" EXIT
     sleep 1
     _BP_CURRENT="$(mktemp /tmp/browser-pipeline-current-XXXXXX.json)"
     node tools/browser-pipeline.mjs --url http://127.0.0.1:8677/ --json > "$_BP_CURRENT"
