@@ -159,6 +159,15 @@ export function createQolUI(doom, input) {
         if (!rafHandle) rafHandle = requestAnimationFrame(tick);
     }
 
+    // Stop the loop when no live feature needs it (19.1 review: a leaked rAF
+    // kept ticking forever after both stats and demo-timer were disabled).
+    function stopTickIfIdle() {
+        if (!s.showStats && !s.showDemoTimer && rafHandle) {
+            cancelAnimationFrame(rafHandle);
+            rafHandle = null;
+        }
+    }
+
     // Start tick loop if either live feature is on.
     if (s.showStats || s.showDemoTimer) startTick();
 
@@ -179,13 +188,13 @@ export function createQolUI(doom, input) {
             s.showStats = v;
             saveSettings(s);
             statsEl.hidden = !v;
-            if (v) startTick();
+            if (v) startTick(); else stopTickIfIdle();
         },
         setShowDemoTimer(v) {
             s.showDemoTimer = v;
             saveSettings(s);
             if (v) startTick();
-            else { demoTimerEl.hidden = true; demoBarEl.hidden = true; }
+            else { demoTimerEl.hidden = true; demoBarEl.hidden = true; stopTickIfIdle(); }
         },
     };
 }

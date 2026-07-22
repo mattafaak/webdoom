@@ -514,10 +514,19 @@ function leaveLobby() {
 
         // Merge local-library entries into the manifest.
         // Entries already on the server (same sha256) are skipped.
+        // Capped at MAXWEBFILES=40 total (16.6b review: import-time enforcement
+        // alone let server-manifest + local entries exceed the engine limit at
+        // boot). Overflow entries are skipped loudly, never silently dropped.
+        const MAXWEBFILES = 40;
         const serverShas = new Set(manifest.map(e => e.sha256));
         const localEntries = await libraryList().catch(() => []);
         for (const e of localEntries) {
-            if (!serverShas.has(e.sha256)) manifest.push(e);
+            if (serverShas.has(e.sha256)) continue;
+            if (manifest.length >= MAXWEBFILES) {
+                console.warn(`WAD library: skipping "${e.name}" — manifest at engine limit (${MAXWEBFILES})`);
+                continue;
+            }
+            manifest.push(e);
         }
 
         font = await loadDoomFont();

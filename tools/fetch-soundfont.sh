@@ -73,6 +73,18 @@ if [[ "$SRC" == https://* ]] || [[ "$SRC" == http://* ]]; then
     fi
     echo "  Downloading $SF2_URL ..."
     curl -fL "$SF2_URL" -o "$SF2_DEST"
+    # Optional integrity pin (17.2a review): export SOUNDFONT_SHA256=<hex> to
+    # verify the download. Unset = trust the operator-controlled source
+    # (fetch-wads.sh precedent).
+    if [ -n "${SOUNDFONT_SHA256:-}" ]; then
+        actual="$(sha256sum "$SF2_DEST" | cut -d' ' -f1)"
+        if [ "$actual" != "$SOUNDFONT_SHA256" ]; then
+            echo "ERROR: soundfont sha256 mismatch (expected $SOUNDFONT_SHA256, got $actual)"
+            rm -f "$SF2_DEST"
+            exit 1
+        fi
+        echo "  sha256 verified: $actual"
+    fi
     if [ -n "$LIC_URL" ]; then
         curl -fL "$LIC_URL" -o "$LIC_DEST"
     else
