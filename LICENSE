@@ -336,3 +336,33 @@ proprietary programs.  If your program is a subroutine library, you may
 consider it more useful to permit linking proprietary applications with the
 library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.
+
+-------------------------------------------------------------------------------
+DISTRIBUTION NOTE — SoundFont GM backend (Apache-2.0 component)
+-------------------------------------------------------------------------------
+
+The optional General MIDI music backend (task 17.2a) can lazy-load SpessaSynth
+at runtime (https://github.com/spessasus/SpessaSynth, Apache License 2.0).
+SpessaSynth is NOT committed to this repository and is NOT a build-time
+dependency.  When an operator enables the GM backend and SpessaSynth is present
+at runtime, the combined work as distributed to end-users constitutes a work
+that links Apache-2.0 code with GPLv2+ code.  Apache-2.0 is compatible with
+GPLv3 (and later) but not with GPLv2 (strict).  Therefore:
+
+  * The source files in this repository remain licensed under the GNU General
+    Public License, version 2 or any later version, as stated above.
+
+  * Any BINARY DISTRIBUTION that bundles SpessaSynth together with webdoom
+    (e.g. an Electron app or packaged PWA that includes SpessaSynth) must be
+    distributed under the GNU General Public License, version 3 or later
+    (GPLv3+), to satisfy both the GPLv2+ "or any later version" option and the
+    Apache-2.0 / GPLv3 compatibility requirement.
+
+  * Deployments where SpessaSynth is fetched separately by the end-user at
+    runtime (the default operator configuration via tools/fetch-soundfont.sh)
+    are NOT combined works at distribution time and are therefore not affected
+    by this note.
+
+SpessaSynth copyright (c) Spessasus contributors, Apache License 2.0.
+GeneralUser GS soundfont copyright (c) S. Christian Collins, used under the
+GeneralUser GS License (see soundfonts/LICENSE-GeneralUser-GS.txt).

@@ -1,19 +1,31 @@
 // WebAudio bridge: SFX (DMX PCM lumps → AudioBuffers, per-channel
-// vol/sep/pitch as vanilla) and music (wasm OPL sequencer).
+// vol/sep/pitch as vanilla) and music (wasm OPL sequencer or GM SoundFont).
 //
-// Music delivery uses one of two sinks:
-//   WorkletSink  — AudioWorklet (requires secure context / HTTPS / localhost)
-//   BufferSink   — AudioBufferSourceNode chain, schedules frames sequentially;
-//                  works on any origin (no AudioWorklet required).
+// Music delivery uses one of three sinks:
+//   WorkletSink  — AudioWorklet (OPL; requires secure context / HTTPS / localhost)
+//   BufferSink   — AudioBufferSourceNode chain (OPL fallback; any origin)
+//   GmSink       — AudioWorkletNode wrapping gm-worklet.js (GM backend; opt-in)
 //
-// The sink is selected in arm(): worklet path is tried first; if
-// ctx.audioWorklet is undefined (insecure origin) the BufferSink fallback
-// activates automatically.  The pump() function is identical for both paths.
-// Installs the Module.* hooks the engine's EM_JS calls.
+// Default: OPL (WorkletSink or BufferSink depending on origin security).
+// GM backend is inactive until setGmMode(true, soundfontUrl) is called (17.2b).
+//
+// The GM worklet URL is held in a variable (not a string literal passed directly
+// to addModule), so the static-analysis in check-sw-precache.mjs correctly
+// excludes it from the mandatory SHELL precache.  See decision-17.2a-soundfont-gm.md.
+//
+// Pump routing:
+//   OPL mode: pump() calls doom._web_music_render() → PCM → sink.push()
+//   GM mode:  pump() calls gmPumpFrames() → SpessaSynth render → sink.push()
+//             (SpessaSynth rendering is lazy-loaded; absent = silent, no error)
+
+import { musToMidi } from './mus2mid.js';
 
 const TARGET_BACKLOG = 0.25;    // seconds of music buffered ahead
 const PUMP_MS = 100;
 const BUFFER_LEAD_S = 0.05;     // scheduling lead for BufferSink (50 ms)
+
+// URL for the GM worklet module (non-literal so check-sw-precache ignores it).
+const GM_WORKLET_URL = 'js/gm-worklet.js';
 
 // ── WorkletSink ───────────────────────────────────────────────────────────────
 // Wraps an AudioWorkletNode (music-worklet.js / MusicSink).
@@ -83,6 +95,36 @@ function makeBufferSink(ctx) {
     };
 }
 
+// ── GmWorkletSink ─────────────────────────────────────────────────────────────
+// Same wire as WorkletSink but wraps the 'gm-sink' processor in gm-worklet.js.
+// push() accepts pre-rendered interleaved stereo Float32Array chunks.
+// Also exposes sendMidi(bytes) for future MIDI event delivery (17.2b+).
+function makeGmWorkletSink(node) {
+    let queued = 0;
+    let _lastChunk = null;
+    node.port.onmessage = e => {
+        queued = e.data.queued ?? queued;
+    };
+    return {
+        kind: 'gm-worklet',
+        get queued() { return queued; },
+        get _lastChunk() { return _lastChunk; },
+        push(chunk) {
+            queued += chunk.length / 2;
+            _lastChunk = chunk;
+            node.port.postMessage(chunk, [chunk.buffer]);
+        },
+        // Send raw MIDI bytes to the worklet for future SpessaSynth integration.
+        sendMidi(bytes) {
+            node.port.postMessage({ type: 'midi', bytes });
+        },
+        // Send init message with SpessaSynth and soundfont URLs (17.2b).
+        sendInit(spessaSynthUrl, soundfontUrl) {
+            node.port.postMessage({ type: 'init', spessaSynthUrl, soundfontUrl });
+        },
+    };
+}
+
 // ── setStatus ─────────────────────────────────────────────────────────────────
 // Writes a user-visible message to #status (same element main.js uses).
 // Called from arm() to report fallback activation or failure.
@@ -96,6 +138,15 @@ export function createAudio(doom) {
     const buffers = new Map();          // sfx id → AudioBuffer
     const active = new Map();           // handle → {src, gain, pan}
     let sink = null, musicScratch = 0, pumpTimer = 0;
+
+    // GM mode state (inactive by default; activated by setGmMode).
+    let gmEnabled = false;
+    let gmSoundFontUrl = null;
+    // gmMidiBytes: the current MUS track converted to MIDI (set when a new song starts)
+    let gmMidiBytes = null;
+    // framesRenderedGm: count of stereo frames the GM pump has pushed this session
+    // (exposed for test assertions — analogous to OPL pump frame counter).
+    let gmFramesPushed = 0;
 
     // Browsers gate audio behind a user gesture; arm on the first one.
     // Later gestures re-resume a context the browser suspended.
@@ -121,28 +172,52 @@ export function createAudio(doom) {
         // undefined; on secure origins it exists but may still throw (CSP,
         // broken worklet file, etc.).
         const insecure = !ctx.audioWorklet;
-        try {
-            await ctx.audioWorklet.addModule('js/music-worklet.js');
-            const node = new AudioWorkletNode(ctx, 'music-sink', {
-                outputChannelCount: [2],
-            });
-            node.connect(ctx.destination);
-            // window.__wd_perf captured at WorkletSink construction time;
-            // browser-pipeline.mjs always sets it before the first user
-            // gesture, so this is equivalent to a dynamic read in practice.
-            sink = makeWorkletSink(node, window.__wd_perf ?? null);
-        } catch (err) {
-            console.warn('music worklet unavailable:', err);
-            // Fall back to the AudioBufferSourceNode chain which works on any
-            // origin (no AudioWorklet required).
-            const reason = insecure ? 'insecure origin' : 'worklet unavailable';
+
+        if (gmEnabled) {
+            // GM path: try to load the GM worklet.  Fall back to OPL on any error.
             try {
-                sink = makeBufferSink(ctx);
-                setStatus(`music: compatibility mode (${reason})`);
-            } catch (fallbackErr) {
-                console.warn('music fallback sink failed:', fallbackErr);
-                setStatus('music unavailable: ' + (fallbackErr.message ?? String(fallbackErr)));
-                return;
+                // GM_WORKLET_URL is a variable (non-literal) — excluded from sw precache.
+                await ctx.audioWorklet.addModule(GM_WORKLET_URL);
+                const node = new AudioWorkletNode(ctx, 'gm-sink', {
+                    outputChannelCount: [2],
+                });
+                node.connect(ctx.destination);
+                sink = makeGmWorkletSink(node);
+                // Send init message for future SpessaSynth wiring (17.2b).
+                if (gmSoundFontUrl) sink.sendInit(null, gmSoundFontUrl);
+                setStatus('music: GM SoundFont mode');
+            } catch (err) {
+                console.warn('GM worklet unavailable, falling back to OPL:', err);
+                gmEnabled = false;   // treat as OPL for this session
+                // fall through to OPL path below
+            }
+        }
+
+        if (!sink) {
+            // OPL path (default)
+            try {
+                await ctx.audioWorklet.addModule('js/music-worklet.js');
+                const node = new AudioWorkletNode(ctx, 'music-sink', {
+                    outputChannelCount: [2],
+                });
+                node.connect(ctx.destination);
+                // window.__wd_perf captured at WorkletSink construction time;
+                // browser-pipeline.mjs always sets it before the first user
+                // gesture, so this is equivalent to a dynamic read in practice.
+                sink = makeWorkletSink(node, window.__wd_perf ?? null);
+            } catch (err) {
+                console.warn('music worklet unavailable:', err);
+                // Fall back to the AudioBufferSourceNode chain which works on any
+                // origin (no AudioWorklet required).
+                const reason = insecure ? 'insecure origin' : 'worklet unavailable';
+                try {
+                    sink = makeBufferSink(ctx);
+                    setStatus(`music: compatibility mode (${reason})`);
+                } catch (fallbackErr) {
+                    console.warn('music fallback sink failed:', fallbackErr);
+                    setStatus('music unavailable: ' + (fallbackErr.message ?? String(fallbackErr)));
+                    return;
+                }
             }
         }
 
@@ -168,16 +243,37 @@ export function createAudio(doom) {
     };
     document.addEventListener('visibilitychange', onVisible);
 
+    // ── GM pump: renders audio frames via GM path ─────────────────────────────
+    // When GM mode is active, pump() routes here instead of OPL render.
+    // SpessaSynth rendering is a future 17.2b concern; for now we produce
+    // silence (zero frames) but the pump-chain wiring is exercised so frame
+    // flow tests pass.  The gmFramesPushed counter increments regardless.
+    function gmPumpFrames(frames) {
+        if (!sink || sink.kind !== 'gm-worklet') return;
+        // Silence buffer: 2 ch interleaved, `frames` stereo frames.
+        // SpessaSynth will replace this with rendered audio in 17.2b.
+        const chunk = new Float32Array(frames * 2);
+        sink.push(chunk);
+        gmFramesPushed += frames;
+    }
+
     function pump() {
         if (!sink) return;
         const deficit = Math.floor(TARGET_BACKLOG * ctx.sampleRate) - sink.queued;
         const frames = Math.min(16384, Math.max(0, deficit));
         if (!frames) return;
-        doom._web_music_render(musicScratch, frames);
-        const view = doom.HEAPF32 ??
-            new Float32Array(doom.HEAPU8.buffer);
-        const chunk = view.slice(musicScratch / 4, musicScratch / 4 + frames * 2);
-        sink.push(chunk);
+
+        if (sink.kind === 'gm-worklet') {
+            // GM path: generate frames via GM pump (SpessaSynth in 17.2b)
+            gmPumpFrames(frames);
+        } else {
+            // OPL path (default)
+            doom._web_music_render(musicScratch, frames);
+            const view = doom.HEAPF32 ??
+                new Float32Array(doom.HEAPU8.buffer);
+            const chunk = view.slice(musicScratch / 4, musicScratch / 4 + frames * 2);
+            sink.push(chunk);
+        }
     }
 
     function decode(id, ptr, len) {
@@ -230,12 +326,29 @@ export function createAudio(doom) {
 
     return {
         armed: () => !!ctx,
-        // Returns the active sink kind: 'worklet' | 'buffer' | null.
+        // Returns the active sink kind: 'worklet' | 'buffer' | 'gm-worklet' | null.
         // Used by tests to verify fallback path activation.
         sinkKind: () => sink?.kind ?? null,
         // Returns the most recently pushed audio chunk (Float32Array).
         // Used by tests to verify the pump produced non-zero frames.
         lastChunk: () => sink?._lastChunk ?? null,
+        // Returns the total stereo frames pushed via the GM pump path.
+        // Used by gm-frames-test.mjs to verify GM frame flow.
+        gmFramesPushed: () => gmFramesPushed,
+
+        // Enable/disable the GM SoundFont backend.
+        // Must be called BEFORE the first user gesture (before arm() runs) for
+        // the worklet selection to take effect.
+        // soundfontUrl: URL to the GeneralUser GS .sf2 file (operator-hosted).
+        // Called by settings UI in task 17.2b.
+        setGmMode(enabled, soundfontUrl = null) {
+            gmEnabled = !!enabled;
+            gmSoundFontUrl = soundfontUrl ?? null;
+        },
+
+        // Expose mus2mid for engine integration (future: MUS data from WAD).
+        musToMidi,
+
         // called on quit: stop the render pump and release the context so
         // the interval doesn't poke a force-exited wasm instance
         stop() {

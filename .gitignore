@@ -17,3 +17,6 @@ env.local
 out/
 tools/sprite-fix-screenshot.ppm
 tools/*.ppm
+# SoundFont bytes — never commit; fetched by tools/fetch-soundfont.sh
+soundfonts/*.sf2
+soundfonts/*.sf3
