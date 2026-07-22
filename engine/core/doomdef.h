@@ -106,11 +106,13 @@ typedef enum
 #define	INV_ASPECT_RATIO	0.625 // 0.75, ideally
 
 // Compile-time maximum screen width: governs static array dimensions and
-// fixed-size allocations (BSS layout unchanged at 320).
+// fixed-size allocations.  Set to 854 (16:9 widescreen cap, per §5.5 of
+// docs/decision-18.1-wide-limits.md — static-max strategy, +205 KB BSS vs
+// W=320, both widths fit in INITIAL_MEMORY=32 MB with ~6 MB headroom).
+// Override with -DMAXSCREENWIDTH=N on the compiler command line if needed.
 // Runtime width (loop bounds, column indices, stride) uses screenwidth below.
-// Override with -DMAXSCREENWIDTH=N on the compiler command line for wide builds.
 #ifndef MAXSCREENWIDTH
-#define MAXSCREENWIDTH  320
+#define MAXSCREENWIDTH  854
 #endif
 
 #ifndef SCREENHEIGHT
