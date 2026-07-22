@@ -23,6 +23,8 @@ extern long   web_perf_span_pixels;
 extern long   web_perf_findplane_calls;
 extern long   web_perf_findplane_iters;
 extern long   web_perf_visplane_peak;
+extern long   web_perf_drawseg_peak; /* task 14.2e / 18.1: peak drawsegs used in any frame */
+extern long   web_perf_opening_peak; /* task 14.2f / 18.1: peak openings used in any frame */
 
 // Returns 0.0 in the native build (no emscripten_get_now).
 double web_perf_now (void);

@@ -645,6 +645,9 @@ done:
 
         fprintf(stderr, "fs-doom: %d gametics, %d trace entries\n",
                 tics, trace_len);
+#ifdef WEB_PERF_PLANE_STATS
+        fprintf(stderr, "visplane_peak: %ld\n", web_perf_visplane_peak);
+#endif
 #ifdef WEB_PERF_DRAWSEG_STATS
         fprintf(stderr, "drawseg_peak: %ld\n", web_perf_drawseg_peak);
 #endif

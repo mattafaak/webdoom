@@ -71,6 +71,13 @@ void Web_FileCopy(const char* path, byte* dest)
     (void)dest;
 }
 
+void Web_FileCopyN(const char* path, byte* dest, int maxlen)
+{
+    (void)path;
+    (void)dest;
+    (void)maxlen;
+}
+
 void Web_FileWrite(const char* path, byte* data, int len)
 {
     (void)path;

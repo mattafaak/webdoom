@@ -53,8 +53,10 @@ rcsid[] = "$Id: r_plane.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 // Comparing with peak: track cumulative-total iters and peak per-frame above.
 // We instead track the max live-visplane count over all frames via this macro.
 #define PERF_PLANE_PEAK()  do { \
-    long _n = (long)(lastvisplane - visplanes); \
-    if (_n > web_perf_visplane_peak) web_perf_visplane_peak = _n; \
+    if (lastvisplane) { \
+        long _n = (long)(lastvisplane - visplanes); \
+        if (_n > web_perf_visplane_peak) web_perf_visplane_peak = _n; \
+    } \
 } while (0)
 #else
 #define PERF_PLANE_CALL()  ((void)0)
@@ -88,9 +90,10 @@ planefunction_t		ceilingfunc;
 //
 
 // Here comes the obnoxious "visplane".
-#define MAXVISPLANES	128	// vanilla; was 128; webdoom raised to 1024, reverted 14.2d (peak 68).
-				// Measured peak = 68 visplanes (tnt-demo2, task 2.3) → 128 = 1.88×
-				// margin over 13-demo corpus. 1024 cost 581 KiB BSS (896 × 664 B);
+#define MAXVISPLANES	128	// vanilla; was 128; webdoom raised to 1024, reverted 14.2d.
+				// Measured peak = 118 visplanes (plutonia-demo1, task 18.1 full 13-demo
+				// suite; task 2.3 tnt-demo2 partial gave 68). 128 = 1.08× margin —
+				// too thin for community WADs. 1024 cost 581 KiB BSS (896 × 664 B);
 				// vanilla's I_Error at MAXVISPLANES (r_plane.c:274) is the correct
 				// failure surface — fail loudly, not silently on OOB overrun.
 visplane_t		visplanes[MAXVISPLANES];
