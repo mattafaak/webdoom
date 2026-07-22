@@ -14,7 +14,7 @@
 #include "nat_platform.h"
 
 // screens[0] lives here; the renderer reads it via v_video.h extern byte** screens.
-static byte screenbuf[SCREENWIDTH * SCREENHEIGHT];
+static byte screenbuf[MAXSCREENWIDTH * SCREENHEIGHT];
 
 // Palette mirror + version counter (same as web/i_video.c).
 static byte webpalette[256 * 3];
@@ -48,7 +48,7 @@ void I_FinishUpdate (void)
 
 void I_ReadScreen (byte* scr)
 {
-    memcpy (scr, screens[0], SCREENWIDTH * SCREENHEIGHT);
+    memcpy (scr, screens[0], screenwidth * SCREENHEIGHT);
 }
 
 // ── hash export ──────────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ unsigned nat_render_hash (void)
     int pv = paletteversion;
 
     for (y = 0; y < SCREENHEIGHT; y++)
-        for (x = 0; x < SCREENWIDTH; x++)
+        for (x = 0; x < screenwidth; x++)
             h = (h ^ (unsigned) fb[x * SCREENHEIGHT + y]) * 0x01000193u;
 
     // Fold palette version as 4 little-endian bytes.

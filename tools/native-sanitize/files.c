@@ -142,6 +142,21 @@ void Web_FileCopy (const char* path, byte* dest)
     fclose (f);
 }
 
+void Web_FileCopyN (const char* path, byte* dest, int maxlen)
+{
+    char  p[512];
+    FILE* f;
+    int   sz = Web_FileLen (path);
+
+    if (sz < 0) return;
+    if (sz > maxlen) sz = maxlen;
+    small_path (p, sizeof p, path);
+    f = fopen (p, "rb");
+    if (!f) return;
+    (void) fread (dest, 1, (size_t) sz, f);
+    fclose (f);
+}
+
 void Web_FileWrite (const char* path, byte* data, int len)
 {
     char  p[512];

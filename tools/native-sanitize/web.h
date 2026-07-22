@@ -19,6 +19,7 @@ byte*   W_WebFile       (const char* path, int* len);
 boolean W_WebFileExists (const char* path);
 int     Web_FileLen     (const char* path);
 void    Web_FileCopy    (const char* path, byte* dest);
+void    Web_FileCopyN   (const char* path, byte* dest, int maxlen);
 void    Web_FileWrite   (const char* path, byte* data, int len);
 
 // MUS+OPL music sequencer stubs (i_sound.c, native: all no-ops).
