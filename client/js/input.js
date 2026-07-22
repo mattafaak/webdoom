@@ -54,6 +54,10 @@ export const defaultSettings = () => ({
     padTurnSpeed: 1.0,
     wideMode: false,       // task 18.3: 854-px Hor+ wide render; false = 320 (default)
     panini: false,         // task 18.3: cylindrical remap shader; OFF by default
+    showFullscreen: false, // task 19.1: hover fullscreen button; OFF by default
+    showCrosshair: false,  // task 19.1: static crosshair overlay; OFF by default
+    showStats: false,      // task 19.1: level time/stats widget; OFF by default
+    showDemoTimer: false,  // task 19.1: demo timer + progress bar; OFF by default
 });
 
 export function loadSettings() {

@@ -19,7 +19,7 @@ function computePaniniStrength(w, enabled) {
     return Math.min(0.4, Math.max(0, (aspect - 4/3) / (21/9 - 4/3)) * 0.4);
 }
 
-export function createSettingsUI(input, doom, renderer) {
+export function createSettingsUI(input, doom, renderer, qol) {
     const s = input.settings;
     const panel = document.createElement('div');
     panel.id = 'settings';
@@ -58,6 +58,11 @@ export function createSettingsUI(input, doom, renderer) {
         <label><input type="checkbox" id="smooth" ${s.smooth ? 'checked' : ''}> Smooth rendering (uncapped fps)</label>
         <label><input type="checkbox" id="wideMode" ${s.wideMode ? 'checked' : ''}> Wide mode (854-px Hor+) — reload persists</label>
         <label><input type="checkbox" id="panini" ${s.panini ? 'checked' : ''}> Cylindrical remap (Panini) — wide-angle only, OFF by default</label>
+        <hr style="border-color:#400;margin:.5rem 0">
+        <label><input type="checkbox" id="showFullscreen" ${s.showFullscreen ? 'checked' : ''}> Fullscreen button (hover top edge) — OFF by default</label>
+        <label><input type="checkbox" id="showCrosshair" ${s.showCrosshair ? 'checked' : ''}> Crosshair overlay — OFF by default</label>
+        <label><input type="checkbox" id="showStats" ${s.showStats ? 'checked' : ''}> Level stats widget (K/I/S + time) — OFF by default</label>
+        <label><input type="checkbox" id="showDemoTimer" ${s.showDemoTimer ? 'checked' : ''}> Demo timer + progress bar — OFF by default</label>
         <label>Music backend
           <select id="musicBackend">
             <option value="opl2"${backend === 'opl2' ? ' selected' : ''}>OPL2 (mono, default, offline-safe)</option>
@@ -144,6 +149,19 @@ export function createSettingsUI(input, doom, renderer) {
             render();
         };
         panel.querySelector('#pturn').oninput = e => { s.padTurnSpeed = +e.target.value; saveSettings(s); };
+        // task 19.1: QoL feature toggles — delegate to qol API so overlays update live.
+        panel.querySelector('#showFullscreen').onchange = e => {
+            qol?.setShowFullscreen(e.target.checked);
+        };
+        panel.querySelector('#showCrosshair').onchange = e => {
+            qol?.setShowCrosshair(e.target.checked);
+        };
+        panel.querySelector('#showStats').onchange = e => {
+            qol?.setShowStats(e.target.checked);
+        };
+        panel.querySelector('#showDemoTimer').onchange = e => {
+            qol?.setShowDemoTimer(e.target.checked);
+        };
         panel.querySelector('#reset').onclick = () => {
             Object.assign(s, defaultSettings());
             saveSettings(s);

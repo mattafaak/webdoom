@@ -20,6 +20,12 @@
 extern int detailLevel;
 extern int screenblocks;
 
+/* Globals for web_level_state read-only snapshot (task 19.1). */
+extern int totalkills, totalitems, totalsecret;
+extern int leveltime;
+extern boolean demoplayback;
+extern byte *demobuffer, *demo_p, *demoend;
+
 //
 // web_set_wide (18.2c): deferred widescreen resize.
 //
@@ -336,4 +342,40 @@ extern boolean wipeactive;
 EMSCRIPTEN_KEEPALIVE void web_wipe_skip (void)
 {
     wipeactive = 0;
+}
+
+//
+// web_level_state (19.1): read-only level stats snapshot for DOM overlays.
+// Fills out[0..8]; does NOT write to any sim state — determinism safe.
+//   out[0] = players[consoleplayer].killcount
+//   out[1] = players[consoleplayer].itemcount
+//   out[2] = players[consoleplayer].secretcount
+//   out[3] = totalkills   (map total)
+//   out[4] = totalitems
+//   out[5] = totalsecret
+//   out[6] = leveltime (tics; 35 tics/sec)
+//   out[7] = demoplayback ? 1 : 0
+//   out[8] = demo progress 0..1000 (pointer fraction; 0 when not playing)
+//
+EMSCRIPTEN_KEEPALIVE void web_level_state (int* out)
+{
+    player_t* p = &players[consoleplayer];
+    out[0] = p->killcount;
+    out[1] = p->itemcount;
+    out[2] = p->secretcount;
+    out[3] = totalkills;
+    out[4] = totalitems;
+    out[5] = totalsecret;
+    out[6] = leveltime;
+    out[7] = demoplayback ? 1 : 0;
+    if (demoplayback && demoend > demobuffer)
+    {
+        int total = (int) (demoend - demobuffer);
+        int cur = (int) (demo_p - demobuffer);
+        out[8] = (cur < 0) ? 0 : (cur > total) ? 1000 : (cur * 1000 / total);
+    }
+    else
+    {
+        out[8] = 0;
+    }
 }

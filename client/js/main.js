@@ -5,6 +5,7 @@ import { createInput, loadSettings } from './input.js';
 import { createAudio } from './audio.js';
 import { sf2GetCurrentBytes } from './sf2-library.js';
 import { createSettingsUI } from './settings.js';
+import { createQolUI } from './qol.js';
 import { attachRelay } from './net.js';
 import { loadPersisted, startSync } from './persist.js';
 import { wadCacheGet, wadCachePut } from './wad-cache.js';
@@ -225,7 +226,9 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
     status('');
     canvas.focus();
     const input = createInput(doom, canvas, loadSettings());
-    createSettingsUI(input, doom, renderer);
+    // task 19.1: create QoL overlays before settings so settings.js gets the qol handle.
+    const qol = createQolUI(doom, input);
+    createSettingsUI(input, doom, renderer, qol);
     doom._web_set_smooth(input.settings.smooth ? 1 : 0);
 
     // task 18.3: aspect-bucket selection — apply persisted wide mode on boot.
