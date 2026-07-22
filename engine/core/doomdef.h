@@ -108,7 +108,10 @@ typedef enum
 // Compile-time maximum screen width: governs static array dimensions and
 // fixed-size allocations (BSS layout unchanged at 320).
 // Runtime width (loop bounds, column indices, stride) uses screenwidth below.
+// Override with -DMAXSCREENWIDTH=N on the compiler command line for wide builds.
+#ifndef MAXSCREENWIDTH
 #define MAXSCREENWIDTH  320
+#endif
 
 #ifndef SCREENHEIGHT
 #define SCREENHEIGHT 200
@@ -119,6 +122,14 @@ typedef enum
 // variable-width support.  Loop bounds, column indices, and stride
 // comparisons use this; static array declarations use MAXSCREENWIDTH.
 extern int screenwidth;
+
+// Hor+ widescreen: original Doom 4:3 design width and half-width.
+// WIDESCREENDELTA is the number of pixels to shift 2D-overlay content
+// rightward so that 320-px-wide assets appear centred on a wider screen.
+// Both evaluate to 0 at W=320 (WIDESCREENDELTA is the identity offset).
+#define DOOM_ORIGWIDTH      320
+#define DOOM_ORIGHALF       (DOOM_ORIGWIDTH / 2)   /* 160 */
+#define WIDESCREENDELTA     ((screenwidth - DOOM_ORIGWIDTH) / 2)
 
 
 

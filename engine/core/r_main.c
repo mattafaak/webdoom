@@ -76,6 +76,9 @@ int			centery;
 fixed_t			centerxfrac;
 fixed_t			centeryfrac;
 fixed_t			projection;
+// Hor+ widescreen (task 18.2b): 4:3 focal half-width capped at 160 px.
+// Identity at W=320 (equals centerxfrac); diverges at wider widths.
+fixed_t			centerxfrac_nonwide;
 
 // just for profiling purposes
 int			framecount;	
@@ -646,7 +649,9 @@ void R_InitLightTables (void)
 	startmap = ((LIGHTLEVELS-1-i)*2)*NUMCOLORMAPS/LIGHTLEVELS;
 	for (j=0 ; j<MAXLIGHTZ ; j++)
 	{
-	    scale = FixedDiv ((MAXSCREENWIDTH/2*FRACUNIT), (j+1)<<LIGHTZSHIFT);
+	    // Hor+ (18.2b): use 4:3 half-width reference (160) so the zlight
+	    // table is independent of MAXSCREENWIDTH for widescreen builds.
+	    scale = FixedDiv ((DOOM_ORIGHALF*FRACUNIT), (j+1)<<LIGHTZSHIFT);
 	    scale >>= LIGHTSCALESHIFT;
 	    level = startmap - scale/DISTMAP;
 	    
@@ -717,7 +722,15 @@ void R_ExecuteSetViewSize (void)
     centerx = viewwidth/2;
     centerxfrac = centerx<<FRACBITS;
     centeryfrac = centery<<FRACBITS;
-    projection = centerxfrac;
+
+    // Hor+ widescreen (task 18.2b): focal length is capped at the 4:3
+    // half-width (160 px) so that the vertical FOV matches vanilla regardless
+    // of screen width.  At W=320 centerxfrac_nonwide == centerxfrac
+    // (pure identity: no change to 320 goldens).
+    centerxfrac_nonwide = centerxfrac < (DOOM_ORIGHALF<<FRACBITS)
+                          ? centerxfrac
+                          : (DOOM_ORIGHALF<<FRACBITS);
+    projection = centerxfrac_nonwide;
 
     if (!detailshift)
     {
@@ -738,9 +751,11 @@ void R_ExecuteSetViewSize (void)
 	
     R_InitTextureMapping ();
     
-    // psprite scales
-    pspritescale = FRACUNIT*viewwidth/MAXSCREENWIDTH;
-    pspriteiscale = FRACUNIT*MAXSCREENWIDTH/viewwidth;
+    // psprite scales — Hor+ (18.2b): relate weapon projection to the 4:3
+    // focal length so weapon sprites scale proportionally with screen width.
+    // At W=320: centerxfrac == centerxfrac_nonwide → both == FRACUNIT (identity).
+    pspritescale = FixedDiv(centerxfrac, centerxfrac_nonwide);
+    pspriteiscale = FixedDiv(centerxfrac_nonwide, centerxfrac);
     
     // thing clipping
     for (i=0 ; i<viewwidth ; i++)
@@ -768,7 +783,9 @@ void R_ExecuteSetViewSize (void)
 	startmap = ((LIGHTLEVELS-1-i)*2)*NUMCOLORMAPS/LIGHTLEVELS;
 	for (j=0 ; j<MAXLIGHTSCALE ; j++)
 	{
-	    level = startmap - j*MAXSCREENWIDTH/(viewwidth<<detailshift)/DISTMAP;
+	    // Hor+ (18.2b): use 4:3 reference width so the scalelight table
+	    // is independent of MAXSCREENWIDTH for widescreen builds.
+	    level = startmap - j*DOOM_ORIGWIDTH/(viewwidth<<detailshift)/DISTMAP;
 	    
 	    if (level < 0)
 		level = 0;

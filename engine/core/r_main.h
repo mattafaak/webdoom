@@ -52,6 +52,12 @@ extern fixed_t		centerxfrac;
 extern fixed_t		centeryfrac;
 extern fixed_t		projection;
 
+// Hor+ widescreen: 4:3-equivalent focal half-width.
+// = MIN(centerxfrac, DOOM_ORIGHALF<<FRACBITS).
+// At W=320 this equals centerxfrac; at wider widths it stays at
+// 160*FRACUNIT so that the 3D projection uses the 4:3 FOV reference.
+extern fixed_t		centerxfrac_nonwide;
+
 extern int		validcount;
 
 extern int		linecount;

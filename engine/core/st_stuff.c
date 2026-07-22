@@ -496,19 +496,52 @@ extern char*	mapnames[];
 //
 void ST_Stop(void);
 
+// ST_FillFlatFlanks — Hor+ widescreen (18.2b).
+// Tiles firstflat across the left- and right-flank columns of screens[BG]
+// that fall outside the 320-px STBAR zone when WIDESCREENDELTA > 0.
+// Flat is 64×64 bytes, row-major; screen buffer is column-major.
+// No-ops when WIDESCREENDELTA == 0 (i.e. W=320).
+static void ST_FillFlatFlanks(int wsd)
+{
+    int x, y;
+    const byte* flat;
+    if (wsd <= 0)
+        return;
+    flat = (const byte*)W_CacheLumpNum(firstflat, PU_CACHE);
+    for (x = 0; x < screenwidth; x++)
+    {
+        if (x >= wsd && x < wsd + DOOM_ORIGWIDTH)
+            continue; // STBAR zone — will be painted by V_DrawPatch
+        for (y = 0; y < ST_HEIGHT; y++)
+            screens[BG][x * SCREENHEIGHT + y] = flat[((y & 63) << 6) | (x & 63)];
+    }
+}
+
 void ST_refreshBackground(void)
 {
-
     if (st_statusbaron)
     {
-	V_DrawPatch(ST_X, 0, BG, sbar);
+        int wsd = WIDESCREENDELTA;
 
-	if (netgame)
-	    V_DrawPatch(ST_FX, 0, BG, faceback);
-
-	V_CopyRect(ST_X, 0, BG, ST_WIDTH, ST_HEIGHT, ST_X, ST_Y, FG);
+        if (wsd > 0)
+        {
+            // Hor+ widescreen: fill flanks then draw STBAR centred.
+            ST_FillFlatFlanks(wsd);
+            V_DrawPatch(wsd, 0, BG, sbar);
+            if (netgame)
+                V_DrawPatch(wsd + ST_FX, 0, BG, faceback);
+            // Copy entire status-bar row (including flat flanks) to FG.
+            V_CopyRect(0, 0, BG, screenwidth, ST_HEIGHT, 0, ST_Y, FG);
+        }
+        else
+        {
+            // Vanilla 320-px path — byte-identical to pre-widescreen.
+            V_DrawPatch(ST_X, 0, BG, sbar);
+            if (netgame)
+                V_DrawPatch(ST_FX, 0, BG, faceback);
+            V_CopyRect(ST_X, 0, BG, ST_WIDTH, ST_HEIGHT, ST_X, ST_Y, FG);
+        }
     }
-
 }
 
 

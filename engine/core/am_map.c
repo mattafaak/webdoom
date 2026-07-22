@@ -219,7 +219,9 @@ static int 	grid = 0;
 static int 	leveljuststarted = 1; 	// kluge until AM_LevelInit() is called
 
 boolean    	automapactive = false;
-static int 	finit_width = MAXSCREENWIDTH;
+// 18.2b: was MAXSCREENWIDTH — runtime-corrected in AM_LevelInit to
+// match the actual screen width so wide builds use the full map viewport.
+static int 	finit_width = MAXSCREENWIDTH; /* corrected at runtime */
 static int 	finit_height = SCREENHEIGHT - 32;
 
 // location of window on screen
@@ -539,6 +541,7 @@ void AM_LevelInit(void)
     leveljuststarted = 0;
 
     f_x = f_y = 0;
+    finit_width = screenwidth; // 18.2b: runtime display width, not compile-time max
     f_w = finit_width;
     f_h = finit_height;
 
