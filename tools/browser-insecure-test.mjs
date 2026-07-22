@@ -18,11 +18,11 @@
 // RED-PROOF: stash the wad-cache.js + main.js changes and run — session 2
 // will re-download the WAD (wadHits.s2 > 0) and the assertion fails.
 //
-// Note: this test is NOT wired into run-tests.sh — that is task 16.5's job.
+// Wired into run-tests.sh as the insecure-origin CI leg (task 16.5).
 //
 // Usage: node tools/browser-insecure-test.mjs
 import { spawn } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -33,6 +33,13 @@ const INSECURE_PORT = 8674;
 const insecureUrl = `http://insecure.test:${INSECURE_PORT}/`;
 const CDP_PORT = 9246;
 
+// Resolve Chrome binary: CHROME_BIN env > /opt/google/chrome/chrome (container) >
+// google-chrome-stable (system PATH).  Use --disable-gpu (not --use-angle=swiftshader)
+// which is required in container/sandbox environments to avoid GPU process crashes.
+const CHROME_BIN =
+    process.env.CHROME_BIN ??
+    (existsSync('/opt/google/chrome/chrome') ? '/opt/google/chrome/chrome' : 'google-chrome-stable');
+
 // A fixed user-data-dir shared across both sessions: IDB survives between
 // tab opens within the same Chrome instance (same profile = same IDB origin).
 const userDataDir = mkdtempSync(join(tmpdir(), 'chrome-insecure-test-'));
@@ -42,10 +49,10 @@ const wadHits = { s1: 0, s2: 0 };
 let activeSession = 0;
 
 let server = null;
-const chrome = spawn('google-chrome-stable', [
+const chrome = spawn(CHROME_BIN, [
     '--headless=new', `--remote-debugging-port=${CDP_PORT}`,
-    '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
-    '--use-angle=swiftshader', '--window-size=1280,960',
+    '--no-first-run', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
+    '--window-size=1280,960',
     '--autoplay-policy=no-user-gesture-required',
     '--host-resolver-rules=MAP insecure.test 127.0.0.1',
     `--user-data-dir=${userDataDir}`,
@@ -284,6 +291,58 @@ if (!idbHasWad) {
 }
 console.log('  IDB webdoom-wads store has entries — WAD cached in IndexedDB');
 
+// ── Music fallback assertion (real insecure context, no synthetic forcing) ────
+// arm() has not been called yet: JS-simulated element.click() calls in
+// bootIntoSP dispatch only click events, NOT keydown/mousedown, so the
+// arm() listener was never triggered.  A CDP-synthesized keydown triggers it
+// here, and on an insecure origin ctx.audioWorklet is genuinely undefined
+// (browser restriction) — the BufferSink path activates without any synthetic
+// override.  This is the real insecure-context music path.
+console.log('[3] Music: assert BufferSink activated on real insecure context (no synthetic forcing)...');
+await tab2.cdp('Input.dispatchKeyEvent', {
+    type: 'keyDown', code: 'KeyW', key: 'w', windowsVirtualKeyCode: 87,
+});
+await sleep(60);
+await tab2.cdp('Input.dispatchKeyEvent', {
+    type: 'keyUp', code: 'KeyW', key: 'w', windowsVirtualKeyCode: 87,
+});
+// arm() is async; pump() runs every PUMP_MS=100ms.  Wait for at least one
+// full pump cycle plus arm() async completion margin.
+await sleep(700);
+
+const musicSinkKind = await tab2.ev(`window.doomAudio?.sinkKind()`);
+if (musicSinkKind !== 'buffer') {
+    console.error(`FAIL: music sink on real insecure origin expected 'buffer', got '${String(musicSinkKind)}'`);
+    console.error('  doomAudio armed:', await tab2.ev(`window.doomAudio?.armed()`));
+    console.error('  doomAudio keys:', await tab2.ev(
+        `window.doomAudio ? Object.keys(window.doomAudio).join(',') : 'null'`));
+    cleanup(1);
+}
+
+const musicRms = await tab2.ev(`(() => {
+    const chunk = window.doomAudio?.lastChunk();
+    if (!chunk || !chunk.length) return -1;
+    let sum = 0;
+    for (let i = 0; i < chunk.length; i++) sum += chunk[i] * chunk[i];
+    return Math.sqrt(sum / chunk.length);
+})()`);
+if (musicRms === null || musicRms === undefined || musicRms < 0) {
+    console.error(`FAIL: lastChunk() empty on insecure origin — pump did not run (got ${musicRms})`);
+    cleanup(1);
+}
+if (musicRms < 0.0005) {
+    console.error(`FAIL: music RMS on insecure origin too low: ${Number(musicRms).toFixed(6)} — OPL silent`);
+    cleanup(1);
+}
+
+const musicStatus = await tab2.ev(`document.getElementById('status')?.textContent`);
+if (!musicStatus?.includes('compatibility mode')) {
+    console.error(`FAIL: status should include 'compatibility mode', got '${String(musicStatus)}'`);
+    cleanup(1);
+}
+console.log(`  music sink=${musicSinkKind}  rms=${Number(musicRms).toFixed(5)}  status="${musicStatus}"`);
+console.log('  real insecure context confirmed: BufferSink active, OPL frames non-zero, status visible');
+
 // Check for uncaught JS exceptions during both sessions.
 const allErrors = [...tab1.errors, ...tab2.errors].filter(
     e => !/wad-cache|IndexedDB|idb/i.test(e),
@@ -294,5 +353,5 @@ if (allErrors.length > 0) {
 }
 
 tab2.close();
-console.log('PASS — session 2 booted SP with zero /wads/ server hits; WAD served from IDB on insecure origin');
+console.log('PASS — insecure origin: IDB WAD cache hit + BufferSink music fallback confirmed (no synthetic forcing)');
 cleanup(0);

@@ -88,6 +88,27 @@ node tools/browser-ierror-test.mjs http://127.0.0.1:8668/ | tail -1
 node tools/browser-rafdeath-test.mjs http://127.0.0.1:8668/ | tail -1
 node tools/browser-offline-test.mjs | tail -2
 
+# ── Insecure-origin CI leg (task 16.5) ────────────────────────────────────────
+# Dedicated port 8674 (hardcoded inside the script per the 12.2b lesson).
+# The script starts its own server (LOG_REQUESTS=1) and its own Chrome instance
+# so it can route http://insecure.test:8674 via --host-resolver-rules.
+# Asserts: (1) navigator.serviceWorker absent, (2) WAD IDB cache round-trip,
+# (3) BufferSink music fallback on real insecure context (no synthetic forcing).
+# RED-PROOF: disable the 16.4 BufferSink fallback in audio.js → this leg fails.
+echo "── browser insecure-origin CI leg (WAD IDB cache + music fallback, real insecure ctx) ──"
+node tools/browser-insecure-test.mjs | tail -1
+
+# ── Music-fallback unit check (audioWorklet=undefined synthetic, secure ctx) ──
+# Dedicated port 8669 per the 12.2b stale-server lesson.
+# Tests the synthetic forcing path (audioWorklet overridden to undefined on
+# localhost) as the unit-level check for the BufferSink fallback in audio.js.
+echo "── browser music-fallback unit check (audioWorklet=undefined, synthetic, secure ctx) ──"
+DOOM_PORT=8669 DOOM_HOST=127.0.0.1 node server/serve.js >/dev/null 2>&1 & _MF_SRV=$!
+trap "kill $SRV 2>/dev/null; kill $_MF_SRV 2>/dev/null" EXIT
+sleep 1
+node tools/browser-music-fallback-test.mjs http://127.0.0.1:8669/ | tail -1
+kill "$_MF_SRV" 2>/dev/null; wait "$_MF_SRV" 2>/dev/null || true
+
 echo "── browser pipeline baseline comparison ─────────────────"
 # Hostname-gated: compare a fresh browser-pipeline.mjs run against the
 # committed per-host golden.  Unknown hosts SKIP loudly so CI on other
