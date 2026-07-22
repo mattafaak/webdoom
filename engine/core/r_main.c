@@ -112,7 +112,7 @@ int			viewangletox[FINEANGLES/2];
 // The xtoviewangleangle[] table maps a screen pixel
 // to the lowest viewangle that maps back to x ranges
 // from clipangle to -clipangle.
-angle_t			xtoviewangle[SCREENWIDTH+1];
+angle_t			xtoviewangle[MAXSCREENWIDTH+1];
 
 
 // UNUSED.
@@ -646,7 +646,7 @@ void R_InitLightTables (void)
 	startmap = ((LIGHTLEVELS-1-i)*2)*NUMCOLORMAPS/LIGHTLEVELS;
 	for (j=0 ; j<MAXLIGHTZ ; j++)
 	{
-	    scale = FixedDiv ((SCREENWIDTH/2*FRACUNIT), (j+1)<<LIGHTZSHIFT);
+	    scale = FixedDiv ((MAXSCREENWIDTH/2*FRACUNIT), (j+1)<<LIGHTZSHIFT);
 	    scale >>= LIGHTSCALESHIFT;
 	    level = startmap - scale/DISTMAP;
 	    
@@ -701,7 +701,7 @@ void R_ExecuteSetViewSize (void)
 
     if (setblocks == 11)
     {
-	scaledviewwidth = SCREENWIDTH;
+	scaledviewwidth = screenwidth;
 	viewheight = SCREENHEIGHT;
     }
     else
@@ -739,8 +739,8 @@ void R_ExecuteSetViewSize (void)
     R_InitTextureMapping ();
     
     // psprite scales
-    pspritescale = FRACUNIT*viewwidth/SCREENWIDTH;
-    pspriteiscale = FRACUNIT*SCREENWIDTH/viewwidth;
+    pspritescale = FRACUNIT*viewwidth/MAXSCREENWIDTH;
+    pspriteiscale = FRACUNIT*MAXSCREENWIDTH/viewwidth;
     
     // thing clipping
     for (i=0 ; i<viewwidth ; i++)
@@ -768,7 +768,7 @@ void R_ExecuteSetViewSize (void)
 	startmap = ((LIGHTLEVELS-1-i)*2)*NUMCOLORMAPS/LIGHTLEVELS;
 	for (j=0 ; j<MAXLIGHTSCALE ; j++)
 	{
-	    level = startmap - j*SCREENWIDTH/(viewwidth<<detailshift)/DISTMAP;
+	    level = startmap - j*MAXSCREENWIDTH/(viewwidth<<detailshift)/DISTMAP;
 	    
 	    if (level < 0)
 		level = 0;

@@ -367,9 +367,9 @@ void I_FinishUpdate (void)
 	if (tics > 20) tics = 20;
 
 	for (i=0 ; i<tics*2 ; i+=2)
-	    screens[0][ (SCREENHEIGHT-1)*SCREENWIDTH + i] = 0xff;
+	    screens[0][ (SCREENHEIGHT-1)*screenwidth + i] = 0xff;
 	for ( ; i<20*2 ; i+=2)
-	    screens[0][ (SCREENHEIGHT-1)*SCREENWIDTH + i] = 0x0;
+	    screens[0][ (SCREENHEIGHT-1)*screenwidth + i] = 0x0;
     
     }
 
@@ -390,7 +390,7 @@ void I_FinishUpdate (void)
 	y = SCREENHEIGHT;
 	while (y--)
 	{
-	    x = SCREENWIDTH;
+	    x = screenwidth;
 	    do
 	    {
 		fouripixels = *ilineptr++;
@@ -432,7 +432,7 @@ void I_FinishUpdate (void)
 	y = SCREENHEIGHT;
 	while (y--)
 	{
-	    x = SCREENWIDTH;
+	    x = screenwidth;
 	    do
 	    {
 		fouripixels = *ilineptr++;
@@ -526,7 +526,7 @@ void I_FinishUpdate (void)
 //
 void I_ReadScreen (byte* scr)
 {
-    memcpy (scr, screens[0], SCREENWIDTH*SCREENHEIGHT);
+    memcpy (scr, screens[0], screenwidth*SCREENHEIGHT);
 }
 
 
@@ -725,7 +725,7 @@ void I_InitGraphics(void)
     if (M_CheckParm("-4"))
 	multiply = 4;
 
-    X_width = SCREENWIDTH * multiply;
+    X_width = screenwidth * multiply;
     X_height = SCREENHEIGHT * multiply;
 
     // check for command-line display name
@@ -910,7 +910,7 @@ void I_InitGraphics(void)
     if (multiply == 1)
 	screens[0] = (unsigned char *) (image->data);
     else
-	screens[0] = (unsigned char *) malloc (SCREENWIDTH * SCREENHEIGHT);
+	screens[0] = (unsigned char *) malloc (MAXSCREENWIDTH * SCREENHEIGHT);
 
 }
 
@@ -975,12 +975,12 @@ Expand4
     }
 		
 		
-    step = 3*SCREENWIDTH/2;
+    step = 3*screenwidth/2;
 	
     y = SCREENHEIGHT-1;
     do
     {
-	x = SCREENWIDTH;
+	x = screenwidth;
 
 	do
 	{

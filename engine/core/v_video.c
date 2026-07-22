@@ -171,12 +171,12 @@ V_CopyRect
 	 
 #ifdef RANGECHECK 
     if (srcx<0
-	||srcx+width >SCREENWIDTH
+	||srcx+width >screenwidth
 	|| srcy<0
-	|| srcy+height>SCREENHEIGHT 
-	||destx<0||destx+width >SCREENWIDTH
+	|| srcy+height>SCREENHEIGHT
+	||destx<0||destx+width >screenwidth
 	|| desty<0
-	|| desty+height>SCREENHEIGHT 
+	|| desty+height>SCREENHEIGHT
 	|| (unsigned)srcscrn>4
 	|| (unsigned)destscrn>4)
     {
@@ -222,9 +222,9 @@ V_DrawPatch
     x -= SHORT(patch->leftoffset); 
 #ifdef RANGECHECK 
     if (x<0
-	||x+SHORT(patch->width) >SCREENWIDTH
+	||x+SHORT(patch->width) >screenwidth
 	|| y<0
-	|| y+SHORT(patch->height)>SCREENHEIGHT 
+	|| y+SHORT(patch->height)>SCREENHEIGHT
 	|| (unsigned)scrn>4)
     {
       fprintf( stderr, "Patch at %d,%d exceeds LFB\n", x,y );
@@ -293,9 +293,9 @@ V_DrawPatchFlipped
     x -= SHORT(patch->leftoffset); 
 #ifdef RANGECHECK 
     if (x<0
-	||x+SHORT(patch->width) >SCREENWIDTH
+	||x+SHORT(patch->width) >screenwidth
 	|| y<0
-	|| y+SHORT(patch->height)>SCREENHEIGHT 
+	|| y+SHORT(patch->height)>SCREENHEIGHT
 	|| (unsigned)scrn>4)
     {
       fprintf( stderr, "Patch origin %d,%d exceeds LFB\n", x,y );
@@ -362,36 +362,36 @@ V_DrawPatchDirect
 
 #ifdef RANGECHECK 
     if (x<0
-	||x+SHORT(patch->width) >SCREENWIDTH
+	||x+SHORT(patch->width) >MAXSCREENWIDTH
 	|| y<0
-	|| y+SHORT(patch->height)>SCREENHEIGHT 
+	|| y+SHORT(patch->height)>SCREENHEIGHT
 	|| (unsigned)scrn>4)
     {
 	I_Error ("Bad V_DrawPatchDirect");
     }
-#endif 
- 
-    //	V_MarkRect (x, y, SHORT(patch->width), SHORT(patch->height)); 
-    desttop = destscreen + y*SCREENWIDTH/4 + (x>>2); 
-	 
-    w = SHORT(patch->width); 
-    for ( col = 0 ; col<w ; col++) 
-    { 
-	outp (SC_INDEX+1,1<<(x&3)); 
-	column = (column_t *)((byte *)patch + LONG(patch->columnofs[col])); 
- 
-	// step through the posts in a column 
-	 
-	while (column->topdelta != 0xff ) 
-	{ 
-	    source = (byte *)column + 3; 
-	    dest = desttop + column->topdelta*SCREENWIDTH/4; 
-	    count = column->length; 
- 
-	    while (count--) 
-	    { 
-		*dest = *source++; 
-		dest += SCREENWIDTH/4; 
+#endif
+
+    //	V_MarkRect (x, y, SHORT(patch->width), SHORT(patch->height));
+    desttop = destscreen + y*MAXSCREENWIDTH/4 + (x>>2);
+
+    w = SHORT(patch->width);
+    for ( col = 0 ; col<w ; col++)
+    {
+	outp (SC_INDEX+1,1<<(x&3));
+	column = (column_t *)((byte *)patch + LONG(patch->columnofs[col]));
+
+	// step through the posts in a column
+
+	while (column->topdelta != 0xff )
+	{
+	    source = (byte *)column + 3;
+	    dest = desttop + column->topdelta*MAXSCREENWIDTH/4;
+	    count = column->length;
+
+	    while (count--)
+	    {
+		*dest = *source++;
+		dest += MAXSCREENWIDTH/4; 
 	    } 
 	    column = (column_t *)(  (byte *)column + column->length 
 				    + 4 ); 
@@ -420,15 +420,15 @@ V_DrawBlock
 	 
 #ifdef RANGECHECK 
     if (x<0
-	||x+width >SCREENWIDTH
+	||x+width >screenwidth
 	|| y<0
-	|| y+height>SCREENHEIGHT 
+	|| y+height>SCREENHEIGHT
 	|| (unsigned)scrn>4 )
     {
 	I_Error ("Bad V_DrawBlock");
     }
-#endif 
- 
+#endif
+
     V_MarkRect (x, y, width, height);
 
     /* 14.2a column-major: the src block stays ROW-major (width pixels/row,
@@ -467,15 +467,15 @@ V_GetBlock
 	 
 #ifdef RANGECHECK 
     if (x<0
-	||x+width >SCREENWIDTH
+	||x+width >screenwidth
 	|| y<0
-	|| y+height>SCREENHEIGHT 
+	|| y+height>SCREENHEIGHT
 	|| (unsigned)scrn>4 )
     {
 	I_Error ("Bad V_DrawBlock");
     }
-#endif 
- 
+#endif
+
     /* 14.2a column-major: screens[scrn] column-major → dest row-major. */
     {
 	int cx, ry;
@@ -501,8 +501,8 @@ void V_Init (void)
 		
     // stick these in low dos memory on PCs
 
-    base = I_AllocLow (SCREENWIDTH*SCREENHEIGHT*4);
+    base = I_AllocLow (MAXSCREENWIDTH*SCREENHEIGHT*4);
 
     for (i=0 ; i<4 ; i++)
-	screens[i] = base + i*SCREENWIDTH*SCREENHEIGHT;
+	screens[i] = base + i*MAXSCREENWIDTH*SCREENHEIGHT;
 }

@@ -143,7 +143,7 @@ void R_DrawColumn (void)
 	return;
 
 #ifdef RANGECHECK
-    if ((unsigned)dc_x >= SCREENWIDTH
+    if ((unsigned)dc_x >= (unsigned)screenwidth
 	|| dc_yl < 0
 	|| dc_yh >= SCREENHEIGHT)
 	I_Error ("R_DrawColumn: %i to %i at %i", dc_yl, dc_yh, dc_x);
@@ -259,26 +259,26 @@ void R_DrawColumn (void)
     while (count >= 8) 
     { 
 	dest[0] = colormap[source[frac>>25]]; 
-	dest[SCREENWIDTH] = colormap[source[(frac+fracstep)>>25]]; 
-	dest[SCREENWIDTH*2] = colormap[source[(frac+fracstep2)>>25]]; 
-	dest[SCREENWIDTH*3] = colormap[source[(frac+fracstep3)>>25]];
-	
-	frac += fracstep4; 
+	dest[MAXSCREENWIDTH] = colormap[source[(frac+fracstep)>>25]];
+	dest[MAXSCREENWIDTH*2] = colormap[source[(frac+fracstep2)>>25]];
+	dest[MAXSCREENWIDTH*3] = colormap[source[(frac+fracstep3)>>25]];
 
-	dest[SCREENWIDTH*4] = colormap[source[frac>>25]]; 
-	dest[SCREENWIDTH*5] = colormap[source[(frac+fracstep)>>25]]; 
-	dest[SCREENWIDTH*6] = colormap[source[(frac+fracstep2)>>25]]; 
-	dest[SCREENWIDTH*7] = colormap[source[(frac+fracstep3)>>25]]; 
+	frac += fracstep4;
 
-	frac += fracstep4; 
-	dest += SCREENWIDTH*8; 
+	dest[MAXSCREENWIDTH*4] = colormap[source[frac>>25]];
+	dest[MAXSCREENWIDTH*5] = colormap[source[(frac+fracstep)>>25]];
+	dest[MAXSCREENWIDTH*6] = colormap[source[(frac+fracstep2)>>25]];
+	dest[MAXSCREENWIDTH*7] = colormap[source[(frac+fracstep3)>>25]];
+
+	frac += fracstep4;
+	dest += MAXSCREENWIDTH*8;
 	count -= 8;
-    } 
-	
+    }
+
     while (count > 0)
-    { 
-	*dest = colormap[source[frac>>25]]; 
-	dest += SCREENWIDTH; 
+    {
+	*dest = colormap[source[frac>>25]];
+	dest += MAXSCREENWIDTH;
 	frac += fracstep; 
 	count--;
     } 
@@ -302,7 +302,7 @@ void R_DrawColumnLow (void)
 	return;
 
 #ifdef RANGECHECK
-    if ((unsigned)dc_x >= SCREENWIDTH
+    if ((unsigned)dc_x >= (unsigned)screenwidth
 	|| dc_yl < 0
 	|| dc_yh >= SCREENHEIGHT)
     {
@@ -410,7 +410,7 @@ void R_DrawFuzzColumn (void)
 
     
 #ifdef RANGECHECK 
-    if ((unsigned)dc_x >= SCREENWIDTH
+    if ((unsigned)dc_x >= (unsigned)screenwidth
 	|| dc_yl < 0 || dc_yh >= SCREENHEIGHT)
     {
 	I_Error ("R_DrawFuzzColumn: %i to %i at %i",
@@ -499,7 +499,7 @@ void R_DrawTranslatedColumn (void)
 	return; 
 				 
 #ifdef RANGECHECK 
-    if ((unsigned)dc_x >= SCREENWIDTH
+    if ((unsigned)dc_x >= (unsigned)screenwidth
 	|| dc_yl < 0
 	|| dc_yh >= SCREENHEIGHT)
     {
@@ -654,7 +654,7 @@ void R_DrawSpan (void)
 #ifdef RANGECHECK
     if (ds_x2 < ds_x1
 	|| ds_x1<0
-	|| ds_x2>=SCREENWIDTH
+	|| ds_x2>=screenwidth
 	|| (unsigned)ds_y>SCREENHEIGHT)
     {
 	I_Error( "R_DrawSpan: %i to %i at %i",
@@ -781,7 +781,7 @@ void R_DrawSpanLow (void)
 #ifdef RANGECHECK 
     if (ds_x2 < ds_x1
 	|| ds_x1<0
-	|| ds_x2>=SCREENWIDTH  
+	|| ds_x2>=screenwidth  
 	|| (unsigned)ds_y>SCREENHEIGHT)
     {
 	I_Error( "R_DrawSpan: %i to %i at %i",
@@ -841,7 +841,7 @@ R_InitBuffer
     // Handle resize,
     //  e.g. smaller view windows
     //  with border and/or status bar.
-    viewwindowx = (SCREENWIDTH-width) >> 1; 
+    viewwindowx = (screenwidth-width) >> 1;
 
     // 14.2a column-major layout: screens[n][x*SCREENHEIGHT + y].
     // columnofs[x] = byte offset of column (viewwindowx+x) from screens[0] base.
@@ -851,7 +851,7 @@ R_InitBuffer
 	columnofs[i] = (viewwindowx + i) * SCREENHEIGHT;
 
     // Same with base row offset.
-    if (width == SCREENWIDTH)
+    if (width == screenwidth)
 	viewwindowy = 0;
     else
 	viewwindowy = (SCREENHEIGHT-SBARHEIGHT-height) >> 1;
@@ -898,7 +898,7 @@ void R_FillBackScreen (void)
     /* 14.2a column-major: fill screens[1] column by column.
        screens[1] pixel at (x,y) lives at screens[1] + x*SCREENHEIGHT + y.
        Flat tile is 64x64; src[((y&63)<<6)+(x&63)] gives the tile pixel. */
-    for (x=0 ; x<SCREENWIDTH ; x++)
+    for (x=0 ; x<screenwidth ; x++)
     {
 	dest = screens[1] + x * SCREENHEIGHT;
 	for (y=0 ; y<SCREENHEIGHT-SBARHEIGHT ; y++)
@@ -983,23 +983,23 @@ void R_DrawViewBorder (void)
     int		top;
     int		side;
 
-    if (scaledviewwidth == SCREENWIDTH)
+    if (scaledviewwidth == screenwidth)
 	return;
 
     top  = ((SCREENHEIGHT-SBARHEIGHT)-viewheight)/2;
-    side = (SCREENWIDTH-scaledviewwidth)/2;
+    side = (screenwidth-scaledviewwidth)/2;
 
     // 14.2a column-major: express border as four explicit axis-aligned rects.
     // Top border: full width, rows [0, top)
-    R_VideoErase (0, 0, SCREENWIDTH, top);
+    R_VideoErase (0, 0, screenwidth, top);
     // Bottom border: full width, rows [viewheight+top, viewheight+2*top)
-    R_VideoErase (0, viewheight+top, SCREENWIDTH, top);
+    R_VideoErase (0, viewheight+top, screenwidth, top);
     // Left side: columns [0, side), rows [top, viewheight+top)
     R_VideoErase (0, top, side, viewheight);
-    // Right side: columns [SCREENWIDTH-side, SCREENWIDTH), rows [top, viewheight+top)
-    R_VideoErase (SCREENWIDTH-side, top, side, viewheight);
+    // Right side: columns [screenwidth-side, screenwidth), rows [top, viewheight+top)
+    R_VideoErase (screenwidth-side, top, side, viewheight);
 
-    V_MarkRect (0, 0, SCREENWIDTH, SCREENHEIGHT-SBARHEIGHT);
+    V_MarkRect (0, 0, screenwidth, SCREENHEIGHT-SBARHEIGHT);
 }
  
  

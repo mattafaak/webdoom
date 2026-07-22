@@ -273,14 +273,14 @@ void F_TextWrite (void)
     // erase the entire screen to a tiled background
     // 14.2a column-major: fill screens[0] column by column.
     src = W_CacheLumpName ( finaleflat , PU_CACHE);
-    for (x=0 ; x<SCREENWIDTH ; x++)
+    for (x=0 ; x<screenwidth ; x++)
     {
 	dest = screens[0] + x * SCREENHEIGHT;
 	for (y=0 ; y<SCREENHEIGHT ; y++)
 	    *dest++ = src[((y&63)<<6) + (x&63)];
     }
 
-    V_MarkRect (0, 0, SCREENWIDTH, SCREENHEIGHT);
+    V_MarkRect (0, 0, screenwidth, SCREENHEIGHT);
     
     // draw some of the text onto the screen
     cx = 10;
@@ -310,7 +310,7 @@ void F_TextWrite (void)
 	}
 		
 	w = SHORT (hu_font[c]->width);
-	if (cx+w > SCREENWIDTH)
+	if (cx+w > screenwidth)
 	    break;
 	V_DrawPatch(cx, cy, 0, hu_font[c]);
 	cx+=w;
@@ -647,32 +647,32 @@ void F_BunnyScroll (void)
     p1 = W_CacheLumpName ("PFUB2", PU_LEVEL);
     p2 = W_CacheLumpName ("PFUB1", PU_LEVEL);
 
-    V_MarkRect (0, 0, SCREENWIDTH, SCREENHEIGHT);
-	
+    V_MarkRect (0, 0, screenwidth, SCREENHEIGHT);
+
     scrolled = 320 - (finalecount-230)/2;
     if (scrolled > 320)
 	scrolled = 320;
     if (scrolled < 0)
 	scrolled = 0;
-		
-    for ( x=0 ; x<SCREENWIDTH ; x++)
+
+    for ( x=0 ; x<screenwidth ; x++)
     {
 	if (x+scrolled < 320)
 	    F_DrawPatchCol (x, p1, x+scrolled);
 	else
-	    F_DrawPatchCol (x, p2, x+scrolled - 320);		
+	    F_DrawPatchCol (x, p2, x+scrolled - 320);
     }
-	
+
     if (finalecount < 1130)
 	return;
     if (finalecount < 1180)
     {
-	V_DrawPatch ((SCREENWIDTH-13*8)/2,
+	V_DrawPatch ((screenwidth-13*8)/2,
 		     (SCREENHEIGHT-8*8)/2,0, W_CacheLumpName ("END0",PU_CACHE));
 	laststage = 0;
 	return;
     }
-	
+
     stage = (finalecount-1180) / 5;
     if (stage > 6)
 	stage = 6;
@@ -681,9 +681,9 @@ void F_BunnyScroll (void)
 	S_StartSound (NULL, sfx_pistol);
 	laststage = stage;
     }
-	
+
     sprintf (name,"END%i",stage);
-    V_DrawPatch ((SCREENWIDTH-13*8)/2, (SCREENHEIGHT-8*8)/2,0, W_CacheLumpName (name,PU_CACHE));
+    V_DrawPatch ((screenwidth-13*8)/2, (SCREENHEIGHT-8*8)/2,0, W_CacheLumpName (name,PU_CACHE));
 }
 
 

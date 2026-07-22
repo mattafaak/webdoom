@@ -111,8 +111,8 @@ short*			lastopening;
 //  floorclip starts out SCREENHEIGHT
 //  ceilingclip starts out -1
 //
-short			floorclip[SCREENWIDTH];
-short			ceilingclip[SCREENWIDTH];
+short			floorclip[MAXSCREENWIDTH];
+short			ceilingclip[MAXSCREENWIDTH];
 
 //
 // spanstart holds the start of a plane span
@@ -128,7 +128,7 @@ lighttable_t**		planezlight;
 fixed_t			planeheight;
 
 fixed_t			yslope[SCREENHEIGHT];
-fixed_t			distscale[SCREENWIDTH];
+fixed_t			distscale[MAXSCREENWIDTH];
 fixed_t			basexscale;
 fixed_t			baseyscale;
 
@@ -306,7 +306,7 @@ R_FindPlane
     check->height = height;
     check->picnum = picnum;
     check->lightlevel = lightlevel;
-    check->minx = SCREENWIDTH;
+    check->minx = screenwidth;
     check->maxx = -1;
     
     memset (check->top,0xff,sizeof(check->top));

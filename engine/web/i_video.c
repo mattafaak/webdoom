@@ -19,7 +19,8 @@ static byte webpalette[256 * 3];
 static int paletteversion; // bumped on every I_SetPalette
 
 // Row-major presentation buffer: JS reads this.  Populated by I_FinishUpdate.
-static byte web_rowmajor_buf[SCREENWIDTH * SCREENHEIGHT];
+// Sized to MAXSCREENWIDTH; only the first screenwidth columns are populated.
+static byte web_rowmajor_buf[MAXSCREENWIDTH * SCREENHEIGHT];
 
 void I_InitGraphics (void) {}
 
@@ -41,18 +42,18 @@ void I_FinishUpdate (void)
 {
     const byte* src = screens[0];
     int x, y;
-    for (x = 0; x < SCREENWIDTH; x++)
+    for (x = 0; x < screenwidth; x++)
     {
         const byte* col = src + x * SCREENHEIGHT;
         for (y = 0; y < SCREENHEIGHT; y++)
-            web_rowmajor_buf[y * SCREENWIDTH + x] = col[y];
+            web_rowmajor_buf[y * screenwidth + x] = col[y];
     }
 }
 
 void I_ReadScreen (byte* scr)
 {
     // Copy raw column-major bytes; callers (wipe, screenshot) handle layout.
-    memcpy (scr, screens[0], SCREENWIDTH * SCREENHEIGHT);
+    memcpy (scr, screens[0], screenwidth * SCREENHEIGHT);
 }
 
 // --- JS bridge ---------------------------------------------------------

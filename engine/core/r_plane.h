@@ -33,7 +33,7 @@
 
 // Visplane related.
 // webdoom: MAXOPENINGS exported here so r_segs.c can guard writes.
-#define MAXOPENINGS	(SCREENWIDTH*64)	// vanilla; was *64; webdoom raised to *256, reverted 14.2f (peak 2527)
+#define MAXOPENINGS	(MAXSCREENWIDTH*64)	// vanilla; was *64; webdoom raised to *256, reverted 14.2f (peak 2527)
 extern  short		openings[MAXOPENINGS];
 extern  short*		lastopening;
 
@@ -43,11 +43,11 @@ typedef void (*planefunction_t) (int top, int bottom);
 extern planefunction_t	floorfunc;
 extern planefunction_t	ceilingfunc_t;
 
-extern short		floorclip[SCREENWIDTH];
-extern short		ceilingclip[SCREENWIDTH];
+extern short		floorclip[MAXSCREENWIDTH];
+extern short		ceilingclip[MAXSCREENWIDTH];
 
 extern fixed_t		yslope[SCREENHEIGHT];
-extern fixed_t		distscale[SCREENWIDTH];
+extern fixed_t		distscale[MAXSCREENWIDTH];
 
 void R_InitPlanes (void);
 void R_ClearPlanes (void);

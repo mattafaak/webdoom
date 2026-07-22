@@ -105,17 +105,20 @@ typedef enum
 #define	SCREEN_MUL		1
 #define	INV_ASPECT_RATIO	0.625 // 0.75, ideally
 
-// Defines suck. C sucks.
-// C++ might sucks for OOP, but it sure is a better C.
-// So there.
-#ifndef SCREENWIDTH
-#define SCREENWIDTH  320
-//SCREEN_MUL*BASE_WIDTH //320
-#endif
+// Compile-time maximum screen width: governs static array dimensions and
+// fixed-size allocations (BSS layout unchanged at 320).
+// Runtime width (loop bounds, column indices, stride) uses screenwidth below.
+#define MAXSCREENWIDTH  320
+
 #ifndef SCREENHEIGHT
 #define SCREENHEIGHT 200
 //(int)(SCREEN_MUL*BASE_WIDTH*INV_ASPECT_RATIO) //200
 #endif
+
+// Runtime screen width — initialized to MAXSCREENWIDTH, future hook for
+// variable-width support.  Loop bounds, column indices, and stride
+// comparisons use this; static array declarations use MAXSCREENWIDTH.
+extern int screenwidth;
 
 
 
