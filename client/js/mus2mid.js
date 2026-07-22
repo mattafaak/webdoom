@@ -101,8 +101,14 @@ function uint16BE(v) {
     return [(v >>> 8) & 0xff, v & 0xff];
 }
 
-// ── Main converter ────────────────────────────────────────name─────────────────
-export function musToMidi(mus) {
+// ── Main converter ────────────────────────────────────────────────────────────
+// dmxgusMap (optional): Uint8Array[175] from the DMXGUS WAD lump.
+//   When provided, MUS instrument-change values are remapped through it:
+//   the MIDI program number becomes dmxgusMap[musProg] & 0x7f instead of
+//   musProg directly.  This produces GUS-flavored instrument selection
+//   without requiring any GUS .pat files (audio comes from the SF2 stack).
+//   The DMXGUS lump is WAD-owned data; see docs/decision-17.3-gus-flavor.md.
+export function musToMidi(mus, dmxgusMap = null) {
     if (!(mus instanceof Uint8Array)) mus = new Uint8Array(mus);
 
     // Validate magic
@@ -203,8 +209,14 @@ export function musToMidi(mus) {
                 last = !!(b2 & 0x80);
                 const value = b2 & 0x7f;
                 if (ctrl === 0) {
-                    // Instrument → MIDI program change
-                    events.push({ tick: currentTick, bytes: [0xc0 | midCh, value] });
+                    // Instrument → MIDI program change.
+                    // If a DMXGUS map is present, remap the MUS instrument
+                    // number to the GUS patch number (≈ GM program number)
+                    // that the WAD author intended for GUS playback.
+                    let prog = value;
+                    if (dmxgusMap !== null && prog < dmxgusMap.length)
+                        prog = dmxgusMap[prog] & 0x7f;
+                    events.push({ tick: currentTick, bytes: [0xc0 | midCh, prog] });
                 } else if (ctrl < MUS_CTRL_TO_MIDI.length && MUS_CTRL_TO_MIDI[ctrl] !== 0) {
                     events.push({ tick: currentTick,
                         bytes: [0xb0 | midCh, MUS_CTRL_TO_MIDI[ctrl], value] });

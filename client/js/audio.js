@@ -124,6 +124,11 @@ export function createAudio(doom) {
     const active = new Map();           // handle → {src, gain, pan}
     let sink = null, musicScratch = 0, pumpTimer = 0;
 
+    // DMXGUS map (optional; null = not loaded).
+    // Set by setDmxgus(bytes); forwarded to musToMidi() as dmxgusMap so that
+    // MUS instrument-change values are remapped per the WAD's GUS patch table.
+    let dmxgusMap = null;
+
     // GM mode state (inactive by default; activated by setGmMode).
     let gmEnabled = false;
     // gmSf2Bytes: Uint8Array from IDB; passed to SpessaSynth Synthetizer.
@@ -397,8 +402,19 @@ export function createAudio(doom) {
             }
         },
 
+        // Load the DMXGUS WAD lump for GUS-flavored instrument mapping.
+        // bytes: Uint8Array (exactly 175 bytes) from W_CheckNumForName("DMXGUS").
+        // After this call, musToMidi() applies GUS patch remapping automatically.
+        // Pass null to clear the map (reverts to default GM program numbers).
+        setDmxgus(bytes) {
+            dmxgusMap = (bytes instanceof Uint8Array && bytes.length >= 175)
+                ? bytes.slice(0, 175)
+                : null;
+        },
+
         // Expose mus2mid for engine integration (future: MUS data from WAD).
-        musToMidi,
+        // dmxgusMap is forwarded automatically when set via setDmxgus().
+        musToMidi: (mus) => musToMidi(mus, dmxgusMap),
 
         // called on quit: stop the render pump and release the context so
         // the interval doesn't poke a force-exited wasm instance

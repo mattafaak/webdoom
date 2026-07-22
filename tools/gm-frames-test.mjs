@@ -273,6 +273,104 @@ console.log('\n── Gate 3: OPL path is taken by default (GM inactive) ──�
     ok('OPL sink kind is worklet', oplSink.kind === 'worklet');
 }
 
+// ── Gate 4: DMXGUS mapping honored in musToMidi ───────────────────────────────
+// Verifies that musToMidi(mus, dmxgusMap) remaps instrument-change values through
+// the DMXGUS table (Uint8Array[175]) and that omitting the map leaves values unchanged.
+//
+// RED-PROOF (against pre-17.3 musToMidi):
+//   - If musToMidi ignores dmxgusMap, prog in MIDI output equals musProg (42),
+//     not the mapped value (71) → Gate 4 assertions fail.
+//   - If dmxgusMap=null produces non-identity output, baseline check fails.
+console.log('\n── Gate 4: DMXGUS mapping honored in musToMidi ─────────────────────────────');
+
+{
+    // Build a minimal MUS lump with one instrument-change event (ctrl=0, prog=42)
+    // followed by a note press and score end.  The DMXGUS map will remap prog 42→71.
+    //
+    // MUS instrument count = 1; instrument list = [42] (uint16 LE)
+    // Score events:
+    //   ctrl event (type 4): ch=0, ctrl=0, value=42, last=0
+    //     event byte: (0<<4)|4 = 0x04
+    //     ctrl byte:  0
+    //     value byte: (last=0<<7)|42 = 0x2A
+    //   press event (type 1): ch=0, note=60, vol=64, last=0
+    //     event byte: 0x01
+    //     byte1: (vol_flag=1<<7)|60 = 0xBC
+    //     byte2: (last=0<<7)|64 = 0x40
+    //   score end (type 6): 0x06
+
+    function buildMusWithInstr(instrNum) {
+        const instr = [instrNum & 0xff, 0];   // uint16 LE
+        const headerLen = 16 + instr.length;
+        const score = [
+            0x04,          // ctrl event, ch=0
+            0x00,          // ctrl id = 0 (instrument)
+            instrNum & 0x7f,  // value = instrNum, last=0
+            0x01,          // press event, ch=0
+            0xBC,          // vol_flag=1, note=60
+            0x40,          // last=0, vol=64
+            0x06,          // score end
+        ];
+        const scoreStart = headerLen;
+        const scoreLen = score.length;
+        const hdr = new Uint8Array(headerLen);
+        hdr[0]=0x4D; hdr[1]=0x55; hdr[2]=0x53; hdr[3]=0x1A;  // "MUS\x1A"
+        hdr[4]=scoreLen&0xff; hdr[5]=(scoreLen>>8)&0xff;
+        hdr[6]=scoreStart&0xff; hdr[7]=(scoreStart>>8)&0xff;
+        hdr[8]=1; hdr[9]=0;   // primary channel count
+        hdr[12]=1; hdr[13]=0; // instrument count
+        hdr[16]=instr[0]; hdr[17]=instr[1];
+        return new Uint8Array([...hdr, ...score]);
+    }
+
+    // Helper: find first MIDI program-change byte (0xCx) in MIDI output and return prog
+    function firstProgChange(midiBytes) {
+        for (let i = 0; i < midiBytes.length - 1; i++) {
+            if ((midiBytes[i] & 0xF0) === 0xC0) return midiBytes[i + 1];
+        }
+        return null;
+    }
+
+    const MUS_PROG = 42;
+    const GUS_PATCH = 71;
+
+    // Baseline: no dmxgusMap → program number is unchanged
+    const musNoMap = buildMusWithInstr(MUS_PROG);
+    const midiNoMap = musToMidi(musNoMap, null);
+    const progNoMap = firstProgChange(midiNoMap);
+    ok('DMXGUS: no map → program unchanged (identity)',
+        progNoMap === MUS_PROG,
+        `expected prog=${MUS_PROG}, got prog=${progNoMap}`);
+
+    // DMXGUS map: 175 bytes, entry 42 → 71
+    const dmxgusMap = new Uint8Array(175).fill(0);
+    dmxgusMap[MUS_PROG] = GUS_PATCH;
+    const musWithMap = buildMusWithInstr(MUS_PROG);
+    const midiWithMap = musToMidi(musWithMap, dmxgusMap);
+    const progWithMap = firstProgChange(midiWithMap);
+    ok('DMXGUS: map entry [42]=71 → program remapped to 71',
+        progWithMap === GUS_PATCH,
+        `expected prog=${GUS_PATCH}, got prog=${progWithMap}`);
+
+    // Edge case: map entry 0x80 (high bit set) → masked to 0x00
+    const dmxgusMapEdge = new Uint8Array(175).fill(0);
+    dmxgusMapEdge[MUS_PROG] = 0x80;  // high bit — should be masked to 0x00
+    const midiEdge = musToMidi(buildMusWithInstr(MUS_PROG), dmxgusMapEdge);
+    const progEdge = firstProgChange(midiEdge);
+    ok('DMXGUS: map entry with high bit → masked to 0x00',
+        progEdge === 0x00,
+        `expected prog=0, got prog=${progEdge}`);
+
+    // Null map short-circuit: passing null explicitly (not undefined) still returns identity
+    const midiNullExplicit = musToMidi(buildMusWithInstr(MUS_PROG), null);
+    const progNullExplicit = firstProgChange(midiNullExplicit);
+    ok('DMXGUS: explicit null map → identity (same as no-map)',
+        progNullExplicit === MUS_PROG,
+        `expected prog=${MUS_PROG}, got prog=${progNullExplicit}`);
+
+    console.log(`  DMXGUS: identity=${progNoMap} mapped=${progWithMap} edge=${progEdge} null-explicit=${progNullExplicit}`);
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log('');
 if (failed === 0) {
@@ -280,6 +378,7 @@ if (failed === 0) {
     console.log('  gm-main sink: pump skips OPL, SpessaSynth self-schedules');
     console.log('  gmDispatchMidi: per-command routing (noteOn/noteOff/cc/pc)');
     console.log('  OPL default path unchanged');
+    console.log('  DMXGUS mapping honored in musToMidi()');
     process.exit(0);
 } else {
     console.error(`FAIL — gm-frames-test: ${failed} failures, ${passed} passed`);

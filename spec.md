@@ -142,8 +142,14 @@ The primary player environment is plain-HTTP on a LAN/tailnet address
   This is the project's first third-party JS runtime dependency; it is
   lazy-loaded, excluded from the SHELL precache unless deliberately
   added, and its size lands as an explicit size-budget line item.
-- **GUS flavor** is decision-gated on licensing (Gravis patches are
-  tolerated-but-unlicensed); no task ships it without a record here.
+- **GUS flavor** (decision record: `docs/decision-17.3-gus-flavor.md`,
+  task 17.3, 2026-07-22): **GREEN-LIT** via DMXGUS mapping + existing
+  SF2 stack. The original Gravis patches (proprietary, no redistribution
+  right) and eawpats (redistribution-unclear; Debian dropped from non-free
+  ~2016) are NOT used. DMXGUS lump is WAD-owned data; its 175-byte
+  mapping table drives GM program selection in `musToMidi()`; audio
+  synthesis comes from the operator-fetched SF2 (GeneralUser GS, same
+  as 17.2a). No GUS .pat files are required, fetched, or redistributed.
 - **Never bundled**: Microsoft GS wavetable, Roland ROMs/Nuked-SC55,
   provenance-unclear soundfonts. User-supplied files are fine.
 - Determinism rule (unchanged): engine music state changes only via
