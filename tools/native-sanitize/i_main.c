@@ -11,9 +11,9 @@
 // via myargc/myargv.  The harness inserts -timedemo automatically and
 // removes -sim / -render / -waddir from the argv it forwards.
 //
-// Collects per-tic sim hash (identical to web_state_hash in engine/web/i_main.c)
-// and per-tic render FNV-1a hash (identical to fnv1aRender in demo-test.mjs),
-// writes both to JSON as {"tics": N, "trace": [u32...]}.
+// Collects per-tic sim hash (identical to web_state_hash in
+// engine/web/i_main.c) and per-tic render FNV-1a hash (identical to fnv1aRender
+// in demo-test.mjs), writes both to JSON as {"tics": N, "trace": [u32...]}.
 // run-all.sh calls this binary once per demo; compare.py diffs the output.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <stdio.h>
@@ -25,11 +25,16 @@
 #include "doomstat.h"
 #include "d_player.h"
 #include "m_argv.h"
+#include "r_defs.h" // sector_t (18.4: sector hash extension)
 #include "nat_platform.h"
-#include "web.h"    // D_DoomFrame declaration
+#include "web.h" // D_DoomFrame declaration
 
 // External sim state.
 extern int prndindex;
+// 18.4: sector/thinker hash extension
+extern int numsectors;
+extern sector_t* sectors;
+extern thinker_t thinkercap; // p_tick.c linked-list sentinel
 
 // ── sim hash: identical to web_state_hash() in engine/web/i_main.c ───────────
 static int nat_state_hash (void)
@@ -41,23 +46,37 @@ static int nat_state_hash (void)
     for (i = 0; i < MAXPLAYERS; i++)
         if (playeringame[i] && players[i].mo)
         {
-            h = (h ^ (unsigned) players[i].mo->x)     * 0x01000193u;
-            h = (h ^ (unsigned) players[i].mo->y)     * 0x01000193u;
+            h = (h ^ (unsigned) players[i].mo->x) * 0x01000193u;
+            h = (h ^ (unsigned) players[i].mo->y) * 0x01000193u;
             h = (h ^ (unsigned) players[i].mo->angle) * 0x01000193u;
-            h = (h ^ (unsigned) players[i].health)    * 0x01000193u;
+            h = (h ^ (unsigned) players[i].health) * 0x01000193u;
         }
+    // 18.4: sector floor/ceiling heights — catches moving floors/ceilings.
+    for (i = 0; i < numsectors; i++)
+    {
+        h = (h ^ (unsigned) sectors[i].floorheight) * 0x01000193u;
+        h = (h ^ (unsigned) sectors[i].ceilingheight) * 0x01000193u;
+    }
+    // 18.4: thinker count — catches spawn/despawn of active thinkers.
+    {
+        thinker_t* th;
+        unsigned cnt = 0;
+        for (th = thinkercap.next; th != &thinkercap; th = th->next)
+            cnt++;
+        h = (h ^ cnt) * 0x01000193u;
+    }
     return (int) h;
 }
 
-// ── JSON output ───────────────────────────────────────────────────────────────
+// ── JSON output
+// ───────────────────────────────────────────────────────────────
 #define MAX_TRACE 300000
 
 static int sim_trace[MAX_TRACE];
 static int render_trace[MAX_TRACE];
 static int trace_len;
 
-static int write_trace (const char* path, int tics,
-                         const int* trace, int n)
+static int write_trace (const char* path, int tics, const int* trace, int n)
 {
     FILE* f;
     int i;
@@ -72,7 +91,8 @@ static int write_trace (const char* path, int tics,
     for (i = 0; i < n; i++)
     {
         fprintf (f, "%u", (unsigned) trace[i]);
-        if (i + 1 < n) fputc (',', f);
+        if (i + 1 < n)
+            fputc (',', f);
     }
     fputs ("]}", f);
     fclose (f);
@@ -84,9 +104,9 @@ static int write_trace (const char* path, int tics,
 int main (int argc, char** argv)
 {
     // Peel off harness-only flags before forwarding argv to D_DoomMain.
-    const char* sim_out    = NULL;
+    const char* sim_out = NULL;
     const char* render_out = NULL;
-    const char* wad_dir    = NULL;
+    const char* wad_dir = NULL;
 
     // Forward-argv buffer: at most as many entries as input.
     static const char* fwd[64];
@@ -97,11 +117,20 @@ int main (int argc, char** argv)
     for (i = 0; i < argc && fwd_argc < 63; i++)
     {
         if (strcmp (argv[i], "-sim") == 0 && i + 1 < argc)
-            { sim_out = argv[++i]; continue; }
+        {
+            sim_out = argv[++i];
+            continue;
+        }
         if (strcmp (argv[i], "-render") == 0 && i + 1 < argc)
-            { render_out = argv[++i]; continue; }
+        {
+            render_out = argv[++i];
+            continue;
+        }
         if (strcmp (argv[i], "-waddir") == 0 && i + 1 < argc)
-            { wad_dir = argv[++i]; continue; }
+        {
+            wad_dir = argv[++i];
+            continue;
+        }
         fwd[fwd_argc++] = argv[i];
     }
 
@@ -113,16 +142,17 @@ int main (int argc, char** argv)
     myargv = (char**) fwd;
 
     // Arm the timedemo longjmp exit.
-    nat_timedemo_active   = 1;
+    nat_timedemo_active = 1;
     nat_timedemo_gametics = 0;
-    trace_len             = 0;
+    trace_len = 0;
 
     if (setjmp (nat_demo_jmp) != 0)
         goto done;
 
     D_DoomMain (); // init + load WAD; calls I_Error on missing WAD (aborts)
 
-    // Pin fractic = FRACUNIT: no wall-clock contribution to render interpolation.
+    // Pin fractic = FRACUNIT: no wall-clock contribution to render
+    // interpolation.
     smoothrender = false;
 
     last_tic = -1;
@@ -136,7 +166,7 @@ int main (int argc, char** argv)
         {
             if (trace_len < MAX_TRACE)
             {
-                sim_trace[trace_len]    = nat_state_hash ();
+                sim_trace[trace_len] = nat_state_hash ();
                 render_trace[trace_len] = (int) nat_render_hash ();
                 trace_len++;
             }
@@ -148,15 +178,15 @@ done:
     nat_timedemo_active = 0;
     {
         int tics = nat_timedemo_gametics;
-        int err  = 0;
+        int err = 0;
 
         if (sim_out)
             err |= write_trace (sim_out, tics, sim_trace, trace_len);
         if (render_out)
             err |= write_trace (render_out, tics, render_trace, trace_len);
 
-        fprintf (stderr, "nat-doom: %d gametics, %d trace entries\n",
-                 tics, trace_len);
+        fprintf (stderr, "nat-doom: %d gametics, %d trace entries\n", tics,
+                 trace_len);
         return err ? 1 : 0;
     }
 }

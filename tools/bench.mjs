@@ -25,9 +25,11 @@ import { dirname, join } from 'node:path';
 
 const here     = dirname(fileURLToPath(import.meta.url));
 const jsonFlag = process.argv.includes('--json');
-const args     = process.argv.slice(2).filter(a => a !== '--json');
+const wideFlag = process.argv.includes('--wide'); // 18.4: wide render cost pass
+const args     = process.argv.slice(2).filter(a => a !== '--json' && a !== '--wide');
 const wad      = args[0] ?? 'doom.wad';
 const reps     = Number(args[1] ?? 3);
+const WIDE_WIDTH = 854;
 const engineName = wad === 'doom.wad' ? 'doomu.wad' : wad;
 
 const createDoom = (await import(join(here, 'doom.js'))).default;
@@ -168,6 +170,75 @@ const avg = Object.values(fpsResults).reduce((a, b) => a + b, 0) / DEMOS.length;
 if (!jsonFlag)
     console.log(`AVG ${avg.toFixed(0)} fps  [${Object.values(fpsResults).map(f => f.toFixed(0)).join(' ')}]`);
 
+// ── Pass 3 (18.4): wide render pass (--wide) ─────────────────────────────────
+// Measures per-stage render ms/frame at 854-px Hor+ (wide mode).
+// Identical to Pass 1 but calls _web_set_wide(854) before the frame loop.
+// The delta vs. Pass 1 is the "wide cost" (extra ms/frame for wider FOV).
+const wideResults = {};
+if (wideFlag) {
+    if (!jsonFlag)
+        console.log(`\nbench — wide render pass (${WIDE_WIDTH}px, per-stage µs/frame) — ${reps} rep(s)`);
+
+    for (const demo of DEMOS) {
+        let best = null;
+
+        for (let r = 0; r < reps; r++) {
+            let done = null;
+            const doom = await createDoom({
+                print: () => {},
+                printErr: t => { const m = /timed (\d+) gametics/.exec(t); if (m) done = +m[1]; },
+            });
+            registerWad(doom);
+            doom.callMain(['-timedemo', demo]);
+            // Activate wide mode before frame loop; first web_frame() applies it.
+            doom._web_set_wide(WIDE_WIDTH);
+            doom._web_frame();
+            doom._web_wipe_skip();
+            doom._web_perf_reset();
+
+            try {
+                for (let i = 0; i < 300000 && done === null; i++) doom._web_frame();
+            } catch { /* timedemo finished */ }
+
+            const frames = doom._web_perf_frames();
+            if (frames < 1) continue;
+
+            const candidate = {
+                frames,
+                sim_us:    doom._web_perf_sim(),
+                frame_us:  doom._web_perf_frame(),
+                bsp_us:    doom._web_perf_bsp(),
+                planes_us: doom._web_perf_planes(),
+                masked_us: doom._web_perf_masked(),
+            };
+            if (!best || frames > best.frames) best = candidate;
+        }
+
+        if (!best) { wideResults[demo] = null; continue; }
+
+        const f = best.frames;
+        const res = {
+            frames:    f,
+            width:     WIDE_WIDTH,
+            sim_ms:    best.sim_us    / f / 1000,
+            frame_ms:  best.frame_us  / f / 1000,
+            bsp_ms:    best.bsp_us    / f / 1000,
+            planes_ms: best.planes_us / f / 1000,
+            masked_ms: best.masked_us / f / 1000,
+        };
+        res.sum_ms = res.frame_ms + res.bsp_ms + res.planes_ms + res.masked_ms;
+        wideResults[demo] = res;
+
+        if (!jsonFlag) {
+            const narrow = renderResults[demo];
+            const delta  = narrow ? ` (Δ=${(res.sum_ms - narrow.sum_ms).toFixed(3)} ms vs 320)` : '';
+            console.log(`  ${demo} W=${WIDE_WIDTH} (${f} frames):`);
+            console.log(`    frame-setup ${res.frame_ms.toFixed(3)} ms  bsp+segs ${res.bsp_ms.toFixed(3)} ms  planes ${res.planes_ms.toFixed(3)} ms  masked ${res.masked_ms.toFixed(3)} ms`);
+            console.log(`    stages-sum ${res.sum_ms.toFixed(3)} ms${delta}`);
+        }
+    }
+}
+
 // ── JSON output ───────────────────────────────────────────────────────────────
 if (jsonFlag) {
     const out = {
@@ -178,5 +249,6 @@ if (jsonFlag) {
         simFps: fpsResults,
         simFpsAvg: avg,
     };
+    if (wideFlag) out.wideRenderStages = wideResults;
     process.stdout.write(JSON.stringify(out, null, 2) + '\n');
 }

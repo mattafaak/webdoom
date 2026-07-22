@@ -237,6 +237,7 @@ EMSCRIPTEN_KEEPALIVE void web_set_detail (int detail)
 // detector — any diverging gameplay decision shifts RNG consumption.
 //
 extern int prndindex;
+extern thinker_t thinkercap; // p_tick.c — thinker linked list sentinel
 
 EMSCRIPTEN_KEEPALIVE int web_state_hash (void)
 {
@@ -252,6 +253,22 @@ EMSCRIPTEN_KEEPALIVE int web_state_hash (void)
             h = (h ^ (unsigned) players[i].mo->angle) * 0x01000193u;
             h = (h ^ (unsigned) players[i].health) * 0x01000193u;
         }
+    // 18.4: sector floor/ceiling heights — catches moving floors/ceilings
+    // that are invisible to player-mo-only hashing (door, lift, stair sectors).
+    for (i = 0; i < numsectors; i++)
+    {
+        h = (h ^ (unsigned) sectors[i].floorheight) * 0x01000193u;
+        h = (h ^ (unsigned) sectors[i].ceilingheight) * 0x01000193u;
+    }
+    // 18.4: thinker count — catches spawn/despawn of active thinkers
+    // (projectiles, specials, mobjs) that don't manifest in player state.
+    {
+        thinker_t* th;
+        unsigned cnt = 0;
+        for (th = thinkercap.next; th != &thinkercap; th = th->next)
+            cnt++;
+        h = (h ^ cnt) * 0x01000193u;
+    }
     return (int) h;
 }
 
