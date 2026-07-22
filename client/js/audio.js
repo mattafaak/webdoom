@@ -4,28 +4,31 @@
 // Music delivery uses one of three sinks:
 //   WorkletSink  — AudioWorklet (OPL; requires secure context / HTTPS / localhost)
 //   BufferSink   — AudioBufferSourceNode chain (OPL fallback; any origin)
-//   GmSink       — AudioWorkletNode wrapping gm-worklet.js (GM backend; opt-in)
+//   GmMainSink   — main-thread SpessaSynth path (GM backend; opt-in)
 //
 // Default: OPL (WorkletSink or BufferSink depending on origin security).
-// GM backend is inactive until setGmMode(true, soundfontUrl) is called (17.2b).
+// GM backend is activated by setGmMode(true, sf2Bytes, spessaSynthUrl) (task 17.2b).
 //
-// The GM worklet URL is held in a variable (not a string literal passed directly
-// to addModule), so the static-analysis in check-sw-precache.mjs correctly
-// excludes it from the mandatory SHELL precache.  See decision-17.2a-soundfont-gm.md.
+// SpessaSynth architecture (task 17.2b):
+//   SpessaSynth's Synthetizer is a main-thread AudioNode class that creates
+//   its own AudioWorklet chain internally.  It CANNOT be instantiated inside
+//   a foreign AudioWorkletProcessor.  The correct wiring is:
+//     relayGain = ctx.createGain() → ctx.destination
+//     new Synthetizer(relayGain, sf2ArrayBuffer)
+//   SpessaSynth manages its own scheduling; audio.js pump() is a no-op for GM.
+//   When SpessaSynth is absent (operator not configured), relayGain is connected
+//   but has no signal → silence.  "SKIP loudly" contract: console.warn + visible
+//   status message.  gmPathBuilt is set to true when the relay node is connected.
 //
 // Pump routing:
 //   OPL mode: pump() calls doom._web_music_render() → PCM → sink.push()
-//   GM mode:  pump() calls gmPumpFrames() → SpessaSynth render → sink.push()
-//             (SpessaSynth rendering is lazy-loaded; absent = silent, no error)
+//   GM mode:  pump() is a no-op (SpessaSynth / silence are self-scheduling)
 
 import { musToMidi } from './mus2mid.js';
 
 const TARGET_BACKLOG = 0.25;    // seconds of music buffered ahead
 const PUMP_MS = 100;
 const BUFFER_LEAD_S = 0.05;     // scheduling lead for BufferSink (50 ms)
-
-// URL for the GM worklet module (non-literal so check-sw-precache ignores it).
-const GM_WORKLET_URL = 'js/gm-worklet.js';
 
 // ── WorkletSink ───────────────────────────────────────────────────────────────
 // Wraps an AudioWorkletNode (music-worklet.js / MusicSink).
@@ -95,33 +98,15 @@ function makeBufferSink(ctx) {
     };
 }
 
-// ── GmWorkletSink ─────────────────────────────────────────────────────────────
-// Same wire as WorkletSink but wraps the 'gm-sink' processor in gm-worklet.js.
-// push() accepts pre-rendered interleaved stereo Float32Array chunks.
-// Also exposes sendMidi(bytes) for future MIDI event delivery (17.2b+).
-function makeGmWorkletSink(node) {
-    let queued = 0;
-    let _lastChunk = null;
-    node.port.onmessage = e => {
-        queued = e.data.queued ?? queued;
-    };
+// ── GmMainSink ────────────────────────────────────────────────────────────────
+// Sentinel sink for the GM main-thread SpessaSynth path.
+// SpessaSynth manages its own AudioWorklet chain and output scheduling;
+// push() is never called.  pump() skips this sink entirely.
+// queued always returns 0 so the pump deficit check short-circuits cleanly.
+function makeGmMainSink() {
     return {
-        kind: 'gm-worklet',
-        get queued() { return queued; },
-        get _lastChunk() { return _lastChunk; },
-        push(chunk) {
-            queued += chunk.length / 2;
-            _lastChunk = chunk;
-            node.port.postMessage(chunk, [chunk.buffer]);
-        },
-        // Send raw MIDI bytes to the worklet for future SpessaSynth integration.
-        sendMidi(bytes) {
-            node.port.postMessage({ type: 'midi', bytes });
-        },
-        // Send init message with SpessaSynth and soundfont URLs (17.2b).
-        sendInit(spessaSynthUrl, soundfontUrl) {
-            node.port.postMessage({ type: 'init', spessaSynthUrl, soundfontUrl });
-        },
+        kind: 'gm-main',
+        get queued() { return 0; },
     };
 }
 
@@ -141,12 +126,31 @@ export function createAudio(doom) {
 
     // GM mode state (inactive by default; activated by setGmMode).
     let gmEnabled = false;
-    let gmSoundFontUrl = null;
-    // gmMidiBytes: the current MUS track converted to MIDI (set when a new song starts)
-    let gmMidiBytes = null;
-    // framesRenderedGm: count of stereo frames the GM pump has pushed this session
-    // (exposed for test assertions — analogous to OPL pump frame counter).
-    let gmFramesPushed = 0;
+    // gmSf2Bytes: Uint8Array from IDB; passed to SpessaSynth Synthetizer.
+    let gmSf2Bytes = null;
+    // gmSpessaSynthUrl: operator-hosted SpessaSynth URL (null = not configured).
+    // Always null in test/CI; real playback requires operator to host the lib.
+    let gmSpessaSynthUrl = null;
+    // gmSynth: SpessaSynth Synthetizer instance (null until loaded).
+    let gmSynth = null;
+    // gmMidiQueue: MIDI byte arrays queued before synth is ready to receive events.
+    let gmMidiQueue = [];
+    // gmPathBuilt: true when the relay GainNode has been connected to ctx.destination.
+    // Used by tests to assert the GM path was constructed (even when SpessaSynth absent).
+    let gmPathBuilt = false;
+
+    // ── gmDispatchMidi ────────────────────────────────────────────────────────
+    // Dispatch a raw MIDI byte array to SpessaSynth using the correct per-command
+    // Synthetizer API.  Shared by live routing and pre-init queue drain.
+    function gmDispatchMidi(bytes) {
+        if (!gmSynth) return;
+        const cmd = bytes[0] >> 4;
+        const ch  = bytes[0] & 0xf;
+        if      (cmd === 0x9) gmSynth.noteOn?.(ch, bytes[1], bytes[2] ?? 64);
+        else if (cmd === 0x8) gmSynth.noteOff?.(ch, bytes[1]);
+        else if (cmd === 0xb) gmSynth.controllerChange?.(ch, bytes[1], bytes[2]);
+        else if (cmd === 0xc) gmSynth.programChange?.(ch, bytes[1]);
+    }
 
     // Browsers gate audio behind a user gesture; arm on the first one.
     // Later gestures re-resume a context the browser suspended.
@@ -174,22 +178,70 @@ export function createAudio(doom) {
         const insecure = !ctx.audioWorklet;
 
         if (gmEnabled) {
-            // GM path: try to load the GM worklet.  Fall back to OPL on any error.
+            // GM path: SpessaSynth runs on the main thread and manages its own
+            // AudioWorklet chain internally.
+            // Synthetizer(targetNode, sf2ArrayBuffer) — SpessaSynth API (v3+).
+            // targetNode is a relay GainNode → ctx.destination; SpessaSynth
+            // connects its output chain to it.  Absence of any signal = silence.
             try {
-                // GM_WORKLET_URL is a variable (non-literal) — excluded from sw precache.
-                await ctx.audioWorklet.addModule(GM_WORKLET_URL);
-                const node = new AudioWorkletNode(ctx, 'gm-sink', {
-                    outputChannelCount: [2],
-                });
-                node.connect(ctx.destination);
-                sink = makeGmWorkletSink(node);
-                // Send init message for future SpessaSynth wiring (17.2b).
-                if (gmSoundFontUrl) sink.sendInit(null, gmSoundFontUrl);
-                setStatus('music: GM SoundFont mode');
+                const relayNode = ctx.createGain();
+                relayNode.connect(ctx.destination);
+                sink = makeGmMainSink();
+                gmPathBuilt = true;
+
+                if (gmSpessaSynthUrl && gmSf2Bytes?.byteLength > 0) {
+                    // Lazy-load SpessaSynth from operator server.
+                    // Always fails in test/CI (URL null or SpessaSynth not served).
+                    setStatus('music: GM SoundFont mode (loading…)');
+                    import(gmSpessaSynthUrl)
+                        .then(ss => {
+                            const SoundFont2  = ss.SoundFont2  ?? ss.default?.SoundFont2;
+                            const Synthetizer = ss.Synthetizer ?? ss.default?.Synthetizer;
+                            if (!SoundFont2 || !Synthetizer) {
+                                throw new Error(
+                                    'SpessaSynth module does not export SoundFont2/Synthetizer',
+                                );
+                            }
+                            // Transfer a copy so the main thread retains the original Uint8Array.
+                            const sf2Buf = gmSf2Bytes.buffer.slice(
+                                gmSf2Bytes.byteOffset,
+                                gmSf2Bytes.byteOffset + gmSf2Bytes.byteLength,
+                            );
+                            // Synthetizer(targetNode, sf2ArrayBuffer) — correct SpessaSynth API.
+                            // SpessaSynth creates its own internal AudioWorkletNode connected to
+                            // relayNode.  It is NOT instantiated inside a foreign worklet.
+                            gmSynth = new Synthetizer(relayNode, sf2Buf);
+                            // Drain MIDI events queued before synth was ready.
+                            for (const bytes of gmMidiQueue) gmDispatchMidi(bytes);
+                            gmMidiQueue = [];
+                            setStatus('music: GM SoundFont mode');
+                        })
+                        .catch(err => {
+                            // Loud skip: SpessaSynth absent or failed to fetch → silence.
+                            const reason = err?.message ?? String(err);
+                            console.warn(
+                                '[audio] SpessaSynth unavailable — silence.',
+                                'Reason:', reason,
+                            );
+                            setStatus(
+                                'music: GM SoundFont mode (SpessaSynth unavailable — silence)',
+                            );
+                        });
+                } else {
+                    // No URL or no sf2: SKIP loudly, relay stays silent.
+                    const reason = !gmSpessaSynthUrl
+                        ? 'no spessaSynthUrl configured'
+                        : 'no sf2 loaded';
+                    console.warn('[audio] SpessaSynth SKIP loudly:', reason);
+                    setStatus(
+                        'music: GM SoundFont mode (SpessaSynth unavailable — silence)',
+                    );
+                }
             } catch (err) {
-                console.warn('GM worklet unavailable, falling back to OPL:', err);
-                gmEnabled = false;   // treat as OPL for this session
-                // fall through to OPL path below
+                console.warn('[audio] GM path setup failed, falling back to OPL:', err);
+                gmEnabled = false;
+                gmPathBuilt = false;
+                sink = null;  // fall through to OPL path below
             }
         }
 
@@ -243,37 +295,22 @@ export function createAudio(doom) {
     };
     document.addEventListener('visibilitychange', onVisible);
 
-    // ── GM pump: renders audio frames via GM path ─────────────────────────────
-    // When GM mode is active, pump() routes here instead of OPL render.
-    // SpessaSynth rendering is a future 17.2b concern; for now we produce
-    // silence (zero frames) but the pump-chain wiring is exercised so frame
-    // flow tests pass.  The gmFramesPushed counter increments regardless.
-    function gmPumpFrames(frames) {
-        if (!sink || sink.kind !== 'gm-worklet') return;
-        // Silence buffer: 2 ch interleaved, `frames` stereo frames.
-        // SpessaSynth will replace this with rendered audio in 17.2b.
-        const chunk = new Float32Array(frames * 2);
-        sink.push(chunk);
-        gmFramesPushed += frames;
-    }
-
     function pump() {
         if (!sink) return;
+        // GM main-thread path: SpessaSynth self-schedules (or silence via undriven
+        // relay node).  Nothing for the pump to push.
+        if (sink.kind === 'gm-main') return;
+
         const deficit = Math.floor(TARGET_BACKLOG * ctx.sampleRate) - sink.queued;
         const frames = Math.min(16384, Math.max(0, deficit));
         if (!frames) return;
 
-        if (sink.kind === 'gm-worklet') {
-            // GM path: generate frames via GM pump (SpessaSynth in 17.2b)
-            gmPumpFrames(frames);
-        } else {
-            // OPL path (default)
-            doom._web_music_render(musicScratch, frames);
-            const view = doom.HEAPF32 ??
-                new Float32Array(doom.HEAPU8.buffer);
-            const chunk = view.slice(musicScratch / 4, musicScratch / 4 + frames * 2);
-            sink.push(chunk);
-        }
+        // OPL path (default)
+        doom._web_music_render(musicScratch, frames);
+        const view = doom.HEAPF32 ??
+            new Float32Array(doom.HEAPU8.buffer);
+        const chunk = view.slice(musicScratch / 4, musicScratch / 4 + frames * 2);
+        sink.push(chunk);
     }
 
     function decode(id, ptr, len) {
@@ -326,24 +363,38 @@ export function createAudio(doom) {
 
     return {
         armed: () => !!ctx,
-        // Returns the active sink kind: 'worklet' | 'buffer' | 'gm-worklet' | null.
-        // Used by tests to verify fallback path activation.
+        // Returns the active sink kind: 'worklet' | 'buffer' | 'gm-main' | null.
+        // Used by tests to verify fallback path activation and GM path construction.
         sinkKind: () => sink?.kind ?? null,
         // Returns the most recently pushed audio chunk (Float32Array).
-        // Used by tests to verify the pump produced non-zero frames.
+        // Used by tests to verify the OPL pump produced non-zero frames.
+        // Returns null for gm-main (SpessaSynth self-schedules; no push-wire).
         lastChunk: () => sink?._lastChunk ?? null,
-        // Returns the total stereo frames pushed via the GM pump path.
-        // Used by gm-frames-test.mjs to verify GM frame flow.
-        gmFramesPushed: () => gmFramesPushed,
+        // Returns true when the GM relay GainNode was connected to ctx.destination.
+        // True even when SpessaSynth is absent (SKIP loudly path).
+        // Used by tests instead of gmFramesPushed (push-wire metric is N/A for gm-main).
+        gmPathBuilt: () => gmPathBuilt,
 
         // Enable/disable the GM SoundFont backend.
         // Must be called BEFORE the first user gesture (before arm() runs) for
-        // the worklet selection to take effect.
-        // soundfontUrl: URL to the GeneralUser GS .sf2 file (operator-hosted).
-        // Called by settings UI in task 17.2b.
-        setGmMode(enabled, soundfontUrl = null) {
+        // the sink selection to take effect.  If called after arm(), the
+        // setting is saved for the next game session.
+        // sf2Bytes: Uint8Array from IDB (task 17.2b); null = no soundfont loaded.
+        // spessaSynthUrl: operator-hosted SpessaSynth URL; null = not configured.
+        setGmMode(enabled, sf2Bytes = null, spessaSynthUrl = null) {
             gmEnabled = !!enabled;
-            gmSoundFontUrl = soundfontUrl ?? null;
+            gmSf2Bytes = (sf2Bytes instanceof Uint8Array) ? sf2Bytes : null;
+            if (spessaSynthUrl) gmSpessaSynthUrl = String(spessaSynthUrl);
+        },
+
+        // Route raw MIDI bytes to SpessaSynth (live or queued pre-init).
+        // cmd dispatch is shared with gmDispatchMidi for consistency.
+        sendMidi(bytes) {
+            if (gmSynth) {
+                gmDispatchMidi(bytes);
+            } else if (gmEnabled) {
+                gmMidiQueue.push(bytes instanceof Uint8Array ? bytes.slice() : Uint8Array.from(bytes));
+            }
         },
 
         // Expose mus2mid for engine integration (future: MUS data from WAD).

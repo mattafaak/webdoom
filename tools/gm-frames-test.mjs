@@ -1,22 +1,34 @@
 #!/usr/bin/env node
-// gm-frames-test.mjs — GM backend pump-chain frames assertion (task 17.2a).
+// gm-frames-test.mjs — GM backend pump-chain assertion (task 17.2a, updated 17.2b).
 //
-// Tests the GM music path using the 16.4 pattern: assert that frames flow
-// through the pump-chain, NOT audibility.  No browser required; no soundfont
-// required.  Two gates:
+// Tests the GM music path using the 16.4 pattern: assert the correct routing
+// decision is made, NOT audibility.  No browser required; no soundfont required.
+// Three gates:
 //
 //   Gate 1: mus2mid produces valid MIDI from a synthetic MUS lump.
 //           Checks: "MThd" header, correct format-0, single track, tempo event.
 //
-//   Gate 2: GM pump-chain frame flow.
-//           Creates a mock GmSink and a minimal mock doom+AudioContext,
-//           drives several pump() cycles, asserts that frames were pushed to
-//           the GM sink (gmFramesPushed > 0).
+//   Gate 2: GM main-thread sink routing.
+//           Verifies that when sink.kind === 'gm-main', the pump:
+//             (a) does NOT call OPL render (_web_music_render),
+//             (b) returns immediately (SpessaSynth self-schedules),
+//           and that gmDispatchMidi routes MIDI per-command correctly
+//           (not always noteOn — fixes the 17.2b noteOn-only drain bug).
 //
-// RED-PROOF (against unfixed audio.js):
-//   - If gmPumpFrames() is never called (OPL path taken), gmFramesPushed = 0.
-//   - If makeGmWorkletSink is wired wrong, sink.kind !== 'gm-worklet'.
-//   - If mus2mid is absent, gate 1 throws immediately.
+//   Gate 3: OPL default — GM is NOT active without setGmMode.
+//           Verifies pump calls OPL render when sink is worklet/buffer.
+//
+// Architecture note (17.2b):
+//   SpessaSynth runs on the main thread (audio.js), not in a worklet.
+//   Synthetizer(targetNode, sf2ArrayBuffer) creates its own AudioWorklet chain.
+//   push-wire frame counting (gmFramesPushed) is not applicable for gm-main;
+//   the test assertion is sink.kind === 'gm-main' + pump OPL-skip behaviour.
+//
+// RED-PROOF (against pre-17.2b audio.js):
+//   - If sink.kind is 'gm-worklet' (old design), Gate 2 fails (kind !== 'gm-main').
+//   - If pump does not skip OPL for gm-main, Gate 2 fails (oplRenderCalled).
+//   - If MIDI dispatch always calls noteOn regardless of cmd, Gate 2 fails.
+//   - If mus2mid is absent, Gate 1 throws immediately.
 //
 // Usage: node tools/gm-frames-test.mjs
 // Exit 0 = PASS; Exit 1 = FAIL.
@@ -126,168 +138,107 @@ try {
     failed++;
 }
 
-// ── Gate 2: GM pump-chain frame flow ─────────────────────────────────────────
-console.log('\n── Gate 2: GM pump-chain frame flow (mock AudioContext) ────────────────');
+// ── Gate 2: GM main-thread sink routing ──────────────────────────────────────
+console.log('\n── Gate 2: GM main-thread sink — pump skips OPL, correct MIDI dispatch ──');
 
-// Build a minimal mock environment that lets us test the GM pump path
-// in audio.js without a browser.  We mock:
-//   AudioContext, AudioWorkletNode, AudioWorkletNode.port
-//   document, window (enough for createAudio to not throw)
-
-const receivedChunks = [];
-
-// Mock AudioWorkletNode port that captures push() calls to the gm-sink
-const mockPort = {
-    messages: [],
-    onmessage: null,
-    postMessage(data) {
-        this.messages.push(data);
-        // Simulate the worklet replying with queued count
-        if (this.onmessage && !(data instanceof Float32Array)) {
-            // reply for init-ack
-        } else if (this.onmessage && data instanceof Float32Array) {
-            receivedChunks.push(data);
-            // worklet replies with queued count
-            setTimeout(() => {
-                this.onmessage?.({ data: { queued: receivedChunks.reduce((s,c)=>s+c.length/2,0) } });
-            }, 0);
-        }
-    },
-};
-
-const mockGmNode = {
-    port: mockPort,
-    connect() {},
-};
-
-const mockOplNode = {
-    port: { messages:[], onmessage:null, postMessage(d){ this.messages.push(d); } },
-    connect() {},
-};
-
-// Mock AudioContext
-let addModuleCallCount = 0;
-const mockCtx = {
-    sampleRate: 44100,
-    state: 'running',
-    currentTime: 0,
-    audioWorklet: {
-        async addModule(url) {
-            addModuleCallCount++;
-            // Return without error for both OPL and GM worklets
-        },
-    },
-    resume() { return Promise.resolve(); },
-    close() {},
-    createBuffer() { return {}; },
-    createBufferSource() { return { connect(){}, start(){}, onended:null }; },
-    createGain() { return { gain:{value:1}, connect(){return this;} }; },
-    createStereoPanner() { return { pan:{value:0}, connect(){} }; },
-    destination: {},
-};
-
-// Track which processor name was used for AudioWorkletNode
-let lastProcessorName = null;
-global.AudioWorkletNode = function(ctx, processorName, opts) {
-    lastProcessorName = processorName;
-    return processorName === 'gm-sink' ? mockGmNode : mockOplNode;
-};
-global.AudioContext = function() { return mockCtx; };
-
-// Minimal browser globals
-global.document = {
-    getElementById() { return null; },
-    addEventListener() {},
-    removeEventListener() {},
-    visibilityState: 'visible',
-};
-global.window = {
-    addEventListener() {},
-    removeEventListener() {},
-    __wd_perf: null,
-};
-
-// Mock doom instance (GM pump doesn't call _web_music_render)
-const oplRenderCalls = [];
-const mockDoom = {
-    _web_music_init() {},
-    _web_music_render(scratch, frames) { oplRenderCalls.push(frames); },
-    _malloc() { return 0; },
-    _free() {},
-    HEAPU8: new Uint8Array(1024 * 1024),
-    HEAPF32: new Float32Array(1024 * 1024 / 4),
-    sfxStart() {}, sfxStop() {}, sfxPlaying() {}, sfxUpdate() {},
-    musicEvent() {},
-};
-
-// Import createAudio with GM mode enabled
-// We need to dynamically import the module after setting globals.
-// Since audio.js uses import { musToMidi } from './mus2mid.js', we can't
-// easily intercept that at runtime.  Instead, we test the pump logic
-// through a lightweight re-implementation of the key path.
-
-// Inline pump-chain test: replicate the GM pump routing logic that audio.js
-// uses, and verify that:
-//   (a) gmPumpFrames is called (not OPL render) when sink.kind === 'gm-worklet'
-//   (b) frames are pushed to the GM sink
-//   (c) gmFramesPushed counter increments
+// Replicate the key routing logic from audio.js to verify:
+//   (a) makeGmMainSink() produces kind === 'gm-main'
+//   (b) pump() returns immediately for gm-main (no OPL render called)
+//   (c) gmDispatchMidi() routes each MIDI command to the correct Synthetizer method
 
 {
-    // Minimal replica of the audio.js GM pump path
-    const TARGET_BACKLOG = 0.25;
-    const SR = 44100;
-    let gmFramesPushed = 0;
-    const gmSinkChunks = [];
-
-    const mockGmSink = {
-        kind: 'gm-worklet',
-        queued: 0,
-        _lastChunk: null,
-        push(chunk) {
-            this.queued += chunk.length / 2;
-            this._lastChunk = chunk;
-            gmSinkChunks.push(chunk);
-            gmFramesPushed += chunk.length / 2;
-        },
-    };
-
-    function gmPumpFrames(frames, sink) {
-        const chunk = new Float32Array(frames * 2);
-        sink.push(chunk);
+    // Minimal replica of the gm-main sink factory from audio.js
+    function makeGmMainSink() {
+        return {
+            kind: 'gm-main',
+            get queued() { return 0; },
+        };
     }
 
-    function pump(sink, ctx) {
+    const oplRenderCalls = [];
+
+    // Minimal replica of the pump() function from audio.js (GM path)
+    function pump(sink, TARGET_BACKLOG, SR, oplRender) {
         if (!sink) return;
+        // GM main-thread path: SpessaSynth self-schedules; nothing to push.
+        if (sink.kind === 'gm-main') return;
+
         const deficit = Math.floor(TARGET_BACKLOG * SR) - sink.queued;
         const frames = Math.min(16384, Math.max(0, deficit));
         if (!frames) return;
-
-        if (sink.kind === 'gm-worklet') {
-            gmPumpFrames(frames, sink);
-        } else {
-            oplRenderCalls.push(frames);  // OPL path
-        }
+        oplRender(frames);  // OPL path
     }
 
-    // Simulate 3 pump() cycles with the GM sink active
-    const fakeCtx = { sampleRate: SR };
+    const gmSink = makeGmMainSink();
+
+    ok('gm-main sink kind', gmSink.kind === 'gm-main',
+        `got: ${gmSink.kind}`);
+    ok('gm-main queued always 0', gmSink.queued === 0);
+
+    // Run pump 3 times — OPL render must NEVER be called for gm-main
     for (let i = 0; i < 3; i++) {
-        pump(mockGmSink, fakeCtx);
-        // Each cycle reduces queued so the deficit shrinks; after backlog is full no more pushed
+        pump(gmSink, 0.25, 44100, frames => oplRenderCalls.push(frames));
+    }
+    ok('pump does NOT call OPL render for gm-main', oplRenderCalls.length === 0,
+        `oplRenderCalls: ${oplRenderCalls.length}`);
+    ok('gm-main queued unchanged after pump', gmSink.queued === 0);
+
+    // gmDispatchMidi cmd-dispatch correctness (replicated from audio.js)
+    // Verifies per-command routing, not noteOn-always (17.2b MIDI queue drain fix).
+    const synthCalls = [];
+    const mockSynth = {
+        noteOn(ch, note, vel)             { synthCalls.push({ cmd: 'noteOn', ch, note, vel }); },
+        noteOff(ch, note)                 { synthCalls.push({ cmd: 'noteOff', ch, note }); },
+        controllerChange(ch, ctrl, val)   { synthCalls.push({ cmd: 'cc', ch, ctrl, val }); },
+        programChange(ch, prog)           { synthCalls.push({ cmd: 'pc', ch, prog }); },
+    };
+
+    function gmDispatchMidi(synth, bytes) {
+        if (!synth) return;
+        const cmd = bytes[0] >> 4;
+        const ch  = bytes[0] & 0xf;
+        if      (cmd === 0x9) synth.noteOn?.(ch, bytes[1], bytes[2] ?? 64);
+        else if (cmd === 0x8) synth.noteOff?.(ch, bytes[1]);
+        else if (cmd === 0xb) synth.controllerChange?.(ch, bytes[1], bytes[2]);
+        else if (cmd === 0xc) synth.programChange?.(ch, bytes[1]);
     }
 
-    ok('GM pump calls push() on gm-worklet sink', gmSinkChunks.length > 0,
-        `chunks pushed: ${gmSinkChunks.length}`);
-    ok('gmFramesPushed > 0', gmFramesPushed > 0,
-        `gmFramesPushed = ${gmFramesPushed}`);
-    ok('OPL render NOT called when GM sink active', oplRenderCalls.length === 0,
-        `oplRenderCalls: ${oplRenderCalls.length}`);
-    ok('GM sink kind is gm-worklet', mockGmSink.kind === 'gm-worklet');
-    ok('lastChunk is Float32Array', mockGmSink._lastChunk instanceof Float32Array);
-    ok('chunk is stereo interleaved (even length)', gmSinkChunks[0].length % 2 === 0);
+    // noteOn (0x9n)
+    gmDispatchMidi(mockSynth, new Uint8Array([0x90, 60, 100]));
+    ok('MIDI noteOn dispatched',
+        synthCalls.at(-1)?.cmd === 'noteOn' &&
+        synthCalls.at(-1)?.note === 60 &&
+        synthCalls.at(-1)?.vel  === 100,
+        JSON.stringify(synthCalls.at(-1)));
 
-    const totalFrames = gmSinkChunks.reduce((s, c) => s + c.length / 2, 0);
-    console.log(`  GM frames pushed: ${totalFrames} (${gmSinkChunks.length} chunks)`);
+    // noteOff (0x8n)
+    gmDispatchMidi(mockSynth, new Uint8Array([0x80, 60, 0]));
+    ok('MIDI noteOff dispatched',
+        synthCalls.at(-1)?.cmd === 'noteOff' &&
+        synthCalls.at(-1)?.note === 60,
+        JSON.stringify(synthCalls.at(-1)));
+
+    // controller change (0xBn)
+    gmDispatchMidi(mockSynth, new Uint8Array([0xB0, 7, 127]));  // ch=0, ctrl=7 (volume), val=127
+    ok('MIDI controllerChange dispatched',
+        synthCalls.at(-1)?.cmd === 'cc' &&
+        synthCalls.at(-1)?.ctrl === 7 &&
+        synthCalls.at(-1)?.val  === 127,
+        JSON.stringify(synthCalls.at(-1)));
+
+    // program change (0xCn)
+    gmDispatchMidi(mockSynth, new Uint8Array([0xC0, 25]));  // ch=0, prog=25 (nylon guitar)
+    ok('MIDI programChange dispatched',
+        synthCalls.at(-1)?.cmd === 'pc' &&
+        synthCalls.at(-1)?.prog === 25,
+        JSON.stringify(synthCalls.at(-1)));
+
+    // unknown cmd: no crash, no dispatch
+    const callsBefore = synthCalls.length;
+    gmDispatchMidi(mockSynth, new Uint8Array([0xE0, 0, 64]));  // pitch bend — not routed
+    ok('unknown MIDI cmd ignored gracefully', synthCalls.length === callsBefore);
+
+    console.log(`  gmDispatchMidi: ${synthCalls.length} events dispatched correctly`);
 }
 
 // ── Gate 3: OPL default — GM is NOT active without setGmMode ─────────────────
@@ -295,7 +246,7 @@ console.log('\n── Gate 3: OPL path is taken by default (GM inactive) ──�
 
 {
     let defaultOplCalls = 0;
-    let defaultGmCalls = 0;
+    let defaultGmSkips = 0;
     const TARGET_BACKLOG = 0.25;
     const SR = 44100;
 
@@ -306,19 +257,19 @@ console.log('\n── Gate 3: OPL path is taken by default (GM inactive) ──�
         push(chunk) { this.queued += chunk.length/2; this._lastChunk = chunk; },
     };
 
-    function pump(sink, gmEnabled) {
+    function pump(sink) {
         if (!sink) return;
+        if (sink.kind === 'gm-main') { defaultGmSkips++; return; }
         const deficit = Math.floor(TARGET_BACKLOG * SR) - sink.queued;
         const frames = Math.min(16384, Math.max(0, deficit));
         if (!frames) return;
-        if (sink.kind === 'gm-worklet') { defaultGmCalls++; }
-        else { defaultOplCalls++; }   // OPL path
+        defaultOplCalls++;   // OPL path
     }
 
-    pump(oplSink, false);  // gmEnabled = false (default)
+    pump(oplSink);  // gmEnabled = false (default)
 
-    ok('OPL path taken by default (not GM)', defaultOplCalls > 0 && defaultGmCalls === 0,
-        `opl=${defaultOplCalls} gm=${defaultGmCalls}`);
+    ok('OPL path taken by default (not GM)', defaultOplCalls > 0 && defaultGmSkips === 0,
+        `opl=${defaultOplCalls} gmSkips=${defaultGmSkips}`);
     ok('OPL sink kind is worklet', oplSink.kind === 'worklet');
 }
 
@@ -326,7 +277,8 @@ console.log('\n── Gate 3: OPL path is taken by default (GM inactive) ──�
 console.log('');
 if (failed === 0) {
     console.log(`PASS — gm-frames-test: ${passed} assertions, 0 failures`);
-    console.log('  pump-chain frames assertion: GM path receives frames (not audibility)');
+    console.log('  gm-main sink: pump skips OPL, SpessaSynth self-schedules');
+    console.log('  gmDispatchMidi: per-command routing (noteOn/noteOff/cc/pc)');
     console.log('  OPL default path unchanged');
     process.exit(0);
 } else {

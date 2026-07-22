@@ -47,18 +47,24 @@ export const defaultSettings = () => ({
     mouseY: 'off',         // 'off' | 'look' (freelook) | 'move' (1993)
     alwaysRun: false,
     smooth: true,          // uncapped-fps render interpolation
-    opl3: false,           // task 17.1: false=OPL2 mono (default), true=OPL3 stereo
+    opl3: false,           // task 17.1 legacy: false=OPL2 mono, true=OPL3 stereo
+                           // superseded by musicBackend in task 17.2b; kept for compat
+    musicBackend: 'opl2',  // task 17.2b: 'opl2' | 'opl3' | 'gm'
     padDeadzone: 0.15,
     padTurnSpeed: 1.0,
 });
 
 export function loadSettings() {
     try {
-        const s = { ...defaultSettings(), ...JSON.parse(localStorage.getItem('webdoom.input') ?? '{}') };
+        const stored = JSON.parse(localStorage.getItem('webdoom.input') ?? '{}');
+        const s = { ...defaultSettings(), ...stored };
         // Pre-freelook migration: honor a legacy stored preference, then strip
         // the key (settings.js now reads/writes mouseY directly — ws-010).
         if (s.mouseMove === true && !s.mouseY) s.mouseY = 'move';
         delete s.mouseMove;
+        // task 17.2b migration: if stored settings have opl3:true but no musicBackend,
+        // promote to musicBackend:'opl3' so the 3-way picker reflects the saved state.
+        if (s.opl3 === true && !stored.musicBackend) s.musicBackend = 'opl3';
         return s;
     } catch { return defaultSettings(); }
 }

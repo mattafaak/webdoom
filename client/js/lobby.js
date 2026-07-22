@@ -12,6 +12,7 @@ import { createCountdown } from './countdown.js';
 import { createFire } from './fire.js';
 import { identifyWad, WadError } from './wad-import.js';
 import { libraryAdd, libraryList } from './wad-library.js';
+import { validateSf2, Sf2Error, sf2StoreCurrent } from './sf2-library.js';
 
 const $ = id => document.getElementById(id);
 const status = msg => { $('status').textContent = msg; };
@@ -112,6 +113,31 @@ async function handleWadImport(file) {
         const msg = err instanceof WadError
             ? `Rejected: ${err.message}`
             : `Import error: ${err.message ?? String(err)}`;
+        status(msg);
+    }
+}
+
+// Handle a .sf2 SoundFont file import from either drag-drop or file picker.
+// Validates the RIFF/sfbk magic, stores bytes in IDB via sf2-library.js, and
+// passes bytes to the active GM audio sink (if GM mode is already armed).
+async function handleSf2Import(file) {
+    try {
+        status('Reading SoundFont…');
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        validateSf2(bytes);   // throws Sf2Error on bad RIFF/sfbk magic or bounds
+
+        const name = file.name.replace(/^.*[/\\]/, '');  // basename only
+        await sf2StoreCurrent(name, bytes);
+
+        // If GM mode is already active (game running), pass bytes to the audio sink.
+        // setGmMode accepts the new bytes live; takes effect on next arm() or reload.
+        window.doomAudio?.setGmMode?.(true, bytes);
+
+        status(`SoundFont loaded: ${name}`);
+    } catch (err) {
+        const msg = err instanceof Sf2Error
+            ? `SF2 rejected: ${err.message}`
+            : `SF2 error: ${err.message ?? String(err)}`;
         status(msg);
     }
 }
@@ -513,20 +539,24 @@ function leaveLobby() {
         return;
     }
 
-    // --- WAD import: file picker (for keyboard/test access) + drag-drop ------
-    // Hidden file input — triggered by "IMPORT WAD" menu item or programmatically.
+    // --- WAD / SF2 import: file picker (for keyboard/test access) + drag-drop --
+    // Hidden file input — triggered by "IMPORT WAD / SF2" menu item or programmatically.
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
-    fileInput.accept = '.wad';
+    fileInput.accept = '.wad,.sf2';
     fileInput.id = 'wad-file-input';
     fileInput.style.cssText = 'position:absolute;left:-9999px;top:-9999px;';
     document.body.appendChild(fileInput);
     fileInput.addEventListener('change', e => {
         const f = e.target.files[0];
-        if (f) { fileInput.value = ''; handleWadImport(f); }
+        if (!f) return;
+        fileInput.value = '';
+        if (f.name.toLowerCase().endsWith('.sf2')) handleSf2Import(f);
+        else handleWadImport(f);
     });
 
     // Drag-and-drop on #landing (the full landing menu area).
+    // Routes .sf2 files to handleSf2Import; everything else to handleWadImport.
     const landing = $('landing');
     landing.addEventListener('dragover', e => {
         e.preventDefault();
@@ -540,12 +570,16 @@ function leaveLobby() {
         e.preventDefault();
         landing.classList.remove('drop-hover');
         const f = e.dataTransfer.files[0];
-        if (f) handleWadImport(f);
+        if (!f) return;
+        if (f.name.toLowerCase().endsWith('.sf2')) handleSf2Import(f);
+        else handleWadImport(f);
     });
 
     // Expose for test injection and external tooling.
     window.__handleWadImport = handleWadImport;
+    window.__handleSf2Import = handleSf2Import;
     window.__wadImport = { identifyWad, WadError };
+    window.__sf2Library = { validateSf2, Sf2Error };
 
     // Test hooks (browser test use only):
     //   __testInjectManifest(entry) — push a fake manifest entry (bypasses IDB)

@@ -1,6 +1,15 @@
-// Settings overlay: key rebinding, mouse/gamepad tuning. Toggled with
-// F8 (or the gear button); state persists via input.js's localStorage.
+// Settings overlay: key rebinding, mouse/gamepad tuning, music backend.
+// Toggled with F8 (or the gear button); state persists via input.js's localStorage.
+//
+// Music backend picker (task 17.2b):
+//   OPL2 — default, works offline; mono synthesis.
+//   OPL3 — stereo 18-voice synthesis (task 17.1).
+//   GM   — GM SoundFont via SpessaSynth + a user-dropped .sf2 file.
+//          Requires an .sf2 in IDB and SpessaSynth configured on the operator
+//          server.  Without both, GM mode produces silence (frames still flow;
+//          loud status notice is shown).
 import { ACTIONS, saveSettings, defaultSettings } from './input.js';
+import { sf2GetCurrentMeta } from './sf2-library.js';
 
 export function createSettingsUI(input, doom) {
     const s = input.settings;
@@ -9,6 +18,15 @@ export function createSettingsUI(input, doom) {
     panel.hidden = true;
     document.getElementById('stage').appendChild(panel);
 
+    // Escape HTML special characters before injecting into innerHTML.
+    // Applied to every user-derived or localStorage-derived value in the template.
+    const esc = v => String(v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
     const keyName = code => String(code)
         .replace(/[^a-zA-Z0-9]/g, '')   // codes are alphanumeric; localStorage isn't trusted
         .replace(/^Key|^Digit/, '')
@@ -16,24 +34,54 @@ export function createSettingsUI(input, doom) {
         .replace(/(Left|Right)$/, ' $1');
 
     function render() {
+        // Determine current backend; fall back gracefully from legacy opl3 bool.
+        const backend = s.musicBackend ?? (s.opl3 ? 'opl3' : 'opl2');
         panel.innerHTML = `
         <h2>webdoom settings</h2>
         <table>
           ${ACTIONS.map(a => `
-            <tr><td>${a.label}</td>
-                <td><button class="bind" data-id="${a.id}">${keyName(s.binds[a.id])}</button></td></tr>
+            <tr><td>${esc(a.label)}</td>
+                <td><button class="bind" data-id="${esc(a.id)}">${esc(keyName(s.binds[a.id]))}</button></td></tr>
           `).join('')}
         </table>
-        <label>Mouse sensitivity <input type="range" id="sens" min="1" max="12" step="1" value="${s.mouseSens}"></label>
+        <label>Mouse sensitivity <input type="range" id="sens" min="1" max="12" step="1" value="${esc(s.mouseSens)}"></label>
         <label><input type="checkbox" id="mmove" ${s.mouseY === 'move' ? 'checked' : ''}> Mouse Y moves player (1993 style)</label>
         <label><input type="checkbox" id="arun" ${s.alwaysRun ? 'checked' : ''}> Always run</label>
         <label><input type="checkbox" id="smooth" ${s.smooth ? 'checked' : ''}> Smooth rendering (uncapped fps)</label>
-        <label><input type="checkbox" id="opl3" ${s.opl3 ? 'checked' : ''}> OPL3 stereo music (18-voice; OPL2 mono is default)</label>
-        <label>Gamepad turn speed <input type="range" id="pturn" min="0.4" max="2" step="0.1" value="${s.padTurnSpeed}"></label>
+        <label>Music backend
+          <select id="musicBackend">
+            <option value="opl2"${backend === 'opl2' ? ' selected' : ''}>OPL2 (mono, default, offline-safe)</option>
+            <option value="opl3"${backend === 'opl3' ? ' selected' : ''}>OPL3 stereo (18-voice)</option>
+            <option value="gm"${backend === 'gm' ? ' selected' : ''}>GM SoundFont (.sf2)</option>
+          </select>
+        </label>
+        <div id="sf2-status" style="font-size:0.85em;margin:4px 0 8px 0;color:#aaa"></div>
+        <label>Gamepad turn speed <input type="range" id="pturn" min="0.4" max="2" step="0.1" value="${esc(s.padTurnSpeed)}"></label>
         <div class="row">
           <button id="reset">Reset defaults</button>
           <button id="close">Close (F8)</button>
         </div>`;
+
+        // Show GM-specific status / sf2 info when GM is the current selection.
+        if (backend === 'gm') {
+            const sf2El = panel.querySelector('#sf2-status');
+            sf2GetCurrentMeta().then(meta => {
+                if (!sf2El || sf2El.parentElement !== panel) return; // stale
+                if (meta) {
+                    sf2El.textContent =
+                        `SF2 loaded: ${meta.name} (${(meta.size / 1024 / 1024).toFixed(1)} MB)`;
+                    sf2El.style.color = '#8f8';
+                } else {
+                    // 16.4-style loud degradation notice
+                    sf2El.textContent =
+                        'GM: no soundfont loaded — drag an .sf2 file onto the screen (silence until loaded)';
+                    sf2El.style.color = '#fa8';
+                }
+            }).catch(() => {
+                if (!sf2El || sf2El.parentElement !== panel) return;
+                sf2El.textContent = 'GM: soundfont status unknown';
+            });
+        }
 
         panel.querySelectorAll('.bind').forEach(btn => {
             btn.onclick = () => {
@@ -49,10 +97,24 @@ export function createSettingsUI(input, doom) {
             saveSettings(s);
             doom?._web_set_smooth(s.smooth ? 1 : 0);
         };
-        panel.querySelector('#opl3').onchange = e => {
-            s.opl3 = e.target.checked;
+        panel.querySelector('#musicBackend').onchange = e => {
+            s.musicBackend = e.target.value;
+            // Keep legacy opl3 bool in sync for backward compatibility.
+            s.opl3 = (s.musicBackend === 'opl3');
             saveSettings(s);
-            doom?._web_set_opl_mode(s.opl3 ? 1 : 0);
+            if (s.musicBackend === 'gm') {
+                // GM: sink cannot be changed live after arm() — save for next session.
+                // window.doomAudio.setGmMode marks intent; takes effect on next boot.
+                window.doomAudio?.setGmMode?.(true, null);
+                document.getElementById('status').textContent =
+                    'music: GM mode saved — takes effect on next game session';
+            } else {
+                // OPL2/OPL3 can be changed live via _web_set_opl_mode.
+                doom?._web_set_opl_mode(s.opl3 ? 1 : 0);
+                window.doomAudio?.setGmMode?.(false, null);
+            }
+            // Re-render to show updated sf2-status panel.
+            render();
         };
         panel.querySelector('#pturn').oninput = e => { s.padTurnSpeed = +e.target.value; saveSettings(s); };
         panel.querySelector('#reset').onclick = () => {

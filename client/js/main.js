@@ -3,6 +3,7 @@
 import { createRenderer } from './video.js';
 import { createInput, loadSettings } from './input.js';
 import { createAudio } from './audio.js';
+import { sf2GetCurrentBytes } from './sf2-library.js';
 import { createSettingsUI } from './settings.js';
 import { attachRelay } from './net.js';
 import { loadPersisted, startSync } from './persist.js';
@@ -225,7 +226,19 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
     const input = createInput(doom, canvas, loadSettings());
     createSettingsUI(input, doom);
     doom._web_set_smooth(input.settings.smooth ? 1 : 0);
-    doom._web_set_opl_mode(input.settings.opl3 ? 1 : 0); // task 17.1: apply persisted OPL mode
+
+    // Apply persisted music backend (task 17.1: OPL2/OPL3; task 17.2b: GM).
+    // musicBackend supersedes the legacy opl3 bool; fall back gracefully.
+    const _musicBackend = input.settings.musicBackend
+        ?? (input.settings.opl3 ? 'opl3' : 'opl2');
+    doom._web_set_opl_mode(_musicBackend === 'opl3' ? 1 : 0);
+    if (_musicBackend === 'gm') {
+        // Load sf2 bytes from IDB (best-effort; GM frames flow even without sf2).
+        // arm() fires on first user gesture — IDB reads complete well before that.
+        sf2GetCurrentBytes()
+            .then(bytes => { window.doomAudio?.setGmMode(true, bytes ?? null); })
+            .catch(() => { window.doomAudio?.setGmMode(true, null); });
+    }
 
     // Quit Game → Y calls I_Quit → this hook: stop the loop, tear down,
     // and let the front end return to the main menu (a fresh wasm boots
