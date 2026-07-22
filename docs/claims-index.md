@@ -85,7 +85,7 @@ and inline `*(not machine-verified)*` markers for the 16 unverifiable claims.
 | rdr-001 | renderer.md:267 | MAXSEGS (solidsegs) in vanilla DOOM | 32 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | rdr-002 | renderer.md:267 | MAXSEGS (solidsegs) in webdoom | 64 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | rdr-003 | renderer.md:416 | MAXOPENINGS in vanilla (SCREENWIDTH × 64) | 20,480 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
-| rdr-004 | renderer.md:405 | MAXOPENINGS in webdoom (SCREENWIDTH × 256) | 81,920 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
+| rdr-004 | renderer.md:405 | MAXOPENINGS in webdoom (MAXSCREENWIDTH × 64, cap 854 since 18.2c) | 54,656 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | rdr-005 | renderer.md:549 | MAXVISPLANES in vanilla DOOM | 128 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | rdr-006 | renderer.md:554 | MAXVISPLANES in webdoom | 1,024 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | rdr-007 | renderer.md:1003 | MAXDRAWSEGS in vanilla DOOM | 256 | invariant | tools/archaeology/source-constant-verify.mjs | verified |

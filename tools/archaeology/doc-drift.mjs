@@ -310,9 +310,9 @@ const DOC_HINTS = {
                  transform: v => String(320 * parseInt(v, 10)) },
 
     'rdr-004': { doc_file: 'renderer.md',
-                 needle: 'SCREENWIDTH*256',
-                 extract_re: /SCREENWIDTH\*(\d+)/,
-                 transform: v => String(320 * parseInt(v, 10)) },
+                 needle: 'MAXSCREENWIDTH*64',
+                 extract_re: /MAXSCREENWIDTH\*(\d+) = \d+/,
+                 transform: v => String(854 * parseInt(v, 10)) },
 
     'rdr-005': { doc_file: 'renderer.md',
                  // Table: "| MAXVISPLANES | 128 | 1024 | ..."

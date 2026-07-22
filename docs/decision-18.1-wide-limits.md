@@ -234,7 +234,7 @@ Four deferred items from the 18.2a review — owners are the 18.2b/c workers:
 1. **am_map.c:222** `finit_width = MAXSCREENWIDTH` is a bucket misclassification
    (display width, should be runtime `screenwidth`). Equal at 320; wrong once
    width changes. Fix in 18.2b when the automap is exercised at non-320 width.
-2. **r_main.c:649,742,743,785** `pspritescale`/`pspriteiscale` and the
+2. **r_main.c:762,763 (pspritescale/pspriteiscale; scalelight sites nearby)** `pspritescale`/`pspriteiscale` and the
    scalelight tables use MAXSCREENWIDTH as the 320 design-reference constant.
    These are exactly the sites 18.2b's Crispy Hor+ (`centerxfrac_nonwide`)
    scheme must update.

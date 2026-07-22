@@ -35,7 +35,7 @@ verified by `node tools/archaeology/source-constant-verify.mjs`.
 
 ## 1. Frame pipeline overview
 
-`R_RenderPlayerView` (r_main.c:973) drives one complete frame in four timed
+`R_RenderPlayerView` (r_main.c:995) drives one complete frame in four timed
 stages:
 
 ```
@@ -55,7 +55,7 @@ masked               → web_perf_masked_us
   R_DrawMasked        (sort sprites, draw back-to-front + weapon psprites)
 ```
 
-`NetUpdate()` is called between each stage (r_main.c:992,1002,1011,1024) —
+`NetUpdate()` is called between each stage (r_main.c:1022,1032,1041,1054) —
 the network tick pump runs inside the render loop to keep latency low.
 
 The five `web_perf_*_us` accumulators (declared in engine/web/perf.c) are read
@@ -72,7 +72,7 @@ are render-local: the simulation always runs on true, unlerped values.
 
 ### 2.1 View basis
 
-`R_SetupFrame` (r_main.c:852) establishes the view every frame:
+`R_SetupFrame` (r_main.c:871) establishes the view every frame:
 
 | variable | type | value |
 |----------|------|-------|
@@ -96,7 +96,7 @@ Built in `R_InitTextureMapping` (r_main.c:564), called from
 `R_ExecuteSetViewSize` whenever the view size changes.
 
 **`viewangletox[i]`** — maps a fine-angle index `i` (0…FINEANGLES/2−1) to the
-screen column where that ray hits the projection plane. Recipe (r_main.c:563):
+screen column where that ray hits the projection plane. Recipe (r_main.c:574):
 
 ```
 focallength = centerxfrac / finetangent[FINEANGLES/4 + FIELDOFVIEW/2]
@@ -179,7 +179,7 @@ structure is unambiguous.
 
 ### 2.4 `yslope` and `distscale`
 
-**`yslope[y]`** (r_plane.c:85, built in r_main.c:750-754): the flat-to-eye
+**`yslope[y]`** (r_plane.c:85, built in r_main.c:774-778): the flat-to-eye
 distance multiplier for each screen row. For row `y`:
 
 ```
@@ -191,7 +191,7 @@ At `y = centery`, `dy` approaches 0 and `yslope` would overflow — but that row
 is the horizon and never receives span fills because the floor is always below
 the horizon (r_main.c has clamp at `viewheight/2 − 8` via `R_ShearView`).
 
-**`distscale[x]`** (r_plane.c:86, built in r_main.c:757-761): corrects flat
+**`distscale[x]`** (r_plane.c:86, built in r_main.c:781-785): corrects flat
 distances for oblique viewing angles at each screen column:
 
 ```
@@ -225,7 +225,7 @@ void R_RenderBSPNode(int bspnum) {
 }
 ```
 
-(r_bsp.c:552-578). The root call is `R_RenderBSPNode(numnodes-1)` (r_main.c:997).
+(r_bsp.c:552-578). The root call is `R_RenderBSPNode(numnodes-1)` (r_main.c:1027).
 
 **Traversal order**: front-to-back relative to the viewpoint. The recursion
 visits the front child before the back child at every node, so subsectors arrive
@@ -407,7 +407,7 @@ sprites (r_segs.c:734-743).
 ### 4.3 `openings[]` — shared clip-array pool
 
 ```c
-#define MAXOPENINGS  SCREENWIDTH*64   // vanilla; was *64; webdoom raised to *256, reverted 14.2f (peak 2527)
+#define MAXOPENINGS  (MAXSCREENWIDTH*64)  // vanilla; was *64; webdoom raised to *256, reverted 14.2f (peak 2527)
 short openings[MAXOPENINGS];
 short* lastopening;
 ```
@@ -418,10 +418,12 @@ or `maskedtexturecol` carves out a slice of `openings[]` via `lastopening`
 (r_segs.c:611, 721-732). The pointer is bumped but never freed within a frame
 (reset to `openings` at `R_ClearPlanes`, r_plane.c:198).
 
-Vanilla MAXOPENINGS is `SCREENWIDTH*64 = 20480`. Webdoom raised it to
-`SCREENWIDTH*256 = 81920` as a robustness measure, then reverted to vanilla
+Vanilla MAXOPENINGS is `SCREENWIDTH*64 = 20480` at width 320. Webdoom raised
+the ratio to ×256 as a robustness measure, then reverted to the vanilla ×64
 in task 14.2f after measuring peak usage of 2527 across the 13-demo corpus
-(8.1× margin). Overflow is guarded in r_segs.c (fail-soft: drops masked
+(8.1× margin). Since task 18.2c the array dimension uses the widescreen
+compile cap: `MAXSCREENWIDTH*64 = 54656` (MAXSCREENWIDTH=854; runtime width
+still bounds actual usage, so the 320-px margin arithmetic is unchanged). Overflow is guarded in r_segs.c (fail-soft: drops masked
 midtex or clears silhouette bit rather than writing past array end).
 The RANGECHECK path (r_plane.c:384-387) still I_Errors on overflow in debug builds.
 
@@ -994,7 +996,7 @@ mapping does not apply (r_plane.c:404-405 — deliberate, noted in source).
 
 Reproduce (ANGLETOSKYSHIFT): `node tools/archaeology/source-constant-verify.mjs`
 
-**webdoom freelook**: `skytexturemid` is updated in `R_ShearView` (r_main.c:927)
+**webdoom freelook**: `skytexturemid` is updated in `R_ShearView` (r_main.c:942)
 to scroll the sky with the pitch. At `lookdir = 0`, `skytexturemid = 100*FRACUNIT`
 (the vanilla value). Pitching up shifts `skytexturemid` upward, revealing the
 upper sky texture.

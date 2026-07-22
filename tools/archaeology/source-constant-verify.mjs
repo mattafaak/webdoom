@@ -28,7 +28,9 @@ function grabDefine(file, name) {
     const m = src(file).match(new RegExp(`#define\\s+${name}\\s+(.+)`));
     if (!m) return null;
     const tok = m[1].replace(/\/\/.*/, '').trim();
-    try { return Number(eval(tok.replace(/SCREENWIDTH/g, '320'))); } catch { return null; }
+    // MAXSCREENWIDTH (854, widescreen cap since 18.2c) must be substituted before
+    // the bare-SCREENWIDTH fallback or the replace corrupts it into "MAX320".
+    try { return Number(eval(tok.replace(/MAXSCREENWIDTH/g, '854').replace(/SCREENWIDTH/g, '320'))); } catch { return null; }
 }
 
 // Verify by regex match in source, returning the matched integer.
@@ -58,8 +60,8 @@ const claims = [
           return /was\s+\*64/.test(t) ? 320 * 64 : null;
       }},
 
-    { id: 'rdr-004', desc: 'MAXOPENINGS webdoom (SCREENWIDTH×64) = 20480 (reverted to vanilla, task 14.2f)',
-      expected: 20480,
+    { id: 'rdr-004', desc: 'MAXOPENINGS webdoom (MAXSCREENWIDTH×64) = 54656 (vanilla ×64 ratio per 14.2f; cap 854 since 18.2c)',
+      expected: 54656,
       verify: () => grabDefine('engine/core/r_plane.h', 'MAXOPENINGS') },
 
     { id: 'rdr-005', desc: 'MAXVISPLANES vanilla = 128',
