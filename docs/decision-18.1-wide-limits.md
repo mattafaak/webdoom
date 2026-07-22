@@ -224,3 +224,23 @@ at `r_plane.c:437` applies. Current verdict: retained.
 - [x] RAM arithmetic against 32 MiB INITIAL_MEMORY (correct post-14.2c baseline)
 - [x] 14.2d/e/f vanilla-limit reverts reviewed with witness peaks
 - [x] Sanity re-measurement on current master confirms peak values unchanged by 14.2c/d/e/f
+
+---
+
+## 9. 18.2a handoff notes (review round, 2026-07-22)
+
+Four deferred items from the 18.2a review — owners are the 18.2b/c workers:
+
+1. **am_map.c:222** `finit_width = MAXSCREENWIDTH` is a bucket misclassification
+   (display width, should be runtime `screenwidth`). Equal at 320; wrong once
+   width changes. Fix in 18.2b when the automap is exercised at non-320 width.
+2. **r_main.c:649,742,743,785** `pspritescale`/`pspriteiscale` and the
+   scalelight tables use MAXSCREENWIDTH as the 320 design-reference constant.
+   These are exactly the sites 18.2b's Crispy Hor+ (`centerxfrac_nonwide`)
+   scheme must update.
+3. **web/i_video.c:23** `web_rowmajor_buf[MAXSCREENWIDTH*SCREENHEIGHT]` is
+   indexed `y*screenwidth+x`; overflows for screenwidth > 320. 18.2c must
+   resize (dynamic alloc or raise MAXSCREENWIDTH to the 854 cap) before
+   `web_set_wide()` activates.
+4. **v_video.c:362** V_DrawPatchDirect RANGECHECK uses MAXSCREENWIDTH
+   (dead VGA-planar code in wasm builds; asymmetric with other V_Draw*).
