@@ -7,6 +7,7 @@ import { join, normalize, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createGame } from './game.js';
 import { uiAssets } from './ui-assets.js';
+import { putDemo, getDemo, PER_DEMO_CAP } from './demo-store.js';
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const HOST = process.env.DOOM_HOST ?? '0.0.0.0';
@@ -47,6 +48,62 @@ const server = createServer((req, res) => {
 
     if (path === '/api/wads')
         return send(res, 200, manifest(), { 'content-type': 'application/json' });
+
+    // ── demo store API ────────────────────────────────────────────────────────
+    //
+    // POST /api/demos
+    //   Body: raw .lmp bytes (application/octet-stream), max PER_DEMO_CAP.
+    //   Query: ?wad=<wadfilename> (optional; stored alongside, returned on GET)
+    //   Returns 201 {"id":"<sha256>","size":<bytes>}
+    //   Returns 413 if body > PER_DEMO_CAP; 400 on read error.
+    //
+    // GET /api/demos/<id>
+    //   id must be 64 lowercase hex chars (sha256); anything else → 400.
+    //   Returns 200 with x-demo-wad header and raw .lmp body.
+    //   Returns 404 if not found or TTL expired.
+    //
+    if (path === '/api/demos' && req.method === 'POST') {
+        const wad = url.searchParams.get('wad') ?? '';
+        const chunks = [];
+        let size = 0;
+        // Drain full request body even if oversized: draining avoids RST and
+        // allows a clean 413 response on 'end'.  We stop accumulating chunks
+        // once the cap is exceeded but continue reading to drain the socket.
+        req.on('data', chunk => {
+            size += chunk.length;
+            if (size <= PER_DEMO_CAP) chunks.push(chunk);
+        });
+        req.on('error', () => send(res, 400, 'read error'));
+        req.on('end', () => {
+            if (size > PER_DEMO_CAP)
+                return send(res, 413, `demo exceeds ${PER_DEMO_CAP} byte cap`);
+            const bytes = Buffer.concat(chunks);
+            let id;
+            try { id = putDemo(bytes, wad); }
+            catch (e) { return send(res, e.status ?? 500, e.message ?? 'store error'); }
+            send(res, 201, JSON.stringify({ id, size: bytes.length }),
+                { 'content-type': 'application/json' });
+        });
+        return;
+    }
+
+    const demoMatch = path.match(/^\/api\/demos\/([0-9a-f]{64})$/);
+    if (demoMatch) {
+        if (req.method !== 'GET') return send(res, 405, 'method not allowed');
+        const rec = getDemo(demoMatch[1]);
+        if (!rec) return send(res, 404, 'demo not found');
+        res.writeHead(200, {
+            'content-type': 'application/octet-stream',
+            'content-length': rec.bytes.length,
+            'cache-control': 'no-store',
+            'x-demo-wad': rec.wad || '',
+        });
+        res.end(rec.bytes);
+        return;
+    }
+    // Bad id format (non-hex or wrong length) → 400 (path traversal guard)
+    if (path.startsWith('/api/demos/')) return send(res, 400, 'invalid demo id');
+
     if (path === '/api/ui-assets') {
         // no-store: a stale hour-long cache kept serving the old logo
         const assets = uiAssets(join(root, 'wads/lib'), JSON.parse(manifest()));
