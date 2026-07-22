@@ -6,7 +6,7 @@
 // Offline mechanism: kill the server before reload.  This is stronger than
 // CDP Network.emulateNetworkConditions because it blocks even the document
 // navigation request, not only subresource fetches within the existing page.
-// The SW serves '/' and all SHELL assets from the 'webdoom-shell-v3' cache
+// The SW serves '/' and all SHELL assets from the current 'webdoom-shell-*' cache (version resolved at runtime)
 // and the WAD from the 'webdoom-wads-v1' cache.
 //
 // SW-ready detection: wait for navigator.serviceWorker.controller to be
@@ -218,7 +218,7 @@ await waitForSWController(tab1, 'tab1 (online)');
 
 // Confirm SHELL addAll is in place.
 const shellEntries = await tab1.ev(
-    `caches.open('webdoom-shell-v3').then(c => c.keys()).then(k => k.length)`,
+    `caches.keys().then(ks => { const n = ks.find(k => k.startsWith('webdoom-shell-')); return n ? caches.open(n).then(c => c.keys()).then(k => k.length) : 0; })`,
 );
 if (!shellEntries || shellEntries === 0) {
     console.error('FAIL: SHELL cache empty after SW controller was set — addAll likely failed');
@@ -275,7 +275,7 @@ console.log('  SW controller active on offline tab');
 
 // Confirm caches are intact.
 const shellOffline = await tab2.ev(
-    `caches.open('webdoom-shell-v3').then(c => c.keys()).then(k => k.length)`,
+    `caches.keys().then(ks => { const n = ks.find(k => k.startsWith('webdoom-shell-')); return n ? caches.open(n).then(c => c.keys()).then(k => k.length) : 0; })`,
 );
 const wadsOffline = await tab2.ev(
     `caches.open('webdoom-wads-v1').then(c => c.keys()).then(k => k.length)`,
