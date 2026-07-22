@@ -244,3 +244,12 @@ Four deferred items from the 18.2a review — owners are the 18.2b/c workers:
    `web_set_wide()` activates.
 4. **v_video.c:362** V_DrawPatchDirect RANGECHECK uses MAXSCREENWIDTH
    (dead VGA-planar code in wasm builds; asymmetric with other V_Draw*).
+
+### 18.2b review addendum (2026-07-22)
+
+- Items 1 and 2 above were fixed in 18.2b (finit_width → screenwidth;
+  zlight/scalelight/pspritescale via DOOM_ORIGHALF/centerxfrac_nonwide).
+- New deferral for 18.2c: **ST_Lib widget x-coordinates** are not
+  WIDESCREENDELTA-offset — health/ammo numerals render in the left flank at
+  wide widths (sbar background patch IS centered). Remap widget x in 18.2c.
+- Item 3 (web_rowmajor_buf resize) remains open for 18.2c.
