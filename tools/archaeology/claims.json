@@ -930,7 +930,7 @@
     "readme-001": {
       "family": "measurement-stamp",
       "command": "node tools/archaeology/size-ledger.mjs",
-      "expected": "348",
+      "expected": "346",
       "status": "verified",
       "notes": "Wasm binary size in README.md, in KB (round(raw_bytes/1024)). Source: build/doom.wasm at task 14.2d base (31e436a); 356,206 B \u2192 round/1024 = 348 KB. NOT derived from perf.md \u00a71 commit-pinned table (perf-001=357,978 is pinned to 6de6256 and legitimately drifts). Machine-verified by size-ledger.mjs (task 14.3): checks README.md KB == round(actual_build_bytes/1024) and claims.json expected == same value; hard fail on any divergence. doc-drift.mjs README_HINTS also hard-fails if README diverges from this expected value. Update command: (cd engine && make) && node tools/archaeology/size-ledger.mjs \u2014 FAIL output shows the correct KB value; update README.md and this expected field to match."
     },
@@ -986,7 +986,7 @@
     "size-004": {
       "family": "size-ledger",
       "command": "node tools/archaeology/size-ledger.mjs",
-      "expected": "348",
+      "expected": "346",
       "status": "verified",
       "notes": "README.md KB figure as verified by size-ledger.mjs. Must equal round(actual doom.wasm raw bytes / 1024). Hard fail if README.md or claims.json readme-001.expected diverges from the computed KB. This closes the 12.1 seed: the README figure can never go stale again without the gate failing."
     }

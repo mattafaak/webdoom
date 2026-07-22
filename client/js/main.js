@@ -225,6 +225,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
     const input = createInput(doom, canvas, loadSettings());
     createSettingsUI(input, doom);
     doom._web_set_smooth(input.settings.smooth ? 1 : 0);
+    doom._web_set_opl_mode(input.settings.opl3 ? 1 : 0); // task 17.1: apply persisted OPL mode
 
     // Quit Game → Y calls I_Quit → this hook: stop the loop, tear down,
     // and let the front end return to the main menu (a fresh wasm boots

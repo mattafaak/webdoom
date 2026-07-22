@@ -5,6 +5,12 @@
 // The sequencer steps MUS events at 140Hz between rendered sample
 // blocks; JS pulls samples through web_music_render() and feeds an
 // AudioWorklet. Everything here is driven by that pull — no timers.
+//
+// OPL2/OPL3 mode toggle (task 17.1):
+//   opl_mode=0 → authentic mono 9-voice OPL2 (NEW=0, default)
+//   opl_mode=1 → stereo 18-voice OPL3 (NEW=1, second bank voices 9-17)
+// Mode flag is read from config only (via M_SaveDefaults/.doomrc path).
+// It never reads playsim/game-state — safe for demos and netplay determinism.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <string.h>
 #include <math.h>
@@ -17,10 +23,16 @@
 #include "z_zone.h"
 #include "opl3.h"
 
-#define MUS_RATE 140
-#define OPL_CHANNELS 9
-#define MUS_CHANNELS 16
+#define MUS_RATE      140
+#define OPL_CHANNELS  9     // OPL2 voice count (9 two-op channels)
+#define OPL3_CHANNELS 18    // OPL3 voice count (18 two-op channels)
+#define MUS_CHANNELS  16
 #define PERCUSSION_CH 15
+
+// 0 = OPL2 authentic mono 9-voice (default, byte-identical to pre-17.1)
+// 1 = OPL3 stereo 18-voice (second addressing scheme, second bank voices 9-17)
+// Mode flag is persisted by JS settings (localStorage) — no .doomrc entry.
+static int opl_mode = 0;
 
 // --- GENMIDI bank -------------------------------------------------------
 
@@ -62,11 +74,11 @@ typedef struct
     int notevol;  // 0..127
     int age;      // for oldest-voice stealing
     const genmidi_voice_t* gv;
-    boolean second; // second voice of a 2VOICE instrument
 } oplvoice_t;
 
 static opl3_chip chip;
-static oplvoice_t voice[OPL_CHANNELS];
+// Full 18-slot array: [0..8] are used in both modes; [9..17] only in OPL3.
+static oplvoice_t voice[OPL3_CHANNELS];
 static int dbg_events, dbg_noteons; // test-harness counters
 static int samplerate = 44100;
 static int agecounter;
@@ -94,9 +106,20 @@ static void opl_write (int reg, int val)
     OPL3_WriteRegBuffered (&chip, (Bit16u) reg, (Bit8u) val);
 }
 
-// operator offsets for the 9 two-op channels
+// operator offsets for the 9 two-op channels (applies to both banks)
 static const int op1off[OPL_CHANNELS] = {0x00, 0x01, 0x02, 0x08, 0x09,
                                          0x0a, 0x10, 0x11, 0x12};
+
+// OPL3 second-bank helpers.
+// vbank(v)  — register bank base: 0x000 for voices 0-8, 0x100 for voices 9-17
+// vch(v)    — channel within bank: 0-8 for both ranges
+// Used ONLY in OPL3 mode; in OPL2 mode v is always < OPL_CHANNELS so
+// vbank(v)=0 and vch(v)=v, preserving identical register addresses.
+static int vbank (int v) { return (v >= OPL_CHANNELS) ? 0x100 : 0x000; }
+static int vch   (int v) { return (v >= OPL_CHANNELS) ? v - OPL_CHANNELS : v; }
+
+// Active voice ceiling: 9 in OPL2, 18 in OPL3
+static int opl_nvoices (void) { return opl_mode ? OPL3_CHANNELS : OPL_CHANNELS; }
 
 // OPL frequency for a midi-ish note + bend (1/64 semitones off center).
 // fnum table for one octave starting at block boundary; computed from
@@ -106,7 +129,7 @@ static const unsigned short fnumtab[12] = {
     0x1e5, 0x202, 0x220, 0x241, 0x263, 0x287,
 };
 
-static void voice_freq (int v, boolean keyon)
+static __attribute__((noinline)) void voice_freq (int v, boolean keyon)
 {
     int note = voice[v].basenote;
     int bend = ch_bend[voice[v].muschan] - 128; // ±128 = ±2 semitones
@@ -136,13 +159,13 @@ static void voice_freq (int v, boolean keyon)
     if (block > 7)
         block = 7;
 
-    opl_write (0xa0 + v, fnum & 0xff);
-    opl_write (0xb0 + v, (keyon ? 0x20 : 0) | (block << 2) | (fnum >> 8));
+    opl_write (vbank (v) | 0xa0 | vch (v), fnum & 0xff);
+    opl_write (vbank (v) | 0xb0 | vch (v), (keyon ? 0x20 : 0) | (block << 2) | (fnum >> 8));
 }
 
 static int op2off (int v)
 {
-    return op1off[v] + 3;
+    return op1off[vch (v)] + 3;
 }
 
 // Combined MIDI-style volume (0..127) → extra OPL total-level steps
@@ -164,6 +187,8 @@ static void init_volatten (void)
 static void voice_volume (int v)
 {
     const genmidi_voice_t* gv = voice[v].gv;
+    int bk = vbank (v);
+    int ch = vch (v);
     int vol; // 0..127 combined
     int level;
 
@@ -175,7 +200,7 @@ static void voice_volume (int v)
     level = (gv->car.level & 0x3f) + volatten[vol];
     if (level > 63)
         level = 63;
-    opl_write (0x40 + op2off (v), (gv->car.scale & 0xc0) | level);
+    opl_write (bk | 0x40 | op2off (v), (gv->car.scale & 0xc0) | level);
 
     // additive connection: the modulator reaches the output too
     if (gv->feedback & 1)
@@ -183,27 +208,31 @@ static void voice_volume (int v)
         level = (gv->mod.level & 0x3f) + volatten[vol];
         if (level > 63)
             level = 63;
-        opl_write (0x40 + op1off[v], (gv->mod.scale & 0xc0) | level);
+        opl_write (bk | 0x40 | op1off[ch], (gv->mod.scale & 0xc0) | level);
     }
 }
 
-static void voice_program (int v)
+static __attribute__((noinline)) void voice_program (int v)
 {
     const genmidi_voice_t* gv = voice[v].gv;
-    int o1 = op1off[v], o2 = op2off (v);
+    int bk = vbank (v);
+    int ch = vch (v);
+    int o1 = op1off[ch], o2 = op2off (v);
 
-    opl_write (0x20 + o1, gv->mod.tremolo);
-    opl_write (0x60 + o1, gv->mod.attack);
-    opl_write (0x80 + o1, gv->mod.sustain);
-    opl_write (0xe0 + o1, gv->mod.waveform);
-    opl_write (0x40 + o1, (gv->mod.scale & 0xc0) | (gv->mod.level & 0x3f));
+    opl_write (bk | 0x20 | o1, gv->mod.tremolo);
+    opl_write (bk | 0x60 | o1, gv->mod.attack);
+    opl_write (bk | 0x80 | o1, gv->mod.sustain);
+    opl_write (bk | 0xe0 | o1, gv->mod.waveform);
+    opl_write (bk | 0x40 | o1, (gv->mod.scale & 0xc0) | (gv->mod.level & 0x3f));
 
-    opl_write (0x20 + o2, gv->car.tremolo);
-    opl_write (0x60 + o2, gv->car.attack);
-    opl_write (0x80 + o2, gv->car.sustain);
-    opl_write (0xe0 + o2, gv->car.waveform);
+    opl_write (bk | 0x20 | o2, gv->car.tremolo);
+    opl_write (bk | 0x60 | o2, gv->car.attack);
+    opl_write (bk | 0x80 | o2, gv->car.sustain);
+    opl_write (bk | 0xe0 | o2, gv->car.waveform);
 
-    opl_write (0xc0 + v, gv->feedback | 0x30); // both speakers
+    // 0xc0+ch: L/R bits 0x30 are OPL3-only (NEW=1); in OPL2 mode (NEW=0)
+    // these bits are inert per OPL3 spec — OPL2 path is byte-identical.
+    opl_write (bk | 0xc0 | ch, gv->feedback | 0x30); // both speakers
     voice_volume (v);
 }
 
@@ -211,18 +240,19 @@ static void voice_off (int v)
 {
     if (voice[v].muschan < 0)
         return;
-    opl_write (0xb0 + v, 0); // key off, keep freq bits harmless
+    opl_write (vbank (v) | 0xb0 | vch (v), 0); // key off, keep freq bits harmless
     voice[v].muschan = -1;
 }
 
 static int voice_alloc (void)
 {
     int v, oldest = 0, oldage = 0x7fffffff;
+    int nv = opl_nvoices ();
 
-    for (v = 0; v < OPL_CHANNELS; v++)
+    for (v = 0; v < nv; v++)
         if (voice[v].muschan < 0)
             return v;
-    for (v = 0; v < OPL_CHANNELS; v++)
+    for (v = 0; v < nv; v++)
         if (voice[v].age < oldage)
         {
             oldage = voice[v].age;
@@ -249,7 +279,6 @@ static void note_on (int muschan, int note, int notevol, boolean second)
     voice[v].notevol = notevol;
     voice[v].age = ++agecounter;
     voice[v].gv = &in->voice[second ? 1 : 0];
-    voice[v].second = second;
 
     if (in->flags & GENMIDI_FLAG_FIXED)
         note = in->fixednote;
@@ -265,7 +294,7 @@ static void note_on (int muschan, int note, int notevol, boolean second)
 static void note_off (int muschan, int note)
 {
     int v;
-    for (v = 0; v < OPL_CHANNELS; v++)
+    for (v = 0; v < opl_nvoices (); v++)
         if (voice[v].muschan == muschan && voice[v].note == note)
             voice_off (v);
 }
@@ -273,14 +302,14 @@ static void note_off (int muschan, int note)
 static void all_notes_off (void)
 {
     int v;
-    for (v = 0; v < OPL_CHANNELS; v++)
+    for (v = 0; v < opl_nvoices (); v++)
         voice_off (v);
 }
 
 static void channel_update (int muschan)
 {
     int v;
-    for (v = 0; v < OPL_CHANNELS; v++)
+    for (v = 0; v < opl_nvoices (); v++)
         if (voice[v].muschan == muschan)
         {
             voice_volume (v);
@@ -393,15 +422,26 @@ void mus_init (int rate)
 
     samplerate = rate;
     OPL3_Reset (&chip, (Bit32u) rate);
-    // OPL2 compat: leave NEW=0; enable waveform select semantics
+    // OPL2 compat: leave NEW=0; enable waveform select semantics.
+    // NEW=0 is the only register write done unconditionally; it keeps the
+    // OPL2 output byte-identical to pre-17.1 builds when opl_mode==0.
     opl_write (0x01, 0x20);
+
+    if (opl_mode == 1)
+    {
+        // OPL3 mode: enable NEW bit in secondary status register.
+        // All OPL3-specific writes are inside this branch so that the
+        // OPL2 path (opl_mode==0) remains byte-inert.
+        opl_write (0x105, 0x01); // NEW=1: enables second bank + panning
+    }
+
     load_bank ();
     init_volatten ();
 
     // The browser re-inits when the AudioContext arms, possibly mid-song:
     // the reset zeroed every operator (attack 0 = silent forever), so
     // reprogram live voices and keep the sequencer's clock consistent.
-    for (v = 0; v < OPL_CHANNELS; v++)
+    for (v = 0; v < opl_nvoices (); v++)
         if (voice[v].muschan >= 0)
         {
             voice_program (v);
@@ -409,6 +449,21 @@ void mus_init (int rate)
         }
     if (playing)
         samples_per_tick = (double) samplerate / MUS_RATE;
+}
+
+// web_set_opl_mode — switch between OPL2 (0) and OPL3 (1) at runtime.
+// Called from JS settings UI; reads config only, never game-state.
+// Mode switch goes through OPL3_Reset + full re-program to avoid live
+// NEW-bit flipping (which leaves operator state inconsistent).
+EMSCRIPTEN_KEEPALIVE void web_set_opl_mode (int mode)
+{
+    int want = mode ? 1 : 0;
+    if (want == opl_mode)
+        return;
+    opl_mode = want;
+    // OPL3_Reset zeroes everything; mus_init re-enables waveforms,
+    // NEW=1 if OPL3, and reprograms any live voices.
+    mus_init (samplerate);
 }
 
 void mus_play (void* data, int len, int loop)
@@ -466,7 +521,7 @@ void mus_setvolume (int vol127)
 {
     int v;
     musicvolume = vol127;
-    for (v = 0; v < OPL_CHANNELS; v++)
+    for (v = 0; v < opl_nvoices (); v++)
         if (voice[v].muschan >= 0)
             voice_volume (v);
 }
@@ -485,7 +540,7 @@ EMSCRIPTEN_KEEPALIVE int web_music_debug (int what)
     case 3:
         return bank_loaded;
     case 4:
-        for (v = 0; v < OPL_CHANNELS; v++)
+        for (v = 0; v < opl_nvoices (); v++)
             if (voice[v].muschan >= 0)
                 n++;
         return n;

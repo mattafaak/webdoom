@@ -28,6 +28,7 @@ export function createSettingsUI(input, doom) {
         <label><input type="checkbox" id="mmove" ${s.mouseY === 'move' ? 'checked' : ''}> Mouse Y moves player (1993 style)</label>
         <label><input type="checkbox" id="arun" ${s.alwaysRun ? 'checked' : ''}> Always run</label>
         <label><input type="checkbox" id="smooth" ${s.smooth ? 'checked' : ''}> Smooth rendering (uncapped fps)</label>
+        <label><input type="checkbox" id="opl3" ${s.opl3 ? 'checked' : ''}> OPL3 stereo music (18-voice; OPL2 mono is default)</label>
         <label>Gamepad turn speed <input type="range" id="pturn" min="0.4" max="2" step="0.1" value="${s.padTurnSpeed}"></label>
         <div class="row">
           <button id="reset">Reset defaults</button>
@@ -47,6 +48,11 @@ export function createSettingsUI(input, doom) {
             s.smooth = e.target.checked;
             saveSettings(s);
             doom?._web_set_smooth(s.smooth ? 1 : 0);
+        };
+        panel.querySelector('#opl3').onchange = e => {
+            s.opl3 = e.target.checked;
+            saveSettings(s);
+            doom?._web_set_opl_mode(s.opl3 ? 1 : 0);
         };
         panel.querySelector('#pturn').oninput = e => { s.padTurnSpeed = +e.target.value; saveSettings(s); };
         panel.querySelector('#reset').onclick = () => {

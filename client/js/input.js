@@ -47,6 +47,7 @@ export const defaultSettings = () => ({
     mouseY: 'off',         // 'off' | 'look' (freelook) | 'move' (1993)
     alwaysRun: false,
     smooth: true,          // uncapped-fps render interpolation
+    opl3: false,           // task 17.1: false=OPL2 mono (default), true=OPL3 stereo
     padDeadzone: 0.15,
     padTurnSpeed: 1.0,
 });

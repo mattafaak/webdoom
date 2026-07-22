@@ -62,6 +62,8 @@ rcsid[] = "$Id: m_misc.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 #include "m_misc.h"
 #include "web.h"	// webdoom file bridge
 
+
+
 //
 // M_DrawText
 // Returns the final X coordinate
@@ -224,6 +226,7 @@ default_t	defaults[] =
     {"mouse_sensitivity",&mouseSensitivity, 5},
     {"sfx_volume",&snd_SfxVolume, 8},
     {"music_volume",&snd_MusicVolume, 8},
+    // opl_mode is persisted by JS settings (localStorage) not .doomrc
     {"show_messages",&showMessages, 1},
     
 
