@@ -13,19 +13,30 @@ const WebSocket = createRequire(join(root, 'server/game.js'))('ws');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let PORT = 8670;
+const liveServers = new Set();
+process.on('exit', () => { for (const s of liveServers) s.kill(); });
 function spawnServer(extraEnv = {}) {
     const port = PORT++;
     const srv = spawn('node', [join(root, 'server/serve.js')],
         { env: { ...process.env, DOOM_PORT: port, DOOM_HOST: '127.0.0.1', ...extraEnv }, stdio: ['ignore', 'ignore', 'ignore'] });
+    liveServers.add(srv);
+    srv.on('exit', () => liveServers.delete(srv));
     return { srv, base: `ws://127.0.0.1:${port}`, kill: () => srv.kill() };
 }
 
-const open = ws => new Promise((res, rej) => { ws.on('open', res); ws.on('error', rej); });
+// Watchdog: every ws await is bounded.  An unbounded open()/onceMsg() await
+// hung CI for 49 minutes when a join race was lost (scenario 3) — a timeout
+// turns that into a fast, named failure instead.
+const AWAIT_MS = 20000;
+const withTimeout = (p, label) => Promise.race([p, new Promise((_, rej) =>
+    setTimeout(() => rej(new Error(`timeout ${AWAIT_MS}ms: ${label}`)), AWAIT_MS).unref())]);
+const open = ws => withTimeout(
+    new Promise((res, rej) => { ws.on('open', res); ws.on('error', rej); }), 'ws open');
 function onceMsg(ws, pred) {
-    return new Promise(res => {
+    return withTimeout(new Promise(res => {
         const h = raw => { let m; try { m = JSON.parse(raw); } catch { return; } if (pred(m)) { ws.off('message', h); res(m); } };
         ws.on('message', h);
-    });
+    }), 'onceMsg');
 }
 const lobbyJoin = base => { const w = new WebSocket(base + '/ws/lobby'); return w; };
 
