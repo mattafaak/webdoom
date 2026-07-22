@@ -58,6 +58,12 @@
       "p99": 3396.7,
       "max": 3396.7,
       "note": "p50=101.6 ms ≈ half of the 200 ms rAF interval (expected: event lands at random phase within a slow frame). p99=3396.7 ms is an outlier scheduling spike on the Bobcat (slow CPU + OS preemption). Not representative of display-synced gameplay. On a real 35 Hz display, input latency would be bounded by the tic period (28.6 ms) not the headless rAF interval."
+    },
+    "canvas_info": {
+      "width": 320,
+      "height": 200,
+      "rendererKind": "webgl2",
+      "note": "task 18.3: DOM canvas dimensions and renderer kind. Not a timing stage; no run1/run2; browser-pipeline-compare.mjs SKIPS this stage. 320×200 = wideMode off (default). 854×200 when wide enabled."
     }
   }
 }

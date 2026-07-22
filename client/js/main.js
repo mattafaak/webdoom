@@ -216,6 +216,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
     syncHandle = startSync(doom, wads[0].file);
 
     const renderer = createRenderer(canvas);
+    window.webdoom._renderer = renderer;   // task 18.3: expose renderer for browser-pipeline.mjs canvas_info
     const fb = doom._web_framebuffer();
     const pal = doom._web_palette();
     let palVersion = -1;
@@ -224,8 +225,26 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
     status('');
     canvas.focus();
     const input = createInput(doom, canvas, loadSettings());
-    createSettingsUI(input, doom);
+    createSettingsUI(input, doom, renderer);
     doom._web_set_smooth(input.settings.smooth ? 1 : 0);
+
+    // task 18.3: aspect-bucket selection — apply persisted wide mode on boot.
+    // web_set_wide() is deferred; web_frame() consumes it on the first tick.
+    // renderW tracks the actual engine screenwidth after each web_frame() call.
+    const SCREEN_H = 200; // DOOM's native framebuffer height (constant)
+    let renderW = 320;
+    if (input.settings.wideMode) doom._web_set_wide(854);
+
+    // Compute Panini/cylindrical remap strength from current aspect ratio.
+    // 0.0 at 4:3 or narrower; 0.4 at 21:9 or wider.  Returns 0 when disabled.
+    function paniniStrength(w, enabled) {
+        if (!enabled) return 0.0;
+        const aspect = w / SCREEN_H;
+        return Math.min(0.4, Math.max(0, (aspect - 4/3) / (21/9 - 4/3)) * 0.4);
+    }
+
+    // Apply initial panini state (OFF by default per settings default).
+    renderer.setPaniniStrength(paniniStrength(renderW, input.settings.panini));
 
     // Apply persisted music backend (task 17.1: OPL2/OPL3; task 17.2b: GM).
     // musicBackend supersedes the legacy opl3 bool; fall back gracefully.
@@ -286,9 +305,20 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
             }
             return;
         }
+        // task 18.3: detect deferred resize consumed by web_frame() this tick.
+        // web_screenwidth() returns the new screenwidth after the deferred
+        // pending_wide_width is applied at the start of web_frame().
+        const newW = doom._web_screenwidth();
+        if (newW !== renderW) {
+            renderW = newW;
+            renderer.resize(renderW, SCREEN_H);
+            canvas.classList.toggle('wide', renderW > 320);
+            renderer.setPaniniStrength(paniniStrength(renderW, input.settings.panini));
+        }
+
         const v = doom._web_palette_version();
         renderer.draw(
-            doom.HEAPU8.subarray(fb, fb + 320 * 200),
+            doom.HEAPU8.subarray(fb, fb + renderW * SCREEN_H),
             doom.HEAPU8.subarray(pal, pal + 768),
             v !== palVersion,
         );

@@ -29,6 +29,14 @@ html, body {
     background: #000;
 }
 
+/* task 18.3: wide mode (854×200 = 4.27:1).  Fills display width, covers the
+   fire background.  Toggled via canvas.classList.toggle('wide', renderW>320)
+   in main.js when web_screenwidth() returns 854 after a web_set_wide() call. */
+#screen.wide {
+    width: min(100vw, calc(100vh * 854 / 200));
+    height: min(100vh, calc(100vw * 200 / 854));
+}
+
 #overlay {
     position: absolute;
     inset: auto auto 1rem 1rem;

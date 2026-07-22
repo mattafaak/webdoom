@@ -52,6 +52,8 @@ export const defaultSettings = () => ({
     musicBackend: 'opl2',  // task 17.2b: 'opl2' | 'opl3' | 'gm'
     padDeadzone: 0.15,
     padTurnSpeed: 1.0,
+    wideMode: false,       // task 18.3: 854-px Hor+ wide render; false = 320 (default)
+    panini: false,         // task 18.3: cylindrical remap shader; OFF by default
 });
 
 export function loadSettings() {

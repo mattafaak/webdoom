@@ -309,6 +309,13 @@ try {
     chromeVer = (await cdp('Browser.getVersion')).result?.product ?? 'unknown';
 } catch (_) {}
 
+// task 18.3: record canvas dimensions at end of run (wide mode off = 320).
+// Not a timing stage; not in CHECKS; baseline entry has no run1/run2 so
+// browser-pipeline-compare.mjs will SKIP it (by design).
+const canvasWidth  = await evaluate(`document.getElementById('screen')?.width ?? 320`);
+const canvasHeight = await evaluate(`document.getElementById('screen')?.height ?? 200`);
+const rendererKind = await evaluate(`window.webdoom?._renderer?.kind ?? 'unknown'`);
+
 const result = {
     schema:      'browser-pipeline.v1',
     host:         hostname,
@@ -336,6 +343,16 @@ const result = {
         // (e) input latency
         input_latency: { ...inputLatStats,
             note: 'Measurement: keydown event.timeStamp → renderer.draw() returns (GPU upload submitted, not compositing). Exact tic-consumption attribution omitted (no engine changes); this is event→next-rAF-draw latency.' },
+        // task 18.3: canvas_info — metadata stage, not a timing distribution.
+        // Not in browser-pipeline-compare.mjs CHECKS; baseline has no run1/run2
+        // so compare SKIPS it.  Records canvas dimensions + renderer kind at
+        // end of the collection run.  320×200 = standard (wideMode off default).
+        canvas_info: {
+            width:        canvasWidth,
+            height:       canvasHeight,
+            rendererKind: rendererKind,
+            note: 'task 18.3: DOM canvas dimensions and renderer kind at end of run. Not a timing stage; not regression-checked. 320×200 with wideMode off (default); 854×200 when wide enabled.',
+        },
     },
 };
 

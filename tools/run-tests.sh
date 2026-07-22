@@ -99,6 +99,7 @@ node tools/browser-lobby-test.mjs http://127.0.0.1:8668/ | tail -2
 node tools/browser-fire-test.mjs http://127.0.0.1:8668/ /tmp | tail -3
 node tools/browser-ierror-test.mjs http://127.0.0.1:8668/ | tail -1
 node tools/browser-rafdeath-test.mjs http://127.0.0.1:8668/ | tail -1
+node tools/browser-wide-toggle-test.mjs http://127.0.0.1:8668/ | tail -1
 node tools/browser-offline-test.mjs | tail -2
 
 # ── Insecure-origin CI leg (task 16.5) ────────────────────────────────────────

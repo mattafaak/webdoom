@@ -40,6 +40,12 @@
       "run1": { "n": 35, "mean": 8.5857, "p50": 8.3, "p90": 15.5, "p99": 35.5, "max": 35.5 },
       "run2": { "n": 35, "mean": 9.3543, "p50": 8.4, "p90": 16.8, "p99": 60.6, "max": 60.6 },
       "note": "keydown event.timeStamp → renderer.draw() returns. p50 ≈ 8–9 ms (≈ 0.5 × 16.7 ms frame interval, as expected for random-phase event landing mid-frame). p90 ≈ 15–17 ms (≈ 1 frame). p99 varies (35–61 ms) due to small n and occasional OS scheduling spikes. Measurement scope: event firing → GPU upload call (compositing not waited). Tic-exact attribution not feasible without engine changes."
+    },
+    "canvas_info": {
+      "width": 320,
+      "height": 200,
+      "rendererKind": "webgl2",
+      "note": "task 18.3: DOM canvas dimensions and renderer kind. Not a timing stage; no run1/run2; browser-pipeline-compare.mjs SKIPS this stage. 320×200 = wideMode off (default). 854×200 when wide enabled."
     }
   }
 }
