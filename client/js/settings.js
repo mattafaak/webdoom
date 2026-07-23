@@ -19,6 +19,17 @@ function computePaniniStrength(w, enabled) {
     return Math.min(0.4, Math.max(0, (aspect - 4/3) / (21/9 - 4/3)) * 0.4);
 }
 
+// Pick the Hor+ render width that best matches the current display aspect ratio.
+// Mirrors main.js wideBucket() — both must stay in sync.
+// Buckets: 320 (wide off) / 426 (~16:9) / 560 (~21:9) / 854 (≥32:9 ultrawide).
+function wideBucket() {
+    const aspect = window.innerWidth / window.innerHeight;
+    if (aspect <= 1.55) return 320;   // 4:3 / 5:4 — wide off equivalent
+    if (aspect <= 2.0)  return 426;   // 16:9 / 16:10
+    if (aspect <= 2.6)  return 560;   // 21:9
+    return 854;                        // 32:9 and wider
+}
+
 export function createSettingsUI(input, doom, renderer, qol) {
     const s = input.settings;
     const panel = document.createElement('div');
@@ -56,7 +67,7 @@ export function createSettingsUI(input, doom, renderer, qol) {
         <label><input type="checkbox" id="mmove" ${s.mouseY === 'move' ? 'checked' : ''}> Mouse Y moves player (1993 style)</label>
         <label><input type="checkbox" id="arun" ${s.alwaysRun ? 'checked' : ''}> Always run</label>
         <label><input type="checkbox" id="smooth" ${s.smooth ? 'checked' : ''}> Smooth rendering (uncapped fps)</label>
-        <label><input type="checkbox" id="wideMode" ${s.wideMode ? 'checked' : ''}> Wide mode (854-px Hor+) — reload persists</label>
+        <label><input type="checkbox" id="wideMode" ${s.wideMode ? 'checked' : ''}> Wide mode (aspect-adaptive Hor+) — reload persists</label>
         <label><input type="checkbox" id="panini" ${s.panini ? 'checked' : ''}> Cylindrical remap (Panini) — wide-angle only, OFF by default</label>
         <hr style="border-color:#400;margin:.5rem 0">
         <label><input type="checkbox" id="showFullscreen" ${s.showFullscreen ? 'checked' : ''}> Fullscreen button (hover top edge) — OFF by default</label>
@@ -112,13 +123,15 @@ export function createSettingsUI(input, doom, renderer, qol) {
             saveSettings(s);
             doom?._web_set_smooth(s.smooth ? 1 : 0);
         };
-        // task 18.3: wide mode — calls web_set_wide() for deferred resize on next frame.
+        // wide-fix: wide mode — calls web_set_wide() with aspect-adaptive bucket.
+        // wideBucket() picks 426 / 560 / 854 based on window aspect (16:9 → 426,
+        // 21:9 → 560, ≥32:9 → 854; ≤4:3 → 320 = effective off).
+        // The frame loop in main.js detects web_screenwidth() change and
+        // calls renderer.resize() + toggles the .wide CSS class.
         panel.querySelector('#wideMode').onchange = e => {
             s.wideMode = e.target.checked;
             saveSettings(s);
-            doom?._web_set_wide(s.wideMode ? 854 : 320);
-            // The frame loop in main.js detects web_screenwidth() change and
-            // calls renderer.resize() + toggles the .wide CSS class.
+            doom?._web_set_wide(s.wideMode ? wideBucket() : 320);
         };
         // task 18.3: Panini/cylindrical remap — updates shader uniform immediately.
         panel.querySelector('#panini').onchange = e => {
