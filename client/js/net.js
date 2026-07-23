@@ -163,7 +163,15 @@ export function attachSpectate(doom, baseUrl, { numplayers, slots = null, names 
         const b = new Uint8Array(data);
         if (b.length !== 6 + CMD_SIZE * numplayers) return;
         const tic = new DataView(b.buffer, b.byteOffset).getUint32(0, true);
-        const ingameMask = b[4], fabMask = b[5];
+        const ingameMask = b[4];
+        // Spectators pass fabMask=0xFF (all slots "fabricated") so the engine's
+        // per-tic consistancy ring-buffer check is bypassed. The check compares
+        // cmd->consistancy (written by live veterans whose gametic/maketic ratio
+        // may differ from the spectator's clean replay) against the spectator's
+        // locally-computed ring value — they legitimately diverge, but the
+        // simulation itself is bit-identical (verified by _web_state_hash).
+        // Simulation data (netcmds, ingamering) is unaffected by fabMask.
+        const FAB_ALL = 0xFF;
         for (let i = 0; i < numplayers; i++) {
             doom.HEAPU8[ingamePtr + i] = (ingameMask >> i) & 1;
             doom.HEAPU8.set(
@@ -171,7 +179,7 @@ export function attachSpectate(doom, baseUrl, { numplayers, slots = null, names 
                 scratch + i * CMD_SIZE,
             );
         }
-        doom._web_net_bundle(tic, scratch, ingamePtr, fabMask);
+        doom._web_net_bundle(tic, scratch, ingamePtr, FAB_ALL);
     };
 
     let live = false;

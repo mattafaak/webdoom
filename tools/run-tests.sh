@@ -74,6 +74,10 @@ echo "── drop-in determinism (coop, deathmatch) ─────────�
 node tools/join-test.mjs | tail -1
 node tools/join-test.mjs dm | tail -1
 
+echo "── spectator links (19.5: catch-up determinism + injection no-op) ──"
+node tools/spectate-test.mjs | tail -1
+node tools/spectate-inject-test.mjs | tail -1
+
 echo "── drop-in edge cases + churn ──────────────────────────"
 node tools/edge-test.mjs | tail -1
 node tools/churn-test.mjs | tail -1
