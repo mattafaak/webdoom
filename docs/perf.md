@@ -1744,3 +1744,61 @@ BSP walk cost grows more modestly (same depth, more visible spans).
 0 mismatches between a 320-px client and an 854-px client in the same
 2-player lockstep session.
 
+---
+
+## §19.3 Replay Scrubber — Seek Latency
+
+Task 19.3 introduces `web_seek_demo(N)`: re-sims the demo from tic 0 to tic
+N with `nodrawers=1` (pure sim, no rendering), then restores the renderer.
+Latency is dominated by simulation throughput, not I/O.
+
+### Algorithm
+
+```
+web_play_demo_buf(ptr)   // parse header, zone-copy once (PU_STATIC)
+web_set_singletics(1)    // exact 1-tic-per-frame counting
+web_seek_demo(N):
+  demo_p = demobuffer + 13   // rewind to first tic (no new Z_Malloc)
+  G_InitNew(skill, ep, map)  // P_SetupLevel → Z_FreeTags(PU_LEVEL)
+  nodrawers = 1
+  for i in 0..N: D_DoomFrame()   // sim only, ~100–5000× realtime
+  nodrawers = 0
+web_wipe_skip(); web_frame()     // one final rendering frame
+```
+
+Zone invariant: `web_zone_hwm` is flat across repeated seeks (confirmed by
+`node tools/demo-seek-test.mjs` zone HWM test — HWM unchanged after 3 seeks).
+
+### Measured latency (devbox — x86_64, Node.js 22, doom.wasm)
+
+| Seek target | Latency | Speed |
+|-------------|---------|-------|
+| tic 1       | 0.2 ms  | ~150× realtime |
+| tic 30      | 0.2 ms  | ~4400× realtime |
+| tic 59      | 0.4 ms  | ~4000× realtime |
+
+Extrapolated worst case (44,580 tics, the longest attract demo in the test
+matrix — tnt-demo1): **~0.3 s on devbox** at ~0.007 ms/tic.
+
+### Wbox estimate (Raspberry Pi 5, TODO: measure)
+
+Task 15.5 estimated ~100× realtime on wbox for attract-demo playback at 35 Hz,
+giving a worst-case 44,580-tic seek of **~13 s**.  The scrubber UI cites this
+figure.  Measure on wbox and update:
+
+```
+# On wbox:
+node tools/demo-seek-test.mjs
+# Record the "extrapolated 44580-tic seek" line and paste here.
+```
+
+The scrubber latency note in `client/js/scrubber.js` cites "up to ~13 s on
+wbox" pending this measurement.
+
+### Equivalence guarantee
+
+`node tools/demo-seek-test.mjs` asserts:
+
+- `web_seek_demo(N)` state hash == linear-playback-at-N hash (N ∈ {1, 30, 59}).
+- Intentional off-by-one (seek to N-1) produces a diverging hash (red-proof).
+- Zone HWM is flat after seek 1 (no per-seek heap growth).
