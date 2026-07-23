@@ -1,0 +1,18 @@
+# 386DX-40 harness — excluded from repo
+# ROM and disk images are fetched/created locally (see docs/386/BRING-UP.md)
+
+# HDD disk image (FreeDOS + DOOM)
+*.img
+*.hdf
+*.vhd
+
+# BIOS ROMs (fetched by fetch-roms.sh to ~/toolchains/emu/86box-roms)
+roms/
+
+# 86Box VM runtime dirs (created by run-386box.sh in /tmp)
+# (these are in /tmp, not here — listed for clarity)
+
+# DOS DOOM shareware binary (not committed — see docs/386/BRING-UP.md §4)
+doom.exe
+DOOM.EXE
+doom1.zip

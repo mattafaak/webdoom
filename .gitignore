@@ -25,3 +25,7 @@ tools/*.ppm
 soundfonts/*.sf2
 soundfonts/*.sf3
 .harness-worktrees/
+# 86Box runtime artifacts (created if 86Box is invoked without -P in repo root)
+86box.cfg
+nvr/
+assets/
