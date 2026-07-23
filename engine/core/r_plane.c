@@ -219,20 +219,14 @@ R_MapPlane
     ds_x2 = x2;
 
 #ifdef WEBDOOM_FAKEFLAT
-// Distance threshold (fixed_t 16.16) for fake-flat solid fill — 512 world units.
-// At this viewing distance the projected texel is well below one screen pixel
-// in the 320x200 viewport, so a solid representative colour is a good approximation.
-// FastDoom centre-pixel approach: flat index 32+32*64=2080 is the 64x64 tile centre.
-// ds_colormap applies distance-based shading, so the solid colour is properly lit.
-#define FAKEFLAT_DIST_THRESHOLD  (512 << FRACBITS)
-    // webdoom task 20.3a: FastDoom fake-flat.
-    // When the viewing distance exceeds FAKEFLAT_DIST_THRESHOLD world units,
-    // skip the texture walk and fill the span with the flat centre pixel colour.
-    // Render-only; playsim unchanged.
-    if (distance > FAKEFLAT_DIST_THRESHOLD)
+// webdoom task 20.3a: FastDoom fake-flat (unconditional solid-colour mode).
+// Every floor/ceiling span is replaced with a single representative colour —
+// no distance threshold, no per-pixel texture read.  FastDoom technique:
+// sample the 64x64 flat tile centre (index 32+32*64=2080) once per span at
+// R_MapPlane call time, then apply ds_colormap for distance-based shading.
+// Render-only; playsim unchanged.  Sky is routed via R_RenderSkyRange, not here.
     {
-	/* ylookup/columnofs are defined in r_draw.c; not in any header.
-	   Declare extern here to avoid adding a non-#ifdef include. */
+	/* ylookup/columnofs defined in r_draw.c; no public header — block extern. */
 	extern byte *ylookup[];
 	extern int   columnofs[];
 	byte solid = ds_colormap[ds_source[32 + 32*64]];

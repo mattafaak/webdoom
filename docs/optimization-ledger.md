@@ -625,16 +625,42 @@ verify-all.sh ALL PASS · size-ledger hard checks green.
 
 ---
 
-## Phase 20.3a — FastDoom fake-flat: distance-based solid-color flats (task 20.3a)
+## Phase 20.3a — FastDoom fake-flat: unconditional solid-colour flats (task 20.3a)
+
+### First attempt: distance-threshold (ABANDONED, +2.4% regression)
+
+Initial implementation inserted `if (distance > (512 << FRACBITS))` per-span and filled qualifying
+spans with a solid colour. On doom-demo3 (E1M3) this regressed by +2.4% (+26,658 instr/tic p50):
+E1M3 content has few spans beyond 512wu so the qualifying check added branch overhead to every span
+without offsetting savings. Distance-threshold is not the FastDoom approach.
+
+### Second attempt: unconditional solid fill (LANDED)
+
+FastDoom fake-flat replaces the texture walk for **all** floor/ceiling spans unconditionally, with no
+distance branch. Every call to R_MapPlane under `#ifdef WEBDOOM_FAKEFLAT` returns early after
+writing a single solid colour, eliminating all per-pixel texture reads (ds_source lookups, xfrac/yfrac
+arithmetic, xstep/ystep additions). Representative colour: centre pixel of the 64×64 flat tile,
+`ds_source[32 + 32*64]` (index 2080), sampled once per span at R_MapPlane call time. ds_colormap
+applies distance-based shading so the colour is correctly lit. Sky is unaffected (routed via
+R_RenderSkyRange, never reaches R_MapPlane). A `#line 221` directive after `#endif` resets the
+compiler's source-line counter so the toggle-off binary is byte-identical to master.
 
 | field | value |
 |-------|-------|
-| **mechanism** | `WEBDOOM_FAKEFLAT` compile-time toggle in `engine/core/r_plane.c` R_MapPlane(). When `distance > FAKEFLAT_DIST_THRESHOLD` (512 world units in fixed_t 16.16), the full texture walk (R_DrawSpan via spanfunc()) is skipped and the span is filled with a single representative colour: `ds_colormap[ds_source[32 + 32*64]]` — the center pixel of the 64×64 flat tile, properly lit by the distance-based colormap. FastDoom technique: center pixel at flat index 2080 (= 32 + 32×64). Column-major fill: `*dest = solid; dest += SCREENHEIGHT;` per pixel. A `#line 221` directive after the `#endif` resets the compiler's source-line counter, making the toggle-off build byte-identical to master. |
-| **toggle-off byte-identity** | `build/doom.wasm` md5 = `c669142745449ff04bd2fef30fa17412` (proven: git-stash baseline matches toggle-off rebuild). Size 356,775 bytes. |
-| **toggle-on build** | `build-fakeflat/doom.wasm` md5 = `e5447d43491ae527e37494a815a1a5de`. Size 357,061 bytes (budget: 360,448 bytes → green). Built with: `EXTRA_CFLAGS=-DWEBDOOM_FAKEFLAT BUILD=../build-fakeflat OUT=../build-fakeflat/doom.js`. |
+| **mechanism** | `WEBDOOM_FAKEFLAT` in R_MapPlane(): all flat spans filled with `ds_colormap[ds_source[32+32*64]]`, no distance check. 1 ds_source read per span (at call time), then constant-colour column-major fill. `#line 221` preserves toggle-off byte-identity. |
+| **toggle-off byte-identity** | `build/doom.wasm` md5 = `c669142745449ff04bd2fef30fa17412` (re-proven after redesign). Size 356,775 bytes. |
+| **toggle-on build** | `build-fakeflat/doom.wasm` md5 = `b2cc4f756075afe7d344400f3b0e11a4`. Size 355,031 bytes (budget: 360,448 bytes → green; smaller than first attempt due to removed threshold code). Built with `EXTRA_CFLAGS=-DWEBDOOM_FAKEFLAT BUILD=../build-fakeflat`. |
 | **golden set name** | `*-render-fakeflat.json` (13 files: doom-demo{1-4}, doom2/tnt/plutonia-demo{1-3}). Vanilla goldens (`-render.json`) untouched. |
-| **icount (local, doom.wad demo3)** | toggle-off: `total_instr=4,092,146,708` mean=1,059,318 instr/tic p50=1,104,391. toggle-on: `total_instr=4,196,318,811` mean=1,086,285 instr/tic p50=1,117,049. **Delta: +26,658 instr/tic p50 (+2.4%)** — regression on doom-demo3. E1M3 content does not expose many spans beyond 512wu; branch overhead for qualifying check adds cost without enough qualifying spans. Fleet measurement unavailable (SSH env not provisioned). Honest note: effectiveness is content-dependent; threshold may need tuning for measurable speedup in practice. |
+| **icount (local, doom.wad demo3, WD_CYCLES=1 fs-doom)** | toggle-off: `total_instr=4,141,325,830` mean=1,072,049 p50=1,110,572 instr/tic. toggle-on: `total_instr=2,925,922,948` mean=757,423 p50=860,682 instr/tic. **Delta: −249,890 instr/tic p50 (−22.5%)** — genuine reduction. Per-pixel ds_source reads, xfrac/yfrac arithmetic, and xstep/ystep additions are eliminated for all flat spans. Fleet SSH unavailable; local-only measurement. |
 | **sim invariance** | 13/13 sim goldens bit-identical in both modes (render-only change; playsim untouched). |
-| **magic-data policy** | No new tables. Center pixel index 2080 is a deterministic expression (32+32×64), not a magic constant. COMPLIES. |
-| **tic-exact-safe?** | YES. R_MapPlane writes to `screens[0]` only via the fill loop or spanfunc(); no P_Random, no actor state, no demo-observable side effects. |
-| **gates** | sim 13/13 PASS · render-fakeflat 13/13 PASS · render-high 13/13 PASS (vanilla goldens unchanged) · red-proof PASS (PIXEL DESYNC at tic 42 naming doom-demo1 → restore → PASS) · sim-wide 13/13 PASS · verify-all.sh ALL PASS |
+| **magic-data policy** | No new tables. Centre pixel index 2080 = 32+32×64, deterministic expression. COMPLIES. |
+| **tic-exact-safe?** | YES. R_MapPlane writes to `screens[0]` only (fill loop or spanfunc()). No P_Random, no actor state. |
+| **kill rule** | Any sim golden mismatch → kill. Any render-fakeflat golden regression → rebuild and re-record. toggle-off md5 divergence → bug in #line directive. |
+| **gates** | sim 13/13 PASS · render-fakeflat 13/13 PASS · render-high 13/13 PASS (vanilla untouched) · red-proof PASS (PIXEL DESYNC at tic 17 naming doom-demo1 → restore → PASS) · render-low 13/13 PASS · render-wide 13/13 PASS · sim-wide 13/13 PASS · sprite-witness PASS · mixed-width-net PASS · lint PASS · verify-all.sh ALL PASS · size-ledger hard checks green |
+
+**Verdict: LANDED — task 20.3a**
+
+20.3a landing evidence: unconditional solid-colour flat fill, no distance threshold.
+toggle-off md5 c669142745449ff04bd2fef30fa17412 · toggle-on md5 b2cc4f756075afe7d344400f3b0e11a4
+Measured gain: doom.wad demo3 p50 **1,110,572 → 860,682 instr/tic = −249,890 instr/tic (−22.5% whole)**.
+First attempt (distance-threshold) regressed +2.4% — documented above as negative data.
