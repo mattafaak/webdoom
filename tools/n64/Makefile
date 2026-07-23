@@ -30,6 +30,11 @@ SIZE    := $(N64_INST)/bin/mips64-elf-size
 STRIP   := $(N64_INST)/bin/mips64-elf-strip
 N64TOOL := $(LIBDRAGON)/tools/n64tool
 
+# `all` must be the default goal: Make picks the FIRST target in the file, and
+# the $(N64TOOL) rule below would otherwise win — a bare `make` then reports
+# success having built only the ROM packer, never the ROM.
+.DEFAULT_GOAL := all
+
 # Compile n64tool from source if binary not present.
 $(N64TOOL):
 	@echo "=== Building n64tool ==="
@@ -46,6 +51,7 @@ N64_ZONE_KB ?= 512
 #   -Wno-pointer-to-int-cast — class 5 landmine mitigation
 COMMON_FLAGS := -mabi=o64 -march=vr4300 -mtune=vr4300 \
                 -O2 \
+                -D__BIG_ENDIAN__ \
                 -DNORMALUNIX \
                 -DMAXSCREENWIDTH=320 \
                 -DN64_ZONE_KB=$(N64_ZONE_KB) \
@@ -182,8 +188,11 @@ boot-log: $(OUT_ROM)
 	    echo "BOOT LOG: D_DoomMain banner not detected (see ares-boot.log)"; \
 	fi
 
+# NOTE: ares-boot.log is committed evidence required by the 20.4b DoD, so it is
+# deliberately NOT removed here — `make clean` used to delete it, which silently
+# destroyed a tracked file. Only build outputs and scratch files go.
 clean:
 	rm -rf $(OBJ_DIR) $(OUT_ELF) $(OUT_ELF).stripped $(OUT_ROM) \
-	       ares-uart.tmp ares-boot.log
+	       ares-uart.tmp
 
 .PHONY: all size boot-log clean

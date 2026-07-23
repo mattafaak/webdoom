@@ -65,11 +65,46 @@ actually manifested during the build of task 20.4b:
 
 ### Class 1 — Endianness (big-endian MIPS vs little-endian x86)
 
-**Disposition: Did not trigger at compile time.**
-engine/core uses `#ifdef __BIG_ENDIAN__` in `m_swap.h` to reverse the swap
-macros, so the same source compiles correctly on both architectures.
-mips64-elf-gcc defines `__BIG_ENDIAN__` for `-mabi=o64`.
-Result: clean compile, no patching needed.
+**Disposition: TRIGGERED — silently, and the first fix attempt was wrong.**
+
+This is the most dangerous landmine in the set, because it compiles perfectly
+clean and only corrupts data at runtime.
+
+engine/core gates its byte-swapping on `#ifdef __BIG_ENDIAN__` (`m_swap.h:34`,
+`m_swap.c:35`). The initial 20.4b build assumed mips64-elf-gcc predefines that
+macro. **It does not.** Verified against the exact build flags:
+
+```
+$ mips64-elf-gcc -march=vr4300 -mtune=vr4300 -mabi=o64 -dM -E - </dev/null | grep ENDIAN
+#define __ORDER_LITTLE_ENDIAN__ 1234
+#define __FLOAT_WORD_ORDER__ __ORDER_BIG_ENDIAN__
+#define __ORDER_PDP_ENDIAN__ 3412
+#define __ORDER_BIG_ENDIAN__ 4321
+#define __BYTE_ORDER__ __ORDER_BIG_ENDIAN__
+```
+
+GCC defines the *modern* `__BYTE_ORDER__`/`__ORDER_BIG_ENDIAN__` pair and the
+MIPS-specific `__MIPSEB__`, but never the legacy `__BIG_ENDIAN__` that this
+1993 codebase tests. So `SHORT()` and `LONG()` expanded to identity macros and
+every multi-byte WAD field — lump offsets, sidedef/linedef indices, texture
+dimensions — would have been read byte-reversed on hardware.
+
+Nothing catches this without either running the ROM (blocked, see §6) or
+inspecting the preprocessor output, which is why it survived a clean build.
+
+**Fix (shim-side, engine/core still 0-diff):** `-D__BIG_ENDIAN__` in
+`COMMON_FLAGS`. Proof it took effect:
+
+| | `.text` | `SwapSHORT` / `SwapLONG` |
+|---|---|---|
+| before | 292,316 | absent from the link |
+| after  | 293,340 | `8001c638 T` / `8001c658 T` |
+
+`.data`/`.bss` are unchanged, so the RDRAM budget in §2 still holds.
+
+**Lesson for 20.5a and any future new-ABI port:** never infer a predefined
+macro — dump it with `-dM -E` under the real build flags. A macro this codebase
+depends on may simply not exist on a modern toolchain.
 
 ### Class 2 — Unaligned memory access
 
