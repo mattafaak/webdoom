@@ -434,11 +434,104 @@ sanctioned by policy).**
 | K7 | Runtime lookup→transcendental | cycle-floor | magic-data policy violation (measured slower) | KILLED |
 | K8 | Browser-fps-motivated wasm work | cycle-floor | framing invalid (render 1.71% of budget) | KILLED |
 | K9 | Combined flat_color lookup table | cycle-floor | magic-data policy violation (new runtime table) | KILLED |
+| NC1 | R_DrawSpan packed-position single-increment | cycle-floor | predicted −4K…−25K instr/tic (1–6% of planes); UNMEASURED | SURVIVES → task 20.2b |
+| NC2 | MAXSEGS solidsegs census (64→32 candidate) | RAM / portability | 0 instr/tic; 256 bytes BSS (survey required); UNMEASURED | SURVIVES → task 20.2b |
+| NC3 | R_GetColumn composite fast-path inlining | cycle-floor | predicted −6K…−18K instr/tic (1–4% of bsp); UNMEASURED | SURVIVES → task 20.2b |
+| NC4 | R_DrawColumn 8-wide unroll (extend existing 4-wide) | cycle-floor | predicted −5K…−10K instr/tic (1–2% of bsp); UNMEASURED | SURVIVES → task 20.2b |
+| NC5 | R_DrawSpan 4-wide loop unroll | cycle-floor | predicted −18K…−37K instr/tic (5–9% of planes); UNMEASURED | SURVIVES → task 20.2b |
 
-**Totals: 16 candidates, 7 survivors, 9 killed.**
+**Totals: 21 candidates, 12 survivors, 9 killed.**
 
 ---
 
-*Generated: task 14.1. Sources: cycle-attribution.json, cycle-floor.json, zone-stats.json,
-browser-pipeline-{alder,wbox}.json, perf.md §13.1a/b/§G, spec.md §magic-data-policy,
-bare-metal.md §7.3, docs/renderer.md §7.2.*
+*Generated: task 14.1 (C1–K9). NC1–NC5 added task 20.2a. Sources: cycle-attribution.json,
+cycle-floor.json, zone-stats.json, browser-pipeline-{alder,wbox}.json, perf.md §13.1a/b/§G/§Q1,
+spec.md §magic-data-policy, bare-metal.md §7.3, docs/renderer.md §7.2, r_draw.c, r_bsp.c.*
+
+---
+
+## Phase 20.2a — Fresh optimization survey (task 20.2a)
+
+Hunting grounds: bsp/segs/planes hotspots, column-major cache-layout effects, fixed-point
+kernel micro-optimizations. Excluded by design: FastDoom visual-quality catalog (fake-flat,
+sb-skip, potato columns, diff-blit) and rp2040-doom known techniques (DMA span, reduced
+colormap levels). Each entry below includes a one-line "non-overlap" marker showing it is
+independent of both excluded catalogs and the existing C1–K9 ledger.
+
+### NC1 — R_DrawSpan packed-position single-increment
+
+| field | value |
+|-------|-------|
+| **mechanism** | Replace the two separate `fixed_t xfrac, yfrac` accumulators in R_DrawSpan's inner loop with a single packed `uint32_t position` register. Encoding: `position = ((xfrac << 10) & 0xffff0000) \| ((yfrac >> 6) & 0xffff)`, step likewise. Each pixel then does `position += step` (1 increment) instead of `xfrac += xstep; yfrac += ystep` (2 increments). Spot extraction: `x_idx = position >> 26` (`&63` implicit in 6-bit field), `y_idx = (position >> 4) & 4032` (`4032 = 63*64`), `spot = x_idx \| y_idx` (matches existing `((yfrac>>(16-6))&(63*64)) + ((xfrac>>16)&63)`). The approach is already present in r_draw.c as a commented-out `#if 0` block (r_draw.c:700–766) labelled "Loop unrolled" with the exact same packing — it just needs to be re-enabled and validated. |
+| **predicted Δinstr/tic** | Anchor: R_DrawSpan total pixels/tic = 24,854 (perf.md §2.2 doom-demo2; verified by claims perf-039, recomputed 24,860). Saving: replacing 2 fixed-point additions with 1 per pixel = 1 instr/pixel saved. Upper bound: 24,854 × 1 = 24,854 instr/tic = 6.2% of planes (402,167 doom.wad p50, perf.md §13.1b). Conservative (compiler already ILP-schedules independent additions): 1–3% of planes = 4,027–12,065 instr/tic = 0.3–1.0% of whole (whole = 1,230,745 doom.wad p50). Arithmetic: 24,854 px × 1 instr/px = 24,854 upper; × 0.2–0.5 compiler-realization factor = **4,971–12,427 instr/tic predicted range**. |
+| **axis** | cycle-floor |
+| **magic-data policy** | None. No new tables. No precomputation. **COMPLIES.** |
+| **tic-exact-safe?** | **YES.** R_DrawSpan is render-only. `ds_source`, `ds_colormap`, `dest` (framebuffer) — none of these feed P_Random, actor state, or any sim-visible variable. The packing is a pure accumulator transformation; texture index `spot` is mathematically identical to the existing formula (verified algebraically from the `#if 0` block). Sim goldens are unchanged by construction. |
+| **kill rule** | Measured icount improvement < 4,000 instr/tic (1% of planes) on doom.wad p50 after instrumentation = drop. Any sim golden mismatch (13/13) = kill (impossible for this change, but stated for completeness). Any render golden pixel divergence before explicit regold = kill. |
+| **non-overlap** | K1 (killed) packed 4 *palette-output bytes* into one u32 store to reduce memory writes — a different mechanism (write compression) that measured a regression. NC1 packs the *texture coordinate state* into one accumulator to reduce arithmetic — orthogonal to K1 and unrelated to FastDoom's visual-quality reductions. Not in rp2040-doom DMA/colormap catalog. |
+
+**Verdict: SURVIVES → task 20.2b (priority: medium; 4K–12K instr/tic predicted; planes stage)**
+
+---
+
+### NC2 — MAXSEGS solidsegs census (64→32 downsize candidate)
+
+| field | value |
+|-------|-------|
+| **mechanism** | `solidsegs[MAXSEGS]` in r_bsp.c is the clip list for solid wall segments; MAXSEGS was doubled from vanilla 32 to 64 as a robustness measure (r_bsp.c:106: `"webdoom: was 32"`). If the 13-demo corpus peak solidsegs count is < 32, the array can revert to vanilla's 32. BSS saving: 32 entries × 8 bytes (sizeof cliprange_t = 2 × int) = **256 bytes**. Protocol: instrument with `-DWEB_PERF_SOLIDSEGS_STATS` (same pattern as drawseg/openings/visplane instrumentation in prior tasks), run 13 demos, record peak. If corpus max ≤ ~22 (1.5× margin below 32), proceed; otherwise keep 64. |
+| **predicted Δinstr/tic** | **0.** Reducing a static BSS array does not change instruction count at runtime. Identical to C4/C5/C6 pattern. |
+| **axis** | RAM / portability |
+| **magic-data policy** | None. **COMPLIES.** |
+| **tic-exact-safe?** | **YES.** r_bsp.c:144 comment confirms: "demo-neutral: solidsegs is render-only, never read by the sim." R_ClipSolidWallSegment and R_ClipPassWallSegment are renderer-only functions. No P_Random consumption. No sim-visible state. Source constant rdr-001 = 32 (vanilla) and rdr-002 = 64 (webdoom) verified by verify-all.sh source-constant gate. |
+| **kill rule** | `I_Error("R_ClipSolidWallSegment: too many (start)")` fires on any of 13 golden demos = kill. Render golden pixel divergence on any demo (solid-seg overflow causes silent missed walls, not crash, so pixel delta is the correct kill detector). |
+| **non-overlap** | C4 reduced MAXVISPLANES, C5 reduced MAXDRAWSEGS, C6 reduced MAXOPENINGS. NC2 targets MAXSEGS (solidsegs), the one remaining BSS array in r_bsp.c not yet surveyed. Not in FastDoom visual-quality catalog. Not in rp2040-doom catalog. |
+
+**Verdict: SURVIVES → task 20.2b (priority: low; 256 bytes BSS only; requires survey pass first)**
+
+---
+
+### NC3 — R_GetColumn composite fast-path inlining
+
+| field | value |
+|-------|-------|
+| **mechanism** | In R_RenderSegLoop (r_segs.c), `dc_source = R_GetColumn(midtexture, texturecolumn)` is called once per wall column. R_GetColumn (r_data.c:383–401) performs: (a) `col &= texturewidthmask[tex]`, (b) look up `texturecolumnlump[tex][col]` and `texturecolumnofs[tex][col]`, (c) if `lump > 0` return via W_CacheLumpNum (rare: multi-patch textures); (d) if `!texturecomposite[tex]` generate composite (rare: first access); (e) return `texturecomposite[tex] + ofs`. For single-patch textures (the common case in DOOM's WADs), `lump ≤ 0` and `texturecomposite[tex]` is already populated, so the hot path is just branch (c) = false + branch (d) = false + `return base + ofs`. The optimization: hoist `comp_base = texturecomposite[tex]`, `widthmask = texturewidthmask[tex]`, and `colofs = texturecolumnofs[tex]` outside the column loop; inside the loop replace the function call with `dc_source = comp_base + colofs[texturecolumn & widthmask]`. The same inlining applies to toptexture and bottomtexture segments. |
+| **predicted Δinstr/tic** | Anchor: R_DrawColumn total calls/tic = 714.8 (perf.md §2.2 table, doom-demo2; confirmed by perf-036 = 34,203 px, 47.9 avg px/call → 34,203/47.9 = 714.0 calls). All three wall tiers (mid, top, bottom) and sky columns call R_GetColumn once per colfunc() invocation. Estimate from perf.md §Q1: "~1,000–3,000 R_DrawColumn calls/frame" total (wall + sky + masked). Midpoint: 2,000 R_GetColumn calls/tic. Function call overhead saved per call: ~8 instrs (call setup, 2 table reads for lump/ofs, 2 conditional branches, return). Inline replacement: 1 AND + 1 array index + 1 addition = 3 instrs. Net saving: ~5 instrs/call. Arithmetic: 2,000 calls × 5 instrs = **10,000 instr/tic** = 2.0% of bsp (503,704 doom.wad p50, ledger 14.4 regenerated) = 0.8% of whole. Range (1,000–3,000 calls): 5,000–15,000 instr/tic. |
+| **axis** | cycle-floor |
+| **magic-data policy** | None. No new tables. Reads existing `texturecomposite`, `texturewidthmask`, `texturecolumnofs` arrays. **COMPLIES.** |
+| **tic-exact-safe?** | **YES.** R_GetColumn returns a pointer into the texture composite buffer. `dc_source` is a rendering-only global consumed only by R_DrawColumn/R_DrawColumnLow, which write to `screens[0]` (the framebuffer). No P_Random consumption. No sim-visible state. The inlined arithmetic is algebraically equivalent to R_GetColumn's composite path (same texturewidthmask AND, same ofs lookup, same base + ofs return). Sim goldens unchanged. Render goldens unchanged (pixel-identical output). |
+| **kill rule** | Measured icount improvement < 5,000 instr/tic on doom.wad p50 = drop. Any sim golden mismatch = kill. Any render golden pixel divergence = kill (inlining must be pixel-identical to R_GetColumn's output by construction). |
+| **non-overlap** | FastDoom "potato columns" reduces the number of wall columns drawn (visual quality reduction). NC3 reduces the per-column function call overhead for the same column count — orthogonal. rp2040-doom DMA approach is a bulk-transfer optimization, not function-call inlining. No entry in C1–K9 ledger targets R_GetColumn. |
+
+**Verdict: SURVIVES → task 20.2b (priority: medium; 5K–15K instr/tic predicted; bsp stage)**
+
+---
+
+### NC4 — R_DrawColumn 8-wide loop unroll (extending existing 4-wide from task 2.2)
+
+| field | value |
+|-------|-------|
+| **mechanism** | Task 2.2 introduced a 4-wide unroll for R_DrawColumn's power-of-2 path (`while (count >= 3)` handles 4 pixels, then a 1-pixel tail). Extending to 8-wide adds an outer layer `while (count >= 7)` handling 8 pixels before falling into the existing 4-wide and 1-pixel tail. For a column with count=N: 4-wide incurs ceil(N/4) + (N mod 4) loop-control ops; 8-wide (with 4-wide fallthrough) incurs floor(N/8) + (N mod 8)/4 + (N mod 4) iterations — fewer iterations for any N ≥ 8. The 8-wide block unrolls 8 independent `colormap[source[((frac+k*fracstep)>>FRACBITS)&mask]]` reads, allowing out-of-order execution to issue all 8 texture reads in parallel. |
+| **predicted Δinstr/tic** | Anchors: R_DrawColumn total px/tic = 34,203 (perf-036 claim); calls/tic = 714.8; avg px/call = 47.9 (perf.md §2.2). Loop overhead analysis per call (avg count = 46): 4-wide path: floor(46/4) = 11 four-pixel iterations + 2-pixel tail = 13 total loop overhead steps. 8-wide (with 4-wide inner): floor(46/8) = 5 eight-pixel iterations + floor(6/4) = 1 four-pixel iter + 2 tail steps = 8 total loop overhead steps. Saving: 13 − 8 = 5 steps/call × ~2 instrs/step = 10 instrs/call × 714.8 calls = **7,148 instr/tic** = 1.4% of bsp (503,704) = 0.6% of whole. Upper bound (including OOO parallelism win for tall walls): ~2% of bsp = 10,074 instr/tic. |
+| **axis** | cycle-floor |
+| **magic-data policy** | None. **COMPLIES.** |
+| **tic-exact-safe?** | **YES.** R_DrawColumn writes to `screens[0]` (framebuffer). The 8-wide inner loop computes identical pixel values to the 4-wide path: same `colormap[source[((frac+k*fracstep)>>FRACBITS)&mask]]` expression, same traversal order (top to bottom of column), same `frac` update (`+= fracstep*8` at end of 8-wide block). No P_Random involvement. No demo-observable state. The only output is pixel bytes in the framebuffer. Render golden regold not expected (output is pixel-identical to the current 4-wide path by construction). |
+| **kill rule** | Measured icount improvement < 4,000 instr/tic on doom.wad p50 vs the current 4-wide baseline = drop. Any sim golden mismatch = kill. Any render golden pixel divergence = kill (output must be identical to 4-wide baseline). |
+| **non-overlap** | The existing ledger records the task 2.2 4-wide unroll as landed (in C1's notes). NC4 is the next unroll level (8-wide) which is not in the ledger. FastDoom's known catalog does not include loop unrolling (it uses visual quality reductions). rp2040-doom's DMA approach is a bulk-transfer technique, not loop unrolling. K1 (killed) packed palette outputs, not the loop structure. |
+
+**Verdict: SURVIVES → task 20.2b (priority: low-medium; 5K–10K instr/tic predicted; bsp stage)**
+
+---
+
+### NC5 — R_DrawSpan 4-wide loop unroll
+
+| field | value |
+|-------|-------|
+| **mechanism** | Task 2.2 added a 4-wide unroll to R_DrawColumn but left R_DrawSpan as a plain single-pixel `do { ... } while (count--)` loop. R_DrawSpan's inner loop is: `spot = ((yfrac>>(16-6))&(63*64)) + ((xfrac>>16)&63); *dest = ds_colormap[ds_source[spot]]; dest += SCREENHEIGHT; xfrac += ds_xstep; yfrac += ds_ystep; count--`. A 4-wide unroll computes 4 spots, issues 4 `ds_source[spot_k]` reads (independent, can issue in parallel under OOO), and writes 4 pixels before decrementing count by 4. The 4 spot reads are independent of each other (each uses a precomputed offset `xfrac+k*xstep`, `yfrac+k*ystep`), so the CPU can overlap all 4 cache-miss loads. Loop control overhead drops from N iterations to N/4 iterations for the bulk. |
+| **predicted Δinstr/tic** | Anchors: R_DrawSpan total px/tic = 24,854 (perf-039); calls/tic = 147.8; avg px/call = 168.2 (perf.md §2.2 doom-demo2). Loop overhead: current loop has 1 `count--` + 1 branch per pixel = 2 instrs/pixel loop control. 4-wide: 2 instrs / 4 pixels = 0.5 instrs/pixel. Saving: 1.5 instrs/pixel × 24,854 px/tic = **37,281 instr/tic** (upper bound = pure loop overhead). Realistic (tail loop for remainder, count mod 4): avg remainder = 1.5 px/call × 147.8 calls × 2 instrs/px = 443 instrs for tail overhead. Net loop overhead saving: (37,281 − 443) = 36,838 instr/tic = 9.2% of planes (402,167) = 3.0% of whole. Conservative (compiler may partially unroll): **18,000–37,000 instr/tic = 4.5–9.2% of planes**. This is the highest-priority NC candidate by predicted icount reduction. |
+| **axis** | cycle-floor |
+| **magic-data policy** | None. No new tables. **COMPLIES.** |
+| **tic-exact-safe?** | **YES.** R_DrawSpan writes to `screens[0]` (framebuffer) only. `ds_colormap`, `ds_source`, `ds_xfrac`, `ds_yfrac`, `ds_xstep`, `ds_ystep` are all render-only globals. No P_Random. No actor state. The 4-wide unroll produces identical pixel bytes in the same order as the scalar loop (spots computed for x1, x1+1, x1+2, x1+3 in order; writes go to dest, dest+SCREENHEIGHT, dest+2×SCREENHEIGHT, dest+3×SCREENHEIGHT). Render golden regold not expected (output is pixel-identical by construction). |
+| **kill rule** | Measured icount improvement < 9,000 instr/tic on doom.wad p50 (half of lower-bound estimate) = drop. Any sim golden mismatch = kill. Any render golden pixel divergence = kill. |
+| **non-overlap** | K1 (killed) packed 4 *output palette bytes* into a u32 store to reduce write count — a different dimension (write compression) that measured a regression (+7.9%). NC5 unrolls the *loop control* and exposes instruction-level parallelism for 4 independent texture reads — orthogonal to K1. Task 2.2 applied 4-wide unroll to R_DrawColumn only; NC5 applies the same technique to R_DrawSpan, which currently has no unroll. FastDoom's fake-flat/sb-skip/diff-blit are visual quality reductions; NC5 makes no visual change. rp2040-doom DMA approach is a bulk-transfer technique, not loop-unroll. |
+
+**Verdict: SURVIVES → task 20.2b (priority: high; 18K–37K instr/tic predicted; planes stage — highest predicted gain of NC1–NC5)**
