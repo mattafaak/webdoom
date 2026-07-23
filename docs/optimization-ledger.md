@@ -622,3 +622,19 @@ of whole; −11.9% of planes stage). Exceeds the 9,000 instr/tic kill threshold 
 sim 13/13 PASS · render-high 13/13 PASS · render-low 13/13 PASS · render-wide 13/13 PASS ·
 sim-wide 13/13 PASS · sprite-witness PASS · mixed-width-net PASS · lint PASS ·
 verify-all.sh ALL PASS · size-ledger hard checks green.
+
+---
+
+## Phase 20.3a — FastDoom fake-flat: distance-based solid-color flats (task 20.3a)
+
+| field | value |
+|-------|-------|
+| **mechanism** | `WEBDOOM_FAKEFLAT` compile-time toggle in `engine/core/r_plane.c` R_MapPlane(). When `distance > FAKEFLAT_DIST_THRESHOLD` (512 world units in fixed_t 16.16), the full texture walk (R_DrawSpan via spanfunc()) is skipped and the span is filled with a single representative colour: `ds_colormap[ds_source[32 + 32*64]]` — the center pixel of the 64×64 flat tile, properly lit by the distance-based colormap. FastDoom technique: center pixel at flat index 2080 (= 32 + 32×64). Column-major fill: `*dest = solid; dest += SCREENHEIGHT;` per pixel. A `#line 221` directive after the `#endif` resets the compiler's source-line counter, making the toggle-off build byte-identical to master. |
+| **toggle-off byte-identity** | `build/doom.wasm` md5 = `c669142745449ff04bd2fef30fa17412` (proven: git-stash baseline matches toggle-off rebuild). Size 356,775 bytes. |
+| **toggle-on build** | `build-fakeflat/doom.wasm` md5 = `e5447d43491ae527e37494a815a1a5de`. Size 357,061 bytes (budget: 360,448 bytes → green). Built with: `EXTRA_CFLAGS=-DWEBDOOM_FAKEFLAT BUILD=../build-fakeflat OUT=../build-fakeflat/doom.js`. |
+| **golden set name** | `*-render-fakeflat.json` (13 files: doom-demo{1-4}, doom2/tnt/plutonia-demo{1-3}). Vanilla goldens (`-render.json`) untouched. |
+| **icount (local, doom.wad demo3)** | toggle-off: `total_instr=4,092,146,708` mean=1,059,318 instr/tic p50=1,104,391. toggle-on: `total_instr=4,196,318,811` mean=1,086,285 instr/tic p50=1,117,049. **Delta: +26,658 instr/tic p50 (+2.4%)** — regression on doom-demo3. E1M3 content does not expose many spans beyond 512wu; branch overhead for qualifying check adds cost without enough qualifying spans. Fleet measurement unavailable (SSH env not provisioned). Honest note: effectiveness is content-dependent; threshold may need tuning for measurable speedup in practice. |
+| **sim invariance** | 13/13 sim goldens bit-identical in both modes (render-only change; playsim untouched). |
+| **magic-data policy** | No new tables. Center pixel index 2080 is a deterministic expression (32+32×64), not a magic constant. COMPLIES. |
+| **tic-exact-safe?** | YES. R_MapPlane writes to `screens[0]` only via the fill loop or spanfunc(); no P_Random, no actor state, no demo-observable side effects. |
+| **gates** | sim 13/13 PASS · render-fakeflat 13/13 PASS · render-high 13/13 PASS (vanilla goldens unchanged) · red-proof PASS (PIXEL DESYNC at tic 42 naming doom-demo1 → restore → PASS) · sim-wide 13/13 PASS · verify-all.sh ALL PASS |

@@ -59,6 +59,17 @@ node tools/demo-test.mjs --render-wide | tail -2
 echo "── sim-invariance gate (wide ENABLED, traces match sim goldens) ─"
 node tools/demo-test.mjs --sim-wide | tail -2
 
+# ── fakeflat render goldens (20.3a: WEBDOOM_FAKEFLAT toggle) ─────────────────
+# Separate build (build-fakeflat/) compiled with -DWEBDOOM_FAKEFLAT.
+# Dedicated golden set (*-render-fakeflat.json): vanilla render goldens (-render.json)
+# are never modified by this leg.
+# Toggle-off byte-identity: build/doom.wasm md5 must match master (proven via #line directive).
+# RED-PROOF: any regression in R_MapPlane fake-flat path fails this leg while
+# the vanilla render leg above stays green.
+echo "── fakeflat build + render goldens (20.3a WEBDOOM_FAKEFLAT) ───"
+(cd engine && make -j8 EXTRA_CFLAGS=-DWEBDOOM_FAKEFLAT BUILD=../build-fakeflat OUT=../build-fakeflat/doom.js 2>&1 | tail -3)
+node tools/demo-test.mjs --render-fakeflat | tail -2
+
 # ── 18.4 exactness artillery: sprite-edge witness + mixed-width netgame ──────
 echo "── sprite-edge witness (r_things cull pin, 320+854) ────"
 node tools/sprite-witness-test.mjs | tail -1

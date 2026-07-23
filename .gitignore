@@ -1,6 +1,7 @@
 wads/
 !wads/.gitkeep
 build/
+build-fakeflat/
 build-invariants/
 node_modules/
 *.wasm

@@ -13,6 +13,8 @@
 //        node tools/demo-test.mjs --render-wide --record  # record 854-px wide render goldens
 //        node tools/demo-test.mjs --render-wide  # verify 854-px wide render goldens
 //        node tools/demo-test.mjs --sim-wide    # sim-invariance: wide ENABLED, must match sim goldens
+//        node tools/demo-test.mjs --render-fakeflat --record  # record fakeflat render goldens
+//        node tools/demo-test.mjs --render-fakeflat  # verify fakeflat render goldens
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -23,10 +25,14 @@ const renderMode = process.argv.includes('--render');
 const lowDetail = process.argv.includes('--low-detail'); // 14.2b: low-detail render goldens
 const wideRender = process.argv.includes('--render-wide'); // 18.2c: 854-px wide render goldens
 const simWide   = process.argv.includes('--sim-wide');    // 18.2c: sim-invariance gate
+const fakeFlatRender = process.argv.includes('--render-fakeflat'); // 20.3a: WEBDOOM_FAKEFLAT render goldens
 const crossIdx = process.argv.indexOf('--cross');
 const chocoBin = crossIdx >= 0 ? process.argv[crossIdx + 1] : null;
 const buildDirIdx = process.argv.indexOf('--build-dir');
-const buildDir = buildDirIdx >= 0 ? process.argv[buildDirIdx + 1] : 'build';
+// --render-fakeflat defaults to build-fakeflat/ (built with -DWEBDOOM_FAKEFLAT)
+const buildDir = buildDirIdx >= 0 ? process.argv[buildDirIdx + 1]
+               : fakeFlatRender   ? 'build-fakeflat'
+               : 'build';
 const goldenDir = join(root, 'tools/golden');
 mkdirSync(goldenDir, { recursive: true });
 
@@ -316,6 +322,122 @@ if (wideRender) {
     if (!verified) { console.log('FAIL: 0 demos verified (no WADs fetched?) — vacuous run'); process.exit(1); }
     console.log(record ? `wide render golden traces written (W=${WIDE_WIDTH})`
                        : `PASS — all wide render goldens pixel-identical (W=${WIDE_WIDTH}, ${verified} demos)`);
+    process.exit(0);
+}
+
+// ── fakeflat render mode (20.3a: --render-fakeflat) ─────────────────────────
+//
+// Records/verifies per-tic FNV-1a 32-bit framebuffer hashes of the build-fakeflat
+// wasm (compiled with -DWEBDOOM_FAKEFLAT).  Flat spans beyond FAKEFLAT_DIST_THRESHOLD
+// are filled with a solid representative colour, producing different pixel output
+// from the vanilla render path.  These goldens are therefore a separate, dedicated
+// set — vanilla render goldens (-render.json) are never modified by this mode.
+//
+// Golden suffix: -render-fakeflat.json
+// Mode tag in PASS/FAIL lines: [fakeflat]
+// No auto-record: missing goldens are hard errors.  Use --record for initial recording.
+
+if (fakeFlatRender) {
+    function fnv1aFakeflat(heapu8, fbPtr, palVer) {
+        let h = 0x811c9dc5;
+        const end = fbPtr + 320 * 200;
+        for (let i = fbPtr; i < end; i++) {
+            h = Math.imul(h ^ heapu8[i], 0x01000193);
+        }
+        h = Math.imul(h ^ ( palVer        & 0xff), 0x01000193);
+        h = Math.imul(h ^ ((palVer >>> 8)  & 0xff), 0x01000193);
+        h = Math.imul(h ^ ((palVer >>> 16) & 0xff), 0x01000193);
+        h = Math.imul(h ^ ((palVer >>> 24) & 0xff), 0x01000193);
+        return h >>> 0;
+    }
+
+    let failures = 0;
+    let verified = 0;
+
+    for (const [wad, engineName, demos] of MATRIX) {
+        const path = join(root, 'wads/lib', wad);
+        if (!existsSync(path)) { console.log(`skip ${wad}: not fetched`); continue; }
+        const wadBytes = readFileSync(path);
+
+        for (const demo of demos) {
+            let done = null;
+            const doom = await createDoom({
+                print: () => {},
+                printErr: t => { const m = /timed (\d+) gametics/.exec(t); if (m) done = +m[1]; },
+                onDoomError: msg => { if (!/timed \d+ gametics/.test(msg)) done = `error: ${msg}`; },
+            });
+            {
+                const p = doom._malloc(wadBytes.length);
+                doom.HEAPU8.set(wadBytes, p);
+                doom.ccall('web_register_file', null, ['string', 'number', 'number'],
+                    [engineName, p, wadBytes.length]);
+            }
+
+            const trace = [];
+            try {
+                doom.callMain(['-timedemo', demo]);
+                doom._web_set_smooth(0);
+                const fbPtr = doom._web_framebuffer();
+                let lastTic = -1;
+                for (let i = 0; i < 200000 && done === null; i++) {
+                    doom._web_wipe_skip();
+                    doom._web_frame();
+                    const tic = doom._web_gametic();
+                    if (tic !== lastTic) {
+                        trace.push(fnv1aFakeflat(doom.HEAPU8, fbPtr,
+                            doom._web_palette_version()));
+                        lastTic = tic;
+                    }
+                }
+            } catch (e) {
+                if (done === null) done = `threw: ${String(e).slice(0, 80)}`;
+            }
+
+            const name = `${wad.replace('.wad', '')}-${demo}`;
+            if (typeof done !== 'number') {
+                console.log(`FAIL ${name} [fakeflat] render: ${done ?? 'never finished'}`);
+                failures++;
+                continue;
+            }
+
+            const goldenPath = join(goldenDir, `${name}-render-fakeflat.json`);
+            if (record) {
+                writeFileSync(goldenPath, JSON.stringify({ tics: done, trace }));
+                console.log(`recorded ${name} [fakeflat] render: ${done} gametics, ${trace.length} hashes`);
+                verified++;
+                continue;
+            }
+            // No auto-record: missing golden is a hard error.
+            if (!existsSync(goldenPath)) {
+                console.log(`FAIL ${name} [fakeflat] render: golden absent (run --render-fakeflat --record first)`);
+                failures++;
+                continue;
+            }
+
+            const golden = JSON.parse(readFileSync(goldenPath));
+            if (golden.tics !== done) {
+                console.log(`FAIL ${name} [fakeflat] render: ran ${done} gametics, golden ${golden.tics}`);
+                failures++;
+                continue;
+            }
+            let diverged = -1;
+            for (let i = 0; i < golden.trace.length; i++) {
+                if (golden.trace[i] !== trace[i]) { diverged = i; break; }
+            }
+            if (diverged >= 0) {
+                console.log(`FAIL ${name} [fakeflat] render: PIXEL DESYNC at tic ${diverged} of ${golden.trace.length}`);
+                failures++;
+            } else {
+                console.log(`PASS ${name} [fakeflat] render: ${done} gametics pixel-identical`);
+                verified++;
+            }
+        }
+    }
+
+    if (failures) { console.log(`${failures} [fakeflat] render golden(s) failed`); process.exit(1); }
+    if (!verified) { console.log('FAIL: 0 demos verified (no WADs fetched?) — vacuous run'); process.exit(1); }
+    console.log(record ? `[fakeflat] render golden traces written`
+                       : `PASS — all [fakeflat] render goldens pixel-identical (${verified} demos)`);
     process.exit(0);
 }
 
