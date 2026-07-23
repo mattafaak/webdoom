@@ -1,0 +1,5 @@
+obj/
+*.elf
+*.bin
+*.map
+whd-out/
