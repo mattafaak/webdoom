@@ -32,7 +32,8 @@
 # DEPENDENCIES: bash, python3 (for WAD parsing and gzip), gzip, stat
 #
 # Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
-set -e
+set -eo pipefail   # pipefail: this script pipes arm-none-eabi-size into awk;
+                   # without it a failing size(1) would silently read as success
 
 WAD="${1:?Usage: prep-whd.sh <wad-file> [output-dir]}"
 OUTDIR="${2:-/tmp/whd-prep-$(basename "$WAD" .wad)}"
@@ -48,7 +49,21 @@ echo "prep-whd.sh: WAD=$WAD  size=${WAD_BYTES} bytes"
 echo "prep-whd.sh: output=$OUTDIR"
 
 # ── Step 1: parse WAD directory (Python inline) ───────────────────────────────
-python3 - "$WAD" "$OUTDIR" << 'PYEOF'
+# Measure the shim's flash footprint from the built ELF so this figure cannot
+# go stale as the port grows.  Falls back to the 2026-07-23 measurement when the
+# ELF has not been built yet (prep-whd.sh is useful before a successful link).
+ELF_FOR_SIZE="${RP2040_ELF:-$(dirname "$0")/rp2040-doom.elf}"
+CODE_SIZE=293476
+if [ -f "$ELF_FOR_SIZE" ] && command -v arm-none-eabi-size >/dev/null 2>&1; then
+    # shellcheck disable=SC2016
+    _sz=$(arm-none-eabi-size "$ELF_FOR_SIZE" | awk 'NR==2 {print $1 + $2}')
+    [ -n "$_sz" ] && CODE_SIZE="$_sz"
+    echo "prep-whd.sh: code_size=${CODE_SIZE} B (text+data, measured from $ELF_FOR_SIZE)"
+else
+    echo "prep-whd.sh: code_size=${CODE_SIZE} B (fallback — ELF not built)"
+fi
+
+python3 - "$WAD" "$OUTDIR" "$CODE_SIZE" << 'PYEOF'
 import struct, sys, os, gzip, io, json
 
 wad_path = sys.argv[1]
@@ -115,7 +130,7 @@ total_gz  = sum(c['gz']  for c in categories.values())
 
 # RP2040 flash budget
 flash_total   = 2 * 1024 * 1024       # 2 MB
-code_size     = 293476                 # measured from rp2040-doom.elf
+code_size     = int(sys.argv[3])       # text+data, measured from the ELF by the caller
 flash_avail   = flash_total - code_size
 ratio         = total_gz / total_raw if total_raw else 1.0
 fits          = total_gz <= flash_avail

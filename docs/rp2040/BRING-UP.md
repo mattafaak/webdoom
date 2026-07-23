@@ -12,7 +12,7 @@ Footprint measured.  Boot-to-D_DoomMain: **BLOCKED — SRAM 4.00× overshoot**
 |------|--------|
 | Cross-compile engine/core (56 files, Cortex-M0+) | PASS — 0 errors, warnings only |
 | Link rp2040-doom.elf (newlib nosys) | PASS |
-| Flash (.text + .data): 293,476 B | fits 2 MB (1.80 MB spare) |
+| Flash (.text + .data): 293,476 B | fits 2 MB (1,761 KB / 1.72 MB spare) |
 | SRAM (.data + .bss): 1,082,104 B | **DOES NOT FIT** — 264 KB cap, deficit **793 KB** |
 | SRAM deficit with real zone (1,028 KB min) | **~1,565 KB** (see §3) |
 | WHD compressed doom.wad (gzip-9) | 5,536 KB — does NOT fit 1,761 KB available |
@@ -77,7 +77,7 @@ Measured from `arm-none-eabi-nm --size-sort -S -td tools/rp2040/rp2040-doom.elf 
 | `finetangent[4096]` | tables.c | 16,384 |
 | `viewangletox[8192]` | r_main.c | 16,384 |
 | `drawsegs[256]` | r_segs.c | 12,288 |
-| everything else | engine/core | ~70,220 |
+| everything else | engine/core | ~70,180 |
 | **TOTAL (.bss section)** | | **1,025,732** |
 
 Note: `rp2040_shadow_fb` (64 KB) is the headless video stub storing a frame copy.
