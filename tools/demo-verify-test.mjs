@@ -104,10 +104,15 @@ async function verifyDemoBytes(lmpBytes, wadPath, golden) {
     if (rc !== 0)
         return { ok: false, error: `web_play_demo_buf returned ${rc}` };
 
+    // Carousel guard + nodraw — mirrors demo-verify.mjs (see comment there).
+    const myBuf = doom._web_demo_buf_ptr();
+    doom._web_set_nodraw(1);
+
     const trace  = [];
     let lastTic  = -1;
     let cappedOut = false;
     for (let i = 0; i < REPLAY_TIC_CAP + 10 && doom._web_demo_playing(); i++) {
+        if (doom._web_demo_buf_ptr() !== myBuf) break;  // carousel took over — demo ended
         if (trace.length >= REPLAY_TIC_CAP) { cappedOut = true; break; }
         doom._web_wipe_skip();
         try { doom._web_frame(); } catch (_) { break; }
@@ -308,11 +313,36 @@ await hostileCase('bad version (0x00)',
 {
     const b = Buffer.alloc(200, 0x00);
     b[0] = 110;  // valid version
-    // episode=0, map=0: G_InitNew is NOT called (per web_play_demo_buf guard)
+    // episode=0, map=0: web_play_demo_buf returns -1 BEFORE G_InitNew (19.4
+    // bounds guard rejects out-of-range level indices outright)
     // The demo will play 0 tics (no level) and demoplayback ends quickly.
     // We put the marker at byte 17 (first 4-byte boundary after header).
     b[17] = 0x80;
     await hostileCase('ep=0 map=0 demo (no G_InitNew, marker at byte 17)', b);
+}
+
+{
+    // Early DEMOMARKER: valid header (ep=1 map=1), marker as the very first
+    // tic byte — a 0-tic demo.  Must reject gracefully (trace too short),
+    // never crash or hang.
+    const b = new Uint8Array(14);
+    b[0] = 109;      // version
+    b[1] = 2;        // skill
+    b[2] = 1;        // episode
+    b[3] = 1;        // map
+    b[9] = 1;        // playeringame[0] = 1 (valid header otherwise)
+    b[13] = 0x80;    // DEMOMARKER at first tic position → 0-tic demo
+    await hostileCase('early DEMOMARKER (0-tic demo, marker at byte 13)', b);
+}
+
+{
+    // Zero-player demo: valid level/skill but playeringame[] all false.
+    // No player ever consumes ticcmds, so the marker is never read and the
+    // engine drifts into undefined attract states — must reject at load.
+    const b = new Uint8Array(18);
+    b[0] = 109; b[1] = 2; b[2] = 1; b[3] = 1;
+    b[17] = 0x80;    // marker after one 4-byte tic
+    await hostileCase('zero-player demo (playeringame all false)', b);
 }
 
 // Case 6: Garbage (random bytes)

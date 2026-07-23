@@ -163,11 +163,6 @@ EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr)
     for (i = 0; i < MAXPLAYERS; i++)
         playeringame[i] = (boolean) *p++;
 
-    // Store header params for web_seek_demo (task 19.3 seek reuse).
-    seek_skill = skill;
-    seek_episode = episode;
-    seek_map = map;
-
     // p now points to the first tic (past the 13-byte header).
     // Scan in 4-byte steps for WEBDEMO_MARKER to determine total demo size.
     // Each tic is exactly 4 bytes (forwardmove, sidemove, angleturn, buttons);
@@ -178,7 +173,11 @@ EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr)
     while (scan < raw + (1024 * 1024 + 16) && *scan != WEBDEMO_MARKER)
         scan += 4;
     if (*scan != WEBDEMO_MARKER)
-        return -1;              /* no terminator within cap — reject */
+        return -1; /* no terminator within cap — reject */
+    if (scan == p)
+        return -1;              /* hostile: 0-tic demo (marker at first tic) —
+                                   nothing to replay; rejecting avoids the
+                                   post-marker attract-carousel states */
     scan++;                     /* include the marker byte */
     total = (int) (scan - raw); /* header + tic data + marker */
 
@@ -208,7 +207,26 @@ EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr)
     // Valid DOOM ranges: episode 1-4, map 1-9 (retail/shareware);
     //                   episode 1,   map 1-32 (commercial/tnt/plutonia).
     if (episode == 0 || map == 0)
-        return -1;             /* hostile: out-of-range level index, reject */
+        return -1; /* hostile: out-of-range level index, reject */
+    if (skill > sk_nightmare)
+        return -1; /* hostile: skill out of range */
+    if (consoleplayer < 0 || consoleplayer >= MAXPLAYERS ||
+        !playeringame[consoleplayer])
+        return -1; /* hostile: console player not in game — a
+                      zero-player replay never consumes ticcmds,
+                      so the DEMOMARKER is never read and the
+                      engine drifts into undefined attract states
+                      (found by 19.4 hostile fuzzing) */
+                   /* NOTE: this intentionally removes the 19.2
+                      title-screen-recording path (ep/map=0) — no
+                      feature or test consumed it, and it enabled
+                      the attract-carousel hang (19.4). */
+
+    // Store header params for web_seek_demo (task 19.3 seek reuse) —
+    // only after the header passed validation above.
+    seek_skill = skill;
+    seek_episode = episode;
+    seek_map = map;
 
     G_InitNew (skill, episode, map);
 
@@ -256,9 +274,10 @@ EMSCRIPTEN_KEEPALIVE int web_seek_demo (int targetTic)
     int i;
 
     // Guard: seek_episode==0 means web_play_demo_buf was never called with
-    // a valid level-based demo (title-screen demos have episode=0).
-    // demoplayback may have been cleared by end-of-demo; that is normal after
-    // a seek completes — rely on seek_episode to gate the initial call.
+    // a valid level-based demo ((historical: pre-19.4 title-screen demos had
+    // episode=0; now rejected at load)). demoplayback may have been cleared by
+    // end-of-demo; that is normal after a seek completes — rely on seek_episode
+    // to gate the initial call.
     if (seek_episode == 0 && seek_map == 0)
         return -1;
 

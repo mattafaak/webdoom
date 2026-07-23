@@ -167,11 +167,22 @@ async function verifyDemo(lmpBytes, wadPath, golden) {
     if (rc !== 0)
         return { ok: false, error: `web_play_demo_buf returned ${rc} (bad version or no marker)` };
 
+    // Carousel guard: after OUR demo's marker, G_CheckDemoStatus starts the
+    // WAD's attract carousel — demobuffer switches away from our zone copy and
+    // web_demo_playing() stays true (playing the WAD's DEMO1).  Without this
+    // guard a 0/short-tic hostile demo grinds ticCap fully-rendered attract
+    // frames (~80 min at the default cap).  Buffer-pointer change = replay over.
+    const myBuf = doom._web_demo_buf_ptr();
+    // Verification hashes sim state only — rendering is pure waste.  nodraw
+    // also prevents the wall-clock melt wipe from arming (19.3 precedent).
+    doom._web_set_nodraw(1);
+
     // Replay: collect per-tic web_state_hash().
     const trace = [];
     let lastTic = -1;
     let cappedOut = false;
     for (let i = 0; i < ticCap + 10 && doom._web_demo_playing(); i++) {
+        if (doom._web_demo_buf_ptr() !== myBuf) break;  // carousel took over — demo ended
         if (trace.length >= ticCap) { cappedOut = true; break; }
         doom._web_wipe_skip();
         try { doom._web_frame(); } catch (_) { break; }

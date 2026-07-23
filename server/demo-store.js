@@ -123,7 +123,7 @@ export function putAttestation(id, tics, trace) {
         throw { status: 404, message: 'demo not found' };
     if (!Array.isArray(trace) || typeof tics !== 'number')
         throw { status: 400, message: 'attestation must have {tics: number, trace: Array}' };
-    if (trace.length > 200_001)
+    if (trace.length > 200_000)
         throw { status: 413, message: 'attestation trace exceeds tic cap' };
     // Validate all entries are safe integers in u32 range.
     for (let i = 0; i < trace.length; i++) {
