@@ -1,0 +1,71 @@
+FINDING: ares emulator exits with SIGSEGV (signal 11) during GUI/window initialization.
+
+== ares binary health (CLI paths work) ==
+  ares --version  → "master - (e1b0d47 - 2026-07-23)"  rc=0  PASS
+  ares --help     → usage text printed                   rc=0  PASS
+  The binary itself is healthy.  SIGSEGV is limited to the GUI initialization
+  path (SDL3/GTK3 window creation).  NOT a static initializer issue and NOT
+  a ROM or build defect.
+
+== Environment ==
+  Host:              Linux x86-64, CachyOS (Arch-based), KDE Plasma Wayland
+  Agent shell:       tty session (no DISPLAY variable)
+  Wayland socket:    /run/user/1000/wayland-0  (live; uid jwhit; GTK3 test OK)
+  X server:          XWayland at :0 (PID 2049 kwin_wayland_wrapper; auth required)
+  xvfb-run / Xvfb:  NOT INSTALLED on this host
+                     Install requires root: pacman -S xorg-server-xvfb  (run as root)
+                     (assistant cannot execute pacman as root)
+  mupen64plus:       NOT INSTALLED
+  cen64:             NOT INSTALLED
+  No alternative N64 emulator was available.
+
+== What was tried ==
+  DISPLAY=:0                     SIGSEGV  (auth error first, then crash)
+  WAYLAND_DISPLAY=wayland-0      SIGSEGV  (GTK3 Python window opened fine on same socket)
+  GDK_BACKEND=wayland            SIGSEGV  (ares-specific failure)
+  SDL_VIDEODRIVER=offscreen      SIGSEGV  (SDL3 path in ares crashes)
+  LIBGL_ALWAYS_SOFTWARE=1        SIGSEGV
+
+== Signal 11 backtrace (LD_PRELOAD handler; ares is stripped) ==
+  [PRELOAD] constructor called     ← library load OK
+  signal 11 (SIGSEGV) caught:
+    ares(+0x2d79a9)                ← fault; in SDL3/GTK3 window/display init area
+    ares(+0x2e054e)
+    ares(+0x2e1359)
+    ares(+0x1661ec)
+    ares(+0x231841)
+    ares(+0xe9718)
+    ares(+0xe7e03)
+    libc __libc_start_main → ares(+0x14c9e5)
+
+== REMEDY (once xvfb is available) ==
+  sudo pacman -S xorg-server-xvfb   # requires root on this host
+  cd tools/n64/
+  make boot-log
+  # which runs:
+  #   xvfb-run -a ares --system "Nintendo 64" --no-file-prompt n64-doom.z64
+  # and captures ISViewer UART to ares-boot.log
+
+  Expected output after remedy (D_DoomMain banner, d_main.c:796):
+    N64 webdoom boot: initialising shim layer
+    ===========================================================================
+    DOOM Shareware Startup v1.9
+    ===========================================================================
+  Then W_InitMultipleFiles calls I_Error (NULL WAD blob) → longjmp →
+    "N64 webdoom: demo completed normally"   ← expected exit for footprint build
+
+== Build artifacts verified (20.4b DoD) ==
+  n64-doom.elf    text=292316 data=53944 bss=936788 dec=1283048
+  n64-doom.z64    360448 bytes  (footprint build, NULL WAD blob)
+
+  RDRAM budget:
+    .data+.bss in-use:    990,732 B  (967.5 KB)   fits stock N64 (4 MB base)
+    4 MB RDRAM headroom: 3,203,572 B  (3128.5 KB)
+    8 MB RDRAM headroom: 7,397,876 B  (7224.5 KB)
+
+  Top BSS contributors:
+    n64_arena (zone):     524,288 B  (512 KB)   i_system_n64.c, N64_ZONE_KB=512
+    finetangent:           16,384 B   (16 KB)   engine/core trig table
+    tantoangle:             8,196 B    (8 KB)   engine/core trig table
+    zlight:                 8,192 B    (8 KB)   engine/core lighting table
+    n64_pal_rgb:              768 B             i_video_n64.c palette shadow

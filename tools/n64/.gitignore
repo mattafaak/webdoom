@@ -1,0 +1,5 @@
+obj/
+*.elf
+*.elf.stripped
+*.z64
+ares-uart.tmp
