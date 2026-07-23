@@ -141,7 +141,10 @@ if (_perfmarks) {
 // wads: [{file, sha}] — first entry is the IWAD, the rest are PWADs.
 // net: {slot, numplayers, jitterMs} or null for single player.
 // onQuit: called when the player quits in-game (Quit Game → Y).
-export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
+// record: if true, call doom._web_demo_start() before callMain so that
+//         G_RecordDemo is armed before D_DoomLoop's G_BeginRecording fires.
+//         The caller (lobby.js) controls the stop-and-share lifecycle.
+export async function bootDoom({ wads, args = [], net = null, onQuit = null, record = false }) {
     const canvas = document.getElementById('screen');
     document.getElementById('landing').hidden = true;
     canvas.hidden = false;
@@ -199,7 +202,12 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
         ? attachRelay(doom, `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`, net)
         : null;
 
-    doom.callMain([...pwads, ...args]);
+    // Arm demo recording via the -record callMain arg (safe path):
+    // G_RecordDemo runs after Z_Init inside D_DoomMain, so the zone
+    // allocator is live.  G_BeginRecording fires from D_DoomLoop.
+    const recordArgs = record ? ['-record', 'webdemo'] : [];
+
+    doom.callMain([...pwads, ...args, ...recordArgs]);
     if (net?.join) {
         // Drop-in: re-simulate the streamed cmd history to the live frontier
         // (headless, at speed), then park the view on a live player until our
@@ -318,7 +326,11 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null }) {
             canvas.classList.toggle('wide', renderW > 320);
             renderer.setPaniniStrength(paniniStrength(renderW, input.settings.panini));
         }
-
+        // Test-harness hook: set window._doomFrameHook = fn() before boot
+        // to intercept each frame (e.g. for per-tic hash collection in CDP
+        // browser tests).  No-op in production (window._doomFrameHook is
+        // undefined unless the test injects it).
+        window._doomFrameHook?.();
         const v = doom._web_palette_version();
         renderer.draw(
             doom.HEAPU8.subarray(fb, fb + renderW * SCREEN_H),

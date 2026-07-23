@@ -13,6 +13,11 @@ import { createFire } from './fire.js';
 import { identifyWad, WadError } from './wad-import.js';
 import { libraryAdd, libraryList } from './wad-library.js';
 import { validateSf2, Sf2Error, sf2StoreCurrent } from './sf2-library.js';
+import {
+    parseDemoUrl, startReplay, ownsWad,
+    armRecording, stopAndShare,
+    showSharePanel, showWadWarning, showReplayNotice,
+} from './demo.js';
 
 const $ = id => document.getElementById(id);
 const status = msg => { $('status').textContent = msg; };
@@ -160,14 +165,40 @@ function returnToMenu() {
 const singleMap = w => (w.maps?.length === 1 && !w.maps[0].startsWith('E')) ? +w.maps[0].slice(3) : null;
 
 function spGameScreen() {
-    const boot = w => {
+    // Boot helper. record=true arms the demo bridge before callMain so that
+    // G_RecordDemo is called before D_DoomLoop runs G_BeginRecording.
+    const boot = (w, record = false) => {
         if (booted) return;
         booted = true;
         fire?.pause();    // stop fire while the game is running
         menu.hide();
         const m = singleMap(w);
         const args = m ? ['-warp', String(m), '-skill', '3'] : [];
-        bootDoom({ wads: stackFor(w.file), args, onQuit: returnToMenu })
+        // Pass record flag so main.js can arm the bridge before callMain.
+        bootDoom({ wads: stackFor(w.file), args, onQuit: returnToMenu, record })
+            .then(doom => {
+                if (record && doom) {
+                    // Inject a stop-and-share button into the overlay during gameplay.
+                    const btn = document.createElement('button');
+                    btn.id = 'demo-stop-btn';
+                    btn.textContent = '⏹ STOP & SHARE';
+                    btn.title = 'Stop recording and generate a share link';
+                    btn.style.cssText =
+                        'position:fixed;top:8px;right:8px;z-index:100;' +
+                        'background:#222;color:#eee;border:1px solid #666;' +
+                        'font-family:monospace;font-size:11px;padding:4px 10px;cursor:pointer;';
+                    document.body.appendChild(btn);
+                    btn.addEventListener('click', async () => {
+                        btn.remove();
+                        try {
+                            const shareUrl = await stopAndShare(doom, w.file);
+                            showSharePanel(shareUrl);
+                        } catch (e) {
+                            status('demo share error: ' + e.message);
+                        }
+                    });
+                }
+            })
             .catch(err => {
                 // WAD fetch / engine boot failed: reset so the user can retry
                 // without reloading the page.  main.js has already restored
@@ -181,18 +212,30 @@ function spGameScreen() {
                 status(String(err));
             });
     };
+    // Per-game action screen: PLAY or RECORD & SHARE
+    const gameActions = w => ({
+        title: w.title,
+        items: [
+            { label: 'PLAY', action: () => boot(w) },
+            {
+                label: 'RECORD & SHARE',
+                action: () => boot(w, true /* arm recording */),
+            },
+        ],
+    });
+
     return {
         title: 'CHOOSE GAME',
         items: sortedGames().map(w => ({
             label: w.title,
             thumb: font.titleThumb(w.file, 52),
-            action: () => boot(w),
+            action: () => menu.push(gameActions(w)),
         })).concat(groups().map(g => ({
             label: g,
             action: () => menu.push({
                 title: g,
                 items: manifest.filter(w => w.group === g)
-                    .map(w => ({ label: w.title, action: () => boot(w) })),
+                    .map(w => ({ label: w.title, action: () => menu.push(gameActions(w)) })),
             }),
         }))),
     };
@@ -608,6 +651,54 @@ function leaveLobby() {
         if (document.hidden) fire.pause();
         else if (!booted) fire.resume();
     });
+
+    // ── Demo permalink: check URL for a demo share param ──────────────────────
+    // ?demo=<sha256id>&wad=<wadfile>  → server-stored demo
+    // #demo=<base64url>&wad=<wadfile> → fragment-embedded demo (≤ FRAGMENT_MAX bytes)
+    //
+    // WAD ownership check: the named WAD must be in the server's manifest.
+    // If missing, show a warning and abort replay (receiver must own the WAD).
+    const demoInfo = await parseDemoUrl().catch(() => null);
+    if (demoInfo) {
+        const { bytes, wad } = demoInfo;
+        if (wad && !ownsWad(manifest, wad)) {
+            showWadWarning(wad);   // sets #status — do NOT clear it with status('')
+            menu.reset(rootScreen());
+            return;
+        }
+        // Find the matching WAD entry in the manifest for booting.
+        const wadEntry = wad ? manifest.find(w => w.file === wad) : sortedGames()[0];
+        if (!wadEntry) {
+            showWadWarning(wad || '(unknown)');   // sets #status — do NOT clear it
+            menu.reset(rootScreen());
+            return;
+        }
+        // Hide the menu and replay the demo.
+        booted = true;
+        fire?.pause();
+        menu.hide();
+        showReplayNotice();
+        bootDoom({ wads: stackFor(wadEntry.file), args: [], onQuit: returnToMenu })
+            .then(doom => {
+                if (!doom) return;
+                const rc = startReplay(doom, bytes);
+                if (rc !== 0) {
+                    booted = false;
+                    fire?.resume();
+                    menu.show();
+                    menu.reset(rootScreen());
+                    status('demo replay failed: version mismatch');
+                }
+            })
+            .catch(err => {
+                booted = false;
+                fire?.resume();
+                menu.show();
+                menu.reset(rootScreen());
+                status(String(err));
+            });
+        return;
+    }
 
     menu.reset(rootScreen());   // triggers onTransition('reset') → fire.flare()
     status('');

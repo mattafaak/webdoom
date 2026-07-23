@@ -84,6 +84,9 @@ node tools/check-sw-precache.mjs
 echo "── static HTTP path fuzz (ws-005 companion) ────────────"
 node tools/http-fuzz-test.mjs | tail -1
 
+echo "── demo store fuzz + abuse (19.2 caps enforcement) ─────"
+node tools/demo-store-fuzz-test.mjs | tail -1
+
 echo "── net fuzz + abuse (malformed/hostile clients) ────────"
 node tools/net-fuzz-test.mjs | tail -1
 
@@ -109,6 +112,7 @@ node tools/browser-rafdeath-test.mjs http://127.0.0.1:8668/ | tail -1
 node tools/browser-wide-toggle-test.mjs http://127.0.0.1:8668/ | tail -1
 node tools/browser-qol-test.mjs http://127.0.0.1:8668/ | tail -1
 node tools/browser-offline-test.mjs | tail -2
+node tools/browser-demo-test.mjs http://127.0.0.1:8668/ | tail -2
 
 # ── Insecure-origin CI leg (task 16.5) ────────────────────────────────────────
 # Dedicated port 8674 (hardcoded inside the script per the 12.2b lesson).

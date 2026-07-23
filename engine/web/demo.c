@@ -25,14 +25,20 @@
 #include <stddef.h>
 #include <emscripten.h>
 
+#include <string.h>     /* memcpy */
+
 #include "doomdef.h"    /* VERSION, MAXPLAYERS */
 #include "doomstat.h"   /* demorecording, demoplayback, consoleplayer, etc. */
 #include "d_event.h"    /* gameaction_t, gameaction, ga_nothing */
 #include "g_game.h"     /* G_RecordDemo, G_InitNew */
+#include "z_zone.h"     /* Z_Malloc, PU_STATIC */
 
 /* Internal demo buffer pointers defined in g_game.c */
 extern byte* demobuffer;
 extern byte* demo_p;
+
+/* Title-screen demo advance flag defined in d_main.c */
+extern boolean advancedemo;
 
 /* DEMOMARKER is #defined inside g_game.c — duplicate the value here. */
 #define WEBDEMO_MARKER 0x80
@@ -102,13 +108,23 @@ EMSCRIPTEN_KEEPALIVE int web_demo_playing (void)
 // Parses the demo header, calls G_InitNew with the embedded params, then
 // sets demoplayback=true so G_Ticker reads inputs from demobuffer.
 // Returns 0 on success, -1 if the demo version byte is not 109 or 110.
+//
+// ZONE COPY: The raw bytes are copied into a zone-allocator buffer (Z_Malloc,
+// PU_STATIC) so that G_CheckDemoStatus can safely call Z_ChangeTag(demobuffer)
+// when the DEMOMARKER is reached at end of replay.  Passing a raw heap ptr
+// directly as demobuffer causes Z_ChangeTag to read a garbage block header and
+// crash the wasm runtime.  Size is computed by scanning for DEMOMARKER after
+// the header; since each tic occupies exactly 4 bytes the scan steps 4 bytes
+// at a time to avoid false positives on movement/button data.
 EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr)
 {
-    byte*   buf = (byte*)(size_t) heapPtr;
-    byte*   p   = buf;
-    int     ver, i;
+    byte*   raw = (byte*)(size_t) heapPtr;
+    byte*   p   = raw;
+    int     ver, i, total;
     skill_t skill;
     int     episode, map;
+    byte*   scan;
+    byte*   zone_buf;
 
     ver = (int)*p++;
     if (ver != VERSION && ver != 109)
@@ -125,13 +141,45 @@ EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr)
     for (i = 0; i < MAXPLAYERS; i++)
         playeringame[i] = (boolean)*p++;
 
-    // Point demobuffer at buffer start; demo_p at tic data (past header).
-    demobuffer  = buf;
-    demo_p      = p;
+    // p now points to the first tic (past the 13-byte header).
+    // Scan in 4-byte steps for WEBDEMO_MARKER to determine total demo size.
+    // Each tic is exactly 4 bytes (forwardmove, sidemove, angleturn, buttons);
+    // the marker 0x80 only appears at a 4-byte-aligned position after the header.
+    scan = p;
+    while (*scan != WEBDEMO_MARKER)
+        scan += 4;
+    scan++;                         /* include the marker byte */
+    total = (int)(scan - raw);      /* header + tic data + marker */
 
-    // G_InitNew sets demoplayback=false; we restore it after.
+    // Zone-allocate and copy so G_CheckDemoStatus can Z_ChangeTag safely.
+    zone_buf = Z_Malloc (total, PU_STATIC, NULL);
+    memcpy (zone_buf, raw, total);
+
+    // Adjust pointers to the zone copy.
+    demobuffer  = zone_buf;
+    demo_p      = zone_buf + (int)(p - raw);
+
+    // Suppress the title-screen demo advance so the WAD's own DEMO* sequence
+    // cannot replace our demobuffer on the first G_Ticker tick.  Without this,
+    // D_DoAdvanceDemo fires immediately and G_DoPlayDemo overwrites zone_buf
+    // with the WAD's DEMO1 bytes, destroying our replay setup.
+    advancedemo = false;
     gameaction = ga_nothing;
-    G_InitNew (skill, episode, map);
+
+    // Skip G_InitNew when episode/map are 0: the recording started from the
+    // title screen (no level was active at record time).  G_InitNew(skill,0,0)
+    // calls P_SetupLevel("E0M0") which is absent from the WAD, triggering
+    // I_Error and aborting the wasm runtime.  With no G_InitNew the engine
+    // remains in GS_DEMOSCREEN; gametic still advances and prndindex stays 0
+    // (P_Random is not called outside GS_LEVEL), producing a deterministic
+    // hash sequence that matches the original title-screen recording exactly.
+    if (episode > 0 && map > 0)
+        G_InitNew (skill, episode, map);
+
+    // Mirror G_DoPlayDemo (g_game.c:1656): replay path requires usergame=false.
+    // G_InitNew sets usergame=true; override here so the engine treats this as
+    // demo playback, not an active user session.
+    usergame = false;
     demoplayback = true;
     return 0;
 }
