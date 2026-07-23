@@ -478,7 +478,8 @@ void R_ProjectSprite (mobj_t* thing)
     fixed_t		tz;
 
     fixed_t		xscale;
-    
+    fixed_t		anchor_offset;	// Hor+ wide: position correction (see below)
+
     int			x1;
     int			x2;
 
@@ -520,15 +521,35 @@ void R_ProjectSprite (mobj_t* thing)
     if (tz < MINZ)
 	return;
     
+    // Size scale: use nonwide focal (projection = centerxfrac_nonwide) so
+    // sprites appear the same pixel size as vanilla DOOM at any screen width
+    // (Hor+ behaviour: object size preserved, wider FOV fills extra columns).
     xscale = FixedDiv(projection, tz);
-	
-    gxt = -FixedMul(tr_x,viewsin); 
-    gyt = FixedMul(tr_y,viewcos); 
-    tx = -(gyt+gxt); 
+
+    gxt = -FixedMul(tr_x,viewsin);
+    gyt = FixedMul(tr_y,viewcos);
+    tx = -(gyt+gxt);
 
     // too far off the side?
     if (abs(tx)>(tz<<2))
 	return;
+
+    // Position correction for Hor+ wide mode (task field-fix/wide-fix):
+    // R_InitTextureMapping builds viewangletox[] with focallength = centerxfrac,
+    // so wall columns are placed using the wide focal.  Sprites must use the
+    // same focal for horizontal position to avoid sliding relative to walls
+    // when the player rotates.
+    //
+    // Decomposition:
+    //   anchor_screen  = centerxfrac + tx * (centerxfrac / tz)   [wide focal]
+    //   left_edge      = anchor_screen - spriteoffset * xscale    [size scale]
+    //
+    // Equivalently, add anchor_offset = tx * (centerxfrac - projection) / tz
+    // to the existing formula x = centerxfrac + (tx - offset) * xscale.
+    // At W=320: centerxfrac == projection → anchor_offset = 0, no change.
+    // Proof of no change at W=320: centerxfrac_nonwide = centerxfrac when
+    // centerxfrac <= DOOM_ORIGHALF (160F), which holds exactly at W=320.
+    anchor_offset = FixedMul(tx, FixedDiv(centerxfrac - projection, tz));
     
     // decide which patch to use for sprite relative to player
 #ifdef RANGECHECK
@@ -559,15 +580,17 @@ void R_ProjectSprite (mobj_t* thing)
     }
     
     // calculate edges of the shape
-    tx -= spriteoffset[lump];	
-    x1 = (centerxfrac + FixedMul (tx,xscale) ) >>FRACBITS;
+    // anchor_offset shifts left/right edge by the wide-vs-nonwide focal delta,
+    // placing the sprite anchor at the wall-consistent wide-focal screen column.
+    tx -= spriteoffset[lump];
+    x1 = (centerxfrac + anchor_offset + FixedMul (tx,xscale) ) >>FRACBITS;
 
     // off the right side?
     if (x1 > viewwidth)
 	return;
-    
+
     tx +=  spritewidth[lump];
-    x2 = ((centerxfrac + FixedMul (tx,xscale) ) >>FRACBITS) - 1;
+    x2 = ((centerxfrac + anchor_offset + FixedMul (tx,xscale) ) >>FRACBITS) - 1;
 
     // off the left side
     if (x2 < 0)
