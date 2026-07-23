@@ -495,6 +495,18 @@ p50 gain: **47,707 instr/tic** = **−4.2% whole-program** / **−11.9% of plane
 (planes baseline 402,167 doom.wad p50, perf.md §13.1b).
 Kill threshold was 9,000 instr/tic; actual gain is 5.3× the threshold.
 
+Notes (measurement transparency):
+- The NC5 prediction was 18K–37K instr/tic; measured 47.7K exceeds the upper
+  bound by ~29% because at `-O1` the compiler does not auto-unroll the scalar
+  baseline at all — the conservative prediction assumed partial compiler
+  realization. Not evidence inflation: before/after are symmetric (same flags,
+  same demo, same host) and the margin over the kill threshold is 5.3×.
+- The kill rule's "doom.wad p50" is anchored to **demo3** for this measurement
+  (the earlier reverted iteration used demo2 under the same label); both sides
+  of the comparison use demo3, so the delta is internally valid.
+- `-O1` native only; the shipped wasm `-O3` gain is unmeasured and likely
+  smaller — optimized codegen may partially unroll the scalar baseline.
+
 ### Gate results (all with real WADs, non-vacuous)
 
 | gate | command | result |
