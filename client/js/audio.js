@@ -71,11 +71,18 @@ function makeWorkletSink(node, perf) {
 // queued: estimated frames still ahead of the playhead (≥ 0).
 function makeBufferSink(ctx) {
     let schedClock = ctx.currentTime + BUFFER_LEAD_S;
-    let queued = 0;
     let _lastChunk = null;   // test hook: captured on every push()
     return {
         kind: 'buffer',
-        get queued() { return queued; },
+        // LIVE computation — never a stored value.  A cached `queued` (only
+        // updated inside push()) deadlocked the pump permanently once the
+        // backlog crossed TARGET_BACKLOG: deficit went negative, push() was
+        // never called again, and the stale value never decayed as playback
+        // drained.  Field symptom: music played ~0.25 s then stopped forever
+        // (present since 16.4 — CI only asserted the first chunk's RMS).
+        get queued() {
+            return Math.max(0, (schedClock - ctx.currentTime) * ctx.sampleRate);
+        },
         get _lastChunk() { return _lastChunk; },
         // Called by onVisible to force underrun recovery after a long-hidden tab
         // so the resumed context drains at the natural LEAD instead of 0.25s burst.
@@ -101,7 +108,6 @@ function makeBufferSink(ctx) {
             src.connect(ctx.destination);
             src.start(schedClock);
             schedClock += frames / sr;
-            queued = Math.max(0, (schedClock - ctx.currentTime) * sr);
             _lastChunk = chunk;
         },
     };

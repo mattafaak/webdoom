@@ -182,6 +182,18 @@ if (!statusText?.includes('compatibility mode')) {
     cleanup(1);
 }
 
+// Sustained playback (see browser-insecure-test.mjs — BufferSink starvation class).
+const _sig = async () => evaluate(
+    `(() => { const c = window.doomAudio?.lastChunk(); if (!c) return 'null';
+       return c.length + ':' + c[0] + ':' + (c[64] ?? 0) + ':' + (c[400] ?? 0); })()`);
+const _sA = await _sig();
+await new Promise(r => setTimeout(r, 1500));
+const _sB = await _sig();
+if (_sA === _sB) {
+    console.error('FAIL (iv): pump stalled — lastChunk unchanged over 1.5 s');
+    cleanup(1);
+}
+console.log('sustained playback confirmed (pump alive at +1.5 s)');
 console.log(`sink: ${sinkKind}  rms: ${Number(rmsVal).toFixed(5)}  status: "${statusText}"`);
 if (consoleErrors.length) console.log('console errors (non-fatal):', consoleErrors.slice(0, 3));
 console.log('PASS — music fallback sink: buffer, frames non-zero, status visible');

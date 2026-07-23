@@ -341,6 +341,22 @@ if (!musicStatus?.includes('compatibility mode')) {
     cleanup(1);
 }
 console.log(`  music sink=${musicSinkKind}  rms=${Number(musicRms).toFixed(5)}  status="${musicStatus}"`);
+
+// ── Sustained playback: the pump must keep pushing past the first backlog. ──
+// A cached BufferSink.queued deadlocked the pump after ~0.25 s for months
+// (music died after 1-2 notes in the field) while this test's single-chunk
+// RMS assert stayed green.  Two samples 1.5 s apart must differ.
+const sig = async () => tab2.ev(
+    `(() => { const c = window.doomAudio?.lastChunk(); if (!c) return 'null';
+       return c.length + ':' + c[0] + ':' + (c[64] ?? 0) + ':' + (c[400] ?? 0); })()`);
+const sustainA = await sig();
+await sleep(1500);
+const sustainB = await sig();
+if (sustainA === sustainB) {
+    console.error('FAIL: pump stalled — lastChunk unchanged over 1.5 s (BufferSink starvation)');
+    cleanup(1);
+}
+console.log('  sustained playback confirmed: pump still pushing after 1.5 s');
 console.log('  real insecure context confirmed: BufferSink active, OPL frames non-zero, status visible');
 
 // Check for uncaught JS exceptions during both sessions.
