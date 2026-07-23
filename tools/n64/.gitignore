@@ -3,3 +3,4 @@ obj/
 *.elf.stripped
 *.z64
 ares-uart.tmp
+ares-boot-raw.log

@@ -1,71 +1,66 @@
-FINDING: ares emulator exits with SIGSEGV (signal 11) during GUI/window initialization.
+ares boot attempt — task 20.4b / 20.4c evidence
+================================================
 
-== ares binary health (CLI paths work) ==
-  ares --version  → "master - (e1b0d47 - 2026-07-23)"  rc=0  PASS
-  ares --help     → usage text printed                   rc=0  PASS
-  The binary itself is healthy.  SIGSEGV is limited to the GUI initialization
-  path (SDL3/GTK3 window creation).  NOT a static initializer issue and NOT
-  a ROM or build defect.
+STATUS 2026-07-23 (updated after xorg-server-xvfb was installed)
 
-== Environment ==
-  Host:              Linux x86-64, CachyOS (Arch-based), KDE Plasma Wayland
-  Agent shell:       tty session (no DISPLAY variable)
-  Wayland socket:    /run/user/1000/wayland-0  (live; uid jwhit; GTK3 test OK)
-  X server:          XWayland at :0 (PID 2049 kwin_wayland_wrapper; auth required)
-  xvfb-run / Xvfb:  NOT INSTALLED on this host
-                     Install requires root: pacman -S xorg-server-xvfb  (run as root)
-                     (assistant cannot execute pacman as root)
-  mupen64plus:       NOT INSTALLED
-  cen64:             NOT INSTALLED
-  No alternative N64 emulator was available.
+RESOLVED: the earlier "ares exits with SIGSEGV before producing any output"
+finding was purely a missing X display. With xvfb present, ares starts
+normally and runs the ROM for the full timeout without crashing:
 
-== What was tried ==
-  DISPLAY=:0                     SIGSEGV  (auth error first, then crash)
-  WAYLAND_DISPLAY=wayland-0      SIGSEGV  (GTK3 Python window opened fine on same socket)
-  GDK_BACKEND=wayland            SIGSEGV  (ares-specific failure)
-  SDL_VIDEODRIVER=offscreen      SIGSEGV  (SDL3 path in ares crashes)
-  LIBGL_ALWAYS_SOFTWARE=1        SIGSEGV
+    $ xvfb-run -a ares --system "Nintendo 64" --no-file-prompt n64-doom.z64
+    OpenGL Version: 4.6 (Core Profile) Mesa 26.1.5-arch3.1, GLSL: 4.60
+    OpenGL: Failed to load librashader: shaders will be disabled
+    (runs until the 25 s timeout; exit 124 = still running, not a crash)
 
-== Signal 11 backtrace (LD_PRELOAD handler; ares is stripped) ==
-  [PRELOAD] constructor called     ← library load OK
-  signal 11 (SIGSEGV) caught:
-    ares(+0x2d79a9)                ← fault; in SDL3/GTK3 window/display init area
-    ares(+0x2e054e)
-    ares(+0x2e1359)
-    ares(+0x1661ec)
-    ares(+0x231841)
-    ares(+0xe9718)
-    ares(+0xe7e03)
-    libc __libc_start_main → ares(+0x14c9e5)
+The librashader line is cosmetic — an optional shader library, not required.
 
-== REMEDY (once xvfb is available) ==
-  sudo pacman -S xorg-server-xvfb   # requires root on this host
-  cd tools/n64/
-  make boot-log
-  # which runs:
-  #   xvfb-run -a ares --system "Nintendo 64" --no-file-prompt n64-doom.z64
-  # and captures ISViewer UART to ares-boot.log
+CURRENT BLOCKER: the ROM contains no WAD, by construction.
 
-  Expected output after remedy (D_DoomMain banner, d_main.c:796):
-    N64 webdoom boot: initialising shim layer
-    ===========================================================================
-    DOOM Shareware Startup v1.9
-    ===========================================================================
-  Then W_InitMultipleFiles calls I_Error (NULL WAD blob) → longjmp →
-    "N64 webdoom: demo completed normally"   ← expected exit for footprint build
+    tools/n64/n64_main.c:52   n64_register_wad(NULL, 0);
 
-== Build artifacts verified (20.4b DoD) ==
-  n64-doom.elf    text=292316 data=53944 bss=936788 dec=1283048
-  n64-doom.z64    360448 bytes  (footprint build, NULL WAD blob)
+and the ROM packing step appends only the stripped ELF:
 
-  RDRAM budget:
-    .data+.bss in-use:    990,732 B  (967.5 KB)   fits stock N64 (4 MB base)
-    4 MB RDRAM headroom: 3,203,572 B  (3128.5 KB)
-    8 MB RDRAM headroom: 7,397,876 B  (7224.5 KB)
+    n64tool --title "webdoom-n64" --output n64-doom.z64 --align 256 \
+            n64-doom.elf.stripped
 
-  Top BSS contributors:
-    n64_arena (zone):     524,288 B  (512 KB)   i_system_n64.c, N64_ZONE_KB=512
-    finetangent:           16,384 B   (16 KB)   engine/core trig table
-    tantoangle:             8,196 B    (8 KB)   engine/core trig table
-    zlight:                 8,192 B    (8 KB)   engine/core lighting table
-    n64_pal_rgb:              768 B             i_video_n64.c palette shadow
+Confirmed empirically — the 360,448-byte ROM contains no IWAD/PWAD magic:
+
+    $ grep -c "IWAD\|PWAD" n64-doom.z64
+    0
+
+So D_DoomMain cannot reach its banner: there is no WAD to identify or load.
+This ROM is a *footprint-measurement artifact* (see docs/n64/BRING-UP.md §2),
+not a playable build, and no emulator configuration changes that.
+
+WHY THERE IS NO ISVIEWER OUTPUT
+ares does implement the ISViewer debug channel that libdragon's
+debug_init(DEBUG_FEATURE_LOG_EMU) writes to:
+
+    ares/n64/cartridge/cartridge.cpp:52-54
+        isviewer.tracer = node->append<Node::Debugger::Tracer::Notification>(...)
+        isviewer.tracer->setTerminal(true);
+
+and Notification::notify() gates on enabled(), which is `file() || terminal()`
+(ares/node/debugger/tracer/tracer.hpp:9). Because setTerminal(true) is applied
+at construction, ISViewer text WOULD reach the terminal. The absence of output
+is therefore evidence about the ROM, not about ares configuration: execution
+never reaches a debugf() call, which is consistent with a NULL WAD.
+
+WHAT A BOOTABLE ROM REQUIRES (next task)
+ 1. Embed an IWAD in the ROM image (n64tool can append data after the ELF) and
+    pass its cartridge address to n64_register_wad() instead of NULL.
+ 2. Decide WAD residency: the smallest IWAD available here is doom.wad at
+    12,408,292 B. N64 cartridges reach 64 MB so ROM size is not the issue, but
+    RDRAM is 4 MB — the WAD must be read in place from cartridge address space
+    rather than copied into RAM. files_n64.c already takes a pointer+length, so
+    the work is in where that pointer points and how reads are serviced.
+ 3. Re-run `make boot-log` and expect a D_DoomMain banner over ISViewer.
+
+REPRODUCTION
+    source ~/toolchains/env.sh
+    cd tools/n64 && make all
+    make boot-log ARES=$HOME/toolchains/bin/ares ARES_TIMEOUT=25
+
+Pass ARES explicitly, or ensure ~/toolchains/bin is on PATH: xvfb-run does not
+inherit a PATH that was set only inside the make invocation. Raw capture from
+each run is written to ares-boot-raw.log; this file is curated evidence.

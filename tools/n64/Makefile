@@ -14,7 +14,7 @@
 # Usage:
 #   make                  build n64-doom.elf + n64-doom.z64
 #   make size             print mips64-elf-size summary
-#   make boot-log         run ares headless, capture UART to ares-boot.log
+#   make boot-log         run ares headless, capture UART to ares-boot-raw.log
 #   make clean
 #
 # Override zone size (default 512 KB):
@@ -159,7 +159,8 @@ size: $(OUT_ELF)
 	@$(N64_INST)/bin/mips64-elf-nm --size-sort --print-size $(OUT_ELF) 2>/dev/null | \
 	    grep " [bB] " | sort -k2 -rn | head -10 || true
 
-# Boot-log target: run ares headless and capture ISViewer UART to ares-boot.log.
+# Boot-log target: run ares headless and capture ISViewer UART to
+# ares-boot-raw.log (untracked). ares-boot.log is curated, committed evidence.
 # xvfb-run is used in headless CI environments (no display server).
 # Timeout: 15 s is sufficient for D_DoomMain banner to appear.
 ARES        ?= ares
@@ -167,7 +168,7 @@ ARES_TIMEOUT ?= 15
 
 boot-log: $(OUT_ROM)
 	@echo "=== Running ares (timeout $(ARES_TIMEOUT)s) ==="
-	@rm -f ares-boot.log ares-uart.tmp
+	@rm -f ares-boot-raw.log ares-uart.tmp
 	@if command -v xvfb-run >/dev/null 2>&1; then \
 	    timeout $(ARES_TIMEOUT) xvfb-run -a \
 	        $(ARES) --system "Nintendo 64" --no-file-prompt $(OUT_ROM) \
@@ -177,15 +178,17 @@ boot-log: $(OUT_ROM)
 	        $(ARES) --system "Nintendo 64" --no-file-prompt $(OUT_ROM) \
 	        >ares-uart.tmp 2>&1 || true; \
 	fi
-	@# ares writes ISViewer output to stdout; filter for DOOM banner lines.
-	@cp ares-uart.tmp ares-boot.log
+	@# ares writes ISViewer output to stdout. Raw capture goes to
+	@# ares-boot-raw.log; ares-boot.log is CURATED evidence (committed) and is
+	@# deliberately not clobbered by a run.
+	@cp ares-uart.tmp ares-boot-raw.log
 	@echo "--- ares UART output ---"
-	@cat ares-boot.log
+	@cat ares-boot-raw.log
 	@echo "--- end of ares output ---"
-	@if grep -q "DOOM\|Startup\|Public DOOM\|W_Init\|V_Init\|Z_Init" ares-boot.log 2>/dev/null; then \
+	@if grep -q "DOOM\|Startup\|Public DOOM\|W_Init\|V_Init\|Z_Init" ares-boot-raw.log 2>/dev/null; then \
 	    echo "BOOT LOG: D_DoomMain banner detected in ares UART output"; \
 	else \
-	    echo "BOOT LOG: D_DoomMain banner not detected (see ares-boot.log)"; \
+	    echo "BOOT LOG: D_DoomMain banner not detected (see ares-boot-raw.log)"; \
 	fi
 
 # NOTE: ares-boot.log is committed evidence required by the 20.4b DoD, so it is
