@@ -95,3 +95,53 @@ export function storeStats() {
     gcExpired();
     return { count: store.size, usedBytes, quota: TOTAL_QUOTA };
 }
+
+// ── Per-demo attestation store (task 19.4) ────────────────────────────────────
+//
+// Attestation: the per-tic full trace hash array produced by demo-verify.mjs.
+// Stored in a separate map keyed by demo id (same 64-char sha256 hex as the
+// demo itself).  Attestations share the demo TTL: when the demo expires or is
+// evicted, its attestation is also removed.
+//
+// ATTEST_BODY_CAP: max JSON body size for POST /api/demos/:id/verify.
+// A 200 000-tic trace of u32 values is at most ~1.6 MB as compact JSON
+// (200000 × 10 chars + separators ≈ 2.1 MB).  Cap at 4 MiB to reject clearly
+// hostile payloads while allowing the full tic cap.
+export const ATTEST_BODY_CAP = 4_194_304;  // 4 MiB
+
+// Map<id, { tics: number, trace: Uint32Array, storedAt: number }>
+const attestStore = new Map();
+
+// Store an attestation for a demo id.
+// id must match an existing demo in the store.
+// trace must be an array of unsigned 32-bit integers (per-tic sim hashes).
+// Throws {status, message} on validation failure.
+export function putAttestation(id, tics, trace) {
+    if (!/^[0-9a-f]{64}$/.test(id))
+        throw { status: 400, message: 'invalid demo id' };
+    if (!store.has(id))
+        throw { status: 404, message: 'demo not found' };
+    if (!Array.isArray(trace) || typeof tics !== 'number')
+        throw { status: 400, message: 'attestation must have {tics: number, trace: Array}' };
+    if (trace.length > 200_001)
+        throw { status: 413, message: 'attestation trace exceeds tic cap' };
+    // Validate all entries are safe integers in u32 range.
+    for (let i = 0; i < trace.length; i++) {
+        if (!Number.isInteger(trace[i]) || trace[i] < 0 || trace[i] > 0xFFFFFFFF)
+            throw { status: 400, message: `trace[${i}] is not a u32` };
+    }
+    attestStore.set(id, { tics, trace, storedAt: Date.now() });
+}
+
+// Retrieve a stored attestation.  Returns {tics, trace, storedAt} or null.
+export function getAttestation(id) {
+    if (!/^[0-9a-f]{64}$/.test(id)) return null;
+    // Evict if the underlying demo has expired.
+    if (!store.has(id)) { attestStore.delete(id); return null; }
+    return attestStore.get(id) ?? null;
+}
+
+// Remove attestation (called when demo is evicted — keeps maps in sync).
+export function deleteAttestation(id) {
+    attestStore.delete(id);
+}

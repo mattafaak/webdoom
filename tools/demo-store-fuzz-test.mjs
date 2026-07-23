@@ -184,7 +184,129 @@ for (const p of traversalCases) {
     ok('POST /api/demos/:id → 405', r.status === 405);
 }
 
-// ── 6. Server stays healthy after all attacks ─────────────────────────────────
+// ── 6. Verify endpoint: happy path + fuzz (task 19.4) ────────────────────────
+//
+// POST /api/demos/:id/verify accepts a JSON attestation {tics, trace}.
+// GET  /api/demos/:id/verify returns the stored attestation.
+// The tests cover: happy path, bad id format/traversal, oversized body (413),
+// rate limit under concurrency (429), and wrong method (405).
+
+let verifyId;
+{
+    // Upload a valid demo to get an id for the verify endpoint tests.
+    const body = minimalDemo(100);
+    const r = await request('POST', `${base}/api/demos?wad=doom.wad`, body,
+        { 'content-type': 'application/octet-stream' });
+    verifyId = JSON.parse(r.body).id;
+}
+
+{
+    // Happy path: POST valid attestation → 200.
+    const attest = JSON.stringify({ tics: 5, trace: [1, 2, 3, 4, 5] });
+    const r = await request('POST', `${base}/api/demos/${verifyId}/verify`,
+        Buffer.from(attest), { 'content-type': 'application/json' });
+    ok('POST /api/demos/:id/verify (valid) → 200', r.status === 200);
+    const j = JSON.parse(r.body);
+    ok('verify response has stored: true', j.stored === true);
+    ok('verify response has id', j.id === verifyId);
+}
+
+{
+    // GET stored attestation → 200 with trace.
+    const r = await request('GET', `${base}/api/demos/${verifyId}/verify`);
+    ok('GET /api/demos/:id/verify → 200', r.status === 200);
+    const j = JSON.parse(r.body);
+    ok('GET verify returns tics', j.tics === 5);
+    ok('GET verify returns trace array', Array.isArray(j.trace) && j.trace.length === 5);
+}
+
+{
+    // Non-existent demo id → 404.
+    const fakeId = 'a'.repeat(64);
+    const attest = JSON.stringify({ tics: 1, trace: [42] });
+    const r = await request('POST', `${base}/api/demos/${fakeId}/verify`,
+        Buffer.from(attest), { 'content-type': 'application/json' });
+    ok('POST verify for unknown demo → 404', r.status === 404);
+}
+
+{
+    // Bad id format (traversal attempt) → 400.
+    const r = await request('POST', `${base}/api/demos/../../../etc/passwd/verify`,
+        Buffer.from('{}'), { 'content-type': 'application/json' });
+    ok('path traversal /verify → 400 or 404', r.status === 400 || r.status === 404);
+}
+
+{
+    // Oversized attestation body → 413.
+    // ATTEST_BODY_CAP is 4 MiB; send 4 MiB + 1 byte.
+    const oversized = Buffer.alloc(4_194_305, 0x20);  // spaces (invalid JSON)
+    const r = await request('POST', `${base}/api/demos/${verifyId}/verify`,
+        oversized, { 'content-type': 'application/json' });
+    ok('oversized attestation body → 413', r.status === 413);
+}
+
+{
+    // Invalid JSON body → 400.
+    const r = await request('POST', `${base}/api/demos/${verifyId}/verify`,
+        Buffer.from('not json'), { 'content-type': 'application/json' });
+    ok('invalid JSON attestation → 400', r.status === 400);
+}
+
+{
+    // Attestation with u32-out-of-range value → 400.
+    const bad = JSON.stringify({ tics: 1, trace: [-1] });
+    const r = await request('POST', `${base}/api/demos/${verifyId}/verify`,
+        Buffer.from(bad), { 'content-type': 'application/json' });
+    ok('out-of-range trace value → 400', r.status === 400);
+}
+
+{
+    // Rate limit: use a raw TCP connection to hold the server's verifyInFlight
+    // flag open.  Send only the HTTP request line + headers on the first
+    // connection (no body, so 'end' never fires and the flag stays true), then
+    // send a second complete request and verify it gets 429.  Finally close the
+    // first socket to release the server.
+    //
+    // Content-Length is set to a non-zero value so the server knows the request
+    // has a body (and waits for it), keeping verifyInFlight=true.
+    const { createConnection } = await import('node:net');
+    const got429 = await new Promise((resolve) => {
+        // Connection 1: send headers only — body never arrives, flag stays open.
+        const sock1 = createConnection(PORT_BASE - 1, '127.0.0.1');
+        sock1.once('connect', async () => {
+            const fakeBody = '{"tics":1,"trace":[1]}';
+            sock1.write(
+                `POST /api/demos/${verifyId}/verify HTTP/1.1\r\n` +
+                `Host: 127.0.0.1\r\n` +
+                `Content-Type: application/json\r\n` +
+                `Content-Length: ${fakeBody.length}\r\n` +
+                `Connection: close\r\n` +
+                `\r\n`
+                // intentionally NOT sending the body
+            );
+            // Give the server one tick to process the headers + set verifyInFlight.
+            await sleep(10);
+
+            // Connection 2: full request — must get 429 (flag still set).
+            const body2 = Buffer.from('{"tics":1,"trace":[42]}');
+            const r2 = await request('POST',
+                `http://127.0.0.1:${PORT_BASE - 1}/api/demos/${verifyId}/verify`,
+                body2, { 'content-type': 'application/json' });
+            sock1.destroy();
+            resolve(r2.status === 429);
+        });
+        sock1.once('error', () => resolve(false));
+    });
+    ok('concurrent verify → 429 when verifyInFlight (rate limit)', got429);
+}
+
+{
+    // Wrong method (DELETE) → 405.
+    const r = await request('DELETE', `${base}/api/demos/${verifyId}/verify`, Buffer.alloc(0));
+    ok('DELETE /api/demos/:id/verify → 405', r.status === 405);
+}
+
+// ── 7. Server stays healthy after all attacks ─────────────────────────────────
 
 {
     const probe = minimalDemo(50);

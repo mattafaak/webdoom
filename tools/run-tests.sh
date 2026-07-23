@@ -90,6 +90,9 @@ node tools/demo-store-fuzz-test.mjs | tail -1
 echo "── demo seek equivalence (19.3 scrubber gate) ──────────"
 node tools/demo-seek-test.mjs | tail -2
 
+echo "── demo verify + divergence (19.4: 13 goldens + doctored + hostile) ─"
+node tools/demo-verify-test.mjs | tail -3
+
 echo "── net fuzz + abuse (malformed/hostile clients) ────────"
 node tools/net-fuzz-test.mjs | tail -1
 

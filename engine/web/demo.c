@@ -197,15 +197,20 @@ EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr)
     advancedemo = false;
     gameaction = ga_nothing;
 
-    // Skip G_InitNew when episode/map are 0: the recording started from the
-    // title screen (no level was active at record time).  G_InitNew(skill,0,0)
-    // calls P_SetupLevel("E0M0") which is absent from the WAD, triggering
-    // I_Error and aborting the wasm runtime.  With no G_InitNew the engine
-    // remains in GS_DEMOSCREEN; gametic still advances and prndindex stays 0
-    // (P_Random is not called outside GS_LEVEL), producing a deterministic
-    // hash sequence that matches the original title-screen recording exactly.
-    if (episode > 0 && map > 0)
-        G_InitNew (skill, episode, map);
+    // Reject out-of-range level indices (episode 0 or map 0).
+    // Without a valid level the engine stays in GS_DEMOSCREEN; when the
+    // DEMOMARKER is reached G_CheckDemoStatus calls D_AdvanceDemo which sets
+    // advancedemo=true.  D_DoAdvanceDemo then fires within the same
+    // D_DoomFrame call (singletics path), starting the attract-mode carousel.
+    // Because demoplayback goes false→true inside one web_frame() invocation,
+    // the JS-side web_demo_playing() check never sees the transition and the
+    // replay loop runs until REPLAY_TIC_CAP is exhausted (~hang).
+    // Valid DOOM ranges: episode 1-4, map 1-9 (retail/shareware);
+    //                   episode 1,   map 1-32 (commercial/tnt/plutonia).
+    if (episode == 0 || map == 0)
+        return -1;             /* hostile: out-of-range level index, reject */
+
+    G_InitNew (skill, episode, map);
 
     // Mirror G_DoPlayDemo (g_game.c:1656): replay path requires usergame=false.
     // G_InitNew sets usergame=true; override here so the engine treats this as

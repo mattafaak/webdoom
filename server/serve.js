@@ -7,7 +7,8 @@ import { join, normalize, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createGame } from './game.js';
 import { uiAssets } from './ui-assets.js';
-import { putDemo, getDemo, PER_DEMO_CAP } from './demo-store.js';
+import { putDemo, getDemo, PER_DEMO_CAP,
+         putAttestation, getAttestation, ATTEST_BODY_CAP } from './demo-store.js';
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const HOST = process.env.DOOM_HOST ?? '0.0.0.0';
@@ -39,6 +40,10 @@ function send(res, code, body, headers = {}) {
 // Optional per-request logging for smoke tests: set LOG_REQUESTS=1 in env.
 // Logs to stderr so stdout (used by some callers for structured output) is unaffected.
 const LOG_REQ = !!process.env.LOG_REQUESTS;
+
+// Rate limit flag for POST /api/demos/:id/verify (task 19.4).
+// Only one verify request may be in flight at a time (returns 429 otherwise).
+let verifyInFlight = false;
 
 const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
@@ -101,6 +106,79 @@ const server = createServer((req, res) => {
         res.end(rec.bytes);
         return;
     }
+    // ── POST /api/demos/:id/verify — attestation store (task 19.4) ──────────────
+    //
+    // Design choice (b): the endpoint stores and retrieves per-tic attestations
+    // (the full trace hash array produced by tools/demo-verify.mjs running on
+    // the client).  The server does NOT replay the demo (no WASM engine).
+    // This keeps the endpoint lightweight and avoids blocking the server event
+    // loop with a CPU-bound wasm replay.
+    //
+    // POST /api/demos/:id/verify
+    //   Body: JSON { tics: number, trace: number[] }  (max ATTEST_BODY_CAP bytes)
+    //   Returns 200 { stored: true, id }
+    //   Returns 400 on bad id format, bad JSON body, or trace validation failure
+    //   Returns 404 if the demo is not in the store
+    //   Returns 413 if body exceeds ATTEST_BODY_CAP
+    //   Returns 429 if another verify request is in flight (1-concurrent limit)
+    //
+    // GET /api/demos/:id/verify
+    //   Returns 200 { tics, trace, storedAt } if attestation exists
+    //   Returns 404 if no attestation stored for this id
+    {
+        const vMatch = path.match(/^\/api\/demos\/([0-9a-f]{64})\/verify$/);
+        if (vMatch) {
+            const vid = vMatch[1];
+            if (req.method === 'GET') {
+                const attest = getAttestation(vid);
+                if (!attest) return send(res, 404, 'no attestation stored for this demo');
+                return send(res, 200,
+                    JSON.stringify({ tics: attest.tics, trace: attest.trace, storedAt: attest.storedAt }),
+                    { 'content-type': 'application/json' });
+            }
+            if (req.method !== 'POST') return send(res, 405, 'method not allowed');
+
+            // Rate limit: 1 concurrent verify operation.
+            if (verifyInFlight) return send(res, 429, 'verify in progress — try again');
+            verifyInFlight = true;
+
+            let size = 0;
+            const chunks = [];
+            req.on('data', chunk => {
+                size += chunk.length;
+                if (size <= ATTEST_BODY_CAP) chunks.push(chunk);
+            });
+            req.on('error', () => { setImmediate(() => { verifyInFlight = false; }); send(res, 400, 'read error'); });
+            req.on('end', () => {
+                // Defer flag clear to next event-loop tick so concurrent requests
+                // that arrive while body events fire synchronously still see
+                // verifyInFlight=true and receive 429 (rate limit).
+                const clearFlag = () => setImmediate(() => { verifyInFlight = false; });
+
+                if (size > ATTEST_BODY_CAP) {
+                    clearFlag();
+                    return send(res, 413, `attestation body exceeds ${ATTEST_BODY_CAP} byte cap`);
+                }
+                let parsed;
+                try { parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+                catch (e) { clearFlag(); return send(res, 400, 'invalid JSON body'); }
+                try { putAttestation(vid, parsed.tics, parsed.trace); }
+                catch (e) {
+                    clearFlag();
+                    return send(res, e.status ?? 400, e.message ?? 'attestation error');
+                }
+                send(res, 200, JSON.stringify({ stored: true, id: vid }),
+                    { 'content-type': 'application/json' });
+                clearFlag();
+            });
+            return;
+        }
+    }
+
+    // Path with /verify but bad id format → 400
+    if (path.match(/^\/api\/demos\/[^/]+\/verify$/))
+        return send(res, 400, 'invalid demo id');
+
     // Bad id format (non-hex or wrong length) → 400 (path traversal guard)
     if (path.startsWith('/api/demos/')) return send(res, 400, 'invalid demo id');
 
