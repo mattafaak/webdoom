@@ -240,6 +240,10 @@ R_MapPlane
 	return;
     }
 #endif
+/* Reset the line counter so the toggle-off build's debug metadata (and
+   therefore the LTO wasm binary) stays byte-identical to a build of this
+   file without the WEBDOOM_FAKEFLAT block above.  The original spanfunc()
+   call was at physical line 222 — update this value if R_MapPlane moves. */
 #line 221
     // high or low detail
     spanfunc ();	

@@ -328,9 +328,9 @@ if (wideRender) {
 // ── fakeflat render mode (20.3a: --render-fakeflat) ─────────────────────────
 //
 // Records/verifies per-tic FNV-1a 32-bit framebuffer hashes of the build-fakeflat
-// wasm (compiled with -DWEBDOOM_FAKEFLAT).  Flat spans beyond FAKEFLAT_DIST_THRESHOLD
-// are filled with a solid representative colour, producing different pixel output
-// from the vanilla render path.  These goldens are therefore a separate, dedicated
+// wasm (compiled with -DWEBDOOM_FAKEFLAT).  All floor/ceiling spans are filled
+// with a single representative colour (unconditional — no distance branch),
+// producing different pixel output from the vanilla render path.  These goldens are therefore a separate, dedicated
 // set — vanilla render goldens (-render.json) are never modified by this mode.
 //
 // Golden suffix: -render-fakeflat.json
