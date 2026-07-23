@@ -45,7 +45,7 @@ The WAD format is unconditionally little-endian (`docs/formats.md §11.1`). On a
 big-endian host, every multi-byte field in the WAD directory, map geometry
 lumps, and lump headers requires byte-swapping. The `__BIG_ENDIAN__` path in
 `m_swap.h/c` implements this. **This path is already implemented and tested:**
-the `mips-linux-musleabi` qemu-user trial (BE-NOTES.md §13.3b) achieved 13/13
+the `mips-linux-musleabi` qemu-user trial (bare-metal.md §5.2) achieved 13/13
 golden demos bit-identical. No source change is needed.
 
 **Savegame structs** (p_saveg.c:60, 91, 246, 302, 506–578) are `memcpy`'d
@@ -77,8 +77,10 @@ automatically).
 `engine/core/r_data.c:277,345` — `LONG(realpatch->columnofs[x])` (patch column
 offsets: int32 inside patch lump, potentially at offset 8 from an
 arbitrarily-placed lump start).
-`engine/core/r_things.c:440` — same `columnofs` access pattern.
-`engine/core/v_video.c:245,310,375` — three further `columnofs` access sites.
+`engine/core/r_things.c:454-455` — same `columnofs` access pattern.
+`engine/core/v_video.c:252` (V_DrawPatch) and `:317` (V_DrawPatchFlipped) — two
+further live `columnofs` access sites. (V_DrawPatchDirect's body, v_video.c:351-401,
+is commented out — its `columnofs` use is dead code and not a port concern.)
 `engine/core/r_data.c:522` — `(maptexture_t*)(maptex + offset)` (texture
 composite struct at an unaligned offset within TEXTURE1/2 lump).
 `engine/core/p_setup.c:279` — `(mapnode_t*)data` (BSP node array, int16 fields
@@ -101,16 +103,16 @@ load from an odd address faults.
 
 `r_data.c:522` (`maptexture_t` cast): patched with `read_le16/read_le32`
 byte-safe accessors (m_swap.h:50–60). This was the fault confirmed during the
-strict-alignment trial on qemu-user MIPS (BE-NOTES.md §13.3b, bare-metal.md
+strict-alignment trial on qemu-user MIPS (bare-metal.md
 §5.2). The trial achieved 13/13 bit-identical after this fix.
 
-`r_things.c:440` (sprite-name `*(int*)` string pun): patched with `read_le32`
-on both sides of the compare (BE-NOTES.md §13.3b, bare-metal.md §5.2).
+`r_things.c:217,223` (sprite-name `*(int*)` string pun): patched with `read_le32`
+on both sides of the compare (bare-metal.md §5.2).
 
 **Latent risk — PWAD content:**
 
-The `columnofs[]` accesses at r_data.c:277/345, r_things.c:440, and
-v_video.c:245/310/375 read a 32-bit array starting at byte offset 8 from the
+The `columnofs[]` accesses at r_data.c:277/345, r_things.c:454-455, and
+v_video.c:252/317 read a 32-bit array starting at byte offset 8 from the
 patch lump header. The 13/13 trial passed because id Software's IWADs happen to
 land patch lumps at 4-byte-aligned file offsets. PWADs offer no such guarantee.
 A PWAD that places a patch lump at an odd file offset will fault at one of these

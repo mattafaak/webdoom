@@ -813,8 +813,8 @@ All were found by `grep` against the source tree.
 | `w_wad.c:187` — `(filelump_t*)(data + LONG(...))` | int32 at offsets 0 and 4 (filepos, size) per directory entry | filepos of the directory itself may not be 4-byte aligned |
 | `p_setup.c:279` — `(mapnode_t*)data` | int16 bbox[2][4] at struct offset 8, then int16 children at offset 24 | the NODES lump start is at an arbitrary file offset |
 | `r_data.c:277,345` — `LONG(realpatch->columnofs[x])` | int32 array at byte offset 8 from patch start | patch lump start at arbitrary file offset; offset 8 may not be 4-byte aligned |
-| `r_things.c:440` — `LONG(patch->columnofs[texturecolumn])` | same as above | same |
-| `v_video.c:245,310,375` — `LONG(patch->columnofs[col])` | same as above | same — three call sites |
+| `r_things.c:454-455` — `LONG(patch->columnofs[texturecolumn])` | same as above | same |
+| `v_video.c:252,317` — `LONG(patch->columnofs[col])` | same as above | same — two live call sites (the third, in V_DrawPatchDirect, is inside the commented-out block at v_video.c:351-401) |
 | `r_data.c:522` — `(maptexture_t*)(maptex + offset)` | int32 `masked` at offset 8, int32 `columndirectory` at offset 16 within maptexture_t | offset into TEXTURE1/2 lump may be misaligned |
 
 **Total: 7 primary sites** (some with multiple call lines). The `patch_t`
@@ -827,7 +827,7 @@ visible wall column and sprite column.
 > Verdicts: **site r_data.c:522 (maptexture_t cast) FAULTED on both strict
 > ISAs** — fixed with byte-safe `read_le16`/`read_le32` helpers (m_swap.h)
 > plus a byte-wise name copy; the pervasive `columnofs` rows (r_data.c:277/
-> 345, r_things.c:440, v_video.c ×3) **never faulted over the corpus** —
+> 345, r_things.c:454-455, v_video.c ×2) **never faulted over the corpus** —
 > id's IWAD lumps are 4-byte-aligned in practice, so `columnofs[]` at offset
 > 8 lands aligned (PWADs offer no such guarantee — the mitigation below still
 > applies to hardened ports). **Two site families the list MISSED, found by
