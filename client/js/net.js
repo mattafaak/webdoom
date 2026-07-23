@@ -126,6 +126,95 @@ export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, nam
     };
 }
 
+// Spectate: receive-only observer. Connects to /ws/spectate (no slot param),
+// streams the sealed-bundle history for catch-up, then watches live.
+// Structurally cannot send ticcmds: doom.netSend is set to a no-op, and the
+// server's spectateConnect has no inbound message handler.
+//
+// consoleplayer is set to the FIRST ingame slot so the engine runs
+// bit-identical to that player: same mo pointer, same sound listener,
+// same consistancy[] tracking. Local ticcmds built by G_BuildTiccmd are
+// discarded by the no-op netSend; netcmds[] is written only by web_net_bundle
+// (sealed bundles), so the simulation is authoritative and deterministic.
+export function attachSpectate(doom, baseUrl, { numplayers, slots = null, names = null }, WS = WebSocket) {
+    const ws = new WS(`${baseUrl}/ws/spectate`);
+    ws.binaryType = 'arraybuffer';
+
+    const ingameSlots = (slots ?? [...Array(numplayers).keys()]);
+    const mask = ingameSlots.reduce((m, s) => m | (1 << s), 0);
+    // Use the first ingame slot as consoleplayer. A phantom (not-ingame) slot
+    // leaves players[consoleplayer].mo NULL, which corrupts sound-listener
+    // arithmetic and diverges consistancy[] from the veteran simulation.
+    const observerSlot = ingameSlots[0] ?? 0;
+    doom._web_net_setup(observerSlot, numplayers, mask);
+    names?.forEach((n, i) => {
+        if (n) doom.ccall('web_set_player_name', null, ['number', 'string'], [i, n]);
+    });
+    doom._web_net_set_delay(2);
+    // Structural enforcement: netSend is a no-op. The /ws/spectate server
+    // handler has no inbound message listener either, so ticcmds cannot be
+    // injected by any path.
+    doom.netSend = () => {};
+
+    const scratch = doom._web_net_scratch();
+    const ingamePtr = doom._malloc(8);
+
+    const deliver = data => {
+        const b = new Uint8Array(data);
+        if (b.length !== 6 + CMD_SIZE * numplayers) return;
+        const tic = new DataView(b.buffer, b.byteOffset).getUint32(0, true);
+        const ingameMask = b[4], fabMask = b[5];
+        for (let i = 0; i < numplayers; i++) {
+            doom.HEAPU8[ingamePtr + i] = (ingameMask >> i) & 1;
+            doom.HEAPU8.set(
+                b.subarray(6 + i * CMD_SIZE, 6 + (i + 1) * CMD_SIZE),
+                scratch + i * CMD_SIZE,
+            );
+        }
+        doom._web_net_bundle(tic, scratch, ingamePtr, fabMask);
+    };
+
+    let live = false;
+    const queue = [];
+    ws.onmessage = ev => {
+        if (live) deliver(ev.data);
+        else queue.push(ev.data);
+    };
+
+    return {
+        // Replay the streamed history to `frontier`, then switch to live delivery.
+        // Same machinery as attachRelay.catchUp — bundles fill web_replay_tic one
+        // per bundle (unpaced), then web_end_catchup arms the live rAF loop.
+        async catchUp(frontier, onProgress) {
+            const CHUNK = 512;
+            const yieldToNet = () => new Promise(r => setTimeout(r, 0));
+            for (;;) {
+                let n = 0;
+                while (queue.length) {
+                    deliver(queue.shift());
+                    doom._web_replay_tic();
+                    if (++n >= CHUNK) {
+                        onProgress?.(doom._web_gametic(), frontier);
+                        await yieldToNet();
+                        n = 0;
+                    }
+                }
+                onProgress?.(doom._web_gametic(), frontier);
+                if (doom._web_gametic() >= frontier && !queue.length) break;
+                await yieldToNet();
+            }
+            doom._web_end_catchup();
+            // Park the view on the first live player so the status bar renders
+            // against a valid player slot (phantom slots have no HUD state).
+            const anchor = doom._web_first_ingame();
+            if (anchor >= 0) doom._web_set_console(anchor);
+            live = true;
+            for (const d of queue.splice(0)) deliver(d);
+        },
+        quit() { ws.close(); },
+    };
+}
+
 // Engine argv for a launch message — identical on every client.
 // `commercial` = MAP01-style wad (doom2/finaldoom family): single -warp N.
 export function launchArgs(params, commercial) {

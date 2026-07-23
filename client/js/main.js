@@ -6,7 +6,7 @@ import { createAudio } from './audio.js';
 import { sf2GetCurrentBytes } from './sf2-library.js';
 import { createSettingsUI } from './settings.js';
 import { createQolUI } from './qol.js';
-import { attachRelay } from './net.js';
+import { attachRelay, attachSpectate } from './net.js';
 import { loadPersisted, startSync } from './persist.js';
 import { wadCacheGet, wadCachePut } from './wad-cache.js';
 import { libraryGetBytes } from './wad-library.js';
@@ -200,9 +200,10 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     });
 
     const pwads = wads.slice(1).flatMap(w => ['-file', w.file]);
-    const relay = net
-        ? attachRelay(doom, `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`, net)
-        : null;
+    const baseWsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
+    const relay = net?.spectate
+        ? attachSpectate(doom, baseWsUrl, net)
+        : net ? attachRelay(doom, baseWsUrl, net) : null;
 
     // Arm demo recording via the -record callMain arg (safe path):
     // G_RecordDemo runs after Z_Init inside D_DoomMain, so the zone
@@ -210,7 +211,12 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     const recordArgs = record ? ['-record', 'webdemo'] : [];
 
     doom.callMain([...pwads, ...args, ...recordArgs]);
-    if (net?.join) {
+    if (net?.spectate) {
+        // Spectate: stream the full history (receive-only, no slot).
+        loading.show('SPECTATING — CATCHING UP');
+        await relay.catchUp(net.frontier ?? 0, (done, total) =>
+            loading.set('SPECTATING — CATCHING UP', total ? Math.min(1, done / total) : 0));
+    } else if (net?.join) {
         // Drop-in: re-simulate the streamed cmd history to the live frontier
         // (headless, at speed), then park the view on a live player until our
         // own slot spawns — the engine snaps it back to us at that tic.
@@ -262,7 +268,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     createSettingsUI(input, doom, renderer, qol);
     doom._web_set_smooth(input.settings.smooth ? 1 : 0);
 
-    // task 18.3: aspect-bucket selection — apply persisted wide mode on boot.
+    // task 18.3 / wide-fix: aspect-bucket selection — apply persisted wide mode on boot.
     // web_set_wide() is deferred; web_frame() consumes it on the first tick.
     // renderW tracks the actual engine screenwidth after each web_frame() call.
     const SCREEN_H = 200; // DOOM's native framebuffer height (constant)

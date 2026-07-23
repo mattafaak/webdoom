@@ -5,7 +5,7 @@
 //                   one-screen pickers. Doing nothing = you're
 //                   Green/Indigo/… and ready to go.
 import { bootDoom } from './main.js';
-import { connectLobby, launchArgs } from './net.js';
+import { connectLobby, launchArgs, attachSpectate } from './net.js';
 import { loadDoomFont } from './doomfont.js';
 import { createMenu } from './menu.js';
 import { createCountdown } from './countdown.js';
@@ -450,6 +450,37 @@ const cyc = (arr, cur, dir) => arr[(arr.indexOf(cur) + dir + arr.length) % arr.l
 // Shown when you open MULTIPLAYER and a game is already live: a summary
 // (wad art, map, mode, who's in) plus optional color/name and a DROP IN that
 // catches you up into the running game.
+async function spectateGame() {
+    if (booted) return;
+    const s = ipSummary; if (!s) return;
+    booted = true; fire?.pause();
+    const e = entry(s.params.wad);
+    menu.hide();
+    const names = (() => {
+        const n = [null, null, null, null];
+        (s.players ?? []).forEach(pl => { n[pl.slot] = pl.name ?? pl.color; });
+        return n;
+    })();
+    bootDoom({
+        wads: stackFor(s.params.wad),
+        args: launchArgs(s.params, isCommercial(e)),
+        net: {
+            numplayers: 4,
+            slots: (s.players ?? []).map(pl => pl.slot),
+            names,
+            spectate: true,
+            frontier: s.frontier ?? 0,
+        },
+        onQuit: returnToMenu,
+    }).then(() => { lobby.close(); }).catch(err => {
+        booted = false; fire?.resume();
+        menu.show(); menu.reset(rootScreen());
+        if (lobby) { lobby.close(); lobby = null; }
+        ipSummary = null; ipSlot = -1;
+        status(String(err));
+    });
+}
+
 function inProgressScreen() {
     const s = ipSummary;
     const p = s.params;
@@ -478,6 +509,7 @@ function inProgressScreen() {
             free.length
                 ? { label: 'DROP IN', action: dropIn }
                 : { label: 'GAME FULL', color: 'Red' },
+            { label: 'SPECTATE', action: () => spectateGame() },
             { label: 'GAME: ', value: entry(p.wad)?.title ?? p.wad, thumb: font.titleThumb(p.wad, 52) },
             { label: 'MAP: ', value: mapName(p) },
             { label: 'MODE: ', value: mode },

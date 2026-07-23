@@ -218,7 +218,8 @@ export function createGame(log = console.log) {
             params: { ...params },      // frozen for the game; handed to drop-ins
             slots,                      // the tic-0 ingame slots
             names: null,
-            history: [],                // every sealed bundle, for drop-in catch-up
+            history: [],                // every sealed bundle, for drop-in and spectator catch-up
+            spectators: new Set(),      // read-only observers; never in session.players
         };
         let n = 3;
         const tick = () => {
@@ -238,9 +239,27 @@ export function createGame(log = console.log) {
         if (!session) return;
         clearInterval(session.timer);
         for (const p of session.players) p.ws?.close();
+        for (const sw of session.spectators) try { sw.close(); } catch {}
         session = null;
         log(`game: over (${reason})`);
         cast(roster());
+    }
+
+    // --- spectator endpoint ---------------------------------------------------
+    // A spectator is a receive-only observer: it gets the full sealed-bundle
+    // history as a burst on connect, then follows live bundles. The handler has
+    // NO ws.on('message') listener — zero ticcmd write code by design — so
+    // injection is structurally impossible, not just guarded by a flag.
+    function spectateConnect(ws) {
+        safeWs(ws, log, 'spectate');
+        if (!session) { try { ws.terminate(); } catch {} return; }
+        for (const b of session.history) ws.send(b);
+        session.spectators.add(ws);
+        log(`spectate: observer connected (history ${session.history.length} tics)`);
+        ws.on('close', () => {
+            session?.spectators.delete(ws);
+            log('spectate: observer disconnected');
+        });
     }
 
     function relayConnect(ws, url) {
@@ -392,9 +411,12 @@ export function createGame(log = console.log) {
         });
         buf[4] = mask;
         buf[5] = fab;
-        session.history.push(buf);      // for drop-in catch-up replay
+        session.history.push(buf);      // for drop-in and spectator catch-up replay
         for (const p of session.players)
             if (p.ws?.readyState === 1) p.ws.send(buf);
+        // Broadcast sealed bundle to all spectators (same bundle, same tic).
+        for (const sw of session.spectators)
+            if (sw.readyState === 1) sw.send(buf);
     }
 
     // --- ws mounting ---------------------------------------------------------
@@ -403,13 +425,17 @@ export function createGame(log = console.log) {
     // perMessageDeflate off: compressing 12-byte, latency-critical packets
     // only burns CPU and adds delay; pin it so a ws default flip can't
     // silently re-enable it.
-    const lobbyWss = new WebSocketServer({ noServer: true, maxPayload: 1024, perMessageDeflate: false });
-    const gameWss  = new WebSocketServer({ noServer: true, maxPayload: 64,   perMessageDeflate: false });
+    const lobbyWss    = new WebSocketServer({ noServer: true, maxPayload: 1024, perMessageDeflate: false });
+    const gameWss     = new WebSocketServer({ noServer: true, maxPayload: 64,   perMessageDeflate: false });
+    // spectateWss: receive-only — maxPayload 64 accepts zero-payload pings only;
+    // no ws.on('message') in spectateConnect so even those are no-ops.
+    const spectateWss = new WebSocketServer({ noServer: true, maxPayload: 64,   perMessageDeflate: false });
 
     // Absorb server-level errors (e.g. bad handshake packets) so the process
     // doesn't exit if a single malformed upgrade sneaks through.
-    lobbyWss.on('error', err => log(`lobbyWss error: ${err?.message ?? err}`));
-    gameWss.on('error',  err => log(`gameWss error: ${err?.message ?? err}`));
+    lobbyWss.on('error',    err => log(`lobbyWss error: ${err?.message ?? err}`));
+    gameWss.on('error',     err => log(`gameWss error: ${err?.message ?? err}`));
+    spectateWss.on('error', err => log(`spectateWss error: ${err?.message ?? err}`));
 
     // Connection cap: connCount tracks every open socket across both endpoints.
     // Managed here (at connection event level) so every accepted socket has
@@ -443,6 +469,18 @@ export function createGame(log = console.log) {
         relayConnect(ws, req.url);
     });
 
+    spectateWss.on('connection', ws => {
+        if (connCount >= MAX_CONNS) {
+            log(`conn cap hit (${connCount}/${MAX_CONNS}): rejecting spectate connection`);
+            ws.on('error', () => {});
+            try { ws.terminate(); } catch {}
+            return;
+        }
+        connCount++;
+        ws.on('close', () => connCount--);
+        spectateConnect(ws);
+    });
+
     return {
         upgrade(req, socket, head) {
             // Guard against malformed upgrade URLs (e.g. raw control bytes that
@@ -451,7 +489,10 @@ export function createGame(log = console.log) {
             let path;
             try { path = new URL(req.url, 'http://x').pathname; }
             catch { socket.destroy(); return; }
-            const wss = path === '/ws/lobby' ? lobbyWss : path === '/ws/game' ? gameWss : null;
+            const wss = path === '/ws/lobby' ? lobbyWss
+                      : path === '/ws/game'  ? gameWss
+                      : path === '/ws/spectate' ? spectateWss
+                      : null;
             if (!wss) { socket.destroy(); return; }
             // Kill Nagle: ticcmds and bundles are tiny and time-critical, so
             // batching them behind delayed-ACK would add tens of ms of lag.

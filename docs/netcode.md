@@ -70,6 +70,41 @@ says which). Every genuinely-transmitted cmd is still verified.
   two tics (`I_GetTimeFrac`), render-side only — the simulation the
   netcode checksums is untouched.
 
+## Spectator protocol
+
+A read-only observer connects to `/ws/spectate` (no slot parameter, no
+auth). The endpoint is structurally receive-only: `spectateConnect` has
+no `ws.on('message')` handler at all — zero ticcmd write code exists on
+the path, so injection is impossible by construction, not by flag.
+
+**Catch-up flow**
+
+1. Client connects to `/ws/spectate`.
+2. Server immediately streams the full `session.history` (every sealed
+   bundle from tic 0 to the current frontier) as a burst of binary
+   messages. Each message is a standard 6+8n-byte sealed bundle.
+3. Server then forwards every subsequent `sealTic` bundle in real time.
+4. Client replays the history burst with `web_replay_tic` (one call per
+   bundle, unpaced) and enters live mode at the frontier, identical to
+   the drop-in machinery (`attachRelay.catchUp`).
+
+**Structural enforcement**
+
+- Server: no `ws.on('message')` listener in `spectateConnect`.
+- Client: `doom.netSend = () => {}` — ticcmds are built locally (engine
+  normal path) but discarded before transmission.
+- The spectator engine uses the first ingame slot as `consoleplayer` so
+  the simulation is bit-identical to that player's engine (same mo
+  pointer, same sound listener). Local ticcmds never reach `netcmds[]`
+  in netgame mode; the sim reads only sealed bundles.
+
+**Memory bound** (`session.history` is the sole log)
+
+`session.history` already exists for drop-in catch-up. Spectators reuse
+it — no parallel log. One entry per sealed tic:
+`6 + 8 × 4 = 38 bytes/tic; 38 × 35 Hz ≈ 1.33 KB/s ≈ 4.8 MB/hr`.
+Released when the session ends (`endSession` sets `session = null`).
+
 ## Lobby protocol (JSON)
 
 ```
