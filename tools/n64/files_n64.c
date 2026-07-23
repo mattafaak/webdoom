@@ -36,8 +36,14 @@ void n64_register_wad(const byte* data, int len)
 {
     n64_wad_data = data;
     n64_wad_len  = len;
-    /* Default name: the engine will call W_WebFileExists("doom1.wad") etc. */
-    strncpy(n64_wad_name, "doom1.wad", sizeof(n64_wad_name) - 1);
+    /* The name must be one IdentifyVersion() probes (d_main.c:592-630):
+       doom2f / doom2 / plutonia / tnt / doomu / doom / doom1, in that order.
+       N64_WAD_NAME is set by the Makefile alongside the WAD it embeds, so the
+       two cannot drift apart. */
+#ifndef N64_WAD_NAME
+#define N64_WAD_NAME "doom1.wad"
+#endif
+    strncpy(n64_wad_name, N64_WAD_NAME, sizeof(n64_wad_name) - 1);
     n64_wad_name[sizeof(n64_wad_name) - 1] = '\0';
 }
 

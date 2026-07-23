@@ -1,66 +1,81 @@
 ares boot attempt — task 20.4b / 20.4c evidence
 ================================================
+STATUS 2026-07-23 (supersedes the earlier "ares SIGSEGV" and "NULL WAD" notes)
 
-STATUS 2026-07-23 (updated after xorg-server-xvfb was installed)
+1. RESOLVED — ares does not crash.
+   The original "SIGSEGV before any output" finding was purely a missing X
+   display. With xorg-server-xvfb installed, ares starts normally:
 
-RESOLVED: the earlier "ares exits with SIGSEGV before producing any output"
-finding was purely a missing X display. With xvfb present, ares starts
-normally and runs the ROM for the full timeout without crashing:
+       $ xvfb-run -a ares --system "Nintendo 64" --no-file-prompt n64-doom.z64
+       OpenGL Version: 4.6 (Core Profile) Mesa 26.1.5-arch3.1, GLSL: 4.60
+       OpenGL: Failed to load librashader: shaders will be disabled
+       (runs to the timeout; exit 124 = still running, not a crash)
 
-    $ xvfb-run -a ares --system "Nintendo 64" --no-file-prompt n64-doom.z64
-    OpenGL Version: 4.6 (Core Profile) Mesa 26.1.5-arch3.1, GLSL: 4.60
-    OpenGL: Failed to load librashader: shaders will be disabled
-    (runs until the 25 s timeout; exit 124 = still running, not a crash)
+   The librashader line is cosmetic — an optional shader library.
 
-The librashader line is cosmetic — an optional shader library, not required.
+2. RESOLVED — the ROM now embeds an IWAD.
+   `make` appends doom.wad at N64_WAD_OFFSET (2 MiB) with n64tool and compiles
+   the cartridge address and length into the shim, which registers it as
+   "doomu.wad" — one of the names IdentifyVersion() probes (d_main.c:592-630).
+   The build asserts the WAD actually landed rather than trusting the tool:
 
-CURRENT BLOCKER: the ROM contains no WAD, by construction.
+       built n64-doom.z64 with ../../wads/lib/doom.wad at offset 2097152
+       WAD magic present in ROM
+       ROM size: 14516224 bytes
 
-    tools/n64/n64_main.c:52   n64_register_wad(NULL, 0);
+   The WAD is read IN PLACE from cartridge space (KSEG1, uncached) because it
+   cannot fit in RDRAM: 12,408,292 B of WAD against 4 MB (8 MB with an
+   Expansion Pak) minus the ~990 KB the engine already holds. Build a
+   footprint-only ROM with `make N64_WAD=`.
 
-and the ROM packing step appends only the stripped ELF:
+3. CURRENT BLOCKER — ares emits no ISViewer output for ANY ROM.
 
-    n64tool --title "webdoom-n64" --output n64-doom.z64 --align 256 \
-            n64-doom.elf.stripped
+   Established by controlled experiment rather than inference. Three ROMs, all
+   with the same result (runs to timeout, exit 124, only the two OpenGL lines):
 
-Confirmed empirically — the 360,448-byte ROM contains no IWAD/PWAD magic:
+     a. webdoom n64-doom.z64 with the WAD embedded          -> no output
+     b. a minimal libdragon ROM whose entire body is
+              debug_init(DEBUG_FEATURE_LOG_EMU);
+              for (int i=0;i<5;i++) debugf("CONTROL ROM ALIVE %d\n", i);
+        built with the same strip + n64tool pipeline        -> no output
+     c. libdragon's own examples/ctest, built by libdragon's OFFICIAL pipeline
+        (n64elfcompress + n64sym + n64tool + stock IPL3, after installing the
+        missing tools into $N64_INST)                       -> no output
 
-    $ grep -c "IWAD\|PWAD" n64-doom.z64
-    0
+   (b) rules out the webdoom port — a ROM that does nothing but print is
+   equally silent. (c) rules out our hand-rolled packaging — libdragon's own
+   toolchain and IPL3 fare no better. The silence is therefore a property of
+   this ares build's ISViewer→stdout path, and tells us nothing about whether
+   webdoom boots.
 
-So D_DoomMain cannot reach its banner: there is no WAD to identify or load.
-This ROM is a *footprint-measurement artifact* (see docs/n64/BRING-UP.md §2),
-not a playable build, and no emulator configuration changes that.
+   Reading the ares source, output *should* appear: the channel is allocated
+   for any ROM under ~63.9 MB (n64/cartridge/cartridge.cpp:50,
+   `rom.size <= 0x03ff0000`; ours is 14.5 MB), the tracer is built with
+   setTerminal(true) (cartridge.cpp:52-54), notify() gates on
+   `file() || terminal()` (node/debugger/tracer/tracer.hpp:9), and
+   Program::log() calls print(message) for a terminal tracer
+   (desktop-ui/program/platform.cpp:58-60).
 
-WHY THERE IS NO ISVIEWER OUTPUT
-ares does implement the ISViewer debug channel that libdragon's
-debug_init(DEBUG_FEATURE_LOG_EMU) writes to:
+   Why that path yields nothing is unresolved. Note libdragon's isviewer_init()
+   probes by writing a magic value and reading it back (src/debug.c:95), so a
+   failed probe disables output silently at the ROM end — consistent with what
+   we observe, but not yet proven to be the cause.
 
-    ares/n64/cartridge/cartridge.cpp:52-54
-        isviewer.tracer = node->append<Node::Debugger::Tracer::Notification>(...)
-        isviewer.tracer->setTerminal(true);
-
-and Notification::notify() gates on enabled(), which is `file() || terminal()`
-(ares/node/debugger/tracer/tracer.hpp:9). Because setTerminal(true) is applied
-at construction, ISViewer text WOULD reach the terminal. The absence of output
-is therefore evidence about the ROM, not about ares configuration: execution
-never reaches a debugf() call, which is consistent with a NULL WAD.
-
-WHAT A BOOTABLE ROM REQUIRES (next task)
- 1. Embed an IWAD in the ROM image (n64tool can append data after the ELF) and
-    pass its cartridge address to n64_register_wad() instead of NULL.
- 2. Decide WAD residency: the smallest IWAD available here is doom.wad at
-    12,408,292 B. N64 cartridges reach 64 MB so ROM size is not the issue, but
-    RDRAM is 4 MB — the WAD must be read in place from cartridge address space
-    rather than copied into RAM. files_n64.c already takes a pointer+length, so
-    the work is in where that pointer points and how reads are serviced.
- 3. Re-run `make boot-log` and expect a D_DoomMain banner over ISViewer.
+NEXT STEPS for the 20.4c gate, cheapest first
+ - Try a released ares build instead of this from-source master, to rule out a
+   regression or a build-option difference.
+ - Enable the debugger explicitly (`--setting Boot/Debugger=true`) and see
+   whether tracer nodes behave differently once the debugger UI is realised.
+ - Failing both, verify through a different channel: ares's DebugServer
+   (Developer/DebugServerEnabled, a GDB stub) to confirm the CPU is executing
+   and inspect the PC, or capture the framebuffer and assert on rendered output
+   instead of UART text.
 
 REPRODUCTION
     source ~/toolchains/env.sh
     cd tools/n64 && make all
     make boot-log ARES=$HOME/toolchains/bin/ares ARES_TIMEOUT=25
 
-Pass ARES explicitly, or ensure ~/toolchains/bin is on PATH: xvfb-run does not
-inherit a PATH that was set only inside the make invocation. Raw capture from
-each run is written to ares-boot-raw.log; this file is curated evidence.
+Pass ARES explicitly, or put ~/toolchains/bin on PATH: xvfb-run does not
+inherit a PATH set only inside the make invocation. Raw capture from each run
+goes to ares-boot-raw.log (gitignored); this file is curated evidence.

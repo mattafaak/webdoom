@@ -43,6 +43,29 @@ $(N64TOOL):
 
 N64_ZONE_KB ?= 512
 
+# ── WAD embedding ────────────────────────────────────────────────────────────
+# The IWAD is appended into the ROM at N64_WAD_OFFSET and read IN PLACE from
+# cartridge address space.  It cannot be copied to RDRAM: doom.wad is
+# 12,408,292 B while the N64 has 4 MB (8 MB with Expansion Pak), of which the
+# engine already uses ~990 KB.
+#
+# The offset must clear the ELF payload (~360 KB); 2 MiB leaves generous room.
+# Cartridge domain 1 is physical 0x10000000, addressed by the CPU through
+# KSEG1 (uncached) at 0xB0000000 — so the WAD's virtual address is
+# 0xB0000000 + N64_WAD_OFFSET.  Uncached is required: the CPU must not cache
+# reads of cartridge space that it never wrote.
+#
+# Set N64_WAD= to build a footprint-only ROM with no WAD (the previous default).
+N64_WAD        ?= ../../wads/lib/doom.wad
+N64_WAD_OFFSET ?= 2097152
+# Engine-visible name. IdentifyVersion() probes doom2f/doom2/plutonia/tnt/
+# doomu/doom/doom1 in that order (d_main.c:592-630); this project's doom.wad is
+# Ultimate DOOM, which the wasm build likewise presents as doomu.wad.
+N64_WAD_NAME   ?= doomu.wad
+# Length is measured from the file at configure time and compiled in: the shim
+# has no filesystem to ask at runtime. 0 when no WAD is embedded.
+N64_WAD_LEN    := $(if $(strip $(N64_WAD)),$(shell wc -c < $(N64_WAD) 2>/dev/null || echo 0),0)
+
 # Common flags for both engine/core and N64 shim.
 # ABI landmine mitigations (docs/n64/MIPS-ABI-LANDMINES.md):
 #   -fno-strict-aliasing — class 4 landmine mitigation
@@ -55,6 +78,9 @@ COMMON_FLAGS := -mabi=o64 -march=vr4300 -mtune=vr4300 \
                 -DNORMALUNIX \
                 -DMAXSCREENWIDTH=320 \
                 -DN64_ZONE_KB=$(N64_ZONE_KB) \
+                -DN64_WAD_OFFSET=$(N64_WAD_OFFSET) \
+                -DN64_WAD_LEN=$(N64_WAD_LEN) \
+                -DN64_WAD_NAME=\"$(N64_WAD_NAME)\" \
                 -Dalloca=__builtin_alloca \
                 -fno-strict-aliasing \
                 -fsigned-char \
@@ -127,10 +153,23 @@ $(OUT_ELF): $(OBJ) | $(N64TOOL)
 	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
 	@echo "built $@"
 
-$(OUT_ROM): $(OUT_ELF) | $(N64TOOL)
+# The WAD length is compiled in, so the ROM depends on the WAD file itself.
+$(OUT_ROM): $(OUT_ELF) $(N64_WAD) | $(N64TOOL)
 	$(STRIP) -s -o $(OUT_ELF).stripped $(OUT_ELF)
+ifeq ($(strip $(N64_WAD)),)
 	$(N64TOOL) --title "webdoom-n64" --output $@ --align 256 $(OUT_ELF).stripped
-	@echo "built $@"
+	@echo "built $@ (footprint-only: no WAD embedded)"
+else
+	$(N64TOOL) --title "webdoom-n64" --output $@ --align 256 $(OUT_ELF).stripped \
+	           --offset $(N64_WAD_OFFSET) $(N64_WAD)
+	@echo "built $@ with $(N64_WAD) at offset $(N64_WAD_OFFSET)"
+	@# Prove the WAD really landed in the image rather than trusting the tool.
+	@if grep -qa "IWAD\|PWAD" $@; then \
+	    echo "WAD magic present in ROM"; \
+	else \
+	    echo "ERROR: no IWAD/PWAD magic in $@ — WAD was not embedded" >&2; exit 1; \
+	fi
+endif
 	@echo "ROM size: $$(wc -c < $@) bytes"
 
 $(OBJ_DIR)/core/%.o: $(CORE_DIR)/%.c

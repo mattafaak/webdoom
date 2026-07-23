@@ -46,10 +46,27 @@ int main(void)
     debugf("N64 webdoom boot: initialising shim layer\n");
 
     // ── Step 2: WAD blob registration ────────────────────────────────────────
-    // NULL / 0: footprint build.  IdentifyVersion() will see no WAD and set
-    // gamemode = indetermined.  D_DoomMain will still print the startup banner.
-    // Real ROM: supply the XIP address from the DFS mount point.
+    // The IWAD is appended into the ROM image by n64tool at N64_WAD_OFFSET and
+    // read IN PLACE from cartridge space — it is far too large to copy into
+    // RDRAM (doom.wad is 12,408,292 B; the console has 4 MB, 8 MB with an
+    // Expansion Pak, and the engine already holds ~990 KB of that).
+    //
+    // Cartridge domain 1 is physical 0x10000000. We address it through KSEG1
+    // (0xA0000000 + physical), which is UNCACHED — mandatory here, because the
+    // CPU must not cache lines from a region it never writes.
+    //
+    // N64_WAD_LEN is 0 for a footprint-only build, in which case nothing is
+    // registered and IdentifyVersion() reports an indeterminate game mode.
+#if N64_WAD_LEN > 0
+    {
+        const byte* wad = (const byte*)(0xA0000000u + 0x10000000u + N64_WAD_OFFSET);
+        debugf("N64 webdoom: WAD %s @ %p len %d\n", N64_WAD_NAME, wad, (int)N64_WAD_LEN);
+        n64_register_wad(wad, (int)N64_WAD_LEN);
+    }
+#else
+    debugf("N64 webdoom: footprint-only build, no WAD embedded\n");
     n64_register_wad(NULL, 0);
+#endif
 
     // ── Step 3: argv ─────────────────────────────────────────────────────────
     myargc = 1;
