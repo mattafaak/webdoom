@@ -1,20 +1,22 @@
 #!/usr/bin/env node
 // tools/browser-wide-toggle-test.mjs — end-to-end wide-mode toggle + persist test.
 //
-// task 18.3: verifies dynamic canvas/texture sizing, aspect-bucket selection,
-// and localStorage persistence of the wideMode setting.
+// task 18.3 / wide-fix: verifies dynamic canvas/texture sizing, aspect-bucket
+// selection, and localStorage persistence of the wideMode setting.
 //
+// Chrome launched at 1280×720 (16:9) so wideBucket() returns 426.
 // Tests:
 //   1. Default state: canvas.width == 320, web_screenwidth() == 320.
 //   2. Toggle-on: open settings (F8), click wide mode checkbox.
-//      After the next rAF frame: canvas.width == 854, web_screenwidth() == 854.
+//      After the next rAF frame: canvas.width == 426, web_screenwidth() == 426.
 //   3. Toggle-off: uncheck wide mode.
 //      After the next rAF frame: canvas.width == 320, web_screenwidth() == 320.
 //   4. Persist: toggle wide on, reload page.
-//      After reload + boot: canvas.width == 854, web_screenwidth() == 854.
+//      After reload + boot: canvas.width == 426, web_screenwidth() == 426.
 //
 // Red-proof:  Steps 2 (wide on) and 3 (toggle-off → 320) are captured in the
 // same run, proving pre-existing behaviour (320) is restored when wide is off.
+// Window at 1280×720 = 16:9: wideBucket() == 426 (threshold: aspect > 1.55).
 //
 // Usage: node tools/browser-wide-toggle-test.mjs [url]
 //   url defaults to http://127.0.0.1:8666/
@@ -25,11 +27,14 @@ const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
 const CDP = 9270;
 const CHROME_BIN = process.env.CHROME_BIN ?? 'google-chrome-stable';
 
+// 1280×720 = 16:9 aspect → wideBucket() returns 426.
+// (1280/720 = 1.78 which is > 1.55 and ≤ 2.0 → bucket 426)
+const WIDE_BUCKET = 426; // expected render width for 16:9 display
 const chrome = spawn(CHROME_BIN, [
     '--headless=new', `--remote-debugging-port=${CDP}`,
     '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
     '--use-angle=swiftshader', '--autoplay-policy=no-user-gesture-required',
-    '--window-size=1280,960', 'about:blank',
+    '--window-size=1280,720', 'about:blank',
 ], { stdio: 'ignore' });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const cleanup = code => { chrome.kill(); process.exit(code); };
@@ -139,8 +144,8 @@ const wideCanvasW = await ev(`document.getElementById('screen').width`);
 const wideScreenW = await ev(`window.webdoom.doom._web_screenwidth()`);
 const wideHasClass = await ev(`document.getElementById('screen').classList.contains('wide')`);
 console.log(`[2] wide on: canvas.width=${wideCanvasW} web_screenwidth=${wideScreenW} .wide=${wideHasClass}`);
-if (wideCanvasW !== 854) fail(`expected canvas.width=854 after wide toggle, got ${wideCanvasW}`);
-if (wideScreenW !== 854) fail(`expected web_screenwidth=854 after wide toggle, got ${wideScreenW}`);
+if (wideCanvasW !== WIDE_BUCKET) fail(`expected canvas.width=${WIDE_BUCKET} after wide toggle (16:9 bucket), got ${wideCanvasW}`);
+if (wideScreenW !== WIDE_BUCKET) fail(`expected web_screenwidth=${WIDE_BUCKET} after wide toggle (16:9 bucket), got ${wideScreenW}`);
 if (!wideHasClass) fail('canvas should have .wide class when wide mode is active');
 
 // ── 3. Toggle wide mode OFF — red-proof of pre-existing 320 behaviour ────────
@@ -187,10 +192,10 @@ await bootSP();
 const persistCanvasW = await ev(`document.getElementById('screen').width`);
 const persistScreenW = await ev(`window.webdoom.doom._web_screenwidth()`);
 console.log(`[4] persist after reload: canvas.width=${persistCanvasW} web_screenwidth=${persistScreenW}`);
-if (persistCanvasW !== 854)
-    fail(`expected canvas.width=854 after reload (persist), got ${persistCanvasW}`);
-if (persistScreenW !== 854)
-    fail(`expected web_screenwidth=854 after reload (persist), got ${persistScreenW}`);
+if (persistCanvasW !== WIDE_BUCKET)
+    fail(`expected canvas.width=${WIDE_BUCKET} after reload (persist, 16:9 bucket), got ${persistCanvasW}`);
+if (persistScreenW !== WIDE_BUCKET)
+    fail(`expected web_screenwidth=${WIDE_BUCKET} after reload (persist, 16:9 bucket), got ${persistScreenW}`);
 
 // Clean up: reset wide mode setting so the browser leaves no persistent state.
 await ev(`localStorage.setItem('webdoom.input', JSON.stringify({
