@@ -17,7 +17,7 @@
 //   Node.js measurement: seek-to-59 in ~0.4 ms (~4000× realtime).
 //   Worst-case 44,580-tic seek extrapolated: ~0.3 s on devbox.
 //   Wbox (Raspberry Pi 5): see docs/perf.md for measured figures.
-//   The UI cites "up to ~13 s" on wbox (15.5 prior estimate) — the wbox
+//   The UI cites the measured wbox worst case (~2.2 s, 2026-07-22) — the wbox
 //   measurement refines or confirms this figure; see docs/perf.md §19.3.
 //
 // Demo LMP tic format (bytes per tic, vanilla):
@@ -102,7 +102,7 @@ export function createScrubberUI(doom, demoBytes, { container = document.body, s
 
     const latencyNote = document.createElement('span');
     latencyNote.style.cssText = 'color:#666;font-family:monospace;font-size:10px;min-width:90px;text-align:right;';
-    latencyNote.title = 'Seek re-sims from tic 0. On wbox (Raspberry Pi 5), worst-case 44,580-tic seek is up to ~13 s. See docs/perf.md §19.3.';
+    latencyNote.title = 'Seek re-sims from tic 0. Worst-case 44,580-tic seek measured at ~2.2 s on the slowest fleet host (wbox). See docs/perf.md §19.3.';
     latencyNote.textContent = '↩ re-sim/tic';
 
     scrubRow.appendChild(label);

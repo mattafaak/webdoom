@@ -1780,20 +1780,23 @@ Zone invariant: `web_zone_hwm` is flat across repeated seeks (confirmed by
 Extrapolated worst case (44,580 tics, the longest attract demo in the test
 matrix — tnt-demo1): **~0.3 s on devbox** at ~0.007 ms/tic.
 
-### Wbox estimate (Raspberry Pi 5, TODO: measure)
+### Wbox measurement (AMD G-T56N, measured 2026-07-22)
 
-Task 15.5 estimated ~100× realtime on wbox for attract-demo playback at 35 Hz,
-giving a worst-case 44,580-tic seek of **~13 s**.  The scrubber UI cites this
-figure.  Measure on wbox and update:
+Measured via `node tools/demo-seek-test.mjs` on wbox (bundle: doom.js/wasm +
+doom.wad rsynced, Node v24):
 
 ```
-# On wbox:
-node tools/demo-seek-test.mjs
-# Record the "extrapolated 44580-tic seek" line and paste here.
+seek-to-1: 2.4 ms  (~12× realtime)
+seek-to-30: 2.5 ms  (~343× realtime)
+seek-to-59: 2.9 ms  (~591× realtime)
+extrapolated 44580-tic seek: 2.2 s (at 0.048 ms/tic)
 ```
 
-The scrubber latency note in `client/js/scrubber.js` cites "up to ~13 s on
-wbox" pending this measurement.
+**Worst-case seek ≈ 2.2 s on wbox** — 6× better than the 15.5 estimate
+(~13 s), because 15.5's ~100× figure included rendering while `web_seek_demo`
+runs sim-only (`nodrawers=1`).  Seek equivalence also PASSes on wbox
+(cross-host confirmation of the DoD hash equality).  The scrubber UI cites
+"a few seconds on the slowest hardware".
 
 ### Equivalence guarantee
 

@@ -87,6 +87,9 @@ node tools/http-fuzz-test.mjs | tail -1
 echo "── demo store fuzz + abuse (19.2 caps enforcement) ─────"
 node tools/demo-store-fuzz-test.mjs | tail -1
 
+echo "── demo seek equivalence (19.3 scrubber gate) ──────────"
+node tools/demo-seek-test.mjs | tail -2
+
 echo "── net fuzz + abuse (malformed/hostile clients) ────────"
 node tools/net-fuzz-test.mjs | tail -1
 
