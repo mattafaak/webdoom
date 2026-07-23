@@ -89,7 +89,7 @@ export function createSettingsUI(input, doom, renderer, qol) {
                 } else {
                     // 16.4-style loud degradation notice
                     sf2El.textContent =
-                        'GM: no soundfont loaded — drag an .sf2 file onto the screen (silence until loaded)';
+                        'GM: no soundfont loaded — drag an .sf2 file onto the screen (OPL fallback until loaded)';
                     sf2El.style.color = '#fa8';
                 }
             }).catch(() => {

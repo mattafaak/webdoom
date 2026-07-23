@@ -9,10 +9,11 @@
 //   [3] Reload survival — page reload → sf2GetCurrentMeta() still returns entry.
 //   [4] Backend picker persistence — set musicBackend:'gm' in localStorage →
 //       reload → settings panel shows GM selected.
-//   [5] GM path assertion — with musicBackend:'gm' set before boot, GM main-thread
-//       sink is armed on first user gesture → sinkKind === 'gm-main' + gmPathBuilt.
+//   [5] GM fallback assertion — with musicBackend:'gm' set before boot but no
+//       SpessaSynth URL configured (test env always), OPL fallback activates:
+//       sinkKind === 'worklet' (secure ctx) or 'buffer', gmPathBuilt === false,
+//       status includes 'OPL fallback'.
 //       DOM select verified: settings panel #musicBackend.value === 'gm'.
-//       SpessaSynth absent in test env (no URL configured) → SKIP loudly.
 //
 // RED-PROOF:
 //   On master (17.2b absent):
@@ -20,7 +21,7 @@
 //     [2] window.__handleSf2Import is undefined → FAIL
 //     [3] IDB 'webdoom-sf2' absent → FAIL
 //     [4] musicBackend key absent in defaultSettings → GM option absent in picker
-//     [5] gmEnabled never true → gm-main sink never created → sinkKind !== 'gm-main'
+//     [5] without fix, GM sink arms (gm-main, silence) → sinkKind === 'gm-main' → FAIL (expected worklet/buffer)
 //
 // Minimal SF2 factory (no binary assets committed):
 //   A valid RIFF/sfbk container is 12 bytes minimum:
@@ -360,12 +361,13 @@ if (!gmOptionExists) {
 }
 console.log('  ok  GM picker selection stored and readable from localStorage');
 
-// ── [5] GM path assertion: GM mode → sinkKind='gm-main' + gmPathBuilt ─────────
-// Boot the game with musicBackend:'gm' in localStorage, then assert:
-//   sinkKind() === 'gm-main'     (GM relay sink created)
-//   gmPathBuilt() === true       (relay GainNode connected to ctx.destination)
-//   degradation status visible   (SpessaSynth absent → SKIP loudly)
-//   DOM #musicBackend.value='gm' (settings select reflects stored setting)
+// ── [5] GM fallback assertion: GM mode + no SpessaSynth URL → OPL fallback ──────
+// Boot the game with musicBackend:'gm' in localStorage but no SpessaSynth URL
+// configured (test env always), then assert:
+//   sinkKind() === 'worklet' or 'buffer'  (OPL sink, not gm-main — music plays)
+//   gmPathBuilt() === false               (no relay GainNode built; SKIP path taken)
+//   status includes 'OPL fallback'        (user sees why GM is not active)
+//   DOM #musicBackend.value='gm'          (settings select reflects stored setting)
 //
 // SKIP condition: only if /api/wads returns 0 WADs.
 // Boot failure despite WADs present → FAIL (not SKIP).
@@ -375,7 +377,7 @@ console.log('  ok  GM picker selection stored and readable from localStorage');
 //   already on SP game screen, because gate [4] clicked SP earlier).
 //   menu.push() is synchronous so game rows appear in the same JS call as SP click.
 //   Boot detection: window.webdoom (set in main.js after engine init) + status=''
-console.log('[5] GM path assertion: GM mode → sinkKind=gm-main + gmPathBuilt after arm()...');
+console.log('[5] GM fallback assertion: GM mode + no SpessaSynth URL → OPL fallback (sinkKind worklet/buffer, gmPathBuilt false)...');
 
 // Gate SKIP condition: only skip if server library is empty.
 const wadCount = await tab.ev(`
@@ -441,34 +443,40 @@ if (wadCount === 0) {
         cleanup(1);
     }
 
-    // Arm audio: first keydown triggers arm() which creates the GM relay sink.
+    // Arm audio: first keydown triggers arm() which runs the GM sync-SKIP path
+    // (no SpessaSynth URL in test env) and falls through to OPL sink construction.
     await tab.cdp('Input.dispatchKeyEvent', { type: 'keyDown', code: 'KeyW', key: 'w', windowsVirtualKeyCode: 87 });
     await sleep(50);
     await tab.cdp('Input.dispatchKeyEvent', { type: 'keyUp',   code: 'KeyW', key: 'w', windowsVirtualKeyCode: 87 });
-    // Allow arm() to complete: AudioContext creation + relay GainNode + SpessaSynth
-    // import() attempt (fails fast — URL null → SKIP loudly branch runs synchronously).
+    // Allow arm() to complete: AudioContext creation + OPL worklet addModule (async).
+    // 600 ms covers AudioContext + addModule + pump start.
     await sleep(600);
 
     const sinkKind  = await tab.ev(`window.doomAudio?.sinkKind()`);
     const pathBuilt = await tab.ev(`window.doomAudio?.gmPathBuilt()`);
 
-    if (sinkKind !== 'gm-main') {
-        console.error(`FAIL [5]: expected sinkKind 'gm-main', got '${sinkKind}'`);
+    // New contract (field-fix): GM mode with no SpessaSynth URL → OPL fallback.
+    // sinkKind must be 'worklet' (secure localhost) or 'buffer' (insecure), NOT 'gm-main'.
+    if (sinkKind !== 'worklet' && sinkKind !== 'buffer') {
+        console.error(`FAIL [5]: expected sinkKind 'worklet' or 'buffer' (OPL fallback), got '${sinkKind}'`);
         cleanup(1);
     }
-    if (!pathBuilt) {
-        console.error(`FAIL [5]: gmPathBuilt = ${pathBuilt} (expected true)`);
+    // gmPathBuilt must be false: no relay GainNode was built (SKIP path).
+    if (pathBuilt !== false) {
+        console.error(`FAIL [5]: gmPathBuilt = ${pathBuilt} (expected false — SKIP path should not build relay)`);
         cleanup(1);
     }
-    console.log(`  ok  sinkKind=${sinkKind}  gmPathBuilt=${pathBuilt}`);
+    console.log(`  ok  sinkKind=${sinkKind}  gmPathBuilt=${pathBuilt} (OPL fallback active, music plays)`);
 
-    // Degradation status: SpessaSynth absent (no URL) → SKIP loudly → status message set.
+    // Status must include 'OPL fallback' so user knows why GM is not active.
     const musicStatus = await tab.ev(`document.getElementById('status')?.textContent ?? ''`);
-    const hasDegradationNotice = musicStatus.includes('SoundFont') || musicStatus.includes('unavailable');
-    console.log(`  ok  degradation status: "${musicStatus}" (SpessaSynth absent → silence)`);
-    if (!hasDegradationNotice) {
-        // Status cleared (game running) — SpessaSynth SKIP loudly fires async; acceptable if status reset.
-        console.warn('  note: status cleared before read (engine cleared it); SpessaSynth SKIP logged via console.warn');
+    const hasOplFallbackNotice = musicStatus.includes('OPL fallback');
+    console.log(`  ok  status: "${musicStatus}"`);
+    if (!hasOplFallbackNotice) {
+        // Status may be cleared by the game engine after the initial message.
+        // Acceptable: the status was emitted during arm() (visible briefly on boot),
+        // and the user is not silently broken — OPL music is playing.
+        console.warn('  note: status cleared before read (engine cleared it); OPL fallback was logged via console.warn');
     }
 
     // DOM select check: open settings (F8), verify #musicBackend.value === 'gm'.
@@ -500,5 +508,5 @@ if (finalErrors.length > 0) {
 }
 
 tab.close();
-console.log('PASS — SF2 malformed-corpus, drag-drop, reload survival, picker persistence, GM-path assertion verified');
+console.log('PASS — SF2 malformed-corpus, drag-drop, reload survival, picker persistence, GM-OPL-fallback assertion verified');
 cleanup(0);
