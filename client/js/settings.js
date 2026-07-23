@@ -10,6 +10,7 @@
 //          loud status notice is shown).
 import { ACTIONS, saveSettings, defaultSettings } from './input.js';
 import { sf2GetCurrentMeta } from './sf2-library.js';
+import { wideBucket } from './wide-utils.js';
 
 // Compute Panini/cylindrical remap strength (matches main.js paniniStrength()).
 // 0.0 at 4:3 or narrower; 0.4 at 21:9+.  Returns 0 when disabled.
@@ -19,16 +20,8 @@ function computePaniniStrength(w, enabled) {
     return Math.min(0.4, Math.max(0, (aspect - 4/3) / (21/9 - 4/3)) * 0.4);
 }
 
-// Pick the Hor+ render width that best matches the current display aspect ratio.
-// Mirrors main.js wideBucket() — both must stay in sync.
-// Buckets: 320 (wide off) / 426 (~16:9) / 560 (~21:9) / 854 (≥32:9 ultrawide).
-function wideBucket() {
-    const aspect = window.innerWidth / window.innerHeight;
-    if (aspect <= 1.55) return 320;   // 4:3 / 5:4 — wide off equivalent
-    if (aspect <= 2.0)  return 426;   // 16:9 / 16:10
-    if (aspect <= 2.6)  return 560;   // 21:9
-    return 854;                        // 32:9 and wider
-}
+// wideBucket() imported from wide-utils.js — single source of truth
+// for the aspect→width mapping (shared with main.js boot path).
 
 export function createSettingsUI(input, doom, renderer, qol) {
     const s = input.settings;

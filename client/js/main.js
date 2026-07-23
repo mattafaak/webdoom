@@ -11,6 +11,7 @@ import { loadPersisted, startSync } from './persist.js';
 import { wadCacheGet, wadCachePut } from './wad-cache.js';
 import { libraryGetBytes } from './wad-library.js';
 import { createScrubberUI } from './scrubber.js';
+import { wideBucket } from './wide-utils.js';
 
 const status = msg => { document.getElementById('status').textContent = msg; };
 
@@ -266,7 +267,13 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     // renderW tracks the actual engine screenwidth after each web_frame() call.
     const SCREEN_H = 200; // DOOM's native framebuffer height (constant)
     let renderW = 320;
-    if (input.settings.wideMode) doom._web_set_wide(854);
+    // Aspect-adaptive bucket (wide-fix): same wideBucket() as the settings
+    // toggle path — a hardcoded 854 here made every reload re-apply the
+    // extreme ultrawide bucket regardless of display shape.
+    if (input.settings.wideMode) {
+        const bucketW = wideBucket();
+        if (bucketW > 320) doom._web_set_wide(bucketW);
+    }
 
     // Compute Panini/cylindrical remap strength from current aspect ratio.
     // 0.0 at 4:3 or narrower; 0.4 at 21:9 or wider.  Returns 0 when disabled.

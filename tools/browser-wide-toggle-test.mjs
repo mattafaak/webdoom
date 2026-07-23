@@ -27,9 +27,14 @@ const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
 const CDP = 9270;
 const CHROME_BIN = process.env.CHROME_BIN ?? 'google-chrome-stable';
 
-// 1280×720 = 16:9 aspect → wideBucket() returns 426.
-// (1280/720 = 1.78 which is > 1.55 and ≤ 2.0 → bucket 426)
-const WIDE_BUCKET = 426; // expected render width for 16:9 display
+// Expected bucket is derived from the PAGE's measured aspect with the same
+// thresholds as wideBucket() — headless Chrome's viewport height is not
+// reliably --window-size (observed 1280×~600 → aspect 2.13 → bucket 560),
+// so a hardcoded 426 is environment-sensitive.  Deriving from the page's own
+// innerWidth/innerHeight validates the aspect→bucket→canvas plumbing without
+// depending on the harness viewport.
+const bucketFor = a => a <= 1.55 ? 320 : a <= 2.0 ? 426 : a <= 2.6 ? 560 : 854;
+let WIDE_BUCKET = 426; // recomputed from the live page after boot
 const chrome = spawn(CHROME_BIN, [
     '--headless=new', `--remote-debugging-port=${CDP}`,
     '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
@@ -144,8 +149,10 @@ const wideCanvasW = await ev(`document.getElementById('screen').width`);
 const wideScreenW = await ev(`window.webdoom.doom._web_screenwidth()`);
 const wideHasClass = await ev(`document.getElementById('screen').classList.contains('wide')`);
 console.log(`[2] wide on: canvas.width=${wideCanvasW} web_screenwidth=${wideScreenW} .wide=${wideHasClass}`);
-if (wideCanvasW !== WIDE_BUCKET) fail(`expected canvas.width=${WIDE_BUCKET} after wide toggle (16:9 bucket), got ${wideCanvasW}`);
-if (wideScreenW !== WIDE_BUCKET) fail(`expected web_screenwidth=${WIDE_BUCKET} after wide toggle (16:9 bucket), got ${wideScreenW}`);
+WIDE_BUCKET = bucketFor(await ev(`window.innerWidth / window.innerHeight`));
+if (WIDE_BUCKET === 320) fail(`harness viewport not widescreen (bucket 320) — cannot exercise wide toggle`);
+if (wideCanvasW !== WIDE_BUCKET) fail(`expected canvas.width=${WIDE_BUCKET} after wide toggle (aspect bucket), got ${wideCanvasW}`);
+if (wideScreenW !== WIDE_BUCKET) fail(`expected web_screenwidth=${WIDE_BUCKET} after wide toggle (aspect bucket), got ${wideScreenW}`);
 if (!wideHasClass) fail('canvas should have .wide class when wide mode is active');
 
 // ── 3. Toggle wide mode OFF — red-proof of pre-existing 320 behaviour ────────
