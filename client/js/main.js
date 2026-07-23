@@ -10,6 +10,7 @@ import { attachRelay } from './net.js';
 import { loadPersisted, startSync } from './persist.js';
 import { wadCacheGet, wadCachePut } from './wad-cache.js';
 import { libraryGetBytes } from './wad-library.js';
+import { createScrubberUI } from './scrubber.js';
 
 const status = msg => { document.getElementById('status').textContent = msg; };
 
@@ -222,6 +223,27 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     }
     window.doomAudio = createAudio(doom);
     window.webdoom = { doom };              // debug/test handle
+
+    // task 19.3: seek hook — scrubber.js / lobby.js call seekTo(n) to
+    // request a seek.  The rAF loop consumes seekPending each frame so
+    // the seek runs on the next animation callback rather than mid-frame.
+    let seekPending  = null;   // tic to seek to, or null
+    let scrubberHandle = null; // { onFrame, destroy } from createScrubberUI
+
+    // attachScrubber: called by lobby.js after startReplay to wire up the UI.
+    // demoBytes: raw Uint8Array from the .lmp; container: element for the panel.
+    window.webdoom.attachScrubber = (demoBytes, container) => {
+        if (scrubberHandle) { scrubberHandle.destroy(); scrubberHandle = null; }
+        scrubberHandle = createScrubberUI(doom, demoBytes, {
+            container,
+            seekHook: (n) => { seekPending = n; },
+        });
+    };
+    // detachScrubber: called when demo ends or user quits replay.
+    window.webdoom.detachScrubber = () => {
+        if (scrubberHandle) { scrubberHandle.destroy(); scrubberHandle = null; }
+    };
+
     syncHandle = startSync(doom, wads[0].file);
 
     const renderer = createRenderer(canvas);
@@ -286,6 +308,8 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
         document.getElementById('landing').hidden = false;
         try { window.doomAudio?.stop?.(); } catch { /* dead instance */ }
         try { syncHandle?.stop?.(); } catch { /* dead instance */ }
+        // task 19.3: remove scrubber panel if present.
+        try { scrubberHandle?.destroy?.(); scrubberHandle = null; } catch { /* no-op */ }
         onQuit?.();
     };
 
@@ -301,8 +325,27 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
             perf._frameCallStart = performance.now();
         }
         try {
-            input.frame();
-            doom._web_frame();
+            // task 19.3: scrubber seek — consume pending seek before normal frame.
+            // web_seek_demo(N) re-sims from tic 0 with nodrawers=1, then restores
+            // nodrawers=0.  web_wipe_skip() clears any pending wipe so the final
+            // rendering web_frame() immediately shows the sought position.
+            if (seekPending !== null) {
+                const n = seekPending;
+                seekPending = null;
+                if (typeof doom._web_seek_demo === 'function') {
+                    doom._web_seek_demo(n);
+                    doom._web_wipe_skip();
+                    // One rendering frame at gametic==n; advances gametic to n+1.
+                    doom._web_frame();
+                    // Update scrubber position display after seek.
+                    scrubberHandle?.onFrame?.();
+                }
+            } else {
+                input.frame();
+                doom._web_frame();
+                // Update scrubber tic position display each playback frame.
+                scrubberHandle?.onFrame?.();
+            }
         } catch (err) {
             // ws-001 fix: surface the error, restore landing, tear down.
             // Guard on running: onDoomError (I_Error/abort) may have already

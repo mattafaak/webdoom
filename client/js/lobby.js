@@ -688,7 +688,14 @@ function leaveLobby() {
                     menu.show();
                     menu.reset(rootScreen());
                     status('demo replay failed: version mismatch');
+                    return;
                 }
+                // task 19.3: attach scrubber below the canvas.
+                // window.webdoom.attachScrubber is set by bootDoom (main.js).
+                // Container: the element that holds #screen (defaults to body).
+                const scrubContainer = document.getElementById('screen')?.parentElement
+                    ?? document.body;
+                window.webdoom?.attachScrubber?.(bytes, scrubContainer);
             })
             .catch(err => {
                 booted = false;
