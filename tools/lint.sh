@@ -99,6 +99,18 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Shell pipe-exit-code trap (see tools/check-pipe-exit.mjs and tools/gate.sh)
+#
+# A pipeline without pipefail reports the LAST command's status, so a failing
+# gate piped into `tail` exits 0 and reads as green.  That has happened six
+# times here; this keeps it from coming back through a committed script.
+# ---------------------------------------------------------------------------
+
+if ! node "$REPO_ROOT/tools/check-pipe-exit.mjs"; then
+    ERRORS=1
+fi
+
+# ---------------------------------------------------------------------------
 # Final result
 # ---------------------------------------------------------------------------
 

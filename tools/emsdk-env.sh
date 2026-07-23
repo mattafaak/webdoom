@@ -9,7 +9,11 @@ if [ ! -x "$EMSDK_DIR/upstream/emscripten/emcc" ]; then
 fi
 
 source "$EMSDK_DIR/emsdk_env.sh" >/dev/null 2>&1
-if ! emcc --version | head -1 | grep -q "$EMSDK_VERSION"; then
+# pipefail is scoped to this subshell on purpose: this file is SOURCED, so a
+# bare `set -o pipefail` would leak the option into the caller's shell.  Inside
+# the subshell it still does its job — if emcc itself fails, the pipeline
+# reports that failure instead of grep's status.
+if ! ( set -o pipefail; emcc --version | head -1 | grep -q "$EMSDK_VERSION" ); then
     echo "warning: emcc is not the pinned $EMSDK_VERSION:" >&2
     emcc --version | head -1 >&2
 fi
