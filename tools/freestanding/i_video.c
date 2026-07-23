@@ -17,7 +17,7 @@
 // Static screen-0 buffer (palette indices, row-major 320*200 = 64,000 bytes).
 // In a freestanding port this lives in a chosen memory region (SRAM, PSRAM).
 /* 4-byte alignment: screens[0] may be cast to short* / int* by render code. */
-static byte fs_screenbuf[SCREENWIDTH * SCREENHEIGHT] __attribute__((aligned(4)));
+static byte fs_screenbuf[MAXSCREENWIDTH * SCREENHEIGHT] __attribute__((aligned(4)));
 
 // Gamma-corrected RGB palette mirror (same layout as web/i_video.c webpalette).
 static byte fs_palette[256 * 3];
@@ -51,7 +51,7 @@ void I_FinishUpdate(void)
 
 void I_ReadScreen(byte* scr)
 {
-    memcpy(scr, screens[0], SCREENWIDTH * SCREENHEIGHT);
+    memcpy(scr, screens[0], screenwidth * SCREENHEIGHT);
 }
 
 // ── Render hash export ────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ unsigned fs_render_hash(void)
     int         pv  = fs_palette_version;
 
     for (y = 0; y < SCREENHEIGHT; y++)
-        for (x = 0; x < SCREENWIDTH; x++)
+        for (x = 0; x < screenwidth; x++)
             h = (h ^ (unsigned)fb[x * SCREENHEIGHT + y]) * 0x01000193u;
 
     h = (h ^ (unsigned)(pv        & 0xff)) * 0x01000193u;

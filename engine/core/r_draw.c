@@ -28,6 +28,7 @@ static const char
 rcsid[] = "$Id: r_draw.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 
 
+#include <stdint.h>
 #include "doomdef.h"
 
 #include "i_system.h"
@@ -587,7 +588,7 @@ void R_InitTranslationTables (void)
     int		i;
 	
     translationtables = Z_Malloc (256*3+255, PU_STATIC, 0);
-    translationtables = (byte *)(( (int)translationtables + 255 )& ~255);
+    translationtables = (byte *)(( (uintptr_t)translationtables + 255 )& ~(uintptr_t)255);
     
     // translate just the 16 green colors
     for (i=0 ; i<256 ; i++)
@@ -674,22 +675,50 @@ void R_DrawSpan (void)
 
     PERF_SPAN_INC(count);
 
-    do
+    // Convert to total pixel count (original do-while ran count+1 times).
+    count++;
+
+    // NC5: 4-wide loop unroll (20.2b).
+    // Four independent spot computations per iteration expose OOO parallelism
+    // on the four ds_source[] loads.  xfrac/yfrac remain separate 32-bit
+    // accumulators (scalar) — no packing, bit-identical to original scalar loop.
+    // Column-major framebuffer (14.2a): successive pixels in a span are
+    // +SCREENHEIGHT bytes apart.
+    while (count >= 4)
     {
-	// Current texture index in u,v.
-	spot = ((yfrac>>(16-6))&(63*64)) + ((xfrac>>16)&63);
+        fixed_t xf1 = xfrac + ds_xstep;
+        fixed_t yf1 = yfrac + ds_ystep;
+        fixed_t xf2 = xf1  + ds_xstep;
+        fixed_t yf2 = yf1  + ds_ystep;
+        fixed_t xf3 = xf2  + ds_xstep;
+        fixed_t yf3 = yf2  + ds_ystep;
 
-	// Lookup pixel from flat texture tile,
-	//  re-index using light/colormap.
-	// 14.2a column-major: moving right one pixel = +SCREENHEIGHT bytes.
-	*dest = ds_colormap[ds_source[spot]];
-	dest += SCREENHEIGHT;
+        int s0 = ((yfrac >> 10) & 4032) | ((xfrac >> 16) & 63);
+        int s1 = ((yf1   >> 10) & 4032) | ((xf1   >> 16) & 63);
+        int s2 = ((yf2   >> 10) & 4032) | ((xf2   >> 16) & 63);
+        int s3 = ((yf3   >> 10) & 4032) | ((xf3   >> 16) & 63);
 
-	// Next step in u,v.
-	xfrac += ds_xstep;
-	yfrac += ds_ystep;
+        dest[0]              = ds_colormap[ds_source[s0]];
+        dest[SCREENHEIGHT]   = ds_colormap[ds_source[s1]];
+        dest[2*SCREENHEIGHT] = ds_colormap[ds_source[s2]];
+        dest[3*SCREENHEIGHT] = ds_colormap[ds_source[s3]];
 
-    } while (count--);
+        xfrac = xf3 + ds_xstep;
+        yfrac = yf3 + ds_ystep;
+        dest  += 4 * SCREENHEIGHT;
+        count -= 4;
+    }
+
+    // Tail: 0-3 remaining pixels, scalar (same as original loop body).
+    while (count > 0)
+    {
+        spot = ((yfrac >> 10) & 4032) | ((xfrac >> 16) & 63);
+        *dest = ds_colormap[ds_source[spot]];
+        dest  += SCREENHEIGHT;
+        xfrac += ds_xstep;
+        yfrac += ds_ystep;
+        count--;
+    }
 }
 
 

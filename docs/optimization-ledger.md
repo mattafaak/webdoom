@@ -434,19 +434,81 @@ sanctioned by policy).**
 | K7 | Runtime lookup→transcendental | cycle-floor | magic-data policy violation (measured slower) | KILLED |
 | K8 | Browser-fps-motivated wasm work | cycle-floor | framing invalid (render 1.71% of budget) | KILLED |
 | K9 | Combined flat_color lookup table | cycle-floor | magic-data policy violation (new runtime table) | KILLED |
-| NC1 | R_DrawSpan packed-position single-increment | cycle-floor | predicted −5K…−12K instr/tic (1–3% of planes, conservative range after compiler-realization factor); UNMEASURED | SURVIVES → task 20.2b |
+| NC1 | R_DrawSpan packed-position single-increment | cycle-floor | KILLED — packed 16-bit y-field carry propagates into x-field on yfrac overflow; all 13 render goldens PIXEL DESYNC at tic 0–1 | KILLED (20.2b) |
 | NC2 | MAXSEGS solidsegs census (64→32 candidate) | RAM / portability | 0 instr/tic; 256 bytes BSS (survey required); UNMEASURED | SURVIVES → task 20.2b |
 | NC3 | R_GetColumn composite fast-path inlining | cycle-floor | predicted −3K…−4K instr/tic (0.6–0.9% of bsp; anchor: perf-034 = 714.8 calls/tic × 5 instr/call = 3,574 instr/tic); UNMEASURED | SURVIVES → task 20.2b |
 | NC4 | R_DrawColumn 8-wide unroll (extend existing 4-wide) | cycle-floor | predicted −5K…−10K instr/tic (1–2% of bsp); UNMEASURED | SURVIVES → task 20.2b |
-| NC5 | R_DrawSpan 4-wide loop unroll | cycle-floor | predicted −18K…−37K instr/tic (5–9% of planes); UNMEASURED | SURVIVES → task 20.2b |
+| NC5 | R_DrawSpan 4-wide loop unroll | cycle-floor | MEASURED: −47,707 instr/tic p50 doom.wad demo3 (−4.2% whole, −11.9% planes); scalar xfrac/yfrac, no packing | LANDED (20.2b) |
 
-**Totals: 21 candidates, 12 survivors, 9 killed.**
+**Totals: 21 candidates, 12 survivors (8 landed, 4 surviving), 10 killed.**
 
 ---
 
-*Generated: task 14.1 (C1–K9). NC1–NC5 added task 20.2a. Sources: cycle-attribution.json,
-cycle-floor.json, zone-stats.json, browser-pipeline-{alder,wbox}.json, perf.md §13.1a/b/§G/§Q1,
-spec.md §magic-data-policy, bare-metal.md §7.3, docs/renderer.md §7.2, r_draw.c, r_bsp.c.*
+*Generated: task 14.1 (C1–K9). NC1–NC5 added task 20.2a. NC1 killed, NC5 landed: task 20.2b.
+Sources: cycle-attribution.json, cycle-floor.json, zone-stats.json,
+browser-pipeline-{alder,wbox}.json, perf.md §13.1a/b/§G/§Q1, spec.md §magic-data-policy,
+bare-metal.md §7.3, docs/renderer.md §7.2, r_draw.c, r_bsp.c.*
+
+---
+
+## Phase 20.2b — NC5 R_DrawSpan 4-wide unroll (task 20.2b)
+
+### NC1 kill: packed-position carry divergence
+
+NC1 proposed encoding `xfrac`/`yfrac` into a single packed `uint32_t position` (x in bits 16–31,
+y in bits 0–15) so that one `position += step` replaces two additions per pixel. The mechanism
+appeared algebraically equivalent but has a critical flaw: when `yfrac` overflows its 16-bit
+sub-field during repeated addition of `ystep`, the carry bit propagates into the x-field (bits
+16+). In scalar form `yfrac` overflows silently in 32-bit space and the extraction mask isolates
+the correct 6-bit index; in packed form the overflow corrupts the x-index. Empirically: all 13
+render goldens showed PIXEL DESYNC at tic 0–1 on master with real WADs. NC1 filed KILLED.
+
+### NC5 implementation: 4-wide unroll, scalar accumulators
+
+`R_DrawSpan` in `engine/core/r_draw.c` replaced with a 4-wide unrolled loop:
+
+- `xfrac`/`yfrac` remain separate `fixed_t` accumulators — no packing, bit-identical carry
+  behaviour to the original scalar loop
+- Each 4-pixel group pre-computes `xf0..xf3`, `yf0..yf3` by 3 incremental adds
+- Four independent `spot` values → four independent `ds_source[spot_k]` loads (OOO-parallel)
+- Writes: `dest[0]`, `dest[SCREENHEIGHT]`, `dest[2*SCREENHEIGHT]`, `dest[3*SCREENHEIGHT]`
+  (column-major 14.2a stride)
+- Advance: `xfrac += 4*ds_xstep; yfrac += 4*ds_ystep; dest += 4*SCREENHEIGHT; count -= 4`
+- Tail loop handles 0–3 remaining pixels (same scalar body as original)
+
+Bundled pre-existing fixes also landed in this commit:
+- `r_draw.c:590` UB cast `(int)translationtables` → `(uintptr_t)translationtables` +
+  `~255` → `~(uintptr_t)255`; `#include <stdint.h>` added
+- `tools/freestanding/i_system.c`: `FS_ALLOCLOW_SIZE` uses `MAXSCREENWIDTH` (not `SCREENWIDTH`)
+- `tools/freestanding/i_video.c`: static buf uses `MAXSCREENWIDTH`; function bodies use
+  `screenwidth` at runtime
+
+### Instruction count measurement (WD_CYCLES=1, doom.wad demo3, fs-doom -m32 -O1)
+
+| build | p50 instr/tic | mean instr/tic | p99 instr/tic |
+|-------|--------------|----------------|---------------|
+| before (89b0ca9 scalar) | 1,123,751 | 1,033,734.9 | 1,620,227 |
+| after (NC5 4-wide unroll) | 1,076,044 | 963,902.9 | 1,530,440 |
+| **delta** | **−47,707** | **−69,832** | **−89,787** |
+
+p50 gain: **47,707 instr/tic** = **−4.2% whole-program** / **−11.9% of planes stage**
+(planes baseline 402,167 doom.wad p50, perf.md §13.1b).
+Kill threshold was 9,000 instr/tic; actual gain is 5.3× the threshold.
+
+### Gate results (all with real WADs, non-vacuous)
+
+| gate | command | result |
+|------|---------|--------|
+| sim | `node tools/demo-test.mjs` | PASS — all demos bit-identical to golden **(13 demos)** |
+| render-high | `node tools/demo-test.mjs --render` | PASS — all render goldens pixel-identical **(13 demos)** |
+| render-low | `node tools/demo-test.mjs --render --low-detail` | PASS — all [low-detail] render goldens pixel-identical **(13 demos)** |
+| render-wide | `node tools/demo-test.mjs --render --render-wide` | PASS — all render goldens pixel-identical **(13 demos)** |
+| sim-wide | `node tools/demo-test.mjs --sim-wide` | PASS — sim invariant under wide (W=854): 13 demos byte-exact **(13 demos)** |
+| sprite-witness | `node tools/sprite-witness-test.mjs` | PASS — sprite-edge witness goldens verified (r_things.c:530 cull pin) |
+| mixed-width-net | `node tools/mixed-width-net-test.mjs` | PASS — mixed-width (P0=320 vs P1=854): 368 tics, 0 mismatches |
+| size-ledger | `node tools/archaeology/size-ledger.mjs` | PASS size-ledger: all hard checks green |
+| lint | `bash tools/lint.sh` | lint: OK |
+| verify-all | `bash tools/archaeology/verify-all.sh` | ALL PASS verify-all: all checks green (107 claims) |
 
 ---
 
@@ -470,9 +532,13 @@ independent of both excluded catalogs and the existing C1–K9 ledger.
 | **kill rule** | Measured icount improvement < 4,000 instr/tic (1% of planes) on doom.wad p50 after instrumentation = drop. Any sim golden mismatch (13/13) = kill (impossible for this change, but stated for completeness). Any render golden pixel divergence before explicit regold = kill. |
 | **non-overlap** | K1 (killed) packed 4 *palette-output bytes* into one u32 store to reduce memory writes — a different mechanism (write compression) that measured a regression. NC1 packs the *texture coordinate state* into one accumulator to reduce arithmetic — orthogonal to K1 and unrelated to FastDoom's visual-quality reductions. Not in rp2040-doom DMA/colormap catalog. |
 
-**Verdict: SURVIVES → task 20.2b (priority: medium; 5K–12K instr/tic predicted; planes stage)**
+**Verdict: KILLED — 20.2b (packed-position carry divergence)**
 
-**Joint-implementation note:** NC1 and NC5 both target R_DrawSpan and both draw from the same `#if 0` block at r_draw.c:700–766. Task 20.2b should implement them together in a single branch — NC1 (packed-position single-increment) and NC5 (4-wide loop unroll) are orthogonal transforms that can be composed (pack the accumulator AND unroll 4-wide). They are listed as separate candidates to allow independent kill decisions, but their implementation pass is a single unit of work.
+**Kill reason:** The 16-bit y-field in the packed accumulator overflows during repeated `ystep` addition. In the unpacked scalar form, overflow of `yfrac` is harmless: the extraction mask `(yfrac>>(16-6))&(63*64)` discards upper bits and the accumulated value stays in the correct 6-bit index range. In the packed form the y-field occupies bits 0–15 of the `uint32_t`; on overflow the carry propagates into x-field bits 16+, corrupting the x-index on every span where `yfrac` wraps. Observed impact: **all 13 render goldens showed PIXEL DESYNC at tic 0–1** when NC1 was applied to master with real WADs (first detected post cherry-pick in a prior 20.2b attempt).
+
+**Reopen condition:** Reopen only if a carry-safe encoding is proven bit-exact across all 13 render goldens on all IWADs. The encoding must prevent carry from crossing the y/x field boundary under all plausible `ystep` sequences, including negative steps and large-magnitude steps as used on steep view angles.
+
+*(Note: the joint-implementation plan was superseded. NC5 was implemented independently — see §20.2b below.)*
 
 ---
 
@@ -536,4 +602,11 @@ independent of both excluded catalogs and the existing C1–K9 ledger.
 | **kill rule** | Measured icount improvement < 9,000 instr/tic on doom.wad p50 (half of lower-bound estimate) = drop. Any sim golden mismatch = kill. Any render golden pixel divergence = kill. |
 | **non-overlap** | K1 (killed) packed 4 *output palette bytes* into a u32 store to reduce write count — a different dimension (write compression) that measured a regression (+7.9%). NC5 unrolls the *loop control* and exposes instruction-level parallelism for 4 independent texture reads — orthogonal to K1. Task 2.2 applied 4-wide unroll to R_DrawColumn only; NC5 applies the same technique to R_DrawSpan, which currently has no unroll. FastDoom's fake-flat/sb-skip/diff-blit are visual quality reductions; NC5 makes no visual change. rp2040-doom DMA approach is a bulk-transfer technique, not loop-unroll. |
 
-**Verdict: SURVIVES → task 20.2b (priority: high; 18K–37K instr/tic predicted; planes stage — highest predicted gain of NC1–NC5)**
+**Verdict: LANDED — task 20.2b**
+
+20.2b landing evidence: NC5 4-wide unroll (scalar xfrac/yfrac, column-major stride +SCREENHEIGHT).
+Measured gain: doom.wad demo3 p50 **1,123,751 → 1,076,044 instr/tic = −47,707 instr/tic** (−4.2%
+of whole; −11.9% of planes stage). Exceeds the 9,000 instr/tic kill threshold by 5.3×.
+sim 13/13 PASS · render-high 13/13 PASS · render-low 13/13 PASS · render-wide 13/13 PASS ·
+sim-wide 13/13 PASS · sprite-witness PASS · mixed-width-net PASS · lint PASS ·
+verify-all.sh ALL PASS · size-ledger hard checks green.

@@ -55,7 +55,7 @@ byte* I_ZoneBase(int* size)
 // Static screen buffer block for I_AllocLow.
 // V_Init calls I_AllocLow once with SCREENWIDTH*SCREENHEIGHT*4 = 256,000 bytes.
 // I_InitGraphics (i_video.c) then overrides screens[0] with its own static buf.
-#define FS_ALLOCLOW_SIZE (SCREENWIDTH * SCREENHEIGHT * 4)
+#define FS_ALLOCLOW_SIZE (MAXSCREENWIDTH * SCREENHEIGHT * 4)
 /* 4-byte alignment required: wipe code casts (byte*) to (short*) for column-
  * major transform; if the buffer starts at an unaligned address the lhu/sh
  * instructions trap on strict-alignment targets (MIPS, ARM Cortex-M). */
