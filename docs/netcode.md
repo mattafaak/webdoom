@@ -105,6 +105,13 @@ it — no parallel log. One entry per sealed tic:
 `6 + 8 × 4 = 38 bytes/tic; 38 × 35 Hz ≈ 1.33 KB/s ≈ 4.8 MB/hr`.
 Released when the session ends (`endSession` sets `session = null`).
 
+Note: spectators bypass the consistancy ring check (`fabMask=0xFF` in
+`attachSpectate.deliver()`), so a spectator-side state divergence — if a
+future bug introduced one — would be silent: no error, no disconnect,
+just an incorrect view. The per-tic `_web_state_hash` equality test
+(`spectate-test.mjs`) is therefore the primary correctness gate for the
+spectator path. Player engines are unaffected; they keep the full check.
+
 ## Lobby protocol (JSON)
 
 ```

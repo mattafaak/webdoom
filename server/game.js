@@ -73,7 +73,7 @@ export function createGame(log = console.log) {
     const lobby = new Map();        // slot → {ws, name} (name null = color default)
     let params = defaultParams();
     let session = null;             // active relay session or null
-    let connCount = 0;              // total open ws connections (lobby + game)
+    let connCount = 0;              // total open ws connections (lobby + game + spectate)
 
     const displayName = slot => lobby.get(slot)?.name ?? COLORS[slot];
     const roster = () => ({
