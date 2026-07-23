@@ -93,6 +93,7 @@ if (renderMode) {
     const detailTag    = lowDetail ? '[low-detail] ' : '';
 
     let failures = 0;
+    let verified = 0;
 
     for (const [wad, engineName, demos] of MATRIX) {
         const path = join(root, 'wads/lib', wad);
@@ -159,6 +160,7 @@ if (renderMode) {
             if (record || !existsSync(goldenPath)) {
                 writeFileSync(goldenPath, JSON.stringify({ tics: done, trace }));
                 console.log(`recorded ${name} ${detailTag}render: ${done} gametics, ${trace.length} hashes`);
+                verified++;
                 continue;
             }
 
@@ -177,13 +179,15 @@ if (renderMode) {
                 failures++;
             } else {
                 console.log(`PASS ${name} ${detailTag}render: ${done} gametics pixel-identical`);
+                verified++;
             }
         }
     }
 
     if (failures) { console.log(`${failures} ${detailTag}render golden(s) failed`); process.exit(1); }
+    if (!verified) { console.log('FAIL: 0 demos verified (no WADs fetched?) — vacuous run'); process.exit(1); }
     console.log(record ? `${detailTag}render golden traces written`
-                       : `PASS — all ${detailTag}render goldens pixel-identical`);
+                       : `PASS — all ${detailTag}render goldens pixel-identical (${verified} demos)`);
     process.exit(0);
 }
 
@@ -221,6 +225,7 @@ if (wideRender) {
     }
 
     let failures = 0;
+    let verified = 0;
 
     for (const [wad, engineName, demos] of MATRIX) {
         const path = join(root, 'wads/lib', wad);
@@ -277,6 +282,7 @@ if (wideRender) {
             if (record) {
                 writeFileSync(goldenPath, JSON.stringify({ tics: done, trace, width: WIDE_WIDTH }));
                 console.log(`recorded ${name} [wide] render: ${done} gametics, ${trace.length} hashes, W=${WIDE_WIDTH}`);
+                verified++;
                 continue;
             }
             // No auto-record: missing golden is a hard error.
@@ -301,13 +307,15 @@ if (wideRender) {
                 failures++;
             } else {
                 console.log(`PASS ${name} [wide] render: ${done} gametics pixel-identical (W=${WIDE_WIDTH})`);
+                verified++;
             }
         }
     }
 
     if (failures) { console.log(`${failures} wide render golden(s) failed`); process.exit(1); }
+    if (!verified) { console.log('FAIL: 0 demos verified (no WADs fetched?) — vacuous run'); process.exit(1); }
     console.log(record ? `wide render golden traces written (W=${WIDE_WIDTH})`
-                       : `PASS — all wide render goldens pixel-identical (W=${WIDE_WIDTH})`);
+                       : `PASS — all wide render goldens pixel-identical (W=${WIDE_WIDTH}, ${verified} demos)`);
     process.exit(0);
 }
 
@@ -326,6 +334,7 @@ if (wideRender) {
 
 if (simWide) {
     let failures = 0;
+    let verified = 0;
 
     for (const [wad, engineName, demos] of MATRIX) {
         const path = join(root, 'wads/lib', wad);
@@ -406,18 +415,21 @@ if (simWide) {
                 failures++;
             } else {
                 console.log(`PASS ${name} sim-wide: ${done} gametics, screenwidth=${screenwidthAfterFirstFrame}, byte-exact`);
+                verified++;
             }
         }
     }
 
     if (failures) { console.log(`${failures} sim-wide check(s) failed`); process.exit(1); }
-    console.log(`PASS — sim invariant under wide (W=${WIDE_WIDTH}): all ${MATRIX.length} wads × demos byte-exact`);
+    if (!verified) { console.log('FAIL: 0 demos verified (no WADs fetched?) — vacuous run'); process.exit(1); }
+    console.log(`PASS — sim invariant under wide (W=${WIDE_WIDTH}): ${verified} demos byte-exact`);
     process.exit(0);
 }
 
 // ── sim mode (original code, unchanged) ─────────────────────────────────────
 
 let failures = 0;
+let verified = 0;
 
 for (const [wad, engineName, demos] of MATRIX) {
     const path = join(root, 'wads/lib', wad);
@@ -489,6 +501,7 @@ for (const [wad, engineName, demos] of MATRIX) {
             failures++;
         } else {
             console.log(`PASS ${name}: ${done} gametics bit-identical`);
+            verified++;
         }
 
         if (chocoBin) {
@@ -516,4 +529,5 @@ for (const [wad, engineName, demos] of MATRIX) {
 }
 
 if (failures) { console.log(`${failures} demo(s) failed`); process.exit(1); }
-console.log(record ? 'golden traces written' : 'PASS — all demos bit-identical to golden');
+if (!verified) { console.log('FAIL: 0 demos verified (no WADs fetched?) — vacuous run'); process.exit(1); }
+console.log(record ? 'golden traces written' : `PASS — all demos bit-identical to golden (${verified} demos)`);
