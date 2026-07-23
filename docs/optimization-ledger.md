@@ -691,3 +691,32 @@ toggle-off md5 c669142745449ff04bd2fef30fa17412 · toggle-on md5 1fa7322e5b2325c
 toggle-on pixel-identical to toggle-off (13/13 render demos PASS with build-sbskip).
 timedemo icount: p50 1,110,737 → 1,091,409 instr/tic (−1.7% p50; +0.9% mean due to overhead > skip-rate in timedemo context).
 Real-play gain measurable only in static-HUD intervals; timedemo is a documented limitation of this technique.
+
+---
+
+### 20.3c — Potato half-width columns (`WEBDOOM_POTATO`)
+
+Draw only even-numbered `dc_x` columns; the adjacent odd column is filled by a single `memcpy` of the drawn even column in `R_DrawColumnPotato`. In column-major layout (14.2a) adjacent columns are exactly `SCREENHEIGHT` bytes apart, so the copy is one contiguous `memcpy(even_start + SCREENHEIGHT, even_start, pixcount)` with no per-pixel loop. Texture reads and colormap lookups are halved for all column-drawn surfaces (walls, sprites, weapon sprites). Callers (r_segs.c, r_things.c) continue to iterate every column 0..viewwidth-1; odd columns return immediately (`if (dc_x & 1) return`). `colfunc = basecolfunc = R_DrawColumnPotato` is set in `R_ExecuteSetViewSize` only for `detailshift == 0` (full-resolution); the `detailshift == 1` path keeps `R_DrawColumnLow` — stacking potato + low-detail is not a design goal.
+
+**Non-overlap with existing low-detail (C2 / task 14.2b):** Low-detail (`R_DrawColumnLow`, `detailshift=1`) draws at half the *horizontal column count* (viewwidth halved) with each column covering 2 adjacent pixels. Potato mode draws at full column count but skips every odd column entirely and copies from the even column — a different dimension: fewer texture reads, not fewer columns submitted by the outer BSP/segs loop. The two modes do not compose (potato applies only when `!detailshift`).
+
+| field | value |
+|-------|-------|
+| **mechanism** | `R_DrawColumnPotato()` in r_draw.c: odd `dc_x` → early return; even `dc_x` → full R_DrawColumn (4-wide pow2 unroll + non-pow2 modulo path) → `memcpy(even_start+SCREENHEIGHT, even_start, pixcount)`. `#line 359` after `#endif` preserves toggle-off byte-identity. r_main.c hook: `#ifdef WEBDOOM_POTATO … if (!detailshift) colfunc = basecolfunc = R_DrawColumnPotato; #endif` + `#line 749`. |
+| **toggle-off byte-identity** | `build/doom.wasm` md5 = `c669142745449ff04bd2fef30fa17412` (proven). Size 356,775 bytes. |
+| **toggle-on build** | `build-potato/doom.wasm` md5 = `08e1273dddcf71751a4075badb61b83a`. Size 357,678 bytes (budget: 360,448 bytes → green). Built with `EXTRA_CFLAGS=-DWEBDOOM_POTATO BUILD=../build-potato`. |
+| **golden set name** | `*-render-potato.json` (13 files: doom-demo{1-4}, doom2/tnt/plutonia-demo{1-3}). Vanilla goldens (`-render.json`) untouched. |
+| **icount (local, doom.wad demo3, WD_CYCLES=1 fs-doom -m32 -O1)** | toggle-off: `total_instr=3,906,937,453` mean=1,011,374 p50=1,091,809 instr/tic. toggle-on: `total_instr=3,371,255,240` mean=872,704 p50=926,504 instr/tic. **Delta: −165,305 instr/tic p50 (−15.1% whole-program)**. Wall/sprite texture reads and colormap lookups halved for column-draw surfaces. Fleet SSH unavailable; local-only measurement, single-host (same precedent as 20.3a/20.3b). |
+| **sim invariance** | 13/13 sim goldens bit-identical in both modes (toggle-on build-potato sim PASS). Render-only change; playsim untouched. |
+| **magic-data policy** | No new tables. No precomputed data. **COMPLIES.** |
+| **tic-exact-safe?** | YES. `R_DrawColumnPotato` writes to `screens[0]` only. No P_Random, no actor state. |
+| **red-proof** | Corrupt `doom-demo1-render-potato.json` trace[0] → `FAIL doom-demo1 [potato] render: PIXEL DESYNC at tic 0` · restore → `PASS`. Vanilla render goldens (-render.json) unaffected throughout. |
+| **kill rule** | Any sim golden mismatch → kill. Any render-potato golden regression → rebuild and re-record. toggle-off md5 divergence → bug in #line directive. |
+| **gates** | sim 13/13 PASS (toggle-on) · render-potato 13/13 PASS · render-high 13/13 PASS (vanilla untouched) · render-low 13/13 PASS · render-wide 13/13 PASS · sim-wide 13/13 PASS · render-fakeflat 13/13 PASS · sprite-witness PASS · mixed-width-net PASS · lint PASS · verify-all.sh ALL PASS · size-ledger hard checks green |
+
+**Verdict: LANDED — task 20.3c**
+
+20.3c landing evidence: potato half-width column renderer, even-column memcpy duplication.
+toggle-off md5 c669142745449ff04bd2fef30fa17412 · toggle-on md5 08e1273dddcf71751a4075badb61b83a
+Measured gain: doom.wad demo3 p50 **1,091,809 → 926,504 instr/tic = −165,305 instr/tic (−15.1% whole)**.
+Non-overlap with C2 low-detail: potato halves texture reads at full column count; low-detail halves column count at full texture cost — orthogonal axes.

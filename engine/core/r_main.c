@@ -746,6 +746,17 @@ void R_ExecuteSetViewSize (void)
 	transcolfunc = R_DrawTranslatedColumn;
 	spanfunc = R_DrawSpanLow;
     }
+#ifdef WEBDOOM_POTATO
+    /* 20.3c: potato mode — draw only even dc_x columns and memcpy to dc_x+1.
+       Only applies to full-resolution (detailshift==0).  Low-detail (detailshift==1)
+       already uses R_DrawColumnLow for 2-px-wide pixel doubling; stacking potato
+       on low-detail is not a design goal and is not wired. */
+    if (!detailshift)
+        colfunc = basecolfunc = R_DrawColumnPotato;
+#endif /* WEBDOOM_POTATO */
+/* Reset line counter so the toggle-off binary stays byte-identical to master.
+   R_InitBuffer() was at physical line 750 — update this if r_main.c moves. */
+#line 749
 
     R_InitBuffer (scaledviewwidth, viewheight);
 	

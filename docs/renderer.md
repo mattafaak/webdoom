@@ -35,7 +35,7 @@ verified by `node tools/archaeology/source-constant-verify.mjs`.
 
 ## 1. Frame pipeline overview
 
-`R_RenderPlayerView` (r_main.c:995) drives one complete frame in four timed
+`R_RenderPlayerView` (r_main.c:1006) drives one complete frame in four timed
 stages:
 
 ```
@@ -55,7 +55,7 @@ masked               → web_perf_masked_us
   R_DrawMasked        (sort sprites, draw back-to-front + weapon psprites)
 ```
 
-`NetUpdate()` is called between each stage (r_main.c:1022,1032,1041,1054) —
+`NetUpdate()` is called between each stage (r_main.c:1033,1043,1052,1065) —
 the network tick pump runs inside the render loop to keep latency low.
 
 The five `web_perf_*_us` accumulators (declared in engine/web/perf.c) are read
@@ -72,7 +72,7 @@ are render-local: the simulation always runs on true, unlerped values.
 
 ### 2.1 View basis
 
-`R_SetupFrame` (r_main.c:871) establishes the view every frame:
+`R_SetupFrame` (r_main.c:882) establishes the view every frame:
 
 | variable | type | value |
 |----------|------|-------|
@@ -225,7 +225,7 @@ void R_RenderBSPNode(int bspnum) {
 }
 ```
 
-(r_bsp.c:552-578). The root call is `R_RenderBSPNode(numnodes-1)` (r_main.c:1027).
+(r_bsp.c:552-578). The root call is `R_RenderBSPNode(numnodes-1)` (r_main.c:1038).
 
 **Traversal order**: front-to-back relative to the viewpoint. The recursion
 visits the front child before the back child at every node, so subsectors arrive
@@ -996,7 +996,7 @@ mapping does not apply (r_plane.c:404-405 — deliberate, noted in source).
 
 Reproduce (ANGLETOSKYSHIFT): `node tools/archaeology/source-constant-verify.mjs`
 
-**webdoom freelook**: `skytexturemid` is updated in `R_ShearView` (r_main.c:942)
+**webdoom freelook**: `skytexturemid` is updated in `R_ShearView` (r_main.c:953)
 to scroll the sky with the pitch. At `lookdir = 0`, `skytexturemid = 100*FRACUNIT`
 (the vanilla value). Pitching up shifts `skytexturemid` upward, revealing the
 upper sky texture.

@@ -54,6 +54,9 @@ extern int		dc_texheight;
 //  here.
 void 	R_DrawColumn (void);
 void 	R_DrawColumnLow (void);
+#ifdef WEBDOOM_POTATO
+void	R_DrawColumnPotato (void); /* 20.3c: half-width even/odd column copy */
+#endif
 
 // The Spectre/Invisibility effect.
 void 	R_DrawFuzzColumn (void);

@@ -70,6 +70,17 @@ echo "── fakeflat build + render goldens (20.3a WEBDOOM_FAKEFLAT) ───"
 (cd engine && make -j8 EXTRA_CFLAGS=-DWEBDOOM_FAKEFLAT BUILD=../build-fakeflat OUT=../build-fakeflat/doom.js 2>&1 | tail -3)
 node tools/demo-test.mjs --render-fakeflat | tail -2
 
+# ── potato render goldens (20.3c: WEBDOOM_POTATO toggle) ─────────────────────
+# Separate build (build-potato/) compiled with -DWEBDOOM_POTATO.
+# Dedicated golden set (*-render-potato.json): vanilla render goldens (-render.json)
+# are never modified by this leg.
+# Toggle-off byte-identity: build/doom.wasm md5 must match master (proven via #line directive).
+# RED-PROOF: any regression in R_DrawColumnPotato path fails this leg while
+# the vanilla render leg above stays green.
+echo "── potato build + render goldens (20.3c WEBDOOM_POTATO) ───────"
+(cd engine && make -j8 EXTRA_CFLAGS=-DWEBDOOM_POTATO BUILD=../build-potato OUT=../build-potato/doom.js 2>&1 | tail -3)
+node tools/demo-test.mjs --render-potato | tail -2
+
 # ── 18.4 exactness artillery: sprite-edge witness + mixed-width netgame ──────
 echo "── sprite-edge witness (r_things cull pin, 320+854) ────"
 node tools/sprite-witness-test.mjs | tail -1

@@ -357,11 +357,105 @@ void R_DrawColumnLow (void)
     }
 }
 
+#ifdef WEBDOOM_POTATO
+// webdoom task 20.3c: FastDoom potato half-width column renderer.
+// Only even-numbered dc_x columns are rendered; odd columns are byte-copies
+// of the immediately preceding even column.  In column-major layout (14.2a)
+// adjacent columns are exactly SCREENHEIGHT bytes apart, so the duplication
+// is a single memcpy — no per-pixel texture read or colormap lookup for the
+// odd column.  Texture reads and colormap lookups are halved overall.
+// Render-only; playsim unchanged.  Uses the same pow2/non-pow2 dispatch as
+// R_DrawColumn.  Does not interact with R_DrawColumnLow (detailshift path).
+void R_DrawColumnPotato (void)
+{
+    int             count;
+    int             pixcount;
+    byte*           even_start;
+    byte*           dest;
+    fixed_t         frac;
+    fixed_t         fracstep;
+    const byte*     source;
+    const lighttable_t* colormap;
+
+    // Odd columns are already filled by the preceding even-column draw.
+    if (dc_x & 1)
+        return;
+
+    count = dc_yh - dc_yl;
+    if (count < 0)
+        return;
+
+#ifdef RANGECHECK
+    if ((unsigned)dc_x >= (unsigned)screenwidth
+     || dc_yl < 0
+     || dc_yh >= SCREENHEIGHT)
+        I_Error("R_DrawColumnPotato: %i to %i at %i", dc_yl, dc_yh, dc_x);
+#endif
+
+    pixcount = count + 1;  /* total pixels to copy to adjacent column */
+
+    even_start = dest = ylookup[dc_yl] + columnofs[dc_x];
+    fracstep   = dc_iscale;
+    frac       = dc_texturemid + (dc_yl - centery) * fracstep;
+    source     = dc_source;
+    colormap   = dc_colormap;
+
+    if (dc_texheight & (dc_texheight - 1))
+    {
+        /* Non-power-of-2 path (sprites): same prboom-style true-modulo wrap
+           as R_DrawColumn.  Correctness over speed for non-pow2 heights. */
+        const fixed_t heightmask = dc_texheight << FRACBITS;
+        if (frac < 0)
+            while ((frac += heightmask) < 0);
+        else
+            while (frac >= heightmask) frac -= heightmask;
+
+        while (count-- >= 0)
+        {
+            *dest = colormap[source[frac >> FRACBITS]];
+            dest++;
+            if ((frac += fracstep) >= heightmask)
+                frac -= heightmask;
+        }
+    }
+    else
+    {
+        /* Power-of-2 fast path (walls) — 4-wide unroll from task 2.2. */
+        const unsigned mask = (unsigned)(dc_texheight - 1);
+
+        while (count >= 3)
+        {
+            dest[0] = colormap[source[((frac            )>>FRACBITS)&mask]];
+            dest[1] = colormap[source[((frac+fracstep  )>>FRACBITS)&mask]];
+            dest[2] = colormap[source[((frac+fracstep*2)>>FRACBITS)&mask]];
+            dest[3] = colormap[source[((frac+fracstep*3)>>FRACBITS)&mask]];
+            dest  += 4;
+            frac  += fracstep * 4;
+            count -= 4;
+        }
+        while (count-- >= 0)
+        {
+            *dest = colormap[source[(frac >> FRACBITS) & mask]];
+            dest++;
+            frac += fracstep;
+        }
+    }
+
+    /* Duplicate even column to adjacent odd column.
+       Column-major (14.2a): column dc_x+1 starts SCREENHEIGHT bytes after dc_x.
+       The drawn span is pixcount contiguous bytes starting at even_start. */
+    memcpy(even_start + SCREENHEIGHT, even_start, (size_t)pixcount);
+}
+#endif /* WEBDOOM_POTATO */
+/* Reset line counter so the toggle-off binary stays byte-identical to master.
+   R_DrawColumnLow } was at physical line 358 — update this if r_draw.c moves. */
+#line 359
+
 
 //
 // Spectre/Invisibility.
 //
-#define FUZZTABLE		50 
+#define FUZZTABLE		50
 /* 14.2a column-major: adjacent fuzz pixel is 1 byte away (next row in column) */
 #define FUZZOFF	1
 
