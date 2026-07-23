@@ -1119,6 +1119,33 @@ void ST_drawWidgets(boolean refresh)
 
 }
 
+#ifdef WEBDOOM_SBSKIP
+/* --- 20.3b WEBDOOM_SBSKIP: compact state snapshot for status-bar redraw skip ---
+   Track all values visible in the status-bar widgets.  ST_diffDraw() compares
+   the current values against the last-drawn snapshot; if every field is
+   identical, the ST_drawWidgets(false) call is skipped entirely.
+   Force-refresh paths (automap toggle, level load, view-size change, wipe,
+   explicit refresh parameter) already set st_firsttime = true, which routes
+   through ST_doRefresh() — so the skip only applies in the purely differential
+   path and will never miss a forced redraw. */
+typedef struct {
+    int     health;
+    int     armorpoints;
+    int     readyweapon;
+    int     ammo[4];
+    int     maxammo[4];
+    int     weaponowned[NUMWEAPONS]; /* NUMWEAPONS = 9 */
+    int     keyboxes_snap[3];
+    int     faceindex;
+    int     fragscount;
+    boolean statusbaron;
+    boolean deathmatch_snap;
+} sb_snap_t;
+
+static sb_snap_t sb_prev;
+static boolean   sb_have_snap = false;
+#endif
+#line 1122
 void ST_doRefresh(void)
 {
 
@@ -1134,6 +1161,62 @@ void ST_doRefresh(void)
 
 void ST_diffDraw(void)
 {
+#ifdef WEBDOOM_SBSKIP
+    /* Build snapshot of current widget-visible state and compare to last draw.
+       If nothing changed, skip ST_drawWidgets() entirely. */
+    {
+        sb_snap_t cur;
+        int i;
+        cur.health        = plyr->health;
+        cur.armorpoints   = plyr->armorpoints;
+        cur.readyweapon   = (int)plyr->readyweapon;
+        for (i = 0; i < 4; i++) {
+            cur.ammo[i]    = plyr->ammo[i];
+            cur.maxammo[i] = plyr->maxammo[i];
+        }
+        for (i = 0; i < NUMWEAPONS; i++)
+            cur.weaponowned[i] = (int)plyr->weaponowned[i];
+        cur.keyboxes_snap[0] = keyboxes[0];
+        cur.keyboxes_snap[1] = keyboxes[1];
+        cur.keyboxes_snap[2] = keyboxes[2];
+        cur.faceindex       = st_faceindex;
+        cur.fragscount      = st_fragscount;
+        cur.statusbaron     = st_statusbaron;
+        cur.deathmatch_snap = deathmatch;
+        if (sb_have_snap &&
+            cur.health        == sb_prev.health        &&
+            cur.armorpoints   == sb_prev.armorpoints   &&
+            cur.readyweapon   == sb_prev.readyweapon   &&
+            cur.faceindex     == sb_prev.faceindex     &&
+            cur.fragscount    == sb_prev.fragscount    &&
+            cur.statusbaron   == sb_prev.statusbaron   &&
+            cur.deathmatch_snap == sb_prev.deathmatch_snap &&
+            cur.keyboxes_snap[0] == sb_prev.keyboxes_snap[0] &&
+            cur.keyboxes_snap[1] == sb_prev.keyboxes_snap[1] &&
+            cur.keyboxes_snap[2] == sb_prev.keyboxes_snap[2] &&
+            cur.ammo[0]    == sb_prev.ammo[0]    &&
+            cur.ammo[1]    == sb_prev.ammo[1]    &&
+            cur.ammo[2]    == sb_prev.ammo[2]    &&
+            cur.ammo[3]    == sb_prev.ammo[3]    &&
+            cur.maxammo[0] == sb_prev.maxammo[0] &&
+            cur.maxammo[1] == sb_prev.maxammo[1] &&
+            cur.maxammo[2] == sb_prev.maxammo[2] &&
+            cur.maxammo[3] == sb_prev.maxammo[3] &&
+            cur.weaponowned[0] == sb_prev.weaponowned[0] &&
+            cur.weaponowned[1] == sb_prev.weaponowned[1] &&
+            cur.weaponowned[2] == sb_prev.weaponowned[2] &&
+            cur.weaponowned[3] == sb_prev.weaponowned[3] &&
+            cur.weaponowned[4] == sb_prev.weaponowned[4] &&
+            cur.weaponowned[5] == sb_prev.weaponowned[5] &&
+            cur.weaponowned[6] == sb_prev.weaponowned[6] &&
+            cur.weaponowned[7] == sb_prev.weaponowned[7] &&
+            cur.weaponowned[8] == sb_prev.weaponowned[8])
+            return;
+        sb_prev      = cur;
+        sb_have_snap = true;
+    }
+#endif
+#line 1137
     // update all widgets
     ST_drawWidgets(false);
 }

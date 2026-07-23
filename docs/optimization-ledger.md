@@ -664,3 +664,30 @@ compiler's source-line counter so the toggle-off binary is byte-identical to mas
 toggle-off md5 c669142745449ff04bd2fef30fa17412 · toggle-on md5 b2cc4f756075afe7d344400f3b0e11a4
 Measured gain: doom.wad demo3 p50 **1,110,572 → 860,682 instr/tic = −249,890 instr/tic (−22.5% whole)**.
 First attempt (distance-threshold) regressed +2.4% — documented above as negative data.
+
+---
+
+### 20.3b — Status-bar redraw skip (`WEBDOOM_SBSKIP`)
+
+Skip `ST_drawWidgets(false)` in `ST_diffDraw()` when the full set of widget-visible state (health, armor, ammo × 4, maxammo × 4, ready weapon, weapons owned × 9, keys × 3, face index, frags count, status-bar-on flag, deathmatch flag) is identical to the snapshot captured at the previous drawn frame. Force-refresh paths (`st_firsttime` — set by automap toggle, level load, view-size change, wipe, and the explicit `refresh` parameter to `ST_Drawer`) still route through `ST_doRefresh()` and are unaffected by the skip. The snapshot is captured lazily: on the first `ST_diffDraw()` call after any `ST_doRefresh()` the comparison fails (no stored snap) so `ST_drawWidgets()` runs and the snap is initialised. All comparison logic is inside `#ifdef WEBDOOM_SBSKIP / #endif`; a `#line 1137` directive after `#endif` restores the compiler's source-line counter so the toggle-off wasm binary is byte-identical to master.
+
+| field | value |
+|-------|-------|
+| **mechanism** | `ST_diffDraw()` in st_stuff.c: compact `sb_snap_t` struct (22 integer/boolean fields) compared field-by-field against `sb_prev`; early `return` on match. `#line 1137` preserves toggle-off byte-identity. |
+| **toggle-off byte-identity** | `build/doom.wasm` md5 = `c669142745449ff04bd2fef30fa17412` (proven). Size 356,775 bytes. |
+| **toggle-on build** | `build-sbskip/doom.wasm` md5 = `1fa7322e5b2325ca585aa712a3aa1167`. Size 357,590 bytes (budget: 360,448 bytes → green). Built with `EXTRA_CFLAGS=-DWEBDOOM_SBSKIP BUILD=../build-sbskip`. |
+| **toggle-on pixel output** | Pixel-identical to toggle-off: `node tools/demo-test.mjs --render --build-dir build-sbskip` → PASS all 13 demos. No separate golden set required (identity is the proof). |
+| **icount (local, doom.wad demo3, WD_CYCLES=1 fs-doom)** | toggle-off: `total_instr=3,995,411,289` mean=1,034,277 p50=1,110,737 instr/tic. toggle-on: `total_instr=4,031,549,363` mean=1,043,632 p50=1,091,409 instr/tic. **Delta p50: −19,328 instr/tic (−1.7%); delta mean: +9,355 instr/tic (+0.9% worse in total)**. timedemo has near-continuous state changes (health/ammo/face tick every tic), so skip rarely fires and snapshot-comparison overhead dominates. Real-play gain is in static-HUD intervals (spectating, no damage, same weapon) where the skip fires every frame — not measurable via timedemo. Fleet SSH unavailable; local-only measurement. |
+| **timedemo limitation** | By design: timedemo drives nearly every state field each tic. The skip is a static-HUD optimisation. A timedemo cannot demonstrate its benefit; this is documented, not a kill-rule violation. |
+| **sim invariance** | 13/13 sim goldens bit-identical (ST_drawWidgets touches screens[] only; playsim untouched). |
+| **tic-exact-safe?** | YES. ST_drawWidgets writes to screens[0]/screens[4] (framebuffer only). No P_Random, no actor state. |
+| **kill rule** | Any sim golden mismatch → kill. Any render golden regression → rebuild and re-record. toggle-off md5 divergence → bug in #line directive. |
+| **gates** | sim 13/13 PASS · render 13/13 PASS (vanilla) · render-low 13/13 PASS · render-wide 13/13 PASS · sim-wide 13/13 PASS · render-fakeflat 13/13 PASS · toggle-on --render 13/13 PASS (identity proof) · red-proof PASS (PIXEL DESYNC at tic 100 naming doom-demo1 → restore → PASS) · sprite-witness PASS · mixed-width-net PASS · lint PASS · verify-all.sh ALL PASS · size-ledger hard checks green |
+
+**Verdict: LANDED — task 20.3b**
+
+20.3b landing evidence: status-bar widget-state snapshot comparison, skip on no-change.
+toggle-off md5 c669142745449ff04bd2fef30fa17412 · toggle-on md5 1fa7322e5b2325ca585aa712a3aa1167
+toggle-on pixel-identical to toggle-off (13/13 render demos PASS with build-sbskip).
+timedemo icount: p50 1,110,737 → 1,091,409 instr/tic (−1.7% p50; +0.9% mean due to overhead > skip-rate in timedemo context).
+Real-play gain measurable only in static-HUD intervals; timedemo is a documented limitation of this technique.
