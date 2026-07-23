@@ -25,13 +25,13 @@
 #include <stddef.h>
 #include <emscripten.h>
 
-#include <string.h>     /* memcpy */
+#include <string.h> /* memcpy */
 
-#include "doomdef.h"    /* VERSION, MAXPLAYERS */
-#include "doomstat.h"   /* demorecording, demoplayback, consoleplayer, etc. */
-#include "d_event.h"    /* gameaction_t, gameaction, ga_nothing */
-#include "g_game.h"     /* G_RecordDemo, G_InitNew */
-#include "z_zone.h"     /* Z_Malloc, PU_STATIC */
+#include "doomdef.h"  /* VERSION, MAXPLAYERS */
+#include "doomstat.h" /* demorecording, demoplayback, consoleplayer, etc. */
+#include "d_event.h"  /* gameaction_t, gameaction, ga_nothing */
+#include "g_game.h"   /* G_RecordDemo, G_InitNew */
+#include "z_zone.h"   /* Z_Malloc, PU_STATIC */
 
 /* Internal demo buffer pointers defined in g_game.c */
 extern byte* demobuffer;
@@ -50,7 +50,7 @@ extern boolean advancedemo;
 // the demo to be played back via the WAD lump system.
 // Essential for Node.js test harnesses where emscripten_get_now() barely
 // advances in tight loops, causing TryRunTics to advance only ~1 tic/run.
-extern boolean singletics;   /* d_main.c: debug flag, also set by timedemo */
+extern boolean singletics; /* d_main.c: debug flag, also set by timedemo */
 
 EMSCRIPTEN_KEEPALIVE void web_set_singletics (int on)
 {
@@ -84,7 +84,7 @@ EMSCRIPTEN_KEEPALIVE int web_demo_stop (void)
         return 0;
     *demo_p++ = WEBDEMO_MARKER;
     demorecording = false;
-    return (int)(demo_p - demobuffer);
+    return (int) (demo_p - demobuffer);
 }
 
 // web_demo_buf_ptr: wasm heap address of the demo buffer.
@@ -92,7 +92,7 @@ EMSCRIPTEN_KEEPALIVE int web_demo_stop (void)
 // Use HEAPU8.slice(ptr, ptr + count) in JS to copy the bytes out.
 EMSCRIPTEN_KEEPALIVE int web_demo_buf_ptr (void)
 {
-    return (int)(size_t) demobuffer;
+    return (int) (size_t) demobuffer;
 }
 
 // web_demo_playing: returns 1 while demo playback is active, 0 when done.
@@ -118,46 +118,50 @@ EMSCRIPTEN_KEEPALIVE int web_demo_playing (void)
 // at a time to avoid false positives on movement/button data.
 EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr)
 {
-    byte*   raw = (byte*)(size_t) heapPtr;
-    byte*   p   = raw;
-    int     ver, i, total;
+    byte* raw = (byte*) (size_t) heapPtr;
+    byte* p = raw;
+    int ver, i, total;
     skill_t skill;
-    int     episode, map;
-    byte*   scan;
-    byte*   zone_buf;
+    int episode, map;
+    byte* scan;
+    byte* zone_buf;
 
-    ver = (int)*p++;
+    ver = (int) *p++;
     if (ver != VERSION && ver != 109)
         return -1;
 
-    skill        = (skill_t)*p++;
-    episode      = (int)*p++;
-    map          = (int)*p++;
-    deathmatch   = (boolean)*p++;
-    respawnparm  = (boolean)*p++;
-    fastparm     = (boolean)*p++;
-    nomonsters   = (boolean)*p++;
-    consoleplayer = (int)*p++;
+    skill = (skill_t) *p++;
+    episode = (int) *p++;
+    map = (int) *p++;
+    deathmatch = (boolean) *p++;
+    respawnparm = (boolean) *p++;
+    fastparm = (boolean) *p++;
+    nomonsters = (boolean) *p++;
+    consoleplayer = (int) *p++;
     for (i = 0; i < MAXPLAYERS; i++)
-        playeringame[i] = (boolean)*p++;
+        playeringame[i] = (boolean) *p++;
 
     // p now points to the first tic (past the 13-byte header).
     // Scan in 4-byte steps for WEBDEMO_MARKER to determine total demo size.
     // Each tic is exactly 4 bytes (forwardmove, sidemove, angleturn, buttons);
-    // the marker 0x80 only appears at a 4-byte-aligned position after the header.
+    // the marker 0x80 only appears at a 4-byte-aligned position after the
+    // header. Bounded: a hostile shared demo with no marker must not walk the
+    // whole wasm heap (server PER_DEMO_CAP is 1 MiB; +16 covers header slack).
     scan = p;
-    while (*scan != WEBDEMO_MARKER)
+    while (scan < raw + (1024 * 1024 + 16) && *scan != WEBDEMO_MARKER)
         scan += 4;
-    scan++;                         /* include the marker byte */
-    total = (int)(scan - raw);      /* header + tic data + marker */
+    if (*scan != WEBDEMO_MARKER)
+        return -1;              /* no terminator within cap — reject */
+    scan++;                     /* include the marker byte */
+    total = (int) (scan - raw); /* header + tic data + marker */
 
     // Zone-allocate and copy so G_CheckDemoStatus can Z_ChangeTag safely.
     zone_buf = Z_Malloc (total, PU_STATIC, NULL);
     memcpy (zone_buf, raw, total);
 
     // Adjust pointers to the zone copy.
-    demobuffer  = zone_buf;
-    demo_p      = zone_buf + (int)(p - raw);
+    demobuffer = zone_buf;
+    demo_p = zone_buf + (int) (p - raw);
 
     // Suppress the title-screen demo advance so the WAD's own DEMO* sequence
     // cannot replace our demobuffer on the first G_Ticker tick.  Without this,

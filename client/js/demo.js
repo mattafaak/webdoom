@@ -19,10 +19,10 @@
 //   TTL           24 hours from upload
 //
 // WAD ownership check (receiver):
-//   If the share URL carries a wad= param, the receiver UI shows a warning
-//   if the named WAD is not in the server's manifest.  The replay still
-//   proceeds if the WAD is loaded (check is informational, not a gate on the
-//   fragment-embed path where no round-trip is needed).
+//   If the share URL carries a wad= param and the receiver does not own the
+//   WAD (server manifest or 16.6 local library), lobby.js shows the warning
+//   and aborts the replay — the ownership check gates BOTH the server-id and
+//   fragment-embed paths.
 
 export const FRAGMENT_MAX = 6_000;   // raw bytes; mirror of server value
 

@@ -325,8 +325,10 @@ try {
     const overlapStart = Math.max(recordStartGamtic, replayStartTic);
     const overlapEnd   = Math.min(recEnd, repEnd);
     const n = Math.max(0, overlapEnd - overlapStart + 1);
-    ok(`Tab B: overlap window is ${n} ticks (gametics ${overlapStart}..${overlapEnd})`, n > 0,
-        `record=[${recordStartGamtic}..${recEnd}] replay=[${replayStartTic}..${repEnd}]`);
+    // Full-trace contract: the overlap must cover the whole recording, not
+    // merely be non-empty (a 1-tick overlap is not a FULL trace comparison).
+    ok(`Tab B: overlap window is ${n} ticks (gametics ${overlapStart}..${overlapEnd})`, n >= TARGET_TICKS,
+        `record=[${recordStartGamtic}..${recEnd}] replay=[${replayStartTic}..${repEnd}] (need >= ${TARGET_TICKS})`);
 
     let desynced = -1;
     for (let t = overlapStart; t <= overlapEnd; t++) {
