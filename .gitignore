@@ -3,6 +3,9 @@ wads/
 build/
 build-fakeflat/
 build-invariants/
+build-potato/
+build-diffblit/
+build-sbskip/
 node_modules/
 *.wasm
 *.wasm.map
