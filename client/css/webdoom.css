@@ -29,12 +29,15 @@ html, body {
     background: #000;
 }
 
-/* task 18.3: wide mode (854×200 = 4.27:1).  Fills display width, covers the
-   fire background.  Toggled via canvas.classList.toggle('wide', renderW>320)
-   in main.js when web_screenwidth() returns 854 after a web_set_wide() call. */
+/* task 18.3 / wide-fix: wide mode.  --wide-aspect is set by main.js to
+   renderW/240 (200 rows × 1.2 pixel aspect = 240 display units), so the
+   canvas box always matches the actual render width.  The old rule
+   hardcoded 854/200 — squashing narrower widths into a letterboxed strip
+   — and ignored pixel aspect entirely.  Toggled via
+   canvas.classList.toggle('wide', renderW>320) in main.js. */
 #screen.wide {
-    width: min(100vw, calc(100vh * 854 / 200));
-    height: min(100vh, calc(100vw * 200 / 854));
+    width: min(100vw, calc(100vh * var(--wide-aspect, 1.775)));
+    height: min(100vh, calc(100vw / var(--wide-aspect, 1.775)));
 }
 
 #overlay {

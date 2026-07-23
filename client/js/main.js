@@ -11,7 +11,7 @@ import { loadPersisted, startSync } from './persist.js';
 import { wadCacheGet, wadCachePut } from './wad-cache.js';
 import { libraryGetBytes } from './wad-library.js';
 import { createScrubberUI } from './scrubber.js';
-import { wideBucket } from './wide-utils.js';
+import { wideWidth } from './wide-utils.js';
 
 const status = msg => { document.getElementById('status').textContent = msg; };
 
@@ -273,12 +273,12 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     // renderW tracks the actual engine screenwidth after each web_frame() call.
     const SCREEN_H = 200; // DOOM's native framebuffer height (constant)
     let renderW = 320;
-    // Aspect-adaptive bucket (wide-fix): same wideBucket() as the settings
-    // toggle path — a hardcoded 854 here made every reload re-apply the
-    // extreme ultrawide bucket regardless of display shape.
+    // Exact-fit width (wide-fix): same wideWidth() as the settings toggle
+    // path — a hardcoded 854 here made every reload re-apply the extreme
+    // ultrawide bucket regardless of display shape.
     if (input.settings.wideMode) {
-        const bucketW = wideBucket();
-        if (bucketW > 320) doom._web_set_wide(bucketW);
+        const fitW = wideWidth();
+        if (fitW > 320) doom._web_set_wide(fitW);
     }
 
     // Compute Panini/cylindrical remap strength from current aspect ratio.
@@ -380,6 +380,11 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
             renderW = newW;
             renderer.resize(renderW, SCREEN_H);
             canvas.classList.toggle('wide', renderW > 320);
+            // Display aspect for W columns × 200 rows at DOOM's 1:1.2 pixel
+            // aspect = W/240.  The .wide CSS rule reads this var; without it
+            // the rule was hardcoded to 854/200, which squashed narrower
+            // render widths into a letterboxed strip (field report).
+            canvas.style.setProperty('--wide-aspect', renderW / 240);
             renderer.setPaniniStrength(paniniStrength(renderW, input.settings.panini));
         }
         // Test-harness hook: set window._doomFrameHook = fn() before boot

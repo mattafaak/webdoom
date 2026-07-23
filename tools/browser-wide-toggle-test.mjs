@@ -33,7 +33,8 @@ const CHROME_BIN = process.env.CHROME_BIN ?? 'google-chrome-stable';
 // so a hardcoded 426 is environment-sensitive.  Deriving from the page's own
 // innerWidth/innerHeight validates the aspect→bucket→canvas plumbing without
 // depending on the harness viewport.
-const bucketFor = a => a <= 1.55 ? 320 : a <= 2.0 ? 426 : a <= 2.6 ? 560 : 854;
+// Exact-fit formula — MUST match client/js/wide-utils.js wideWidth().
+const bucketFor = a => Math.max(320, Math.min(854, Math.round(240 * a / 2) * 2));
 let WIDE_BUCKET = 426; // recomputed from the live page after boot
 const chrome = spawn(CHROME_BIN, [
     '--headless=new', `--remote-debugging-port=${CDP}`,
@@ -154,6 +155,17 @@ if (WIDE_BUCKET === 320) fail(`harness viewport not widescreen (bucket 320) — 
 if (wideCanvasW !== WIDE_BUCKET) fail(`expected canvas.width=${WIDE_BUCKET} after wide toggle (aspect bucket), got ${wideCanvasW}`);
 if (wideScreenW !== WIDE_BUCKET) fail(`expected web_screenwidth=${WIDE_BUCKET} after wide toggle (aspect bucket), got ${wideScreenW}`);
 if (!wideHasClass) fail('canvas should have .wide class when wide mode is active');
+
+// The displayed canvas box must FILL the window (field report: the .wide CSS
+// rule was hardcoded to 854/200, squashing narrower render widths into a
+// letterboxed strip — canvas.width was correct while the display was broken).
+// Exact-fit width ⇒ both dimensions ≥ 97% of the viewport (rounding slack).
+const fillPct = await ev(`(() => {
+    const r = document.getElementById('screen').getBoundingClientRect();
+    return Math.min(r.width / window.innerWidth, r.height / window.innerHeight);
+})()`);
+console.log(`[2b] display fill: ${(fillPct * 100).toFixed(1)}% of viewport (min of both dims)`);
+if (fillPct < 0.97) fail(`canvas letterboxed: fills only ${(fillPct * 100).toFixed(1)}% of viewport — display aspect does not match render width`);
 
 // ── 3. Toggle wide mode OFF — red-proof of pre-existing 320 behaviour ────────
 const narrowCbChecked = await ev(`(() => {

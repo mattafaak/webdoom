@@ -1,18 +1,22 @@
-// wide-utils.js — shared Hor+ aspect-bucket selection (wide-fix).
+// wide-utils.js — shared Hor+ exact-fit width selection (wide-fix).
 //
-// Single source of truth for display-aspect → render-width mapping, used by
+// Single source of truth for display-shape → render-width mapping, used by
 // BOTH the settings toggle path (settings.js) and the boot persist path
 // (main.js).  These were previously two divergent implementations: the
 // toggle picked 560 while a reload re-applied a hardcoded 854 — exactly the
 // drift the shared module exists to prevent.
 //
-// Buckets are the Crispy-standard widths measured in task 18.1; all are
-// within the MAXSCREENWIDTH=854 compile cap.
+// Exact fit, not buckets (field report: coarse Crispy buckets 426/560/854
+// letterboxed any window whose aspect fell between them — "I just want the
+// horizontal screen space filled").  DOOM's 200 rows display as 240
+// aspect-corrected units (1:1.2 pixel aspect), so the width that exactly
+// fills a window of aspect A is 240·A.  Rounded to an even column count
+// (low-detail mode draws column pairs) and clamped to [320, MAXSCREENWIDTH
+// =854].  16:9 → 426, 16:10 → 384, 21:9 → 560, 32:9 → 854: the old buckets
+// fall out as the special cases.
 
-export function wideBucket() {
+export function wideWidth() {
     const aspect = window.innerWidth / window.innerHeight;
-    if (aspect <= 1.55) return 320;   // 4:3 / 5:4 — wide off equivalent
-    if (aspect <= 2.0)  return 426;   // 16:9 / 16:10
-    if (aspect <= 2.6)  return 560;   // 21:9
-    return 854;                       // 32:9 / beyond
+    const w = Math.round(240 * aspect / 2) * 2;
+    return Math.max(320, Math.min(854, w));
 }

@@ -46,6 +46,13 @@ static int pending_wide_width = 0;
 
 EMSCRIPTEN_KEEPALIVE void web_set_wide (int w)
 {
+    // Clamp: screenwidth beyond MAXSCREENWIDTH overruns the framebuffer
+    // and render tables.  JS now computes exact-fit widths from the window
+    // shape, so the bound must live here, not in the caller.
+    if (w < DOOM_ORIGWIDTH)
+        w = DOOM_ORIGWIDTH;
+    if (w > MAXSCREENWIDTH)
+        w = MAXSCREENWIDTH;
     pending_wide_width = w;
 }
 

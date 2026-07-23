@@ -10,7 +10,7 @@
 //          loud status notice is shown).
 import { ACTIONS, saveSettings, defaultSettings } from './input.js';
 import { sf2GetCurrentMeta } from './sf2-library.js';
-import { wideBucket } from './wide-utils.js';
+import { wideWidth } from './wide-utils.js';
 
 // Compute Panini/cylindrical remap strength (matches main.js paniniStrength()).
 // 0.0 at 4:3 or narrower; 0.4 at 21:9+.  Returns 0 when disabled.
@@ -20,7 +20,7 @@ function computePaniniStrength(w, enabled) {
     return Math.min(0.4, Math.max(0, (aspect - 4/3) / (21/9 - 4/3)) * 0.4);
 }
 
-// wideBucket() imported from wide-utils.js — single source of truth
+// wideWidth() imported from wide-utils.js — single source of truth
 // for the aspect→width mapping (shared with main.js boot path).
 
 export function createSettingsUI(input, doom, renderer, qol) {
@@ -117,14 +117,14 @@ export function createSettingsUI(input, doom, renderer, qol) {
             doom?._web_set_smooth(s.smooth ? 1 : 0);
         };
         // wide-fix: wide mode — calls web_set_wide() with aspect-adaptive bucket.
-        // wideBucket() picks 426 / 560 / 854 based on window aspect (16:9 → 426,
+        // wideWidth() computes the exact-fit Hor+ width for the window (16:9 → 426,
         // 21:9 → 560, ≥32:9 → 854; ≤4:3 → 320 = effective off).
         // The frame loop in main.js detects web_screenwidth() change and
         // calls renderer.resize() + toggles the .wide CSS class.
         panel.querySelector('#wideMode').onchange = e => {
             s.wideMode = e.target.checked;
             saveSettings(s);
-            doom?._web_set_wide(s.wideMode ? wideBucket() : 320);
+            doom?._web_set_wide(s.wideMode ? wideWidth() : 320);
         };
         // task 18.3: Panini/cylindrical remap — updates shader uniform immediately.
         panel.querySelector('#panini').onchange = e => {
