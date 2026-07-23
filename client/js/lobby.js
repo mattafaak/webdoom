@@ -773,10 +773,15 @@ function leaveLobby() {
     menu.reset(rootScreen());   // triggers onTransition('reset') → fire.flare()
     status('');
     // On insecure origins (plain http://<LAN-IP>) navigator.serviceWorker is
-    // absent — the SW never engages and its WAD cache is unavailable.
-    // Surface a non-silent notice so players know WADs are cached locally via
-    // IndexedDB instead. This replaces the previous silent no-op.
-    if (!('serviceWorker' in navigator)) {
-        status('offline caching unavailable (insecure origin) — WADs cached locally instead');
+    // absent — the SW never engages and its WAD cache is unavailable. WADs
+    // still cache locally via IndexedDB; only installable offline mode is
+    // lost. Browsers hard-block SW on plain-HTTP non-localhost origins, so
+    // this is informational, not an error — word it that way (field report:
+    // the old "offline caching unavailable" phrasing was read as a bug three
+    // times). Shown once per browser, not every launch.
+    if (!('serviceWorker' in navigator) &&
+            !localStorage.getItem('http-notice-shown')) {
+        localStorage.setItem('http-notice-shown', '1');
+        status('ℹ WADs cached locally — offline install needs HTTPS or localhost (all features work)');
     }
 })();

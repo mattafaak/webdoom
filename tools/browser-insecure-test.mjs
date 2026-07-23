@@ -209,6 +209,16 @@ if (swInNav) {
     cleanup(1);
 }
 console.log(`  confirmed: navigator.serviceWorker absent on ${insecureUrl} (insecure context)`);
+
+// First-ever load in this fresh profile: the one-shot plain-HTTP notice must
+// be visible here (and only here — later sessions assert suppression).
+await waitForMenu(tabCheck, 'tabCheck (pre-flight)');
+const noticeMsg = await tabCheck.ev(`document.getElementById('status')?.textContent`);
+if (!noticeMsg?.includes('cached locally')) {
+    console.error(`FAIL: one-shot plain-HTTP notice not shown on first load (got: "${noticeMsg}")`);
+    cleanup(1);
+}
+console.log(`  one-shot notice on first load: "${noticeMsg}"`);
 tabCheck.close();
 
 // ── Session 1: boot SP — WAD must come from network ───────────────────────────
@@ -217,13 +227,15 @@ activeSession = 1;
 const tab1 = await openTab(insecureUrl);
 await waitForMenu(tab1, 'tab1 (session 1)');
 
-// Assert degraded-mode status message is visible.
+// The one-shot notice was consumed by the pre-flight load: later sessions
+// must NOT show it again (field report: an every-launch banner reads as an
+// error).
 const degradedMsg = await tab1.ev(`document.getElementById('status')?.textContent`);
-if (!degradedMsg?.includes('insecure origin')) {
-    console.error(`FAIL: degraded-mode status not shown (got: "${degradedMsg}")`);
+if (degradedMsg?.includes('cached locally')) {
+    console.error(`FAIL: plain-HTTP notice reappeared in session 1 — should be one-shot (got: "${degradedMsg}")`);
     cleanup(1);
 }
-console.log(`  degraded-mode status: "${degradedMsg}"`);
+console.log(`  session 1: notice suppressed (status: "${degradedMsg}")`);
 
 await bootIntoSP(tab1, 'tab1 (session 1)');
 console.log('  SP booted — checking server WAD hit count...');
@@ -245,10 +257,10 @@ activeSession = 2;
 const tab2 = await openTab(insecureUrl);
 await waitForMenu(tab2, 'tab2 (session 2)');
 
-// Confirm degraded-mode status still shown.
+// One-shot notice must stay suppressed in session 2 as well.
 const degradedMsg2 = await tab2.ev(`document.getElementById('status')?.textContent`);
-if (!degradedMsg2?.includes('insecure origin')) {
-    console.error(`FAIL: session 2 degraded-mode status not shown (got: "${degradedMsg2}")`);
+if (degradedMsg2?.includes('cached locally')) {
+    console.error(`FAIL: plain-HTTP notice reappeared in session 2 — should be one-shot (got: "${degradedMsg2}")`);
     cleanup(1);
 }
 
