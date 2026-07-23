@@ -126,7 +126,7 @@ console.log('\n── browser-demo-test: record → fragment URL → replay hash
 
 let tabA, tabB, tabC;
 try {
-    // ── Tab A: wait for SW, navigate to RECORD & SHARE ───────────────────────
+    // ── Tab A: wait for SW, navigate SINGLE PLAYER → RECORD & SHARE… → game ──
 
     tabA = await openTab(srvUrl);
     await sleep(2500);
@@ -134,30 +134,34 @@ try {
     // Wait for service worker to control the page.
     await waitFor(() => tabA.eval(`!!navigator.serviceWorker.controller`), 20000);
 
-    // Navigate menu to SINGLE PLAYER → doom.wad → RECORD & SHARE.
-    // Click SINGLE PLAYER, then the first game in the list (doom.wad should
-    // appear as "The Ultimate DOOM" or just "DOOM" depending on manifest),
-    // then RECORD & SHARE.
+    // Navigate: SINGLE PLAYER → RECORD & SHARE… → doom.wad game entry.
+    // (Game row click now boots immediately; RECORD & SHARE is a separate item.)
     const spOk = await tabA.click('SINGLE PLAYER');
     ok('Tab A: SINGLE PLAYER menu item found', spOk);
 
-    // Wait for game list to appear, then click doom.wad's entry.
+    // Wait for SP game list, then click the RECORD & SHARE… item.
     await sleep(500);
+    const recOk = await waitFor(async () => {
+        const hit = await tabA.eval(
+            `(() => { const r = document.querySelector('#dmenu .row[data-label*="RECORD"]');
+                      return r ? (r.click(), true) : false; })()`);
+        return hit;
+    }, 10000, 300);
+    ok('Tab A: RECORD & SHARE item clicked', recOk);
+
+    // Wait for record-picker list, then click doom.wad's entry.
+    await sleep(400);
     const doomOk = await waitFor(async () => {
         // Try common title strings for doom.wad
         for (const label of ['DOOM', 'ULTIMATE DOOM', 'THE ULTIMATE DOOM', 'ULTIMATE DOOM (V1.9)']) {
-            const ok = await tabA.eval(
+            const hit = await tabA.eval(
                 `(() => { const r = document.querySelector('#dmenu .row[data-label*=${JSON.stringify(label)}]');
                           return r ? (r.click(), true) : false; })()`);
-            if (ok) return true;
+            if (hit) return true;
         }
         return false;
     }, 10000, 500);
-    ok('Tab A: doom.wad game entry clicked', doomOk);
-
-    await sleep(400);
-    const recOk = await tabA.click('RECORD');
-    ok('Tab A: RECORD & SHARE action clicked', recOk);
+    ok('Tab A: doom.wad game entry clicked (record picker)', doomOk);
 
     // Wait for bootDoom to complete: window.webdoom must be set.
     await waitFor(() => tabA.eval(`typeof window.webdoom?.doom?._web_demo_stop === 'function'`), 60000, 500);

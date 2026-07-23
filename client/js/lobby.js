@@ -174,6 +174,21 @@ function spGameScreen() {
         menu.hide();
         const m = singleMap(w);
         const args = m ? ['-warp', String(m), '-skill', '3'] : [];
+
+        // REC indicator overlay: shown while recording, pointer-events:none so it
+        // never intercepts game input.  Removed when STOP & SHARE is clicked.
+        let recIndicator = null;
+        if (record) {
+            recIndicator = document.createElement('div');
+            recIndicator.id = 'rec-indicator';
+            recIndicator.textContent = '● REC';
+            recIndicator.style.cssText =
+                'position:fixed;top:8px;left:8px;z-index:100;' +
+                'color:#f33;font-family:monospace;font-size:14px;font-weight:bold;' +
+                'pointer-events:none;text-shadow:0 0 4px #000;';
+            document.body.appendChild(recIndicator);
+        }
+
         // Pass record flag so main.js can arm the bridge before callMain.
         bootDoom({ wads: stackFor(w.file), args, onQuit: returnToMenu, record })
             .then(doom => {
@@ -190,6 +205,8 @@ function spGameScreen() {
                     document.body.appendChild(btn);
                     btn.addEventListener('click', async () => {
                         btn.remove();
+                        recIndicator?.remove();
+                        recIndicator = null;
                         try {
                             const shareUrl = await stopAndShare(doom, w.file);
                             showSharePanel(shareUrl);
@@ -204,6 +221,8 @@ function spGameScreen() {
                 // without reloading the page.  main.js has already restored
                 // #landing visibility via restoreOnFailure(); here we re-arm
                 // the booted guard and bring the menu back to the root screen.
+                recIndicator?.remove();
+                recIndicator = null;
                 booted = false;
                 fire?.resume();
                 // flare triggered by menu.reset() → onTransition('reset')
@@ -212,32 +231,44 @@ function spGameScreen() {
                 status(String(err));
             });
     };
-    // Per-game action screen: PLAY or RECORD & SHARE
-    const gameActions = w => ({
-        title: w.title,
-        items: [
-            { label: 'PLAY', action: () => boot(w) },
-            {
-                label: 'RECORD & SHARE',
-                action: () => boot(w, true /* arm recording */),
-            },
-        ],
-    });
 
-    return {
-        title: 'CHOOSE GAME',
+    // Game list for recording: same entries as the main SP list but each boots
+    // with record=true.  Used by the RECORD & SHARE top-level item.
+    const recordPickerScreen = () => ({
+        title: 'RECORD & SHARE',
         items: sortedGames().map(w => ({
             label: w.title,
             thumb: font.titleThumb(w.file, 52),
-            action: () => menu.push(gameActions(w)),
+            action: () => boot(w, true),
         })).concat(groups().map(g => ({
             label: g,
             action: () => menu.push({
                 title: g,
                 items: manifest.filter(w => w.group === g)
-                    .map(w => ({ label: w.title, action: () => menu.push(gameActions(w)) })),
+                    .map(w => ({ label: w.title, action: () => boot(w, true) })),
             }),
         }))),
+    });
+
+    return {
+        title: 'CHOOSE GAME',
+        // Game row click = immediate PLAY (vanilla-first: 1 click to launch).
+        // RECORD & SHARE is a separate top-level item at the end of the list.
+        items: sortedGames().map(w => ({
+            label: w.title,
+            thumb: font.titleThumb(w.file, 52),
+            action: () => boot(w),
+        })).concat(groups().map(g => ({
+            label: g,
+            action: () => menu.push({
+                title: g,
+                items: manifest.filter(w => w.group === g)
+                    .map(w => ({ label: w.title, action: () => boot(w) })),
+            }),
+        }))).concat([{
+            label: 'RECORD & SHARE…',
+            action: () => menu.push(recordPickerScreen()),
+        }]),
     };
 }
 
