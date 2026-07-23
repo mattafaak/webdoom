@@ -35,14 +35,16 @@ static byte web_rowmajor_buf[MAXSCREENWIDTH * SCREENHEIGHT];
    For timedemo (camera in motion, ~100% columns dirty every tic) comparison
    cost exceeds savings — measured negative for timedemo, expected positive
    for real-play static scenes (open menus, spectating, stationary view).
-   screenwidth sentinel: web_prev_screenwidth starts at 0 (less than any real
-   screenwidth) so the first I_FinishUpdate call always does a full-dirty
-   invalidation and memsets web_prev_col, guaranteeing correct initial state
-   regardless of screens[0] content on entry. On screenwidth change the
-   entire snapshot is also invalidated so web_rowmajor_buf is always
-   re-transposed with the correct row stride. */
+   Invalidation uses an explicit web_prev_valid flag, not a sentinel byte
+   pattern: any fill value could legitimately occur as a full column of
+   screens[0], which would make memcmp report "unchanged" and leave a stale
+   wrong-stride column in web_rowmajor_buf. The flag has no such collision.
+   web_prev_screenwidth starts at 0 (less than any real screenwidth) so the
+   first call always invalidates, and every screenwidth change invalidates
+   again so the buffer is re-transposed with the correct row stride. */
 static byte web_prev_col[MAXSCREENWIDTH * SCREENHEIGHT];
 static int web_prev_screenwidth; /* 0 at startup → force full refresh */
+static int web_prev_valid;       /* snapshot usable for skip decisions */
 #endif                           /* WEBDOOM_DIFFBLIT */
 /* Reset line counter so the toggle-off binary stays byte-identical to master.
    void I_InitGraphics was at physical line 25 — update if i_video.c moves. */
@@ -70,21 +72,22 @@ void I_FinishUpdate (void)
 #ifdef WEBDOOM_DIFFBLIT
     if (screenwidth != web_prev_screenwidth)
     {
-        /* Width change or first call: invalidate entire snapshot so every
-           column is re-transposed with the correct stride. */
-        memset (web_prev_col, 0x01, sizeof (web_prev_col));
+        /* Width change or first call: every column must be re-transposed
+           with the new stride, so no skip may fire this frame. */
+        web_prev_valid = 0;
         web_prev_screenwidth = screenwidth;
     }
     for (x = 0; x < screenwidth; x++)
     {
         const byte* col = src + x * SCREENHEIGHT;
         byte* prv = web_prev_col + x * SCREENHEIGHT;
-        if (memcmp (col, prv, SCREENHEIGHT) == 0)
+        if (web_prev_valid && memcmp (col, prv, SCREENHEIGHT) == 0)
             continue;                    /* column unchanged — skip transpose */
         memcpy (prv, col, SCREENHEIGHT); /* update snapshot */
         for (y = 0; y < SCREENHEIGHT; y++)
             web_rowmajor_buf[y * screenwidth + x] = col[y];
     }
+    web_prev_valid = 1;
 #else
 #line 45
     for (x = 0; x < screenwidth; x++)
