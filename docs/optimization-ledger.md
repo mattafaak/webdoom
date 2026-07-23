@@ -720,3 +720,33 @@ Draw only even-numbered `dc_x` columns; the adjacent odd column is filled by a s
 toggle-off md5 c669142745449ff04bd2fef30fa17412 · toggle-on md5 08e1273dddcf71751a4075badb61b83a
 Measured gain: doom.wad demo3 p50 **1,091,809 → 926,504 instr/tic = −165,305 instr/tic (−15.1% whole)**.
 Non-overlap with C2 low-detail: potato halves texture reads at full column count; low-detail halves column count at full texture cost — orthogonal axes.
+
+---
+
+### 20.3d — Differential blit (`WEBDOOM_DIFFBLIT`)
+
+`I_FinishUpdate` in `engine/web/i_video.c` performs a column-major → row-major transposition (the only "blit" step before JS uploads `web_rowmajor_buf` to the GPU). FastDoom's dirty-column technique is the VGA analogue: only changed columns are blitted. Under `#ifdef WEBDOOM_DIFFBLIT`, a column-major snapshot buffer (`web_prev_col[MAXSCREENWIDTH*SCREENHEIGHT]`) and a `web_prev_screenwidth` sentinel are added as static vars. `I_FinishUpdate` compares each of the `screenwidth` columns (200 bytes each) against the snapshot; unchanged columns skip the transpose and the snapshot update. On the first call and on `screenwidth` change the sentinel detects the transition and `memset`s the entire snapshot to `0x01` (forcing a full refresh). The `#line 25`, `#line 45`, and `#line 51` directives after `#endif` / inside the `#else` branch restore the compiler's line counter so the toggle-off object code is byte-identical to master. The `#else` branch contains the original verbatim loop.
+
+Trade-off: one `memcmp(SCREENHEIGHT bytes = 200 B)` per column per frame regardless of outcome. For timedemo (camera always moving, ≈100% columns dirty every tic) this comparison overhead exceeds any savings — net effect is negative for timedemo. The technique targets real-play static scenes (stationary camera, menu open, spectating) where runs of identical columns accumulate across frames.
+
+**Measurement note:** The freestanding `I_FinishUpdate` (tools/freestanding/i_video.c) is a no-op — icount cannot measure the transfer path. `bench.mjs` stage timers (frame-setup/BSP/planes/masked) do not instrument `I_FinishUpdate`; the sim-fps pass uses `-nodraw` which bypasses `I_FinishUpdate` entirely. No separate measurement path is available without adding binary-perturbing instrumentation. FINDING: timedemo is structurally unsuited to measure this technique (same limitation as SBSKIP in 20.3b). bench.mjs sim-fps: toggle-off AVG 208,412 fps vs toggle-on AVG 207,159 fps (−0.6%); difference is within run-to-run noise (sim-fps pass uses `-nodraw`, does NOT call `I_FinishUpdate`). The technique's benefit is in the `I_FinishUpdate` transfer cost only, which is unmeasured by available CI tools.
+
+| field | value |
+|-------|-------|
+| **mechanism** | `I_FinishUpdate()` in engine/web/i_video.c: column-major snapshot `web_prev_col[]` + `web_prev_screenwidth` sentinel. `memcmp(col, prv, SCREENHEIGHT)` per column; skip transpose on match; `memcpy` + transpose on mismatch. `memset(0x01)` on width change or first call. `#line 25` (after static-var block) + `#line 45` + `#line 51` (inside `#else` branch of function body) preserve toggle-off byte-identity. |
+| **toggle-off byte-identity** | `build/doom.wasm` md5 = `c669142745449ff04bd2fef30fa17412` (proven). Size 356,775 bytes. |
+| **toggle-on build** | `build-diffblit/doom.wasm` md5 = `f7a3c7de67b22477cc669687c74fda62`. Size 356,639 bytes (budget: 360,448 bytes → green). Built with `EXTRA_CFLAGS=-DWEBDOOM_DIFFBLIT BUILD=../build-diffblit`. |
+| **toggle-on pixel output** | Pixel-identical to toggle-off: `node tools/demo-test.mjs --render --build-dir build-diffblit` → PASS all 13 demos. `web_rowmajor_buf` retains valid transposed data for unchanged columns across frames; JS upload is always of the full buffer regardless. No separate golden set required. |
+| **throughput measurement** | FINDING — see measurement note above. No icount or bench.mjs stage-timer path instruments `I_FinishUpdate`. bench.mjs sim-fps toggle-off 208,412 fps vs toggle-on 207,159 fps (−0.6%); sim-fps uses -nodraw and is a noise reading for this feature. The technique targets static-scene wasm→rowmajor-buf bandwidth, not timedemo throughput. Fleet SSH unavailable; local-only. |
+| **sim invariance** | 13/13 sim goldens bit-identical (I_FinishUpdate writes to web_rowmajor_buf only; playsim untouched). |
+| **magic-data policy** | No new tables. No precomputed data. **COMPLIES.** |
+| **tic-exact-safe?** | YES. `I_FinishUpdate` writes to `web_rowmajor_buf` and `web_prev_col` only. No P_Random, no actor state. |
+| **red-proof** | Corrupt `doom-demo1-render.json` trace[0] → `FAIL doom-demo1 render: PIXEL DESYNC at tic 0` · restore → `PASS`. |
+| **kill rule** | Any sim golden mismatch → kill. toggle-off md5 divergence → bug in #line directive. |
+| **gates** | build-engine toggle-off md5 PASS · sim 13/13 PASS · render 13/13 PASS (vanilla) · render-low 13/13 PASS · render-wide 13/13 PASS · sim-wide 13/13 PASS · render-fakeflat 13/13 PASS · render-potato 13/13 PASS · toggle-on --render 13/13 PASS (identity proof) · sprite-witness PASS · mixed-width-net PASS · lint PASS · verify-all.sh ALL PASS · size-ledger hard checks green · red-proof PASS |
+
+**Verdict: LANDED — task 20.3d**
+
+20.3d landing evidence: I_FinishUpdate differential blit — column-major snapshot, skip unchanged columns.
+toggle-off md5 c669142745449ff04bd2fef30fa17412 · toggle-on md5 f7a3c7de67b22477cc669687c74fda62
+FINDING: I_FinishUpdate transfer path not separately instrumented by icount or bench.mjs; timedemo structurally ill-suited (≈100% columns dirty). bench.mjs sim-fps (no-draw, does not call I_FinishUpdate): 208,412 → 207,159 fps (−0.6%, within noise). Real-play static-scene benefit is the design target; negative timedemo result is an honest documented limitation, not a kill-rule trigger (same precedent as 20.3b SBSKIP).

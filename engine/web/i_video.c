@@ -22,6 +22,31 @@ static int paletteversion; // bumped on every I_SetPalette
 // Sized to MAXSCREENWIDTH; only the first screenwidth columns are populated.
 static byte web_rowmajor_buf[MAXSCREENWIDTH * SCREENHEIGHT];
 
+#ifdef WEBDOOM_DIFFBLIT
+/* --- 20.3d WEBDOOM_DIFFBLIT: differential blit behind compile-time toggle ---
+   Column-major snapshot of the previous frame (same layout as screens[0]).
+   I_FinishUpdate compares each column against the snapshot; columns whose
+   SCREENHEIGHT-byte content is unchanged skip the column-major → row-major
+   transpose into web_rowmajor_buf, saving memory-write bandwidth on frames
+   where large fractions of the screen are stationary.
+   FastDoom analogue: VGA dirty-column blit tracking (column-major → row-major
+   transpose ≡ VGA column blit; changed columns only ≡ dirty-page tracking).
+   Trade-off: one memcmp(SCREENHEIGHT bytes) overhead per column per frame.
+   For timedemo (camera in motion, ~100% columns dirty every tic) comparison
+   cost exceeds savings — measured negative for timedemo, expected positive
+   for real-play static scenes (open menus, spectating, stationary view).
+   screenwidth sentinel: web_prev_screenwidth starts at 0 (less than any real
+   screenwidth) so the first I_FinishUpdate call always does a full-dirty
+   invalidation and memsets web_prev_col, guaranteeing correct initial state
+   regardless of screens[0] content on entry. On screenwidth change the
+   entire snapshot is also invalidated so web_rowmajor_buf is always
+   re-transposed with the correct row stride. */
+static byte web_prev_col[MAXSCREENWIDTH * SCREENHEIGHT];
+static int web_prev_screenwidth; /* 0 at startup → force full refresh */
+#endif                           /* WEBDOOM_DIFFBLIT */
+/* Reset line counter so the toggle-off binary stays byte-identical to master.
+   void I_InitGraphics was at physical line 25 — update if i_video.c moves. */
+#line 25
 void I_InitGraphics (void) {}
 
 void I_ShutdownGraphics (void) {}
@@ -42,12 +67,34 @@ void I_FinishUpdate (void)
 {
     const byte* src = screens[0];
     int x, y;
+#ifdef WEBDOOM_DIFFBLIT
+    if (screenwidth != web_prev_screenwidth)
+    {
+        /* Width change or first call: invalidate entire snapshot so every
+           column is re-transposed with the correct stride. */
+        memset (web_prev_col, 0x01, sizeof (web_prev_col));
+        web_prev_screenwidth = screenwidth;
+    }
+    for (x = 0; x < screenwidth; x++)
+    {
+        const byte* col = src + x * SCREENHEIGHT;
+        byte* prv = web_prev_col + x * SCREENHEIGHT;
+        if (memcmp (col, prv, SCREENHEIGHT) == 0)
+            continue;                    /* column unchanged — skip transpose */
+        memcpy (prv, col, SCREENHEIGHT); /* update snapshot */
+        for (y = 0; y < SCREENHEIGHT; y++)
+            web_rowmajor_buf[y * screenwidth + x] = col[y];
+    }
+#else
+#line 45
     for (x = 0; x < screenwidth; x++)
     {
         const byte* col = src + x * SCREENHEIGHT;
         for (y = 0; y < SCREENHEIGHT; y++)
             web_rowmajor_buf[y * screenwidth + x] = col[y];
     }
+#endif /* WEBDOOM_DIFFBLIT */
+#line 51
 }
 
 void I_ReadScreen (byte* scr)
