@@ -20,6 +20,14 @@ echo "── engine smoke (doom, doom2) ─────────────�
 node tools/smoke-test.mjs doom.wad 700 | tail -2
 node tools/smoke-test.mjs doom2.wad 1100 | tail -2
 
+# ── music backends (headless pump-chain / RMS gates) ─────────────────────────
+# opl-mode: OPL2 (9-voice mono) vs OPL3 (18-voice stereo) toggle (task 17.1).
+# gm-frames: GM/SoundFont pump chain + DMXGUS mapping (17.2a/17.3). Both run
+# headless against build/doom.js — no browser needed.
+echo "── music backends (OPL2/OPL3 toggle, GM/GUS pump) ──────"
+node tools/opl-mode-test.mjs doom.wad | tail -1
+node tools/gm-frames-test.mjs doom.wad | tail -1
+
 # ── invariant build (primary sim-safety gate) ────────────────────────────────
 # The invariant build compiles with -DWEBDOOM_INVARIANTS into a *separate*
 # artifact dir (build-invariants/) so the shipping build/ artifact is NEVER
@@ -143,6 +151,11 @@ node tools/browser-ierror-test.mjs http://127.0.0.1:8668/ | tail -1
 node tools/browser-rafdeath-test.mjs http://127.0.0.1:8668/ | tail -1
 node tools/browser-wide-toggle-test.mjs http://127.0.0.1:8668/ | tail -1
 node tools/browser-qol-test.mjs http://127.0.0.1:8668/ | tail -1
+# WAD library features (16.6a import, 16.6b MP-gating) and SoundFont UX (17.2b).
+# Shipped features whose browser tests existed but were never in the suite.
+node tools/browser-wadimport-test.mjs http://127.0.0.1:8668/ | tail -1
+node tools/browser-mp-gating-test.mjs http://127.0.0.1:8668/ | tail -1
+node tools/browser-sf2-test.mjs http://127.0.0.1:8668/ | tail -1
 node tools/browser-offline-test.mjs | tail -2
 node tools/browser-demo-test.mjs http://127.0.0.1:8668/ | tail -2
 
