@@ -141,9 +141,9 @@ LDFLAGS  := -mabi=o64 -march=vr4300 -mtune=vr4300 \
 LDLIBS   := -ldragon -lm -ldragonsys -lc
 
 CORE_DIR := ../../engine/core
-OUT_ELF  := n64-doom.elf
-OUT_ROM  := n64-doom.z64
-OBJ_DIR  := obj
+OUT_ELF  ?= n64-doom.elf
+OUT_ROM  ?= n64-doom.z64
+OBJ_DIR  ?= obj
 
 # engine/core sources: same excludes as freestanding build (we provide shims).
 CORE_EXCLUDE := $(CORE_DIR)/i_main.c \
@@ -155,6 +155,13 @@ CORE_EXCLUDE := $(CORE_DIR)/i_main.c \
 
 CORE_SRC := $(filter-out $(CORE_EXCLUDE),$(wildcard $(CORE_DIR)/*.c))
 
+# Timedemo gate (20.4c): bake demo name at compile time for GDB-based trace.
+# Usage: make N64_TIMEDEMO=demo1   (or demo2, demo3, demo4)
+# Omit N64_TIMEDEMO for the default banner-only / attract-loop build.
+ifdef N64_TIMEDEMO
+COMMON_FLAGS += -DN64_TIMEDEMO=\"$(N64_TIMEDEMO)\"
+endif
+
 # N64 shim files (this directory).
 PLAT_SRC := n64_main.c \
             i_system_n64.c \
@@ -163,7 +170,8 @@ PLAT_SRC := n64_main.c \
             d_net_n64.c \
             files_n64.c \
             cart_read_n64.c \
-            perf_n64.c
+            perf_n64.c \
+            n64_hash.c
 
 SRC := $(CORE_SRC) $(PLAT_SRC)
 OBJ := $(patsubst $(CORE_DIR)/%.c,$(OBJ_DIR)/core/%.o,$(filter $(CORE_DIR)/%,$(SRC))) \

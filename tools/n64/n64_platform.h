@@ -59,4 +59,13 @@ extern jmp_buf      n64_demo_jmp;
 extern boolean smoothrender;
 extern boolean wipeactive;
 
+// ── Sim-hash trace (20.4c) ────────────────────────────────────────────────────
+// n64_record_hash(): append fs_state_hash()-equivalent for the current gametic.
+// n64_demo_complete_halt(): named GDB breakpoint target; fires when trace done.
+// n64_trace[] / n64_trace_len: the accumulated hash array.
+extern int n64_trace[];
+extern int n64_trace_len;
+void n64_record_hash(void);
+void n64_demo_complete_halt(void);
+
 #endif /* __N64_PLATFORM_H__ */

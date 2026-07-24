@@ -4,3 +4,5 @@ obj/
 *.z64
 ares-uart.tmp
 ares-boot-raw.log
+*.bin
+trace*.json

@@ -30,18 +30,31 @@
 #include "m_argv.h"
 #include "n64_platform.h"
 
-/* Argv for D_DoomMain.  No -timedemo for banner-only check; add to exercise
- * the demo loop once a WAD blob is registered. */
+/* Argv for D_DoomMain.
+ * Without N64_TIMEDEMO: banner-only mode (attract-loop default).
+ * With N64_TIMEDEMO="demo1" (etc.): timedemo gate mode (20.4c). */
+#ifdef N64_TIMEDEMO
+static const char* n64_argv[] = {
+    "n64-doom",
+    "-timedemo",
+    N64_TIMEDEMO,   /* string literal, e.g. "demo1" */
+    NULL
+};
+static const int n64_argc = 3;
+#else
 static const char* n64_argv[] = {
     "n64-doom",
     NULL
 };
+static const int n64_argc = 1;
+#endif
 
 /* Defined in d_main.c. Only engine/web/web.h declares it, and that header pulls
  * in emscripten types we do not want on this target — declare it locally.
- * numlumps lives in w_wad.c. */
+ * numlumps lives in w_wad.c.  gametic lives in g_game.c (via doomstat). */
 void D_DoomFrame(void);
 extern int numlumps;
+extern int gametic;   /* per-tic hash gate (20.4c) */
 
 int main(void)
 {
@@ -118,15 +131,17 @@ int main(void)
 #endif
 
     // ── Step 3: argv ─────────────────────────────────────────────────────────
-    myargc = 1;
+    myargc = n64_argc;
     myargv = (char**)n64_argv;
 
     // ── Step 4: suppress non-deterministic display paths ────────────────────
     smoothrender = 0;
-    wipeactive   = 0;
 
     n64_timedemo_active   = 0;
     n64_timedemo_gametics = 0;
+#ifdef N64_TIMEDEMO
+    n64_timedemo_active   = 1;  /* enable longjmp exit on timedemo completion */
+#endif
 
     // ── Step 5: engine entry point ───────────────────────────────────────────
     // D_DoomMain prints the startup title banner (d_main.c:796):
@@ -134,9 +149,12 @@ int main(void)
     // This is the primary DoD milestone for 20.4b.
     if (setjmp(n64_demo_jmp) != 0) {
         // Demo completed via longjmp from I_Error — normal exit path.
-        debugf("N64 webdoom: demo completed normally\n");
-        // Spin: bare-metal N64 has no OS to return to.
-        for (;;) {}
+        debugf("N64 webdoom: demo completed normally, trace len=%d\n",
+               n64_trace_len);
+        // Halt in the named GDB breakpoint target so run-n64-demos.sh can
+        // dump n64_trace[0..n64_trace_len-1] via "dump binary memory".
+        n64_demo_complete_halt();
+        /* unreachable — n64_demo_complete_halt spins forever */
     }
 
     // D_DoomMain runs engine init and RETURNS in this port (the game loop was
@@ -150,8 +168,22 @@ int main(void)
     // the GDB stub, that the port executes DOOM's simulation on hardware, not
     // just that init succeeded. Video output is i_video_n64's job (still a
     // software-render stub at this milestone); the sim runs regardless.
-    for (;;) {
-        D_DoomFrame();
+    //
+    // Per-tic hash recording (20.4c): n64_record_hash() appends
+    // fs_state_hash()-equivalent to n64_trace[] once per unique gametic,
+    // exactly mirroring the freestanding i_main.c gate loop.
+    {
+        int last_tic = -1;
+        for (;;)
+        {
+            wipeactive = 0; /* suppress non-deterministic melt wipes */
+            D_DoomFrame ();
+            if (gametic != last_tic)
+            {
+                n64_record_hash ();
+                last_tic = gametic;
+            }
+        }
     }
     return 0;
 }
