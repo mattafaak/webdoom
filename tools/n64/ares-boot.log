@@ -61,12 +61,34 @@ STATUS 2026-07-23 (supersedes the earlier "ares SIGSEGV" and "NULL WAD" notes)
    failed probe disables output silently at the ROM end — consistent with what
    we observe, but not yet proven to be the cause.
 
+RULED OUT (2026-07-23, second investigation pass)
+ - NOT a master-vs-release regression. `git diff v148..e1b0d47` restricted to
+   ares/n64/cartridge/, ares/node/debugger/ and desktop-ui/program/platform.cpp
+   is EMPTY — the release tag and the master build are byte-identical through
+   the whole ISViewer path, so packaging a release build cannot change this.
+   (ares publishes no Linux binary; macOS and Windows only. The distro package
+   builds from this same source.)
+ - NOT saved settings overriding the tracer. Tracer::unserialize() does
+   overwrite _terminal from persisted state (tracer.hpp:30-36), which would
+   silently defeat setTerminal(true) — but ~/.local/share/ares/settings.bml
+   contains no terminal/tracer/ISViewer keys and no per-system node state, so
+   nothing is being restored over it.
+ - NOT the ROM being too large or mis-routed. ISViewer RAM is allocated for any
+   ROM <= 0x03ff0000 (cartridge.cpp:50; ours is 0x00dd8000), ISViewer::enabled()
+   is simply `ram.size` (cartridge.hpp:46), and the PI bus routes
+   0x13ff0000-0x13ffffff there when enabled (pi/bus.hpp:48,100). ares also
+   carries an explicit libdragon compatibility path in ISViewer::writeHalf()
+   (isviewer.cpp, the 0x16 register hack).
+
+So every link in the chain checks out on inspection, yet no ROM produces
+output. The remaining candidate is libdragon's isviewer_init() probe failing at
+runtime (src/debug.c:95 writes a magic value and reads it back); confirming
+that needs interactive debugging rather than static reading.
+
 NEXT STEPS for the 20.4c gate, cheapest first
- - Try a released ares build instead of this from-source master, to rule out a
-   regression or a build-option difference.
  - Enable the debugger explicitly (`--setting Boot/Debugger=true`) and see
    whether tracer nodes behave differently once the debugger UI is realised.
- - Failing both, verify through a different channel: ares's DebugServer
+ - Failing that, verify through a different channel: ares's DebugServer
    (Developer/DebugServerEnabled, a GDB stub) to confirm the CPU is executing
    and inspect the PC, or capture the framebuffer and assert on rendered output
    instead of UART text.
