@@ -28,7 +28,75 @@ STATUS 2026-07-23 (supersedes the earlier "ares SIGSEGV" and "NULL WAD" notes)
    Expansion Pak) minus the ~990 KB the engine already holds. Build a
    footprint-only ROM with `make N64_WAD=`.
 
-3. CURRENT BLOCKER — ares emits no ISViewer output for ANY ROM.
+3. SUPERSEDED — the ISViewer silence was never the real problem.
+
+   The GDB stub (ares --setting Developer/DebugServerEnabled=true, port 9123)
+   provides the verification channel ISViewer could not, and it works: attach
+   with the ELF loaded and symbols resolve, so the ROM's state is fully
+   inspectable without any UART at all. That made the following possible.
+
+4. FIXED — `--wrap __do_global_ctors` was missing from the link.
+
+   The first GDB backtrace showed the ROM trapping before main():
+
+       #0 joybus_exec              #1 inspector (MODE_EXCEPTION)
+       #3 exception_default_handler #5 __onSyscallException
+
+   Cause register 0x20 decodes to ExcCode 8 (syscall), and the faulting PC
+   0x800349ec resolves to `__inspector_assertion+12: syscall 0x1`. Reading the
+   assert's arguments out of the saved register block gave the message:
+
+       "(uint32_t) ctor_sentinel[0] != 0xFFFFFFFF"
+
+   which is libdragon's own check (src/do_ctors.c:61), and its text states the
+   remedy outright: "When linking with g++, please specify: --wrap
+   __do_global_ctors". libdragon's n64.mk links with
+   `--gc-sections --wrap __do_global_ctors`; our LDFLAGS had the first and not
+   the second, so the constructor list was never populated and the ROM aborted
+   before reaching main(). Fixed in the Makefile.
+
+5. FIXED — the WAD was embedded at an address the shim never looked at.
+
+   n64tool's --offset is expressed in N64 memory terms, not file position, so
+   `--offset 2097152` did not put the WAD at file offset 0x200000. It landed at
+   0x433F0. Verified both ways: `grep` on the ROM image finds IWAD magic at
+   0x433F0, and reading cartridge address 0xB00433F0 over GDB returns "IWAD"
+   while 0xB0200000 returns zeroes. The cartridge mapping is therefore simply
+   file offset + 0xB0000000 (KSEG1, domain 1).
+
+   Rather than hardcode a constant that breaks whenever the shim's size
+   changes, n64_main.c now scans aligned cartridge addresses for the IWAD/PWAD
+   magic and registers whatever it finds.
+
+6. CURRENT STATE — the engine boots and reads the WAD; lump lookup fails.
+
+   With both fixes the failure moved twice, each time further into the engine:
+
+       (before)  no output at all, aborted before main()
+       (ctors)   "Wad file doomu.wad doesn't have IWAD or PWAD id"
+       (offset)  "W_GetNumForName: PNAMES not found!"
+
+   So libdragon init, main(), D_DoomMain, IdentifyVersion (it matched the
+   registered "doomu.wad") and W_AddFile's header parse all now succeed — the
+   directory is being read and searched. The remaining failure is lump-name
+   lookup.
+
+   Leading hypothesis, NOT yet proven: byte-granular CPU reads of cartridge
+   space are unreliable on the PI bus, so the 8-byte lump names come back
+   corrupted even though word reads are fine. Careful: an apparent byte-swap
+   seen over GDB is not evidence — `set endian big` was not issued, and the
+   same address read as a string returned "IWAD" correctly. Confirm with an
+   endian-correct read before acting on it. If the hypothesis holds, the file
+   layer must service reads through libdragon's dma_read() into a RAM window
+   instead of dereferencing cartridge pointers, which is also the shape
+   rp2040-doom's WHD reader takes.
+
+   How the error message was recovered: I_Error formats into a stack buffer
+   that is gone by the time abort() lands, so i_system_n64.c now keeps a static
+   `n64_last_error[512]` copy. Post-mortem:
+       gdb -ex "target remote :9123" -ex 'x/s (char*)&n64_last_error'
+
+APPENDIX — the original ISViewer investigation (unresolved, now lower priority)
 
    Established by controlled experiment rather than inference. Three ROMs, all
    with the same result (runs to timeout, exit 124, only the two OpenGL lines):

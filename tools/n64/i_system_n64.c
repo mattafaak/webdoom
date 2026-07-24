@@ -144,6 +144,15 @@ void I_StartTic(void)   {}
 
 // ── I_Error ───────────────────────────────────────────────────────────────────
 // Format error message via debugf (ISViewer), detect timedemo-end, longjmp.
+//
+// n64_last_error is a STATIC copy of the formatted message, deliberately not on
+// the stack: on this platform there is no console, and when I_Error ends in
+// abort() the stack frame is gone by the time a debugger can look. With a
+// static copy the message survives, so a post-mortem
+//     gdb -ex "target remote :9123" -ex "p n64_last_error"
+// recovers it. This is how the WAD-loading failure below was diagnosed at all.
+char n64_last_error[512] = {0};
+
 void I_Error(char* error, ...)
 {
     va_list argptr;
@@ -154,6 +163,10 @@ void I_Error(char* error, ...)
     va_start(argptr, error);
     vsnprintf(buf, sizeof(buf), error, argptr);
     va_end(argptr);
+
+    /* Preserve for post-mortem inspection before anything can longjmp/abort. */
+    strncpy(n64_last_error, buf, sizeof(n64_last_error) - 1);
+    n64_last_error[sizeof(n64_last_error) - 1] = '\0';
 
     // Timedemo-end detection: "timed %i gametics in %i realtics"
     if (n64_timedemo_active &&

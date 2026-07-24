@@ -59,9 +59,37 @@ int main(void)
     // registered and IdentifyVersion() reports an indeterminate game mode.
 #if N64_WAD_LEN > 0
     {
-        const byte* wad = (const byte*)(0xA0000000u + 0x10000000u + N64_WAD_OFFSET);
-        debugf("N64 webdoom: WAD %s @ %p len %d\n", N64_WAD_NAME, wad, (int)N64_WAD_LEN);
-        n64_register_wad(wad, (int)N64_WAD_LEN);
+        /* Locate the WAD by scanning cartridge space for its magic rather than
+           trusting a compile-time offset. n64tool's --offset is expressed in
+           N64 memory terms, not file position, so the WAD does not land where
+           a naive byte offset would predict — an earlier build looked at
+           0xB0200000 and found zeroes while the WAD sat at 0xB00433F0.
+           n64tool aligns payloads (we pass --align 256), and the WAD always
+           follows the ELF, so a coarse aligned scan over the low megabyte
+           finds it in a few thousand reads and stays correct as the shim's
+           size changes. */
+        const unsigned int   base = 0xA0000000u + 0x10000000u;   /* KSEG1 cart domain 1 */
+        const byte* wad  = NULL;
+        unsigned int off;
+        for (off = 0x1000; off < 0x400000u; off += 0x100) {
+            const volatile unsigned int* p = (const volatile unsigned int*)(base + off);
+            if (*p == 0x49574144u) {                    /* "IWAD" big-endian */
+                wad = (const byte*)(base + off);
+                break;
+            }
+            if (*p == 0x50574144u) {                    /* "PWAD" */
+                wad = (const byte*)(base + off);
+                break;
+            }
+        }
+        if (wad) {
+            debugf("N64 webdoom: WAD %s @ %p len %d\n",
+                   N64_WAD_NAME, wad, (int)N64_WAD_LEN);
+            n64_register_wad(wad, (int)N64_WAD_LEN);
+        } else {
+            debugf("N64 webdoom: WAD magic not found in cartridge scan\n");
+            n64_register_wad(NULL, 0);
+        }
     }
 #else
     debugf("N64 webdoom: footprint-only build, no WAD embedded\n");

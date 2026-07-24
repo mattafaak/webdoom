@@ -113,9 +113,19 @@ PLAT_CFLAGS := $(COMMON_FLAGS) -std=gnu11
 # -lc: newlib C library
 # --gc-sections: strip unreferenced sections
 LDSCRIPT := $(LIBDRAGON)/n64.ld
+# --wrap __do_global_ctors is REQUIRED, not optional. libdragon's own n64.mk
+# links with `--gc-sections --wrap __do_global_ctors`; without the wrap, its
+# __do_global_ctors() finds an unpopulated constructor list and traps:
+#     assertf((uint32_t) ctor_sentinel[0] != 0xFFFFFFFF,
+#             "Invalid constructor sentinel. ... please specify:
+#              --wrap __do_global_ctors")          (libdragon src/do_ctors.c:61)
+# That assert fires a `syscall 0x1` before main() ever runs, so the ROM dies in
+# libdragon's crash inspector having produced no output at all — which is
+# exactly what we spent a while blaming on the emulator.
 LDFLAGS  := -mabi=o64 -march=vr4300 -mtune=vr4300 \
              -L$(N64_INST)/mips64-elf/lib \
              -Wl,--gc-sections \
+             -Wl,--wrap,__do_global_ctors \
              -Wl,-T$(LDSCRIPT)
 LDLIBS   := -ldragon -lm -ldragonsys -lc
 
