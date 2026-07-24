@@ -68,7 +68,52 @@ STATUS 2026-07-23 (supersedes the earlier "ares SIGSEGV" and "NULL WAD" notes)
    changes, n64_main.c now scans aligned cartridge addresses for the IWAD/PWAD
    magic and registers whatever it finds.
 
-6. CURRENT STATE — the engine boots and reads the WAD; lump lookup fails.
+6. ROOT-CAUSED — byte-granular cartridge reads are corrupt; word reads are fine.
+
+   Two more fixes were needed to get the real WAD header parsing:
+     - The magic scan matched the string literals "IWAD"/"PWAD" that w_wad.c
+       compiles into rodata (used by its strncmp) BEFORE the real WAD. The scan
+       now validates numlumps and infotableofs, not just the magic.
+     - Those two fields are little-endian in the WAD; on this big-endian CPU
+       the validation must byte-swap them (as the engine's LONG() does). Raw,
+       the real header's numlumps reads 0x02090000 instead of 2306.
+
+   With a valid header registered the failure became "W_GetNumForName: PNAMES
+   not found", and a probe pinned down why. Reading the first lump's 8 name
+   bytes from the same cartridge address two ways, in the same run:
+
+       BYTE-read : "PLPAPA*"      (how strncpy/memcpy read it)
+       WORD-read : "PLAYPAL"      (32-bit reads, unpacked big-endian)
+
+   truth 50 4C 41 59 50 41 4C 00  P L A Y P A L
+   byte  50 4C 50 41 50 41 0C 2A  P L P A P A . .
+
+   So the N64 PI bus does not service sub-word reads of cartridge space
+   reliably; only 32-bit-aligned word reads return correct data. This is the
+   documented hardware constraint, now confirmed empirically here rather than
+   assumed. (Note the earlier "apparent byte-swap over GDB" caveat was right to
+   distrust — that was a display artifact; this probe reads the CPU's own copy
+   into RAM, so it is authoritative.)
+
+7. THE FIX (next task) — the file layer must not deref cartridge pointers.
+
+   engine/core is 0-diff and does exactly that in two places:
+       w_wad.c:204  strncpy(lump_p->name, fileinfo->name, 8)   // directory
+       w_wad.c:388  memcpy(dest, (byte*) l->handle, l->size)   // lump data
+   both on pointers derived from the cartridge-resident `data`. The WAD is
+   12.4 MB and cannot be copied whole into 4 MB RDRAM, so the two options are:
+     (a) Provide word-safe memcpy/strncpy in the shim (via -Wl,--wrap,memcpy /
+         --wrap,strncpy) that detect a KSEG1 cartridge source and route it
+         through libdragon dma_read() into RAM. Keeps engine/core 0-diff; costs
+         a source-range branch on every copy.
+     (b) WHD-style: build a reduced, RAM-resident WAD offline (the same asset
+         work 20.7 needs for RP2040) so the whole file fits and byte reads are
+         RAM reads.
+   (a) is the smaller change and unblocks the ares 13/13 gate; (b) is the
+   longer-horizon shared-infrastructure play. This is a reviewable unit of work
+   on its own and is left for the next task.
+
+APPENDIX — the original ISViewer investigation (unresolved, now lower priority)
 
    With both fixes the failure moved twice, each time further into the engine:
 

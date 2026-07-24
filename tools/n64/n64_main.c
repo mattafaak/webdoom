@@ -59,25 +59,40 @@ int main(void)
     // registered and IdentifyVersion() reports an indeterminate game mode.
 #if N64_WAD_LEN > 0
     {
-        /* Locate the WAD by scanning cartridge space for its magic rather than
-           trusting a compile-time offset. n64tool's --offset is expressed in
-           N64 memory terms, not file position, so the WAD does not land where
-           a naive byte offset would predict — an earlier build looked at
-           0xB0200000 and found zeroes while the WAD sat at 0xB00433F0.
-           n64tool aligns payloads (we pass --align 256), and the WAD always
-           follows the ELF, so a coarse aligned scan over the low megabyte
-           finds it in a few thousand reads and stays correct as the shim's
-           size changes. */
+        /* Locate the WAD by scanning cartridge space for a VALID header, not
+           just the magic. n64tool's --offset is in N64 memory terms and its
+           payloads are 256-aligned, so a compile-time file offset does not
+           predict the landing address. But matching magic alone is not enough
+           either: w_wad.c contains the string literals "IWAD"/"PWAD" (used by
+           strncmp in W_AddFile), so those bytes appear in the shim's rodata
+           BEFORE the real WAD. An unvalidated scan finds a rodata literal
+           first and registers garbage — which is exactly what produced the
+           "PNAMES not found" failure.
+
+           A real header is magic + numlumps + infotableofs. numlumps and
+           infotableofs are stored LITTLE-ENDIAN (WAD native) — the magic is a
+           byte string so it matches directly, but the two int32 fields read
+           byte-swapped on this big-endian CPU, exactly as the engine's LONG()
+           macro swaps them. Both must be in range after swapping:
+           0 < numlumps < 20000 and 0 < infotableofs < N64_WAD_LEN. The rodata
+           literals are followed by unrelated bytes and fail this, so the scan
+           skips them. (An earlier version compared without swapping and
+           rejected the real header, whose raw big-endian numlumps reads as
+           0x02090000 rather than 2306.) */
         const unsigned int   base = 0xA0000000u + 0x10000000u;   /* KSEG1 cart domain 1 */
         const byte* wad  = NULL;
         unsigned int off;
         for (off = 0x1000; off < 0x400000u; off += 0x100) {
             const volatile unsigned int* p = (const volatile unsigned int*)(base + off);
-            if (*p == 0x49574144u) {                    /* "IWAD" big-endian */
-                wad = (const byte*)(base + off);
-                break;
-            }
-            if (*p == 0x50574144u) {                    /* "PWAD" */
+            if (*p != 0x49574144u && *p != 0x50574144u)  /* "IWAD" / "PWAD" */
+                continue;
+            {
+                unsigned int numlumps = __builtin_bswap32(p[1]);  /* WAD is LE */
+                unsigned int infoofs  = __builtin_bswap32(p[2]);
+                if (numlumps == 0 || numlumps >= 20000u)
+                    continue;                            /* rodata literal, not a header */
+                if (infoofs == 0 || infoofs >= (unsigned int)N64_WAD_LEN)
+                    continue;
                 wad = (const byte*)(base + off);
                 break;
             }
