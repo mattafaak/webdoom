@@ -68,3 +68,9 @@ int  Web_FileLen(const char* path)                          { (void)path; return
 void Web_FileCopy(const char* path, byte* dest)             { (void)path; (void)dest; }
 void Web_FileCopyN(const char* path, byte* dest, int maxlen){ (void)path; (void)dest; (void)maxlen; }
 void Web_FileWrite(const char* path, byte* data, int len)   { (void)path; (void)data; (void)len; }
+
+/* newlib syscall stub: M_ScreenShot() (m_misc.c) calls access() to find an
+   unused screenshot filename. There is no filesystem here; report every path
+   as absent so the screenshot path resolves without a link error. Screenshots
+   are not a bring-up concern. */
+int access(const char* path, int mode) { (void)path; (void)mode; return -1; }

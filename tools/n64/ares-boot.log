@@ -1,6 +1,7 @@
 ares boot attempt — task 20.4b / 20.4c evidence
 ================================================
-STATUS 2026-07-23 (supersedes the earlier "ares SIGSEGV" and "NULL WAD" notes)
+STATUS 2026-07-24 — THE N64 PORT BOOTS AND RUNS DOOM (see §7).
+(supersedes the earlier "ares SIGSEGV" and "NULL WAD" notes)
 
 1. RESOLVED — ares does not crash.
    The original "SIGSEGV before any output" finding was purely a missing X
@@ -95,23 +96,30 @@ STATUS 2026-07-23 (supersedes the earlier "ares SIGSEGV" and "NULL WAD" notes)
    distrust — that was a display artifact; this probe reads the CPU's own copy
    into RAM, so it is authoritative.)
 
-7. THE FIX (next task) — the file layer must not deref cartridge pointers.
+7. FIXED — word-safe cartridge reads (option a), and the port now runs.
 
-   engine/core is 0-diff and does exactly that in two places:
+   engine/core is 0-diff and byte-derefs cartridge pointers in two places:
        w_wad.c:204  strncpy(lump_p->name, fileinfo->name, 8)   // directory
        w_wad.c:388  memcpy(dest, (byte*) l->handle, l->size)   // lump data
-   both on pointers derived from the cartridge-resident `data`. The WAD is
-   12.4 MB and cannot be copied whole into 4 MB RDRAM, so the two options are:
-     (a) Provide word-safe memcpy/strncpy in the shim (via -Wl,--wrap,memcpy /
-         --wrap,strncpy) that detect a KSEG1 cartridge source and route it
-         through libdragon dma_read() into RAM. Keeps engine/core 0-diff; costs
-         a source-range branch on every copy.
-     (b) WHD-style: build a reduced, RAM-resident WAD offline (the same asset
-         work 20.7 needs for RP2040) so the whole file fits and byte reads are
-         RAM reads.
-   (a) is the smaller change and unblocks the ares 13/13 gate; (b) is the
-   longer-horizon shared-infrastructure play. This is a reviewable unit of work
-   on its own and is left for the next task.
+   tools/n64/cart_read_n64.c wraps memcpy/strncpy (via -Wl,--wrap): a cartridge
+   source is reconstructed from aligned word reads, a RAM source falls through
+   to real libc. With that in place:
+
+       numlumps         = 2306   (all of doom.wad's directory, read correctly)
+       D_DoomMain()     returns  (web-port model: init then return, d_main.c:381)
+       gametic          679 -> 859 -> 1039 and climbing, n64_last_error empty
+
+   So the ROM boots, initialises the whole engine, and D_DoomFrame() drives the
+   attract-mode demos — the simulation runs on the emulated N64, verified live
+   over the GDB stub. Two supporting fixes: an access() newlib stub for
+   M_ScreenShot, and the zone heap raised 512 KB -> 2.5 MB (512 KB ran out at
+   gametic 171; the N64's 4 MB leaves room, ~467 KB free after a 2.5 MB zone).
+
+   Still open, lower priority: video output. i_video_n64 is a software-render
+   stub, so nothing is displayed yet — the sim advances but D_Display's frame
+   is not presented. That is 20.4b's software rasterizer / 20.5's RDP work. The
+   remaining ISViewer silence (below) is now moot for verification, since the
+   GDB stub is the working channel.
 
 APPENDIX — the original ISViewer investigation (unresolved, now lower priority)
 

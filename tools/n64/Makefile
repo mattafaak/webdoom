@@ -41,7 +41,11 @@ $(N64TOOL):
 	gcc -O2 -o $(N64TOOL) $(LIBDRAGON)/tools/n64tool.c
 	@echo "n64tool built"
 
-N64_ZONE_KB ?= 512
+# Zone heap. 512 KB filled during the attract demo and Z_Malloc failed at
+# gametic 171; the N64 has 4 MB RDRAM and non-zone static is ~466 KB, so 2.5 MB
+# leaves ~1 MB for stack and dynamic allocation while giving the sim 5x the
+# room. Override with `make N64_ZONE_KB=…`.
+N64_ZONE_KB ?= 2560
 
 # ── WAD embedding ────────────────────────────────────────────────────────────
 # The IWAD is appended into the ROM at N64_WAD_OFFSET and read IN PLACE from
@@ -122,10 +126,17 @@ LDSCRIPT := $(LIBDRAGON)/n64.ld
 # That assert fires a `syscall 0x1` before main() ever runs, so the ROM dies in
 # libdragon's crash inspector having produced no output at all — which is
 # exactly what we spent a while blaming on the emulator.
+# --wrap,memcpy / --wrap,strncpy route the engine's two cartridge byte-copies
+# (w_wad.c:204 directory names, :388 lump data) through cart_read_n64.c, which
+# rebuilds each byte from aligned word reads. Required because the N64 PI bus
+# corrupts sub-word reads of cartridge space (task 20.4c). RAM→RAM copies fall
+# straight through to the real libc routine.
 LDFLAGS  := -mabi=o64 -march=vr4300 -mtune=vr4300 \
              -L$(N64_INST)/mips64-elf/lib \
              -Wl,--gc-sections \
              -Wl,--wrap,__do_global_ctors \
+             -Wl,--wrap,memcpy \
+             -Wl,--wrap,strncpy \
              -Wl,-T$(LDSCRIPT)
 LDLIBS   := -ldragon -lm -ldragonsys -lc
 
@@ -151,6 +162,7 @@ PLAT_SRC := n64_main.c \
             i_sound_n64.c \
             d_net_n64.c \
             files_n64.c \
+            cart_read_n64.c \
             perf_n64.c
 
 SRC := $(CORE_SRC) $(PLAT_SRC)

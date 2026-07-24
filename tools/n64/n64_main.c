@@ -37,6 +37,12 @@ static const char* n64_argv[] = {
     NULL
 };
 
+/* Defined in d_main.c. Only engine/web/web.h declares it, and that header pulls
+ * in emscripten types we do not want on this target — declare it locally.
+ * numlumps lives in w_wad.c. */
+void D_DoomFrame(void);
+extern int numlumps;
+
 int main(void)
 {
     // ── Step 1: UART output to ares ISViewer ────────────────────────────────
@@ -133,9 +139,23 @@ int main(void)
         for (;;) {}
     }
 
+    // D_DoomMain runs engine init and RETURNS in this port (the game loop was
+    // split out — d_main.c:381). The startup banner is printed during init.
     D_DoomMain();
+    debugf("N64 webdoom: D_DoomMain returned; %d lumps; driving frames\n",
+           numlumps);
 
-    // D_DoomMain never returns in normal operation; spin if it does.
-    for (;;) {}
+    // Drive the simulation. Each D_DoomFrame() advances one tic (attract-mode
+    // title → demo playback). gametic increments as it runs — the proof, over
+    // the GDB stub, that the port executes DOOM's simulation on hardware, not
+    // just that init succeeded. Video output is i_video_n64's job (still a
+    // software-render stub at this milestone); the sim runs regardless.
+    for (;;) {
+        D_DoomFrame();
+    }
     return 0;
 }
+
+/* D_DoomFrame is defined in d_main.c but only declared in engine/web/web.h,
+   which pulls in emscripten types we do not want here — declare it locally. */
+void D_DoomFrame(void);
