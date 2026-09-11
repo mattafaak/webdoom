@@ -29,3 +29,5 @@ soundfonts/*.sf3
 86box.cfg
 nvr/
 assets/
+# per-leg logs kept by run-tests.sh when a leg fails
+tools/.suite-logs/

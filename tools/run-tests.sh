@@ -1,277 +1,370 @@
 #!/bin/bash
-# webdoom test suite. Requires: built engine, wads fetched, chrome.
-# Starts its own throwaway server for the browser suites.
-set -eo pipefail
+# webdoom test suite — leg-isolating runner.
+#
+# WHY THIS SHAPE
+# --------------
+# The previous runner was 254 lines of `set -eo pipefail` with ~32 legs in a
+# straight line.  It aborted at the first red, so a failure at leg 3 left the
+# other 29 unverified AND UNMENTIONED: the operator saw one error and nothing
+# about the rest of the suite.  That is the project's own doctrine violated by
+# its top-level runner — "could not run" and "ran and passed" must not produce
+# the same word, and here they produced no word at all.
+#
+# Every leg now runs through tools/gate.sh, which executes the command outside
+# any pipeline so its exit code is exact (the six-times pipe-exit trap), keeps
+# the untrimmed log, and prints a trimmed view.  A failing leg is recorded and
+# the run continues.  The suite ends with a table naming every leg, its verdict,
+# its duration and the count it reported about itself.
+#
+# A leg whose prerequisites are absent is SKIPPED WITH A REASON rather than
+# failing confusingly or passing silently, and the final verdict always states
+# the skip count — so a run with skips can never read as a clean pass.
+# --require-complete turns any skip into a failure, for the host that is
+# supposed to be able to run everything.
+#
+# usage:
+#   tools/run-tests.sh                 # full tier (everything)
+#   tools/run-tests.sh --quick         # no WADs, no build, no browser — clone-safe
+#   tools/run-tests.sh --only ID [...] # run just these legs
+#   tools/run-tests.sh --list          # print the leg registry and exit
+#   tools/run-tests.sh --require-complete   # a SKIP is a failure
+#
+# Copyright (C) 2026, GPL-2.0-or-later.
+
+# Deliberately NOT -e: this runner must survive a failing leg in order to
+# report it and everything after it.  Every command that can fail is either
+# guarded with `|| rc=$?` or is a leg.
+set -uo pipefail
 cd "$(dirname "$0")/.."
+REPO="$PWD"
 
-echo "── lint (clang-format + JS syntax) ─────────────────────"
-bash tools/lint.sh
+TIER=full
+REQUIRE_COMPLETE=0
+ONLY=()
+LIST=0
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --quick)            TIER=quick; shift ;;
+        --full)             TIER=full; shift ;;
+        --only)             ONLY+=("$2"); shift 2 ;;
+        --list)             LIST=1; shift ;;
+        --require-complete) REQUIRE_COMPLETE=1; shift ;;
+        -h|--help)          sed -n '28,36p' "$0"; exit 0 ;;
+        *) echo "unknown argument '$1' (see --list, --help)" >&2; exit 2 ;;
+    esac
+done
 
-# ── artifact freshness (task 21.5) ───────────────────────────────────────────
-# This suite builds build-invariants/, build-fakeflat/ and build-potato/ but
-# NOT build/ — yet smoke, the sim and render goldens, size-ledger, music, seek
-# and demo-verify all load build/doom.js.  Without this leg a source edit that
-# was never compiled passes the entire suite, and size-ledger (below) measures a
-# stale wasm against the budget.  The same check covers the two native reference
-# binaries the fuzz gates use; nat-doom was found 6 engine/core sources stale on
-# 2026-09-11, so the ASan gate had been green against code no longer in the tree.
-# RED-PROOF: touch engine/core/r_main.c → this leg FAILS naming the file.
-echo "── artifact freshness (build/ + native references vs sources) ──"
-node tools/artifact-freshness.mjs --all
+LOGDIR="$(mktemp -d -t webdoom-suite-XXXXXX)"
+SUMMARY="$LOGDIR/summary.tsv"
+: > "$SUMMARY"
 
-echo "── archaeology drift (doc figures == manifest == script) "
-bash tools/archaeology/verify-all.sh
+# ── prerequisite probes ──────────────────────────────────────────────────────
+# Each returns 0 when satisfied; the reason string is what the table prints.
+IWADS=(doom.wad doom2.wad tnt.wad plutonia.wad)
+have_build()   { [ -f build/doom.js ] && [ -f build/doom.wasm ]; }
+have_wad()     { local w; for w in "${IWADS[@]}"; do [ -f "wads/lib/$w" ] || return 1; done; }
+have_native()  { [ -x tools/native-sanitize/nat-doom ]; }
+have_gcc()     { command -v gcc >/dev/null 2>&1; }
+have_browser() { command -v "${CHROME_BIN:-google-chrome-stable}" >/dev/null 2>&1 || [ -x /opt/google/chrome/chrome ]; }
+have_firefox() { [ -x /usr/bin/firefox ]; }
+have_emsdk()   { [ -x "${EMSDK_DIR:-$HOME/projects/bee-kettle-doom/emsdk}/upstream/emscripten/emcc" ]; }
+have_baseline(){ [ -f "tools/golden/browser-pipeline-$(hostname).json" ]; }
 
-echo "── state-machine edge↔test coverage (static check) ─────"
-node tools/check-state-machine.mjs
+need_reason() {   # need_reason <tag> -> prints why it is unmet
+    case "$1" in
+        build)    echo "build/doom.js absent (run: source tools/emsdk-env.sh && make -C engine)" ;;
+        wad)      echo "IWADs absent (run: tools/fetch-wads.sh)" ;;
+        native)   echo "nat-doom absent (run: make -C tools/native-sanitize)" ;;
+        gcc)      echo "gcc not on PATH" ;;
+        browser)  echo "Chrome not found (set CHROME_BIN)" ;;
+        firefox)  echo "/usr/bin/firefox not found" ;;
+        emsdk)    echo "emsdk not found (run: tools/setup-emsdk.sh)" ;;
+        baseline) echo "no browser-pipeline baseline for host $(hostname)" ;;
+        *)        echo "unmet prerequisite '$1'" ;;
+    esac
+}
+need_met() {
+    case "$1" in
+        build) have_build ;; wad) have_wad ;; native) have_native ;; gcc) have_gcc ;;
+        browser) have_browser ;; firefox) have_firefox ;; emsdk) have_emsdk ;;
+        baseline) have_baseline ;;
+        *) return 1 ;;
+    esac
+}
 
-echo "── size ledger (doom.wasm budget + README KB gate) ─────"
-node tools/archaeology/size-ledger.mjs
-
-echo "── engine smoke (doom, doom2) ──────────────────────────"
-node tools/smoke-test.mjs doom.wad 700 | tail -2
-node tools/smoke-test.mjs doom2.wad 1100 | tail -2
-
-# ── music backends (headless pump-chain / RMS gates) ─────────────────────────
-# opl-mode: OPL2 (9-voice mono) vs OPL3 (18-voice stereo) toggle (task 17.1).
-# gm-frames: GM/SoundFont pump chain + DMXGUS mapping (17.2a/17.3). Both run
-# headless against build/doom.js — no browser needed.
-echo "── music backends (OPL2/OPL3 toggle, GM/GUS pump) ──────"
-node tools/opl-mode-test.mjs doom.wad | tail -1
-node tools/gm-frames-test.mjs doom.wad | tail -1
-
-# ── invariant build (primary sim-safety gate) ────────────────────────────────
-# The invariant build compiles with -DWEBDOOM_INVARIANTS into a *separate*
-# artifact dir (build-invariants/) so the shipping build/ artifact is NEVER
-# touched.  This gate is stronger than the golden-trace gate below:
-#   • An assert names the broken invariant at the call site (e.g. p_tick.c:85).
-#   • A golden diff is a downstream symptom — it fires only after the full demo
-#     runs and gives no indication of *which* invariant was violated.
-# See docs/playsim.md §16.2 for the proof: both injection experiments showed
-# the assert naming the exact source location vs. a hash mismatch with no cause.
-echo "── invariant build (sim-safety gate) ───────────────────"
-source tools/emsdk-env.sh
-(cd engine && make -j8 EXTRA_CFLAGS=-DWEBDOOM_INVARIANTS BUILD=../build-invariants OUT=../build-invariants/doom.js 2>&1 | tail -3)
-node tools/demo-test.mjs --build-dir build-invariants | tail -2
-
-echo "── differential fuzz (fast tier: 20 seeds, parallel 8) ─"
-# Fast CI tier: ~1 min. Fails the suite immediately on any divergence (set -eo pipefail).
-# Full / release tier: node tools/fuzz/run-fuzz.mjs --seeds 1000 --parallel 8  (~30 min)
-# Drift-proof test: FUZZ_FORCE_DIVERGE=1 node tools/fuzz/run-fuzz.mjs --seeds 1 --parallel 1
-node tools/fuzz/run-fuzz.mjs --seeds 20 --parallel 8 --require-native
-
-echo "── demo compatibility (golden traces) ──────────────────"
-node tools/demo-test.mjs | tail -2
-
-echo "── render goldens (per-tic framebuffer hashes) ─────────"
-node tools/demo-test.mjs --render | tail -2
-
-# ── low-detail render goldens (task 14.2b, wired 21.6) ───────────────────────
-# The 13 *-render-low.json goldens were committed and then gated by nothing:
-# --low-detail appeared in demo-test.mjs and in no runner.  A golden family with
-# no runner is maintained by nobody and proves nothing.  It also made the
-# `--render-low` typo (which silently ran the SIM suite and printed a 13-demo
-# PASS) look like a plausible invocation.
-# RED-PROOF: corrupt a *-render-low.json → this leg FAILS, the 320 vanilla
-# render goldens above stay green.
-echo "── low-detail render goldens (web_set_detail path) ─────"
-node tools/demo-test.mjs --render --low-detail | tail -2
-
-# ── wide render goldens (854-px Hor+ per-tic hashes, task 18.2c) ─────────────
-# One bucket at W=854 (the compile-time cap and only UI-exposed widescreen
-# width).  web_set_wide(854) → setblocks=11 → Hor+ full-width render.
-# RED-PROOF: modify any wide-path pixel draw → this leg fails, 320-px gate above stays green.
-echo "── wide render goldens (854-px Hor+) ───────────────────"
-node tools/demo-test.mjs --render-wide | tail -2
-
-# ── sim-invariance gate (wide ENABLED, must match existing sim goldens) ───────
-# Proves wide mode does not perturb game logic (P_Random, player state, etc.).
-# Assert: screenwidth > 320 during run.  Compare traces to standard sim goldens.
-echo "── sim-invariance gate (wide ENABLED, traces match sim goldens) ─"
-node tools/demo-test.mjs --sim-wide | tail -2
-
-# ── fakeflat render goldens (20.3a: WEBDOOM_FAKEFLAT toggle) ─────────────────
-# Separate build (build-fakeflat/) compiled with -DWEBDOOM_FAKEFLAT.
-# Dedicated golden set (*-render-fakeflat.json): vanilla render goldens (-render.json)
-# are never modified by this leg.
-# Toggle-off byte-identity: build/doom.wasm md5 must match master (proven via #line directive).
-# RED-PROOF: any regression in R_MapPlane fake-flat path fails this leg while
-# the vanilla render leg above stays green.
-echo "── fakeflat build + render goldens (20.3a WEBDOOM_FAKEFLAT) ───"
-(cd engine && make -j8 EXTRA_CFLAGS=-DWEBDOOM_FAKEFLAT BUILD=../build-fakeflat OUT=../build-fakeflat/doom.js 2>&1 | tail -3)
-node tools/demo-test.mjs --render-fakeflat | tail -2
-
-# ── potato render goldens (20.3c: WEBDOOM_POTATO toggle) ─────────────────────
-# Separate build (build-potato/) compiled with -DWEBDOOM_POTATO.
-# Dedicated golden set (*-render-potato.json): vanilla render goldens (-render.json)
-# are never modified by this leg.
-# Toggle-off byte-identity: build/doom.wasm md5 must match master (proven via #line directive).
-# RED-PROOF: any regression in R_DrawColumnPotato path fails this leg while
-# the vanilla render leg above stays green.
-echo "── potato build + render goldens (20.3c WEBDOOM_POTATO) ───────"
-(cd engine && make -j8 EXTRA_CFLAGS=-DWEBDOOM_POTATO BUILD=../build-potato OUT=../build-potato/doom.js 2>&1 | tail -3)
-node tools/demo-test.mjs --render-potato | tail -2
-
-# ── 18.4 exactness artillery: sprite-edge witness + mixed-width netgame ──────
-echo "── sprite-edge witness (r_things cull pin, 320+854) ────"
-node tools/sprite-witness-test.mjs | tail -1
-
-echo "── mixed-width netgame (P0=320 vs P1=854 per-tic hash) ─"
-node tools/mixed-width-net-test.mjs | tail -1
-
-echo "── netplay determinism (2p, 4p) ────────────────────────"
-node tools/net-test.mjs 2 | tail -2
-node tools/net-test.mjs 4 | tail -2
-
-echo "── drop-in determinism (coop, deathmatch) ──────────────"
-node tools/join-test.mjs | tail -1
-node tools/join-test.mjs dm | tail -1
-
-echo "── spectator links (19.5: catch-up determinism + injection no-op) ──"
-node tools/spectate-test.mjs | tail -1
-node tools/spectate-inject-test.mjs | tail -1
-
-echo "── drop-in edge cases + churn ──────────────────────────"
-node tools/edge-test.mjs | tail -1
-node tools/churn-test.mjs | tail -1
-
-echo "── sw.js precache integrity (ws-003 drift prevention) ──"
-node tools/check-sw-precache.mjs
-
-echo "── static HTTP path fuzz (ws-005 companion) ────────────"
-node tools/http-fuzz-test.mjs | tail -1
-
-echo "── demo store fuzz + abuse (19.2 caps enforcement) ─────"
-node tools/demo-store-fuzz-test.mjs | tail -1
-
-echo "── demo seek equivalence (19.3 scrubber gate) ──────────"
-node tools/demo-seek-test.mjs | tail -2
-
-echo "── demo verify + divergence (19.4: 13 goldens + doctored + hostile) ─"
-node tools/demo-verify-test.mjs | tail -3
-
-echo "── net fuzz + abuse (malformed/hostile clients) ────────"
-node tools/net-fuzz-test.mjs | tail -1
-
-echo "── adversarial map gate (tenet-4: 0 sanitizer reports) ─"
-# Gate: run 30 adversarial map seeds against nat-doom ASan build.
-# Exit 0 iff all results are {clean | I_Error}; exit 1 on any ASan/UBSan hit.
-# Reproduce: node tools/fuzz/run-map-fuzz.mjs --adversarial-gate [--build-dir build-test]
-node tools/fuzz/run-map-fuzz.mjs --adversarial-gate | tail -4
-
-echo "── browser (SP gate + 2-tab multiplayer) ───────────────"
-DOOM_PORT=8668 DOOM_HOST=127.0.0.1 node server/serve.js & SRV=$!
-trap "kill $SRV 2>/dev/null || true" EXIT
-sleep 1
-node tools/browser-test.mjs http://127.0.0.1:8668/ | tail -2
-node tools/browser-net-test.mjs http://127.0.0.1:8668/ | tail -1
-node tools/browser-join-test.mjs http://127.0.0.1:8668/ | tail -1
-node tools/persist-test.mjs http://127.0.0.1:8668/ | tail -1
-node tools/browser-resilience-test.mjs http://127.0.0.1:8668/ | tail -2
-node tools/browser-lobby-test.mjs http://127.0.0.1:8668/ | tail -2
-node tools/browser-fire-test.mjs http://127.0.0.1:8668/ /tmp | tail -3
-node tools/browser-ierror-test.mjs http://127.0.0.1:8668/ | tail -1
-node tools/browser-rafdeath-test.mjs http://127.0.0.1:8668/ | tail -1
-node tools/browser-wide-toggle-test.mjs http://127.0.0.1:8668/ | tail -1
-node tools/browser-qol-test.mjs http://127.0.0.1:8668/ | tail -1
-# WAD library features (16.6a import, 16.6b MP-gating) and SoundFont UX (17.2b).
-# Shipped features whose browser tests existed but were never in the suite.
-node tools/browser-wadimport-test.mjs http://127.0.0.1:8668/ | tail -1
-node tools/browser-mp-gating-test.mjs http://127.0.0.1:8668/ | tail -1
-node tools/browser-sf2-test.mjs http://127.0.0.1:8668/ | tail -1
-node tools/browser-offline-test.mjs | tail -2
-node tools/browser-demo-test.mjs http://127.0.0.1:8668/ | tail -2
-
-# ── Insecure-origin CI leg (task 16.5) ────────────────────────────────────────
-# Dedicated port 8674 (hardcoded inside the script per the 12.2b lesson).
-# The script starts its own server (LOG_REQUESTS=1) and its own Chrome instance
-# so it can route http://insecure.test:8674 via --host-resolver-rules.
-# Asserts: (1) navigator.serviceWorker absent, (2) WAD IDB cache round-trip,
-# (3) BufferSink music fallback on real insecure context (no synthetic forcing).
-# RED-PROOF: disable the 16.4 BufferSink fallback in audio.js → this leg fails.
-echo "── browser insecure-origin CI leg (WAD IDB cache + music fallback, real insecure ctx) ──"
-node tools/browser-insecure-test.mjs | tail -1
-
-# ── Music-fallback unit check (audioWorklet=undefined synthetic, secure ctx) ──
-# Dedicated port 8669 per the 12.2b stale-server lesson.
-# Tests the synthetic forcing path (audioWorklet overridden to undefined on
-# localhost) as the unit-level check for the BufferSink fallback in audio.js.
-echo "── browser music-fallback unit check (audioWorklet=undefined, synthetic, secure ctx) ──"
-DOOM_PORT=8669 DOOM_HOST=127.0.0.1 node server/serve.js >/dev/null 2>&1 & _MF_SRV=$!
-trap "kill $SRV 2>/dev/null || true; kill $_MF_SRV 2>/dev/null || true" EXIT
-sleep 1
-node tools/browser-music-fallback-test.mjs http://127.0.0.1:8669/ | tail -1
-kill "$_MF_SRV" 2>/dev/null; wait "$_MF_SRV" 2>/dev/null || true
-
-echo "── browser pipeline baseline comparison ─────────────────"
-# Hostname-gated: compare a fresh browser-pipeline.mjs run against the
-# committed per-host golden.  Unknown hosts SKIP loudly so CI on other
-# machines never silently passes with no data.
-#
-# Dedicated port 8677 — avoids stale-server confusion (12.2b lesson:
-# port 8666 once served an uninstrumented client to the collector).
-#
-# Tolerance band derivation (from baseline run1/run2 variance × 3):
-#   palette/p99      spread=0ms → floor=0.1ms → tol=0.3ms → thr=0.4ms
-#   upload/p99       spread=0ms → floor=0.1ms → tol=0.3ms → thr=0.5ms
-#   raf_duration/p99 spread=0.1ms → tol=0.3ms → thr=1.2ms
-#   raf_interval/p50 spread=0ms → floor=1.0ms → tol=3.0ms → thr=19.7ms
-#   input_lat/p50    spread=0.1ms → floor=0.5ms → tol=1.5ms → thr=9.9ms
-#   input_lat/p99    SKIP — n=35; baseline notes 35–61ms run-to-run spread
-#   worklet          SKIP — n=0 in headless (AudioContext never arms)
-_BP_HOST="$(hostname)"
-_BP_BASELINE="tools/golden/browser-pipeline-${_BP_HOST}.json"
-if [ ! -f "$_BP_BASELINE" ]; then
-    echo "SKIP: no browser-pipeline baseline for host '${_BP_HOST}' — add tools/golden/browser-pipeline-${_BP_HOST}.json to gate this host"
-else
-    DOOM_PORT=8677 DOOM_HOST=127.0.0.1 node server/serve.js >/dev/null 2>&1 & _BP_SRV=$!
-    trap "kill $SRV 2>/dev/null || true; kill $_BP_SRV 2>/dev/null || true" EXIT
-    sleep 1
-    _BP_CURRENT="$(mktemp /tmp/browser-pipeline-current-XXXXXX.json)"
-    node tools/browser-pipeline.mjs --url http://127.0.0.1:8677/ --json > "$_BP_CURRENT"
-    kill "$_BP_SRV" 2>/dev/null; wait "$_BP_SRV" 2>/dev/null || true
-    node tools/browser-pipeline-compare.mjs --baseline "$_BP_BASELINE" --current "$_BP_CURRENT"
-    _BP_RC=$?
-    rm -f "$_BP_CURRENT"
-    if [ "$_BP_RC" -ne 0 ]; then
-        echo "browser pipeline baseline: FAIL (see regression above)"
-        exit 1
-    fi
-    echo "browser pipeline baseline: PASS"
-fi
-
-echo "── firefox smoke (UA + JS execution check) ──────────────"
-# Asserts Firefox UA requests /api/wads, proving:
-#   (1) Firefox loaded the page HTML (DOM fetch of JS modules)
-#   (2) JS executed (lobby.js calls /api/wads to populate the WAD list)
-#   (3) Service worker registered (sw.js was fetched, re-fetched modules)
-# SKIP loudly when firefox binary is absent (CI without Firefox is valid).
-if [ ! -x /usr/bin/firefox ]; then
-    echo "SKIP: /usr/bin/firefox not found"
-else
-    _FF_LOG="$(mktemp /tmp/ff-smoke-XXXXXX.log)"
-    _FF_PROFILE="$(mktemp -d /tmp/ff-profile-XXXXXX)"
-    DOOM_PORT=8675 DOOM_HOST=127.0.0.1 LOG_REQUESTS=1 node server/serve.js 2>"$_FF_LOG" >/dev/null &
-    _FF_SRV=$!
-    sleep 1
-    # Run Firefox headless; let it execute JS for 9 s, then kill.
-    # No --screenshot: we need JS to run async (sw registration + /api/wads fetch)
-    # before the process exits.  timeout rc=124 is expected and suppressed.
-    timeout 11 firefox --headless --no-remote --profile "$_FF_PROFILE" \
-        http://127.0.0.1:8675/ >/dev/null 2>&1 || true
-    sleep 1  # allow in-flight requests to complete
-    kill "$_FF_SRV" 2>/dev/null; wait "$_FF_SRV" 2>/dev/null || true
-    rm -rf "$_FF_PROFILE"
-    _FF_UA_LINES="$(grep -c "Firefox/" "$_FF_LOG" 2>/dev/null || echo 0)"
-    _FF_WADS_LINES="$(grep -c "/api/wads" "$_FF_LOG" 2>/dev/null || echo 0)"
-    echo "  Firefox UA requests: ${_FF_UA_LINES}  /api/wads requests: ${_FF_WADS_LINES}"
-    rm -f "$_FF_LOG"
-    if [ "$_FF_UA_LINES" -gt 0 ] && [ "$_FF_WADS_LINES" -gt 0 ]; then
-        echo "firefox smoke: PASS — Firefox UA confirmed, JS executed (/api/wads fetched)"
+# ── the headline a leg reported about itself ─────────────────────────────────
+# A FAILING LEG MUST NOT WEAR A PASSING HEADLINE, and a leg's own result line
+# beats its first PASS line — both lessons paid for elsewhere in this mesh.  So
+# a red prefers a FAIL/Error line and a green prefers a PASS/summary line;
+# gate.sh's own "GATE x rc=" line is never the headline.
+headline() {
+    local log="$1" rc="$2" h=""
+    [ -s "$log" ] || { echo "(no output)"; return; }
+    if [ "$rc" -ne 0 ]; then
+        h="$(grep -aE '(^|[^A-Za-z])(FAIL|GATE FAIL|FATAL|Error:|error:)' "$log" | grep -av '^GATE ' | tail -1)"
     else
-        echo "firefox smoke: FAIL — Firefox UA=${_FF_UA_LINES} /api/wads=${_FF_WADS_LINES}"
+        h="$(grep -aE '^(PASS|GATE PASS|ALL PASS)' "$log" | grep -av '^GATE ' | tail -1)"
+    fi
+    [ -n "$h" ] || h="$(grep -av '^GATE ' "$log" | grep -av '^[[:space:]]*$' | tail -1)"
+    # collapse whitespace and clip for the table
+    echo "$h" | tr -s '[:space:]' ' ' | cut -c1-96
+}
+
+PASSED=0; FAILED=0; SKIPPED=0
+FAILED_IDS=()
+
+# leg <id> <needs-csv|-> <description> -- <command...>
+leg() {
+    local id="$1" needs="$2" desc="$3"; shift 3
+    [ "${1:-}" = "--" ] && shift
+
+    if [ "${#ONLY[@]}" -gt 0 ]; then
+        local want=0 o
+        for o in "${ONLY[@]}"; do [ "$o" = "$id" ] && want=1; done
+        [ "$want" = "1" ] || return 0
+    fi
+
+    local t
+    for t in ${needs//,/ }; do
+        [ "$t" = "-" ] && continue
+        if ! need_met "$t"; then
+            local why; why="$(need_reason "$t")"
+            printf '\n── %-26s SKIP — %s\n' "$id" "$why"
+            printf '%s\tSKIP\t0\t%s\n' "$id" "$why" >> "$SUMMARY"
+            SKIPPED=$((SKIPPED + 1))
+            return 0
+        fi
+    done
+
+    printf '\n── %-26s %s\n' "$id" "$desc"
+    local log="$LOGDIR/$id.log" rc=0 t0 t1
+    t0=$(date +%s)
+    bash tools/gate.sh --tail 2 --log "$log" "$id" -- "$@" || rc=$?
+    t1=$(date +%s)
+    local secs=$((t1 - t0)) head; head="$(headline "$log" "$rc")"
+    if [ "$rc" -eq 0 ]; then
+        PASSED=$((PASSED + 1))
+        printf '%s\tPASS\t%s\t%s\n' "$id" "$secs" "$head" >> "$SUMMARY"
+    else
+        FAILED=$((FAILED + 1)); FAILED_IDS+=("$id")
+        printf '%s\tFAIL(rc=%s)\t%s\t%s\n' "$id" "$rc" "$secs" "$head" >> "$SUMMARY"
+        mkdir -p "$REPO/tools/.suite-logs"
+        cp "$log" "$REPO/tools/.suite-logs/$id.log" 2>/dev/null || true
+    fi
+}
+
+# ── throwaway servers ────────────────────────────────────────────────────────
+# Readiness is polled, never slept for: a fixed sleep means the test proceeds
+# against whatever is on that port, which is how a stale server once served an
+# uninstrumented client to the collector (the 12.2b lesson).  Ownership of the
+# port is asserted in task 21.7.
+SERVERS=()
+serve_start() {   # serve_start <port>
+    local port="$1" i
+    DOOM_PORT="$port" DOOM_HOST=127.0.0.1 node server/serve.js >"$LOGDIR/server-$port.log" 2>&1 &
+    local pid=$!
+    SERVERS+=("$pid")
+    for i in $(seq 1 60); do
+        if curl -fsS -o /dev/null "http://127.0.0.1:$port/" 2>/dev/null; then return 0; fi
+        kill -0 "$pid" 2>/dev/null || { echo "server on $port died at startup:"; tail -5 "$LOGDIR/server-$port.log"; return 1; }
+        sleep 0.25
+    done
+    echo "server on $port never became ready"; return 1
+}
+serve_stop_all() {
+    local p
+    for p in ${SERVERS[@]+"${SERVERS[@]}"}; do kill "$p" 2>/dev/null; wait "$p" 2>/dev/null; done
+    SERVERS=()
+}
+# ONE trap for every server this run starts — the old runner reassigned the EXIT
+# trap four times, each overwriting the last, and never trapped the firefox leg's
+# server at all.
+cleanup() { serve_stop_all; rm -rf "$LOGDIR"; }
+trap cleanup EXIT INT TERM
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# THE LEG REGISTRY
+#
+# One line per leg: id, prerequisites, description, command.  The id is what
+# --only takes and what the summary table prints.  Compound legs were split so
+# each reports its own verdict — "engine smoke (doom, doom2)" used to be two
+# commands under one heading, and the second was unreachable if the first failed.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# --list reads the registry out of this file.  A discovery that finds almost
+# nothing is a red, not an empty list: the first version of this used a regex
+# that required exactly one space after the id, so column alignment hid 40 of
+# the 50 legs and it reported 10 with no error (the roster-discovery lesson).
+list_legs() {
+    awk '/^[[:space:]]*leg[[:space:]]+[a-z0-9-]+[[:space:]]/ {
+             id = $2; needs = $3;
+             desc = "";
+             if (match($0, /"[^"]*"/)) desc = substr($0, RSTART + 1, RLENGTH - 2);
+             printf "  %-22s %-18s %s\n", id, needs, desc
+         }' "$1"
+}
+if [ "$LIST" = "1" ]; then
+    list_legs "$0"
+    n=$(list_legs "$0" | wc -l)
+    echo "  ($n legs)"
+    if [ "$n" -lt 20 ]; then
+        echo "  FAIL --list: discovered only $n legs; the registry is larger than that" >&2
         exit 1
+    fi
+    exit 0
+fi
+
+echo "webdoom suite — tier: $TIER${ONLY+ }${ONLY[*]-}"
+echo "logs: $LOGDIR"
+
+# ── tier: quick ──────────────────────────────────────────────────────────────
+# Everything here runs on a bare clone: no WADs, no build, no browser.  This is
+# the tier a public CI can actually run (task 24.3).
+leg lint            -    "clang-format + JS syntax + pipe-exit rule" -- bash tools/lint.sh
+leg doc-drift       gcc  "doc figures == claims.json == script output" -- bash tools/archaeology/verify-all.sh
+leg state-machine   -    "lobby edge<->test coverage (static)"      -- node tools/check-state-machine.mjs
+leg sw-precache     -    "sw.js SHELL list <-> app-shell imports"   -- node tools/check-sw-precache.mjs
+leg http-fuzz       -    "static HTTP path attacks (ws-005)"        -- node tools/http-fuzz-test.mjs
+leg demo-store-fuzz -    "demo-store cap enforcement (19.2)"        -- node tools/demo-store-fuzz-test.mjs
+leg net-fuzz        -    "malformed/hostile WebSocket clients"      -- node tools/net-fuzz-test.mjs
+
+if [ "$TIER" = "quick" ]; then
+    QUICK_ONLY=1
+else
+    QUICK_ONLY=0
+fi
+
+if [ "$QUICK_ONLY" = "0" ]; then
+
+# ── artifacts under test are current with their sources (21.4/21.5) ──────────
+leg freshness       build      "build/ + native refs not older than sources" -- node tools/artifact-freshness.mjs --all
+leg size-ledger     build      "doom.wasm budget + README KB three-way"      -- node tools/archaeology/size-ledger.mjs
+
+# ── engine boots and makes sound ─────────────────────────────────────────────
+leg smoke-doom      build,wad  "boots doom.wad headless, 700 frames"   -- node tools/smoke-test.mjs doom.wad 700
+leg smoke-doom2     build,wad  "boots doom2.wad headless, 1100 frames" -- node tools/smoke-test.mjs doom2.wad 1100
+leg opl-mode        build,wad  "OPL2 byte-identical to ref; OPL3 RMS"  -- node tools/opl-mode-test.mjs doom.wad
+leg gm-frames       build,wad  "GM/GUS pump chain + DMXGUS mapping"    -- node tools/gm-frames-test.mjs doom.wad
+
+# ── the sim-safety gate: an assert names the broken invariant at its call site,
+#    which a golden diff cannot do.  It runs BEFORE the goldens for that reason.
+leg build-invariants emsdk     "compile -DWEBDOOM_INVARIANTS"          -- bash tools/build-toggle.sh WEBDOOM_INVARIANTS build-invariants
+leg sim-invariants   wad       "13 demos under armed invariant asserts" -- node tools/demo-test.mjs --build-dir build-invariants
+
+# ── differential + goldens ───────────────────────────────────────────────────
+leg fuzz-diff       native,wad "20 mutated demos: wasm == native"      -- node tools/fuzz/run-fuzz.mjs --seeds 20 --parallel 8 --require-native
+leg sim-goldens     build,wad  "13 demos, per-tic gamestate hashes"    -- node tools/demo-test.mjs
+leg render-goldens  build,wad  "13 demos, per-tic framebuffer hashes"  -- node tools/demo-test.mjs --render
+leg render-low      build,wad  "low-detail render goldens (14.2b)"     -- node tools/demo-test.mjs --render --low-detail
+leg render-wide     build,wad  "854-px Hor+ render goldens (18.2c)"    -- node tools/demo-test.mjs --render-wide
+leg sim-wide        build,wad  "wide ENABLED must match sim goldens"   -- node tools/demo-test.mjs --sim-wide
+
+leg build-fakeflat   emsdk     "compile -DWEBDOOM_FAKEFLAT"            -- bash tools/build-toggle.sh WEBDOOM_FAKEFLAT build-fakeflat
+leg render-fakeflat  wad       "fakeflat render goldens (20.3a)"       -- node tools/demo-test.mjs --render-fakeflat
+leg build-potato     emsdk     "compile -DWEBDOOM_POTATO"              -- bash tools/build-toggle.sh WEBDOOM_POTATO build-potato
+leg render-potato    wad       "potato render goldens (20.3c)"         -- node tools/demo-test.mjs --render-potato
+
+leg sprite-witness  build,wad  "r_things.c:530 cull pin, 320 + 854"    -- node tools/sprite-witness-test.mjs
+
+# ── netcode determinism ──────────────────────────────────────────────────────
+leg mixed-width-net build,wad  "P0=320 vs P1=854 per-tic hash"         -- node tools/mixed-width-net-test.mjs
+leg net-2p          build,wad  "2 real wasm clients through the relay" -- node tools/net-test.mjs 2
+leg net-4p          build,wad  "4 real wasm clients through the relay" -- node tools/net-test.mjs 4
+leg join-coop       build,wad  "drop-in determinism, co-op"            -- node tools/join-test.mjs
+leg join-dm         build,wad  "drop-in determinism, deathmatch"       -- node tools/join-test.mjs dm
+leg spectate        build,wad  "spectator catch-up determinism (19.5)" -- node tools/spectate-test.mjs
+leg spectate-inject build,wad  "spectator injection is a no-op"        -- node tools/spectate-inject-test.mjs
+leg edge            build,wad  "drop-in edge cases"                    -- node tools/edge-test.mjs
+leg churn           build,wad  "connect/disconnect churn"              -- node tools/churn-test.mjs
+
+# ── demo tooling ─────────────────────────────────────────────────────────────
+leg demo-seek       build,wad  "scrubber seek == linear replay (19.3)" -- node tools/demo-seek-test.mjs
+leg demo-verify     build,wad  "13 goldens + doctored + hostile (19.4)" -- node tools/demo-verify-test.mjs
+
+# ── tenet 4: the sanitizer IS the gate ───────────────────────────────────────
+leg adversarial-map native,wad "30 adversarial maps, 0 ASan/UBSan reports" -- node tools/fuzz/run-map-fuzz.mjs --adversarial-gate
+
+# ── browser suite ────────────────────────────────────────────────────────────
+# One shared server for the 16 legs that only need a page to load.  Started
+# once, torn down by the single EXIT trap, readiness polled rather than slept.
+if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^persist$'; then
+    if have_browser && have_build && have_wad; then
+        if serve_start 8668; then
+            U=http://127.0.0.1:8668/
+            leg browser-sp        browser,build,wad "title -> menu -> new game -> movement" -- node tools/browser-test.mjs "$U"
+            leg browser-net       browser,build,wad "2 tabs through the lobby into co-op"   -- node tools/browser-net-test.mjs "$U"
+            leg browser-join      browser,build,wad "browser drop-in"                       -- node tools/browser-join-test.mjs "$U"
+            leg persist           browser,build,wad "settings/keybind persistence"          -- node tools/persist-test.mjs "$U"
+            leg browser-resilience browser,build,wad "fetch/sw/visibility/gamepad failures" -- node tools/browser-resilience-test.mjs "$U"
+            leg browser-lobby     browser,build,wad "lobby state machine, 25 edges"         -- node tools/browser-lobby-test.mjs "$U"
+            leg browser-fire      browser,build,wad "PSX fire background + reduced-motion"  -- node tools/browser-fire-test.mjs "$U" /tmp
+            leg browser-ierror    browser,build,wad "I_Error surfaces, no wedge"            -- node tools/browser-ierror-test.mjs "$U"
+            leg browser-rafdeath  browser,build,wad "rAF death recovery"                    -- node tools/browser-rafdeath-test.mjs "$U"
+            leg browser-wide      browser,build,wad "widescreen toggle"                     -- node tools/browser-wide-toggle-test.mjs "$U"
+            leg browser-qol       browser,build,wad "QoL batch + F8 vanilla toggle"         -- node tools/browser-qol-test.mjs "$U"
+            leg browser-wadimport browser,build,wad "user WAD import (16.6a)"               -- node tools/browser-wadimport-test.mjs "$U"
+            leg browser-mp-gating browser,build,wad "local-WAD MP gating (16.6b)"           -- node tools/browser-mp-gating-test.mjs "$U"
+            leg browser-sf2       browser,build,wad "SoundFont UX (17.2b)"                  -- node tools/browser-sf2-test.mjs "$U"
+            leg browser-offline   browser,build,wad "offline single player"                 -- node tools/browser-offline-test.mjs
+            leg browser-demo      browser,build,wad "demo permalink replay (19.2)"          -- node tools/browser-demo-test.mjs "$U"
+            # The old runner gave this its own server on 8669 "per the 12.2b
+            # stale-server lesson".  That lesson was about a STALE server being
+            # picked up; this runner starts its own, polls it ready and tears it
+            # down from one trap, so the shared secure-context server is fine and
+            # the test itself only patches audioWorklet client-side.
+            leg browser-music-fallback browser,build,wad "BufferSink fallback, audioWorklet=undefined" -- node tools/browser-music-fallback-test.mjs "$U"
+            serve_stop_all
+        else
+            echo "SKIP browser suite: could not start a server on 8668"
+            printf 'browser-suite\tSKIP\t0\tcould not start server on 8668\n' >> "$SUMMARY"
+            SKIPPED=$((SKIPPED + 1))
+        fi
+    else
+        echo "SKIP browser suite: prerequisites absent"
+        printf 'browser-suite\tSKIP\t0\tbrowser/build/wad prerequisite absent\n' >> "$SUMMARY"
+        SKIPPED=$((SKIPPED + 1))
     fi
 fi
 
-echo "ALL SUITES PASS"
+# These three own their servers (dedicated ports, per the 12.2b stale-server
+# lesson), so they are ordinary legs.
+leg browser-insecure browser "real insecure origin: IDB WAD cache + music fallback" -- node tools/browser-insecure-test.mjs
+leg browser-pipeline browser,baseline "per-frame JS/GPU cost vs this host's baseline" -- bash tools/pipeline-gate.sh
+leg firefox-smoke    firefox "Firefox UA executes JS and fetches /api/wads" -- bash tools/firefox-smoke.sh
+
+fi   # QUICK_ONLY
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SUMMARY
+# ═══════════════════════════════════════════════════════════════════════════════
+echo
+echo "══════════════════════════════════════════════════════════════════════════════"
+printf '  %-22s %-11s %5s  %s\n' LEG VERDICT SECS "WHAT IT REPORTED"
+echo "  ────────────────────────────────────────────────────────────────────────────"
+while IFS=$'\t' read -r id verdict secs note; do
+    printf '  %-22s %-11s %5s  %s\n' "$id" "$verdict" "$secs" "$note"
+done < "$SUMMARY"
+echo "  ────────────────────────────────────────────────────────────────────────────"
+
+TOTAL=$((PASSED + FAILED + SKIPPED))
+printf '  %d legs: %d passed, %d failed, %d skipped  (tier: %s)\n' \
+       "$TOTAL" "$PASSED" "$FAILED" "$SKIPPED" "$TIER"
+
+# A run that executed no legs is not a pass — the shape this whole round exists
+# to remove (failure mode #3).
+if [ "$TOTAL" -eq 0 ]; then
+    echo "  SUITE VACUOUS: 0 legs ran — check --only ids against --list"
+    exit 1
+fi
+if [ "$FAILED" -gt 0 ]; then
+    echo "  SUITE FAILED: ${FAILED_IDS[*]}"
+    echo "  failing logs kept at tools/.suite-logs/<leg>.log"
+    exit 1
+fi
+if [ "$SKIPPED" -gt 0 ]; then
+    # Never the word "pass" on its own when legs did not run.
+    echo "  SUITE INCOMPLETE: $PASSED passed, $SKIPPED skipped (reasons above)"
+    [ "$REQUIRE_COMPLETE" = "1" ] && { echo "  --require-complete: a skip is a failure"; exit 1; }
+    exit 0
+fi
+echo "  ALL $PASSED LEGS PASS"

@@ -36,11 +36,17 @@ set -uo pipefail        # deliberately NOT -e: we must survive a failing gate
 TAIL_LINES=2
 FAIL_TAIL_LINES=25
 SHOW_FULL=0
+KEEP_LOG=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --tail) TAIL_LINES="$2"; shift 2 ;;
         --full) SHOW_FULL=1; shift ;;
+        # --log FILE keeps the UNTRIMMED log, so a caller (run-tests.sh) can
+        # trim for the reader and still read the gate's own summary line out of
+        # the full output.  Without it a leg runner has to re-implement the
+        # no-pipeline rule this script exists to hold.
+        --log)  KEEP_LOG="$2"; shift 2 ;;
         --) shift; break ;;
         *)
             if [ -z "${LABEL:-}" ]; then LABEL="$1"; shift
@@ -51,7 +57,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -z "${LABEL:-}" ] || [ $# -eq 0 ]; then
-    echo "usage: bash tools/gate.sh [--tail N] [--full] <label> -- <command> [args...]" >&2
+    echo "usage: bash tools/gate.sh [--tail N] [--full] [--log FILE] <label> -- <command> [args...]" >&2
     exit 2
 fi
 
@@ -71,4 +77,7 @@ else
 fi
 
 echo "GATE $LABEL rc=$rc"
+if [ -n "$KEEP_LOG" ]; then
+    cp "$LOG" "$KEEP_LOG" 2>/dev/null || true
+fi
 exit "$rc"
