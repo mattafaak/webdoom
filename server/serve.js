@@ -213,6 +213,24 @@ const server = createServer((req, res) => {
 
 const game = createGame();
 server.on('upgrade', (req, socket, head) => game.upgrade(req, socket, head));
+
+// Without this, a listen failure is an unhandled 'error' event: the process dies
+// with a stack trace, and any harness that spawned it and then slept for a fixed
+// interval carries on talking to WHATEVER ELSE holds that port — a stale server
+// from an earlier run, serving a different build.  That is the 12.2b failure
+// ("port 8666 once served an uninstrumented client to the collector") and the
+// orphaned-server hangs on the 867x range.  Fail loudly and name the port.
+server.on('error', err => {
+    if (err && err.code === 'EADDRINUSE') {
+        console.error(`webdoom: port ${PORT} is already in use on ${HOST} — refusing to start.`);
+        console.error('webdoom: another server (likely orphaned by an earlier test run) owns it.');
+        console.error(`webdoom: find it with:  ss -tlnp 'sport = :${PORT}'`);
+    } else {
+        console.error(`webdoom: listen failed on ${HOST}:${PORT} — ${err?.code ?? ''} ${err?.message ?? err}`);
+    }
+    process.exit(1);
+});
+
 server.listen(PORT, HOST, async () => {
     // one lobby, any route in: LAN and tailnet clients land in the same
     // game because everything relays through this server

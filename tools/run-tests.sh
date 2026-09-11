@@ -166,13 +166,36 @@ leg() {
 # uninstrumented client to the collector (the 12.2b lesson).  Ownership of the
 # port is asserted in task 21.7.
 SERVERS=()
+# Answering on the port is not the same as being OUR server: a stale process from
+# an earlier run answers just as well, and serves a different build.  So the port
+# is checked for OWNERSHIP, not just for a response (task 21.7).
+assert_port_owned() {   # assert_port_owned <port> <pid>
+    if ! command -v ss >/dev/null 2>&1; then
+        echo "  note: ss not available — port ownership NOT verified for $1"
+        return 0
+    fi
+    local owner
+    owner="$(ss -tlnpH "sport = :$1" 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)"
+    if [ -z "$owner" ]; then
+        echo "  note: no listener found for port $1 in ss output — ownership NOT verified"
+        return 0
+    fi
+    [ "$owner" = "$2" ] && return 0
+    echo "  port $1 is held by pid $owner, not the server we started (pid $2)"
+    echo "  a foreign or orphaned server would have been tested instead of this build"
+    echo "  find it with: ss -tlnp 'sport = :$1'"
+    return 1
+}
 serve_start() {   # serve_start <port>
     local port="$1" i
     DOOM_PORT="$port" DOOM_HOST=127.0.0.1 node server/serve.js >"$LOGDIR/server-$port.log" 2>&1 &
     local pid=$!
     SERVERS+=("$pid")
     for i in $(seq 1 60); do
-        if curl -fsS -o /dev/null "http://127.0.0.1:$port/" 2>/dev/null; then return 0; fi
+        if curl -fsS -o /dev/null "http://127.0.0.1:$port/" 2>/dev/null; then
+            assert_port_owned "$port" "$pid" || return 1
+            return 0
+        fi
         kill -0 "$pid" 2>/dev/null || { echo "server on $port died at startup:"; tail -5 "$LOGDIR/server-$port.log"; return 1; }
         sleep 0.25
     done
