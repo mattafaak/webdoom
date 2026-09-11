@@ -350,6 +350,10 @@ leg adversarial-map native,wad "30 adversarial maps, 0 ASan/UBSan reports" -- no
 # at the server; this points a hostile SERVER at the engine, which is the
 # direction that produced the 23.1 out-of-bounds write and had no coverage.
 leg hostile-server  build,wad  "hostile server frames vs the engine (23.8)" -- node tools/hostile-server-test.mjs
+# Hostile lump CONTENT.  wad-import.js validates a WAD's directory well;
+# nothing validated what is inside a lump, and a PWAD lump overrides the
+# IWAD's, so an imported WAD can hand the engine any bytes under a known name.
+leg wad-content-fuzz build,wad "hostile GENMIDI/MUS lump payloads (23.2)" -- node tools/wad-content-fuzz-test.mjs
 
 # ── browser suite ────────────────────────────────────────────────────────────
 # One shared server for the 16 legs that only need a page to load.  Started

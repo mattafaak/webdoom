@@ -26,25 +26,43 @@ export async function loadDoomFont() {
         canvas.leftoff = v.getInt16(4, true);
         const ctx = canvas.getContext('2d');
         const img = ctx.createImageData(w, h);
+        // Bounds are load-bearing here, not defensive dressing.  `o` is an
+        // unvalidated u32 straight out of the lump, and past the end of the
+        // array `bytes[o]` is undefined -- so `top === 0xff` is never true,
+        // `len` is undefined, `o += len + 4` makes o NaN, and `for (;;)` NEVER
+        // TERMINATES.  Reproduced 2026-09-11 with a 64-byte patch whose
+        // columnofs point past the end: 5,000,000 iterations and still going.
+        // This runs on the main thread while the launcher builds the menu
+        // font, so the symptom is a frozen tab before anything renders, with
+        // no error and no way back.
+        let truncated = false;
         for (let x = 0; x < w; x++) {
             let o = v.getUint32(8 + 4 * x, true);
             for (;;) {
+                if (o < 0 || o + 1 >= bytes.length) { truncated = true; break; }
                 const top = bytes[o];
                 if (top === 0xff) break;
                 const len = bytes[o + 1];
+                if (o + 3 + len > bytes.length) { truncated = true; break; }
                 for (let i = 0; i < len; i++) {
                     let idx = bytes[o + 3 + i];
                     if (remapBase !== null && idx >= FONT_RANGE[0] && idx <= FONT_RANGE[1])
                         idx = remapBase + (idx - FONT_RANGE[0]);
                     const p = ((top + i) * w + x) * 4;
-                    img.data[p]     = pal[idx * 3];
-                    img.data[p + 1] = pal[idx * 3 + 1];
-                    img.data[p + 2] = pal[idx * 3 + 2];
+                    if (p < 0 || p + 3 >= img.data.length) continue;   // bogus top
+                    const q = idx * 3;
+                    if (q + 2 >= pal.length) continue;                 // bogus palette index
+                    img.data[p]     = pal[q];
+                    img.data[p + 1] = pal[q + 1];
+                    img.data[p + 2] = pal[q + 2];
                     img.data[p + 3] = 255;
                 }
                 o += len + 4;
             }
         }
+        // Degrade loudly, per the insecure-origin contract: a half-drawn glyph
+        // is better than a frozen tab, but it should not be silent.
+        if (truncated) canvas.truncated = true;
         ctx.putImageData(img, 0, 0);
         return canvas;
     }

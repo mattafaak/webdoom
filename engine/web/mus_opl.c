@@ -331,16 +331,40 @@ static void channel_update (int muschan)
 // --- MUS event processing ----------------------------------------------
 
 // returns tics to wait, or -1 on score end
+// Every read past a group's first byte must be bounded.  The single
+// `ev >= ev_end` check at the top of the loop below admits ONE byte, and the
+// cases consume up to two more; the trailing delay VLQ had no bound at all and
+// would walk the zone heap until it happened on a byte with bit 7 clear.  A MUS
+// lump is WAD-owned data and a PWAD's lump overrides the IWAD's, so this is
+// reachable from a WAD the player imported (task 23.2).
+//
+// The JS twin, client/js/mus2mid.js:99-108, has always bounds-checked its VLQ
+// reader and throws "MUS: unexpected end in delay VLQ"; the C sequencer was the
+// weaker of two implementations of one format.
+static boolean mus_overrun;
+
+static int mus_byte (void)
+{
+    if (ev >= ev_end)
+    {
+        mus_overrun = true;
+        return 0;
+    }
+    return *ev++;
+}
+
 static int run_event_group (void)
 {
     int b, type, chan, delay;
+
+    mus_overrun = false;
 
     for (;;)
     {
         if (ev >= ev_end)
             return -1;
 
-        b = *ev++;
+        b = mus_byte ();
         type = (b >> 4) & 7;
         chan = b & 15;
         dbg_events++;
@@ -348,22 +372,22 @@ static int run_event_group (void)
         switch (type)
         {
         case 0: // release
-            note_off (chan, *ev++ & 0x7f);
+            note_off (chan, mus_byte () & 0x7f);
             break;
         case 1: // play
         {
-            int note = *ev++;
+            int note = mus_byte ();
             if (note & 0x80)
-                ch_lastvol[chan] = *ev++ & 0x7f;
+                ch_lastvol[chan] = mus_byte () & 0x7f;
             note_on (chan, note & 0x7f, ch_lastvol[chan], false);
             break;
         }
         case 2: // pitch bend
-            ch_bend[chan] = *ev++;
+            ch_bend[chan] = mus_byte ();
             channel_update (chan);
             break;
         case 3: // system event
-            switch (*ev++ & 0x7f)
+            switch (mus_byte () & 0x7f)
             {
             case 10:
             case 11:
@@ -375,8 +399,8 @@ static int run_event_group (void)
             break;
         case 4: // controller
         {
-            int ctrl = *ev++ & 0x7f;
-            int val = *ev++ & 0x7f;
+            int ctrl = mus_byte () & 0x7f;
+            int val = mus_byte () & 0x7f;
             switch (ctrl)
             {
             case 0:
@@ -394,16 +418,31 @@ static int run_event_group (void)
         case 6: // score end
             return -1;
         default: // unknown: skip payload
-            ev++;
+            (void) mus_byte ();
             break;
         }
 
+        // A group's payload may have run off the end of the score even though
+        // its first byte was in range.
+        if (mus_overrun)
+            return -1;
+
         if (b & 0x80) // delay follows
         {
+            int vlqbytes = 0;
+
             delay = 0;
             do
             {
-                b = *ev++;
+                b = mus_byte ();
+                if (mus_overrun)
+                    return -1;
+                // Standard VLQ is at most 4 bytes / 28 bits.  Without this the
+                // shift overflows int, delay goes NEGATIVE, and the
+                // `while (tick_accum <= 0)` pump in web_music_render never
+                // terminates.
+                if (++vlqbytes > 4)
+                    return -1;
                 delay = (delay << 7) | (b & 0x7f);
             } while (b & 0x80);
             return delay;
@@ -416,9 +455,21 @@ static int run_event_group (void)
 static void load_bank (void)
 {
     byte* g;
+    int lump;
 
     if (bank_loaded || W_CheckNumForName ("GENMIDI") < 0)
         return;
+    // The lump's LENGTH was never consulted: memcmp read 8 bytes from a lump
+    // that may be shorter, and memcpy then took a fixed 6300 bytes out of it.
+    // REPRODUCED 2026-09-11 with a PWAD whose GENMIDI is exactly the 8-byte
+    // magic: "GENMIDI lump length = 8, about to copy 6300 bytes from it" -- a
+    // 6292-byte overread into adjacent zone memory, used as instrument data.
+    // A PWAD's lump overrides the IWAD's, and PWADs are user-importable
+    // (16.6a).
+    lump = W_GetNumForName ("GENMIDI");
+    if (W_LumpLength (lump) < (int) (8 + sizeof bank))
+        return; // keep the built-in bank rather than garbage
+
     g = W_CacheLumpName ("GENMIDI", PU_STATIC);
     if (memcmp (g, "#OPL_II#", 8) == 0)
     {
