@@ -12,7 +12,10 @@ unverified and unmentioned.
 **Result**: **63 legs — 62 passed, 1 failed, 0 skipped**, ~13 min wall clock.
 
 **End-of-round re-run** (after 21.3, 21.10, 21.12 added eight more legs):
-**71 legs — 70 passed, 1 failed, 0 skipped**. The single red is F1 below.
+**71 legs — 70 passed, 1 failed, 0 skipped**. The single red was F1 below.
+
+**After F1 was root-caused and fixed: 71 legs — 71 passed, 0 failed, 0
+skipped, `--require-complete`, exit 0.** Fully green.
 The table at the bottom is the original 63-leg run, kept as the baseline it was
 taken to be.
 
@@ -34,7 +37,7 @@ This is evidence, not a claim: the table below is the runner's own output.
 
 ## Open reds and findings
 
-### F1 — intermittent timeout flake across the server-spawning tests (OPEN)
+### F1 — a missed-event race in the harness (CLOSED, 6296f2d)
 
 Not one test: across eight observed runs the red moves.
 
@@ -60,9 +63,34 @@ accepts its first connection in **54-58 ms over 10 samples** (sd < 2 ms), while
 these tests wait 600-800 ms before connecting — 10x headroom. The fixed sleeps
 are ugly (task 21.7 replaced them at the suite level) but they are not this.
 
-**Next step**: instrument the wait, not the theory. `serverAlive()` returns a
-bare boolean, so "connection refused", "connected but no welcome" and "welcome
-arrived at 2001 ms" are indistinguishable today. Phase 23, reproduction first.
+**Root cause, found by instrumenting the wait rather than theorising about it.**
+`serverAlive()` returned a bare boolean, so it was made to say which of the
+three outcomes it hit: the socket opened in 0–1 ms (`readyState=1`) and no
+welcome arrived. That read as a server bug. Moving the recording listener to
+**construction time** settled it — the same failing run then logged
+`frames: welcome,roster` while `onceMsg` reported "no welcome within 2000 ms".
+
+The frame had arrived and the wait had missed it. `onceMsg()` attached its
+`ws.on('message')` handler only when CALLED, one or two microtasks after
+`await open(ws)` resolved; a frame landing in that window was emitted to no
+listener and dropped. The server answers immediately on connect, so that window
+is exactly where the answer lives. `edge-test.mjs` carried the same race,
+written independently.
+
+Both now record from socket construction, and `onceMsg` consults that buffer
+before waiting. The buffer is the single source of truth: an arriving frame
+satisfies at most one waiter and leaves the buffer when it does — resolving from
+the buffer while leaving it there would let a later wait match the same frame
+twice, a false pass in the other direction.
+
+    net-fuzz   before: 1 pass / 7 fail of 8      after: 8 pass / 0 fail of 8
+    edge       before: red on ~1 full run in 2   after: 8 pass / 0 fail of 8
+    full suite after: 71/71, exit 0
+
+Blast radius checked, not assumed: of the tools speaking the game protocol
+directly, `browser-lobby-test` runs in the browser, `spectate-test` creates no
+raw sockets, and `spectate-inject-test` polls rather than awaiting a named
+frame. These two were the only instances.
 
 ### F2 — `verify-all.sh --full` is red: perf-009 `__heap_base` (OPEN)
 

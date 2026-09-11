@@ -143,7 +143,7 @@ and `run-tests.sh` never built `build/`, the artifact almost every leg loads.
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
 | 22.1 | Full suite run committed as dated evidence, reds filed as findings | summary table committed; every red has a disposition | 21.x | cc:完了 [b80d729] |
-| 22.2 | Triage: F1 flake, F2 perf-009, F3 wbox baseline, F4 four-host perf gate | each red fixed, promoted to a task, or recorded with an expiry | 22.1 | cc:TODO |
+| 22.2 | Triage: F1 flake, F2 perf-009, F3 wbox baseline, F4 four-host perf gate | each red fixed, promoted to a task, or recorded with an expiry | 22.1 | cc:完了(partial) [6296f2d] — F1 fixed, F3 addressed; F2 and F4 recorded, F4 needs a decision |
 | 22.3 | Node 26.8.1 compatibility capture | drift recorded with the version boundary named | 22.1 | cc:TODO |
 
 ## What round 4 bought, measured
@@ -159,9 +159,13 @@ and `run-tests.sh` never built `build/`, the artifact almost every leg loads.
 
 ## Open findings (see docs/2026-09-11-suite-baseline.md)
 
-- **F1** intermittent timeout flake across the server-spawning tests. Slow
-  server startup is REFUTED by measurement (54–58 ms vs 600–800 ms waits); do
-  not re-open it. Next step is instrumenting the wait, not another hypothesis.
+- **F1** CLOSED [6296f2d]. Not a server flake: `onceMsg()` attached its message
+  listener one or two microtasks after `open` resolved, so the `welcome` the
+  server sends immediately on connect was emitted to no listener and dropped.
+  Two hypotheses died on measurement first (slow startup: 54–58 ms vs 600–800 ms
+  waits; "the server never sends welcome": it does, and the instrumented probe
+  logged `frames: welcome,roster` while the wait timed out). net-fuzz went
+  1/8 → 8/8, edge likewise, and the full suite is **71/71, exit 0**.
 - **F2** `verify-all --full` red: perf-009 `__heap_base` 5,042,320 vs a
   documented 4,721,456 — static data grew ~321 KB. Understand before restamping.
 - **F3** wbox has no gating baseline until one is recorded ON wbox (no repo,
