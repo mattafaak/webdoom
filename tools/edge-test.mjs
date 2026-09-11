@@ -32,13 +32,48 @@ const withTimeout = (p, label) => Promise.race([p, new Promise((_, rej) =>
     setTimeout(() => rej(new Error(`timeout ${AWAIT_MS}ms: ${label}`)), AWAIT_MS).unref())]);
 const open = ws => withTimeout(
     new Promise((res, rej) => { ws.on('open', res); ws.on('error', rej); }), 'ws open');
+// Frames are recorded from the moment the socket exists, and onceMsg consults
+// that buffer before waiting for more.
+//
+// THE RACE THIS FIXES (F1, diagnosed 2026-09-11): the server sends `welcome`
+// the instant a lobby socket connects, but onceMsg attached its listener only
+// when CALLED, one or two microtasks after `await open(ws)` resolved.  A frame
+// arriving in that window was emitted to no listener and dropped, and the wait
+// then timed out against a server that had already answered -- surfacing here
+// as "Error: timeout 20000ms: onceMsg" on ~1 full-suite run in 2.  The same
+// race, independently written, was the whole of net-fuzz-test.mjs's flake.
+function attachBuf(ws) {
+    ws._buf = [];
+    ws._waiters = [];
+    ws.on('message', raw => {
+        let m; try { m = JSON.parse(raw); } catch { return; }
+        ws._buf.push(m);
+        // Each arriving frame satisfies AT MOST ONE waiter, and a satisfied
+        // frame leaves the buffer.  Resolving from the buffer while also
+        // leaving it there would let a later wait match the same frame again,
+        // which is a false pass in a different direction.
+        for (let i = 0; i < ws._waiters.length; i++) {
+            const w = ws._waiters[i];
+            const j = ws._buf.findIndex(w.pred);
+            if (j >= 0) {
+                const hit = ws._buf.splice(j, 1)[0];
+                ws._waiters.splice(i, 1); i--;
+                w.resolve(hit);
+            }
+        }
+    });
+    return ws;
+}
 function onceMsg(ws, pred) {
+    if (!ws._buf) attachBuf(ws);
+    const i = ws._buf.findIndex(pred);
+    if (i >= 0) return Promise.resolve(ws._buf.splice(i, 1)[0]);
     return withTimeout(new Promise(res => {
-        const h = raw => { let m; try { m = JSON.parse(raw); } catch { return; } if (pred(m)) { ws.off('message', h); res(m); } };
-        ws.on('message', h);
+        const w = { pred, resolve: res };
+        ws._waiters.push(w);
     }), 'onceMsg');
 }
-const lobbyJoin = base => { const w = new WebSocket(base + '/ws/lobby'); return w; };
+const lobbyJoin = base => attachBuf(new WebSocket(base + '/ws/lobby'));
 
 // A fake host: 1 real player that starts a session and keeps sealing tics so
 // history accumulates and the session stays alive.
@@ -49,7 +84,7 @@ async function startSession(base, wad = 'doom.wad') {
     lob.send(JSON.stringify({ t: 'params', params: { wad, episode: 1, map: 1, skill: 3, mode: 'coop' } }));
     lob.send(JSON.stringify({ t: 'start' }));
     await onceMsg(lob, m => m.t === 'launch');
-    const g = new WebSocket(base + '/ws/game?slot=0');
+    const g = attachBuf(new WebSocket(base + '/ws/game?slot=0'));
     g.binaryType = 'nodebuffer';
     await open(g);
     let tic = 0, stopped = false;
@@ -91,7 +126,7 @@ async function fifthPlayer() {
     const fillers = [];
     for (let i = 1; i <= 3; i++) {
         const p = await probeJoin(s.base);
-        const g = new WebSocket(s.base + '/ws/game?slot=' + p.slot); g.binaryType = 'nodebuffer';
+        const g = attachBuf(new WebSocket(s.base + '/ws/game?slot=' + p.slot)); g.binaryType = 'nodebuffer';
         await open(g);
         let tic = 0; const loop = () => { const b = Buffer.alloc(12); b.writeUInt32LE(tic++, 0); if (g.readyState === 1) { g.send(b); setTimeout(loop, 28); } }; loop();
         fillers.push({ p, g });
@@ -145,7 +180,7 @@ async function joinAndDrop() {
     // 2-player session
     const host = await startSession(s.base);
     const p1 = await probeJoin(s.base);
-    const g1 = new WebSocket(s.base + '/ws/game?slot=' + p1.slot); g1.binaryType = 'nodebuffer';
+    const g1 = attachBuf(new WebSocket(s.base + '/ws/game?slot=' + p1.slot)); g1.binaryType = 'nodebuffer';
     await open(g1);
     let t1 = 0, alive = true; const loop1 = () => { if (!alive) return; const b = Buffer.alloc(12); b.writeUInt32LE(t1++, 0); if (g1.readyState === 1) g1.send(b); setTimeout(loop1, 28); }; loop1();
     await sleep(800);
