@@ -105,3 +105,71 @@ Applied to root `spec.md` this session:
 4. **Non-goals amended** — retro-hardware test beds sanctioned atlas-first
    (N64, 386, sub-100 MHz MCU); Genesis+Sega CD parked with arithmetic;
    SNES/GBA verdicts unchanged.
+
+---
+
+# Planning round 4 (2026-09-11) — gate integrity
+
+Contract: root `spec.md`, unamended. Opened after an audit found that the gate
+CULTURE was sound and the gate MACHINERY was not, and that the top-level runner
+could not report which of its legs had run. Full findings and the first honest
+baseline in 49 days: `docs/2026-09-11-suite-baseline.md`.
+
+The three that mattered, each verified by reading the code rather than the docs:
+the primary sim AND render goldens auto-recorded a missing golden and printed a
+full-count PASS; `nat-doom` — the reference for both the differential fuzzer and
+the adversarial ASan gate — was 10 engine commits stale and nothing checked;
+and `run-tests.sh` never built `build/`, the artifact almost every leg loads.
+
+## Phase 21: gate integrity
+
+| Task | 内容 | DoD | Depends | Status |
+|------|------|-----|---------|--------|
+| 21.1 | Leg-isolating runner over `tools/gate.sh`: per-leg rc, summary table, tiers (`--quick`/`--only`/`--list`/`--require-complete`) | suite completes past a red and reports every other leg; skips named and counted; 0 legs run is a failure; red-proofed | - | cc:完了 [e4b7d2a] |
+| 21.2 | Close the self-regold holes (`demo-test.mjs` sim + render, `sprite-witness-test.mjs`); coverage asserted against MATRIX | absent golden = named FAIL, never a silent re-record; partial WAD set cannot read green; red-proofed against the OLD file | - | cc:完了 [376e5b6] |
+| 21.3 | Golden provenance: {tool, commit, dirty, build_dir, wasm_md5, reason} at record time; dirty-tree record refused without `--record-reason`; 80 goldens migrated | all 12 golden-consuming gates green with the new key; re-record byte-identical; red-proofed | 21.2 | cc:完了 [bd7a634] |
+| 21.4 | Reference-binary freshness (`nat-doom`, `fs-doom`) asserted and printed by both fuzz gates | gate mode refuses a stale reference by name; provenance printed every run | - | cc:完了 [63a6978] |
+| 21.5 | Build freshness: `build/` asserted current before any leg reads it | an uncompiled source edit fails the suite instead of passing it | - | cc:完了 [63a6978] |
+| 21.6 | Unknown-flag rejection in `demo-test.mjs`; the orphaned `--low-detail` golden family wired | `--render-low` (which ran the SIM suite and printed a 13-demo PASS) exits 2; no golden family without a runner | - | cc:完了 [2bcfb8c] |
+| 21.7 | Port/server ownership: `serve.js` listen-error handler; runner asserts the listening pid is its own child | a squatting server is refused, never tested; red-proofed | 21.1 | cc:完了 [2c929ed] |
+| 21.8 | Vacuous-skip closure: `demo-verify-test`, `lint.sh` C half, emsdk pin, `verify-all` skips | no gate prints a pass with zero observations; every skip named and counted | 21.1 | cc:完了 [7c9775c] |
+| 21.9 | Claim counts computed from `claims.json`, `_summary` gated | coverage line computed not typed; drift fails the doc gate | - | cc:完了 [98f54ae] |
+| 21.10 | browser-pipeline comparator refuses a baseline it cannot compare; wbox single-run baseline archived | 0-of-N comparisons is a FAIL; wbox SKIPs loudly with a reason | 21.1 | cc:完了 [a134fca] |
+| 21.11 | Gate census: transitive reachability + an explicit registry with reasons | 0 orphaned; four real gates wired (native ASan, freestanding 13/13, ro-wad, the 19.4 CLI); red-proofed 3 ways | 21.1 | cc:完了 [26a691a] |
+| 21.12 | Gate 20.3b/20.3d (no golden family — pixel-identity IS the proof) + `toggle-identity-check.mjs` for the ledger's md5 claims | both toggle paths gated; 8/8 ledger md5 claims verified; red-proofed | 21.2 | cc:完了 [40af544] |
+
+## Phase 22: the baseline
+
+| Task | 内容 | DoD | Depends | Status |
+|------|------|-----|---------|--------|
+| 22.1 | Full suite run committed as dated evidence, reds filed as findings | summary table committed; every red has a disposition | 21.x | cc:完了 [b80d729] |
+| 22.2 | Triage: F1 flake, F2 perf-009, F3 wbox baseline, F4 four-host perf gate | each red fixed, promoted to a task, or recorded with an expiry | 22.1 | cc:TODO |
+| 22.3 | Node 26.8.1 compatibility capture | drift recorded with the version boundary named | 22.1 | cc:TODO |
+
+## What round 4 bought, measured
+
+- **71 legs** where there were 32 headings; a red no longer hides the rest.
+- The differential fuzzer and the adversarial ASan gate answer for the CURRENT
+  engine for the first time since 2026-07-22.
+- Four gates that existed and ran nowhere are wired — including the native ASan
+  demo suite `README.md` already advertised.
+- **The build is byte-reproducible**: `build/doom.wasm` rebuilt from a clean
+  tree returns to its documented md5 `c669142745449ff04bd2fef30fa17412`, and so
+  does `build-sbskip`. The ledger said "proven"; now it is re-provable.
+
+## Open findings (see docs/2026-09-11-suite-baseline.md)
+
+- **F1** intermittent timeout flake across the server-spawning tests. Slow
+  server startup is REFUTED by measurement (54–58 ms vs 600–800 ms waits); do
+  not re-open it. Next step is instrumenting the wait, not another hypothesis.
+- **F2** `verify-all --full` red: perf-009 `__heap_base` 5,042,320 vs a
+  documented 4,721,456 — static data grew ~321 KB. Understand before restamping.
+- **F3** wbox has no gating baseline until one is recorded ON wbox (no repo,
+  build or WADs there today).
+- **F4** the four-host perf gate is unrunnable as `spec.md` writes it: pi5 down.
+
+## Phases 23–25 (planned, not started)
+
+Memory safety and hostile input (the server→client and WAD→engine directions
+nobody fuzzed); docs/promises truth-up and the CI claim; dead code, the `web.h`
+contract, and the Phase 20 disposition. Detail in the round-4 plan.

@@ -11,6 +11,11 @@ unverified and unmentioned.
 **Command**: `bash tools/run-tests.sh --require-complete`
 **Result**: **63 legs — 62 passed, 1 failed, 0 skipped**, ~13 min wall clock.
 
+**End-of-round re-run** (after 21.3, 21.10, 21.12 added eight more legs):
+**71 legs — 70 passed, 1 failed, 0 skipped**. The single red is F1 below.
+The table at the bottom is the original 63-leg run, kept as the baseline it was
+taken to be.
+
 This is evidence, not a claim: the table below is the runner's own output.
 
 ## What the run establishes
@@ -42,6 +47,8 @@ Not one test: across eight observed runs the red moves.
 | isolated 4 | net-fuzz 1/30 | lobby JSON fuzz |
 | isolated 5 | net-fuzz 2/30 | rapid lobby churn; msg rate flood |
 | full run B (this baseline) | **edge** | `Error: timeout 20000ms: onceMsg` |
+| full run C (end of round) | net-fuzz 1/30 **and** edge | both, same run |
+| full run D (end of round) | **edge** | `Error: timeout 20000ms: onceMsg` |
 
 Every failure is a wait-for-message timeout; `crashed` is false every time, so
 the server process is alive and not answering in time. Six distinct net-fuzz
@@ -71,13 +78,35 @@ exist to answer. Understand it, then stamp it.
 (Prior art: `Plans-floor-initiative-complete.md:100` records the same claim
 drifting once before, 5,461,072 -> 4,930,352, closed by task 14.4.)
 
-### F3 — the wbox browser-pipeline baseline is vacuous (OPEN, task 21.10)
+### F5 — the build is byte-reproducible (CLOSED, new fact)
+
+Not a defect — a fact the project asserted and had never re-verified. Rebuilding
+`build/doom.wasm` from a clean tree returns **exactly** the md5 the optimization
+ledger records as "proven", `c669142745449ff04bd2fef30fa17412`, at 356,775
+bytes; `build-sbskip` likewise reproduces `1fa7322e5b2325ca585aa712a3aa1167`.
+Re-recording the 13 sim goldens from that build produced byte-identical files.
+So on the pinned toolchain the artifacts, and the goldens taken from them, are
+reproducible rather than merely once-measured. `tools/toggle-identity-check.mjs`
+now holds all 8 of the ledger's md5/size claims against the artifacts.
+
+It also found one stale: `build-diffblit` had drifted from its documented md5
+because commit 22fa00f changed `i_video.c` the day after the landing commit
+recorded the figure, and never updated the row. Corrected, with that history
+attached.
+
+### F3 — the wbox browser-pipeline baseline is vacuous (ADDRESSED, task 21.10)
 
 `tools/golden/browser-pipeline-wbox.json` is in the pre-`run1`/`run2` schema:
 0 of 7 stages carry `run1`, so every check takes the
 `SKIP: no run1/run2 in baseline` branch and the comparator prints PASS having
 compared nothing. Verified by parsing both baselines — alder has `run1` on 6 of
 7 stages, wbox on 0 of 7.
+
+Fixed in both halves: the comparator now FAILS when 0 of N checks actually
+compared, and the file moved to `tools/golden/archive/` so wbox SKIPs loudly.
+**Still open**: wbox has no gating baseline. Recording one needs the repo, a
+build and WADs on wbox, none of which are there (node v24.19.0 and
+google-chrome-stable are). That is a provisioning task.
 
 ### F4 — the four-host perf gate cannot be run as specified (OPEN)
 
