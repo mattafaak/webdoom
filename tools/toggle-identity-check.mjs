@@ -88,6 +88,20 @@ for (const c of claims) {
 
 if (bad) {
     console.log(`FAIL toggle-identity: ${bad} of ${claims.length} ledger md5 claim(s) do not match the artifacts`);
+    console.log('');
+    console.log('  The question this red asks is: DID YOU CHANGE THE ENGINE?');
+    console.log('    yes -> expected. Every toggle build is the same engine plus one #ifdef, so');
+    console.log('           an engine change moves all five md5s. Update the rows in the SAME');
+    console.log('           commit as the change; the diff is then the evidence.');
+    console.log('    no  -> something is wrong. A toggle artifact drifted without a source change,');
+    console.log('           or a row was edited, or a build is not reproducible.');
+    console.log('  Current values, for the rows:');
+    for (const [dir] of seen) {
+        const f = join(root, dir, 'doom.wasm');
+        if (existsSync(f))
+            console.log(`    \`${dir}/doom.wasm\` md5 = \`${md5of(f)}\`. Size ` +
+                        `${statSync(f).size.toLocaleString('en-US')} bytes`);
+    }
     process.exit(1);
 }
 if (!checked) {

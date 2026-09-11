@@ -346,6 +346,11 @@ leg demo-verify     build,wad  "13 goldens + doctored + hostile (19.4)" -- node 
 # ── tenet 4: the sanitizer IS the gate ───────────────────────────────────────
 leg adversarial-map native,wad "30 adversarial maps, 0 ASan/UBSan reports" -- node tools/fuzz/run-map-fuzz.mjs --adversarial-gate
 
+# The other direction (task 23.8).  Every other fuzz gate points hostile CLIENT
+# at the server; this points a hostile SERVER at the engine, which is the
+# direction that produced the 23.1 out-of-bounds write and had no coverage.
+leg hostile-server  build,wad  "hostile server frames vs the engine (23.8)" -- node tools/hostile-server-test.mjs
+
 # ── browser suite ────────────────────────────────────────────────────────────
 # One shared server for the 16 legs that only need a page to load.  Started
 # once, torn down by the single EXIT trap, readiness polled rather than slept.

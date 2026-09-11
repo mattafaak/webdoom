@@ -61,6 +61,18 @@ static int web_ingamemask;
 EMSCRIPTEN_KEEPALIVE void web_net_setup (int player, int numplayers,
                                          int ingamemask)
 {
+    // Both values arrive from the server's lobby JSON by way of the client and
+    // were used unchecked.  players[] is MAXPLAYERS wide and is indexed by
+    // consoleplayer all over the engine (ST_Start, G_BuildTiccmd,
+    // web_level_state), and web_numplayers bounds the write loop in
+    // web_net_bundle -- so a hostile or buggy `welcome`/`launch` could place
+    // both out of range.  Note web_net_set_delay already clamps and
+    // web_set_player_name already bounds-checks; these two did not.
+    if (player < 0 || player >= MAXPLAYERS)
+        return;
+    if (numplayers < 1 || numplayers > MAXPLAYERS)
+        return;
+
     consoleplayer = displayplayer = player;
     web_localslot = player;
     web_numplayers = numplayers;
@@ -94,6 +106,23 @@ EMSCRIPTEN_KEEPALIVE void web_net_bundle (int tic, ticcmd_t* cmds, byte* ingame,
 {
     int i;
     byte mask = 0;
+
+    // `tic` comes off the wire as a u32 (net.js: getUint32) and lands here in a
+    // signed int, so anything >= 2^31 arrives NEGATIVE -- and C's % keeps the
+    // sign, so `tic % BACKUPTICS` indexes BEFORE these arrays.  Reproduced
+    // 2026-09-11 against the shipping build: a bundle with tic 0xFFFFFFFF wrote
+    // 8 bytes below slot 0 of netcmds, and 0xFFFFFFE0 wrote 256 bytes below --
+    // the offset is under the sender's control.
+    //
+    // On the deployment spec.md names as primary -- plain HTTP on a LAN or
+    // tailnet -- anything that can answer ws://host:8666/ws/game can send it.
+    // The guard lives here rather than only in net.js because this is the
+    // core<->platform boundary a bare-metal port inherits.
+    //
+    // tic == INT_MAX is refused too: `nettics[i] = tic + 1` below would
+    // overflow, which is undefined behaviour rather than merely wrong.
+    if (tic < 0 || tic >= 0x7FFFFFFF)
+        return;
 
     fabricated[tic % BACKUPTICS] = (byte) fabmask;
     for (i = 0; i < web_numplayers; i++)

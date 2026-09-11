@@ -75,6 +75,11 @@ export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, nam
         const b = new Uint8Array(data);
         if (b.length !== 6 + CMD_SIZE * numplayers) return;
         const tic = new DataView(b.buffer, b.byteOffset).getUint32(0, true);
+        // Mirrors the engine guard in web_net_bundle: a u32 >= 2^31 lands in C
+        // as a negative int and indexes before the tic-ring arrays.  The engine
+        // is the load-bearing check (a bare-metal port inherits it); this keeps
+        // a hostile frame from crossing the boundary at all.
+        if (tic >= 0x7FFFFFFF) return;
         const ingameMask = b[4], fabMask = b[5];
         for (let i = 0; i < numplayers; i++) {
             doom.HEAPU8[ingamePtr + i] = (ingameMask >> i) & 1;
@@ -163,6 +168,11 @@ export function attachSpectate(doom, baseUrl, { numplayers, slots = null, names 
         const b = new Uint8Array(data);
         if (b.length !== 6 + CMD_SIZE * numplayers) return;
         const tic = new DataView(b.buffer, b.byteOffset).getUint32(0, true);
+        // Mirrors the engine guard in web_net_bundle: a u32 >= 2^31 lands in C
+        // as a negative int and indexes before the tic-ring arrays.  The engine
+        // is the load-bearing check (a bare-metal port inherits it); this keeps
+        // a hostile frame from crossing the boundary at all.
+        if (tic >= 0x7FFFFFFF) return;
         const ingameMask = b[4];
         // Spectators pass fabMask=0xFF (all slots "fabricated") so the engine's
         // per-tic consistancy ring-buffer check is bypassed. The check compares

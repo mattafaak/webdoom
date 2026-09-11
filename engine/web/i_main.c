@@ -152,6 +152,15 @@ void ST_Start (void);
 
 EMSCRIPTEN_KEEPALIVE void web_set_console (int player)
 {
+    // ST_Start() dereferences &players[consoleplayer] immediately, and
+    // players[] is MAXPLAYERS wide.  Today every caller passes
+    // web_first_ingame()'s return, which is in range -- so this is latent, not
+    // live.  It is still an exported wasm entry point with no guard, and the
+    // two beside it (web_net_setup, web_net_bundle) were the same shape and
+    // were not latent.
+    if (player < 0 || player >= MAXPLAYERS)
+        return;
+
     consoleplayer = displayplayer = player;
     ST_Start (); // rebind the status bar to the new view player
 }
