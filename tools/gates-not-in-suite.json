@@ -1,0 +1,29 @@
+{
+  "_comment": "Gate-shaped tools deliberately NOT run by tools/run-tests.sh. Enforced by tools/gate-census.mjs: a gate that is neither reachable from the suite nor listed here fails the census, and an entry naming a file that no longer exists fails it too. A reason must say why the tool CANNOT be green in the suite — 'nobody got round to it' is not one; wire it instead.",
+  "_schema": {
+    "reason": "why this cannot be a suite leg",
+    "owner": "the task that would change that, if any"
+  },
+  "not_in_suite": {
+    "tools/386/run-386box.sh": {
+      "reason": "BLOCKED: needs a FreeDOS disk image and a DOS DOOM.EXE, neither in the repo (docs/386/BRING-UP.md). It also measures id's vanilla DOS binary as a 386 baseline, not this codebase, so it could never gate a change here.",
+      "owner": "20.6b"
+    },
+    "tools/baremetal/run-check.sh": {
+      "reason": "BLOCKED: OS-less ARM under QEMU boots, but per-tic hash streaming over the emulated UART is unresolved (tools/baremetal/README.md, 13.4b residual). Without the hashes there is nothing to assert.",
+      "owner": "13.4b residual"
+    },
+    "tools/coverage/run-coverage.sh": {
+      "reason": "Produces a coverage REPORT, not a verdict: there is no committed floor to regress against, so wiring it would add runtime and assert nothing. Give it a floor and it becomes a leg.",
+      "owner": null
+    },
+    "tools/freestanding/be-check.sh": {
+      "reason": "KNOWN-DIVERGING BY DESIGN: big-endian PPC under qemu-ppc-static, hashes diverge and the script is deliberately written to exit non-zero (13.3a WIP, BE-NOTES.md). Wiring it would make the suite permanently red on a documented open question.",
+      "owner": "13.3a"
+    },
+    "tools/n64/run-n64-demos.sh": {
+      "reason": "KNOWN-RED: -timedemo does not engage on N64 so gametic never aligns with the golden base (docs/n64/DEMO-GATE-STATUS.md, which says in as many words: do not wire it into the main suite as green).",
+      "owner": "20.4c"
+    }
+  }
+}

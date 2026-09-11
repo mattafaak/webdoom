@@ -64,6 +64,7 @@ IWADS=(doom.wad doom2.wad tnt.wad plutonia.wad)
 have_build()   { [ -f build/doom.js ] && [ -f build/doom.wasm ]; }
 have_wad()     { local w; for w in "${IWADS[@]}"; do [ -f "wads/lib/$w" ] || return 1; done; }
 have_native()  { [ -x tools/native-sanitize/nat-doom ]; }
+have_fs()      { [ -x tools/freestanding/fs-doom ]; }
 have_gcc()     { command -v gcc >/dev/null 2>&1; }
 have_browser() { command -v "${CHROME_BIN:-google-chrome-stable}" >/dev/null 2>&1 || [ -x /opt/google/chrome/chrome ]; }
 have_firefox() { [ -x /usr/bin/firefox ]; }
@@ -75,6 +76,7 @@ need_reason() {   # need_reason <tag> -> prints why it is unmet
         build)    echo "build/doom.js absent (run: source tools/emsdk-env.sh && make -C engine)" ;;
         wad)      echo "IWADs absent (run: tools/fetch-wads.sh)" ;;
         native)   echo "nat-doom absent (run: make -C tools/native-sanitize)" ;;
+        fs)       echo "fs-doom absent (run: make -C tools/freestanding)" ;;
         gcc)      echo "gcc not on PATH" ;;
         browser)  echo "Chrome not found (set CHROME_BIN)" ;;
         firefox)  echo "/usr/bin/firefox not found" ;;
@@ -85,7 +87,7 @@ need_reason() {   # need_reason <tag> -> prints why it is unmet
 }
 need_met() {
     case "$1" in
-        build) have_build ;; wad) have_wad ;; native) have_native ;; gcc) have_gcc ;;
+        build) have_build ;; wad) have_wad ;; native) have_native ;; gcc) have_gcc ;; fs) have_fs ;;
         browser) have_browser ;; firefox) have_firefox ;; emsdk) have_emsdk ;;
         baseline) have_baseline ;;
         *) return 1 ;;
@@ -99,13 +101,18 @@ need_met() {
 # gate.sh's own "GATE x rc=" line is never the headline.
 headline() {
     local log="$1" rc="$2" h=""
+    # Exclude ONLY gate.sh's own trailer.  The first version excluded every line
+    # starting "GATE ", which also threw away a tool's own "GATE PASS: ..."
+    # verdict — so adversarial-map's headline became a trailing rule-of-thumb
+    # sentence instead of "0 clean + 30 I_Error, 0 sanitizer reports".
+    local OWN='^GATE [A-Za-z0-9_-]+ rc='
     [ -s "$log" ] || { echo "(no output)"; return; }
     if [ "$rc" -ne 0 ]; then
-        h="$(grep -aE '(^|[^A-Za-z])(FAIL|GATE FAIL|FATAL|Error:|error:)' "$log" | grep -av '^GATE ' | tail -1)"
+        h="$(grep -aE '(^|[^A-Za-z])(FAIL|GATE FAIL|FATAL|Error:|error:)' "$log" | grep -avE "$OWN" | tail -1)"
     else
-        h="$(grep -aE '^(PASS|GATE PASS|ALL PASS)' "$log" | grep -av '^GATE ' | tail -1)"
+        h="$(grep -aE '^(PASS|GATE PASS|ALL PASS)' "$log" | grep -avE "$OWN" | tail -1)"
     fi
-    [ -n "$h" ] || h="$(grep -av '^GATE ' "$log" | grep -av '^[[:space:]]*$' | tail -1)"
+    [ -n "$h" ] || h="$(grep -avE "$OWN" "$log" | grep -av '^[[:space:]]*$' | tail -1)"
     # collapse whitespace and clip for the table
     echo "$h" | tr -s '[:space:]' ' ' | cut -c1-96
 }
@@ -227,6 +234,7 @@ leg sw-precache     -    "sw.js SHELL list <-> app-shell imports"   -- node tool
 leg http-fuzz       -    "static HTTP path attacks (ws-005)"        -- node tools/http-fuzz-test.mjs
 leg demo-store-fuzz -    "demo-store cap enforcement (19.2)"        -- node tools/demo-store-fuzz-test.mjs
 leg net-fuzz        -    "malformed/hostile WebSocket clients"      -- node tools/net-fuzz-test.mjs
+leg gate-census     -    "every gate is wired or registered with a reason" -- node tools/gate-census.mjs
 
 if [ "$TIER" = "quick" ]; then
     QUICK_ONLY=1
@@ -265,6 +273,18 @@ leg build-potato     emsdk     "compile -DWEBDOOM_POTATO"              -- bash t
 leg render-potato    wad       "potato render goldens (20.3c)"         -- node tools/demo-test.mjs --render-potato
 
 leg sprite-witness  build,wad  "r_things.c:530 cull pin, 320 + 854"    -- node tools/sprite-witness-test.mjs
+
+# ── gates that existed and ran nowhere until the census (task 21.11) ──────────
+# README.md advertises the native ASan/UBSan demo suite as part of the gate set;
+# it was run only by hand.  The freestanding 13/13 check calls itself "the
+# crown-jewel proof for rung 1" and is cited as a landing gate throughout
+# Plans; also hand-run.  demo-verify.mjs is the SHIPPED 19.4 CLI, and its test
+# re-implements the logic rather than importing it, so the CLI's own argv
+# handling, --all mode and size cap were ungated.
+leg native-asan     native,wad "13 demos under ASan/UBSan (README's claim)"  -- bash tools/native-sanitize/run-all.sh wads/lib tools/native-sanitize/out sim
+leg freestanding-sim fs,wad    "fs-doom 13/13 == vanilla (rung 1 proof)"     -- bash tools/freestanding/run-check.sh
+leg ro-wad          fs,wad     "WAD blob stays read-only over 13 demos (XIP)" -- bash tools/freestanding/ro-wad-check.sh
+leg demo-verify-cli build,wad  "the shipped 19.4 CLI itself, --all mode"     -- node tools/demo-verify.mjs --all
 
 # ── netcode determinism ──────────────────────────────────────────────────────
 leg mixed-width-net build,wad  "P0=320 vs P1=854 per-tic hash"         -- node tools/mixed-width-net-test.mjs
