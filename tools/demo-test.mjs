@@ -8,7 +8,7 @@
 //
 // usage: node tools/demo-test.mjs             # verify sim traces against golden
 //        node tools/demo-test.mjs --record    # (re)write sim golden traces
-//        node tools/demo-test.mjs --render    # verify render goldens (auto-record if absent)
+//        node tools/demo-test.mjs --render    # verify render goldens (absent golden = FAIL)
 //        node tools/demo-test.mjs --render --record  # force re-record render goldens
 //        node tools/demo-test.mjs --render-wide --record  # record 854-px wide render goldens
 //        node tools/demo-test.mjs --render-wide  # verify 854-px wide render goldens
@@ -50,6 +50,24 @@ const MATRIX = [
     ['tnt.wad', 'tnt.wad', ['demo1', 'demo2', 'demo3']],
     ['plutonia.wad', 'plutonia.wad', ['demo1', 'demo2', 'demo3']],
 ];
+
+// Every gate family replays the whole MATRIX.  Derive the expected demo count
+// from it rather than hardcoding 13, so adding an IWAD row moves the assertion
+// with no other edit (task 21.2).
+const EXPECTED_DEMOS = MATRIX.reduce((n, [, , demos]) => n + demos.length, 0);
+
+// A run that verified fewer demos than the matrix declares DID NOT RUN IN FULL,
+// and must never print the full-count PASS line.  This replaces the old
+// `if (!verified)` vacuous guard, which only caught the all-missing case: with
+// one WAD absent the render gate printed PASS over 12 of 13, and with one
+// GOLDEN absent it silently re-recorded and printed PASS over all 13.
+function assertFullCoverage(label, verified) {
+    if (verified !== EXPECTED_DEMOS) {
+        console.log(`FAIL ${label}: verified ${verified} of ${EXPECTED_DEMOS} demos — ` +
+                    `incomplete run (WAD not fetched, or golden absent). A partial run is not a pass.`);
+        process.exit(1);
+    }
+}
 
 // ── render mode ─────────────────────────────────────────────────────────────
 //
@@ -168,10 +186,22 @@ if (renderMode) {
             }
 
             const goldenPath = join(goldenDir, `${name}${goldenSuffix}.json`);
-            if (record || !existsSync(goldenPath)) {
+            if (record) {
                 writeFileSync(goldenPath, JSON.stringify({ tics: done, trace }));
                 console.log(`recorded ${name} ${detailTag}render: ${done} gametics, ${trace.length} hashes`);
                 verified++;
+                continue;
+            }
+            // No auto-record: missing golden is a hard error (task 21.2).
+            // This branch used to share the `record` arm above AND increment
+            // `verified`, so deleting a golden re-created it from the build
+            // under test and still printed the full-count PASS line — a silent,
+            // self-authorising regold.  The wide/fakeflat/potato families never
+            // had this hole; the two oldest and most load-bearing gates did.
+            if (!existsSync(goldenPath)) {
+                console.log(`FAIL ${name} ${detailTag}render: golden absent ` +
+                            `(run --render${lowDetail ? ' --low-detail' : ''} --record first)`);
+                failures++;
                 continue;
             }
 
@@ -196,7 +226,7 @@ if (renderMode) {
     }
 
     if (failures) { console.log(`${failures} ${detailTag}render golden(s) failed`); process.exit(1); }
-    if (!verified) { console.log('FAIL: 0 demos verified (no WADs fetched?) — vacuous run'); process.exit(1); }
+    assertFullCoverage(`${detailTag}render`, verified);
     console.log(record ? `${detailTag}render golden traces written`
                        : `PASS — all ${detailTag}render goldens pixel-identical (${verified} demos)`);
     process.exit(0);
@@ -324,7 +354,7 @@ if (wideRender) {
     }
 
     if (failures) { console.log(`${failures} wide render golden(s) failed`); process.exit(1); }
-    if (!verified) { console.log('FAIL: 0 demos verified (no WADs fetched?) — vacuous run'); process.exit(1); }
+    assertFullCoverage('wide render', verified);
     console.log(record ? `wide render golden traces written (W=${WIDE_WIDTH})`
                        : `PASS — all wide render goldens pixel-identical (W=${WIDE_WIDTH}, ${verified} demos)`);
     process.exit(0);
@@ -440,7 +470,7 @@ if (fakeFlatRender) {
     }
 
     if (failures) { console.log(`${failures} [fakeflat] render golden(s) failed`); process.exit(1); }
-    if (!verified) { console.log('FAIL: 0 demos verified (no WADs fetched?) — vacuous run'); process.exit(1); }
+    assertFullCoverage('[fakeflat] render', verified);
     console.log(record ? `[fakeflat] render golden traces written`
                        : `PASS — all [fakeflat] render goldens pixel-identical (${verified} demos)`);
     process.exit(0);
@@ -557,7 +587,7 @@ if (potatoRender) {
     }
 
     if (failures) { console.log(`${failures} [potato] render golden(s) failed`); process.exit(1); }
-    if (!verified) { console.log('FAIL: 0 demos verified (no WADs fetched?) — vacuous run'); process.exit(1); }
+    assertFullCoverage('[potato] render', verified);
     console.log(record ? `[potato] render golden traces written`
                        : `PASS — all [potato] render goldens pixel-identical (${verified} demos)`);
     process.exit(0);
@@ -665,7 +695,7 @@ if (simWide) {
     }
 
     if (failures) { console.log(`${failures} sim-wide check(s) failed`); process.exit(1); }
-    if (!verified) { console.log('FAIL: 0 demos verified (no WADs fetched?) — vacuous run'); process.exit(1); }
+    assertFullCoverage('sim-wide', verified);
     console.log(`PASS — sim invariant under wide (W=${WIDE_WIDTH}): ${verified} demos byte-exact`);
     process.exit(0);
 }
@@ -725,9 +755,16 @@ for (const [wad, engineName, demos] of MATRIX) {
         }
 
         const goldenPath = join(goldenDir, `${name}.json`);
-        if (record || !existsSync(goldenPath)) {
+        if (record) {
             writeFileSync(goldenPath, JSON.stringify({ tics: done, trace }));
             console.log(`recorded ${name}: ${done} gametics, ${trace.length} samples`);
+            verified++;   // without this, --record ended at the 0-verified guard
+            continue;
+        }
+        // No auto-record: missing golden is a hard error (task 21.2).
+        if (!existsSync(goldenPath)) {
+            console.log(`FAIL ${name}: golden absent (run --record first)`);
+            failures++;
             continue;
         }
 
@@ -773,5 +810,5 @@ for (const [wad, engineName, demos] of MATRIX) {
 }
 
 if (failures) { console.log(`${failures} demo(s) failed`); process.exit(1); }
-if (!verified) { console.log('FAIL: 0 demos verified (no WADs fetched?) — vacuous run'); process.exit(1); }
+assertFullCoverage('sim', verified);
 console.log(record ? 'golden traces written' : `PASS — all demos bit-identical to golden (${verified} demos)`);

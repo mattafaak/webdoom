@@ -57,8 +57,11 @@ const WIDE_WIDTH = 854;
 
 const wadPath = join(root, 'wads/lib', WAD_FILE);
 if (!existsSync(wadPath)) {
-    console.log(`SKIP sprite-witness: ${WAD_FILE} not fetched`);
-    process.exit(0);
+    // Not a SKIP: this gate has exactly two buckets and no other input, so a
+    // missing WAD means it verified nothing.  Exiting 0 here made "could not
+    // run" and "ran and passed" print the same verdict (task 21.2).
+    console.log(`FAIL sprite-witness: ${WAD_FILE} not fetched — gate verified nothing`);
+    process.exit(1);
 }
 const wadBytes = readFileSync(wadPath);
 
@@ -113,6 +116,8 @@ async function runWitness(wideWidth) {
 }
 
 let failures = 0;
+let verified = 0;
+const EXPECTED_BUCKETS = 2;   // narrow (320) + wide (854)
 
 for (const [label, wideWidth, goldenFile] of [
     ['sprite-witness-narrow', 0,         'sprite-witness-narrow.json'],
@@ -121,9 +126,19 @@ for (const [label, wideWidth, goldenFile] of [
     const trace = await runWitness(wideWidth);
     const goldenPath = join(goldenDir, goldenFile);
 
-    if (record || !existsSync(goldenPath)) {
+    if (record) {
         writeFileSync(goldenPath, JSON.stringify({ tics: WITNESS_TICS, trace, width: wideWidth || 320 }));
         console.log(`recorded ${label}: ${trace.length} hashes, W=${wideWidth || 320}`);
+        verified++;
+        continue;
+    }
+    // No auto-record: missing golden is a hard error (task 21.2).  This branch
+    // used to share the `record` arm, so deleting a golden re-created it from
+    // the build under test and the run still printed the unconditional PASS
+    // line below — a self-authorising regold of the r_things.c:530 cull pin.
+    if (!existsSync(goldenPath)) {
+        console.log(`FAIL ${label}: golden absent (run --record first)`);
+        failures++;
         continue;
     }
 
@@ -147,6 +162,7 @@ for (const [label, wideWidth, goldenFile] of [
         failures++;
     } else {
         console.log(`PASS ${label}: ${golden.trace.length} hashes pixel-identical, W=${golden.width}`);
+        verified++;
     }
 }
 
@@ -154,4 +170,9 @@ if (failures) {
     console.log(`${failures} sprite-witness check(s) FAILED`);
     process.exit(1);
 }
-console.log('PASS — sprite-edge witness goldens verified (r_things.c:530 cull pin)');
+if (verified !== EXPECTED_BUCKETS) {
+    console.log(`FAIL sprite-witness: verified ${verified} of ${EXPECTED_BUCKETS} buckets — ` +
+                `incomplete run. A partial run is not a pass.`);
+    process.exit(1);
+}
+console.log(`PASS — sprite-edge witness goldens verified (${verified} buckets, r_things.c:530 cull pin)`);
