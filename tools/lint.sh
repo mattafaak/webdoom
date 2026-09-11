@@ -120,6 +120,42 @@ if ! node "$REPO_ROOT/tools/check-pipe-exit.mjs"; then
 fi
 
 # ---------------------------------------------------------------------------
+# Executable bit on scripts README tells a user to run BARE
+#
+# README.md's quick start says `tools/run-tests.sh`, with no interpreter.  If
+# the mode bit is lost the documented command dies "Permission denied" while
+# `bash tools/run-tests.sh` keeps working, so every existing caller stays green
+# and only a new reader following the README hits it.  This mesh has paid for
+# that exact shape before (four guards calling a mode-644 psafe mirror, every
+# call dying into 2>/dev/null for two weeks).  Caused here on 2026-09-11 by an
+# atomic-rewrite helper that did not preserve the mode.
+# ---------------------------------------------------------------------------
+
+BARE=$(grep -oE '(^|[^a-zA-Z/.])tools/[a-z0-9/-]+\.sh' README.md \
+       | grep -oE 'tools/[a-z0-9/-]+\.sh' | sort -u)
+BARE_BAD=0
+BARE_N=0
+for f in $BARE; do
+    # only the ones README runs with no interpreter in front of them
+    if grep -qE '(bash|sh|source|\.) +'"$f" README.md; then continue; fi
+    [ -f "$f" ] || continue
+    BARE_N=$((BARE_N + 1))
+    if [ ! -x "$f" ]; then
+        echo "lint: FAIL $f is not executable, but README invokes it directly"
+        BARE_BAD=1
+    fi
+done
+if [ "$BARE_BAD" = "1" ]; then
+    ERRORS=1
+elif [ "$BARE_N" -eq 0 ]; then
+    # A check that found nothing to check is broken, not clean.
+    echo "lint: FAIL exec-bit check found 0 bare-invoked scripts in README.md"
+    ERRORS=1
+else
+    echo "lint: exec bit OK ($BARE_N bare-invoked script(s) in README)"
+fi
+
+# ---------------------------------------------------------------------------
 # Final result
 # ---------------------------------------------------------------------------
 
