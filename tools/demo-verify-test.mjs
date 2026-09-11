@@ -60,8 +60,11 @@ function extractWadLump(wadBytes, lumpName) {
 
 const doomJsPath = join(root, buildDir, 'doom.js');
 if (!existsSync(doomJsPath)) {
-    console.log(`skip: engine not built (${buildDir}/doom.js absent)`);
-    process.exit(0);
+    // NOT exit 0.  Without the engine this gate makes zero assertions and then
+    // printed "0 passed, 0 failed" followed by "PASS — all gates green": a
+    // full green over an empty set (task 21.8).
+    console.log(`FAIL demo-verify-test: engine not built (${buildDir}/doom.js absent) — verified nothing`);
+    process.exit(1);
 }
 const createDoom = (await import(doomJsPath)).default;
 
@@ -191,7 +194,12 @@ for (const [wad, , demos] of MATRIX) {
     }
 }
 
-console.log(`\n  Gate A: ${goldenVerified}/${goldenTotal} golden demos verified`);
+// goldenTotal only counts demos whose WAD was present, so "3/3" was a full
+// green over one IWAD.  Both numbers are checked against the matrix.
+const EXPECTED_DEMOS = MATRIX.reduce((n, [, , demos]) => n + demos.length, 0);
+console.log(`\n  Gate A: ${goldenVerified}/${goldenTotal} golden demos verified (matrix declares ${EXPECTED_DEMOS})`);
+ok(`Gate A: all ${EXPECTED_DEMOS} matrix demos were reachable (WADs fetched)`, goldenTotal === EXPECTED_DEMOS);
+ok(`Gate A: all ${goldenTotal} reachable demos verified`, goldenVerified === goldenTotal && goldenTotal > 0);
 
 // ── Gate B: Doctored demo red-proof ──────────────────────────────────────────
 //
@@ -359,5 +367,15 @@ if (failures) {
     console.log(`demo-verify-test: ${failures} failure(s)`);
     process.exit(1);
 }
-console.log('PASS — demo-verify-test: all gates green');
+// A run that asserted almost nothing is not a pass.  With no WADs every gate
+// skipped and this printed "0 passed, 0 failed" then declared all gates green.
+// The floor is the matrix's own demo count plus Gate A's two assertions; Gates
+// B and C add more, so it is a floor, not an equality.
+const MIN_ASSERTIONS = EXPECTED_DEMOS + 2;
+if (passes < MIN_ASSERTIONS) {
+    console.log(`FAIL demo-verify-test: only ${passes} assertions passed, expected at least ` +
+                `${MIN_ASSERTIONS} — gates were skipped, this is not a green run`);
+    process.exit(1);
+}
+console.log(`PASS — demo-verify-test: all gates green (${passes} assertions)`);
 process.exit(0);

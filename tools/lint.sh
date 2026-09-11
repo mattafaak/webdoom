@@ -20,11 +20,17 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
 FIX=0
-if [ "${1:-}" = "--fix" ]; then
-    FIX=1
-fi
+REQUIRE_C=0
+for a in "$@"; do
+    case "$a" in
+        --fix)       FIX=1 ;;
+        --require-c) REQUIRE_C=1 ;;
+        *) echo "lint: unknown argument '$a' (expected --fix or --require-c)" >&2; exit 2 ;;
+    esac
+done
 
 ERRORS=0
+C_CHECKED=0   # did the C formatting check actually run?
 
 # ---------------------------------------------------------------------------
 # C formatting via clang-format
@@ -33,11 +39,12 @@ ERRORS=0
 PINNED_MAJOR=22
 
 if ! command -v clang-format >/dev/null 2>&1; then
-    echo "lint: WARNING: clang-format not found — skipping C checks"
+    echo "lint: SKIP: clang-format not found — C formatting checks did NOT run"
 else
     CF_VERSION="$(clang-format --version | grep -oP '\d+' | head -1)"
     if [ "$CF_VERSION" != "$PINNED_MAJOR" ]; then
-        echo "lint: WARNING: clang-format major version is $CF_VERSION, expected $PINNED_MAJOR — skipping C checks to avoid version-drift false positives"
+        echo "lint: SKIP: clang-format major is $CF_VERSION, pinned $PINNED_MAJOR — C formatting checks did NOT run"
+        echo "lint:       (output varies across major versions; skipped to avoid false positives on a contributor's box)"
     else
         C_FILES=(
             engine/web/*.c
@@ -48,6 +55,7 @@ else
         if [ "$FIX" = "1" ]; then
             echo "lint: clang-format --fix on ${#C_FILES[@]} C files"
             clang-format -i "${C_FILES[@]}"
+            C_CHECKED=1
         else
             BAD_C=()
             for f in "${C_FILES[@]}"; do
@@ -63,6 +71,7 @@ else
             else
                 echo "lint: clang-format OK (${#C_FILES[@]} files)"
             fi
+            C_CHECKED=1
         fi
     fi
 fi
@@ -114,9 +123,25 @@ fi
 # Final result
 # ---------------------------------------------------------------------------
 
+# A skip that nobody counts is a gate that quietly shrank.  Half of this gate's
+# scope (engine/web + tools/archaeology C) evaporates on a version mismatch, and
+# it used to print the same "lint: OK" either way (task 21.8).  The suite passes
+# --require-c so the host that is supposed to have the pinned toolchain cannot
+# silently run half a lint; an ad-hoc run still degrades, but says so.
+if [ "$C_CHECKED" = "0" ]; then
+    if [ "$REQUIRE_C" = "1" ]; then
+        echo "lint: FAILED — C formatting checks did not run and --require-c was given"
+        echo "lint:          install clang-format $PINNED_MAJOR, or drop --require-c to accept partial lint"
+        exit 1
+    fi
+    ERRORS_NOTE=" (C CHECKS SKIPPED — JS and pipe-exit only)"
+else
+    ERRORS_NOTE=""
+fi
+
 if [ "$ERRORS" = "1" ]; then
     echo "lint: FAILED — see above"
     exit 1
 fi
 
-echo "lint: OK"
+echo "lint: OK${ERRORS_NOTE}"

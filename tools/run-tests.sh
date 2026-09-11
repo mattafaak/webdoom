@@ -227,7 +227,7 @@ echo "logs: $LOGDIR"
 # ── tier: quick ──────────────────────────────────────────────────────────────
 # Everything here runs on a bare clone: no WADs, no build, no browser.  This is
 # the tier a public CI can actually run (task 24.3).
-leg lint            -    "clang-format + JS syntax + pipe-exit rule" -- bash tools/lint.sh
+leg lint            -    "clang-format + JS syntax + pipe-exit rule" -- bash tools/lint.sh --require-c
 leg doc-drift       gcc  "doc figures == claims.json == script output" -- bash tools/archaeology/verify-all.sh
 leg state-machine   -    "lobby edge<->test coverage (static)"      -- node tools/check-state-machine.mjs
 leg sw-precache     -    "sw.js SHELL list <-> app-shell imports"   -- node tools/check-sw-precache.mjs

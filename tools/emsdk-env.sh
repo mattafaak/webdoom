@@ -13,7 +13,15 @@ source "$EMSDK_DIR/emsdk_env.sh" >/dev/null 2>&1
 # bare `set -o pipefail` would leak the option into the caller's shell.  Inside
 # the subshell it still does its job — if emcc itself fails, the pipeline
 # reports that failure instead of grep's status.
-if ! ( set -o pipefail; emcc --version | head -1 | grep -q "$EMSDK_VERSION" ); then
+# Publish the verdict instead of only printing it.  Three suite legs assert that
+# a toggle-off build is BYTE-IDENTICAL to master (docs/optimization-ledger.md),
+# so an unpinned compiler is precisely the drift those claims cannot survive —
+# and a warning on stderr inside a `| tail -3` build log is invisible.  Callers
+# that care read EMSDK_PIN_OK; tools/build-toggle.sh refuses without it.
+if ( set -o pipefail; emcc --version | head -1 | grep -q "$EMSDK_VERSION" ); then
+    export EMSDK_PIN_OK=1
+else
+    export EMSDK_PIN_OK=0
     echo "warning: emcc is not the pinned $EMSDK_VERSION:" >&2
     emcc --version | head -1 >&2
 fi

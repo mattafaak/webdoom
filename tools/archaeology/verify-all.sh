@@ -35,6 +35,8 @@ trap 'rm -f "$SCRIPT_VALUES_FILE"' EXIT
 
 MERGED_VALUES='{}'
 FAMILIES_FAILED=0
+FAMILIES_SKIPPED=0
+SKIPPED_NAMES=""
 
 # Run a family node/bash command.
 # Captures CLAIMS_JSON footer (if present) and merges into MERGED_VALUES.
@@ -185,7 +187,12 @@ for (let i = 0; i < nl; i++) {
         tools/archaeology/colormap-cross-palette.c -- wads/lib
 else
     echo ""
-    echo "SKIP  colormap crackers: $WAD_PATH not found (ea-018..021, ea-023..026)"
+    echo "SKIP  colormap crackers: $WAD_PATH not found (ea-018..021, ea-023..026, ea-048..049)"
+    # A skip nobody counts is coverage that silently shrank: this drops TEN
+    # claims — including ea-018, the universal-recipe figure quoted in the
+    # public writeup — while the coverage line below still said 107 (task 21.8).
+    FAMILIES_SKIPPED=$((FAMILIES_SKIPPED + 3))
+    SKIPPED_NAMES="colormap-crack, colormap-invuln-crack, colormap-cross-palette"
 fi
 
 # ── Full families (--full only) ────────────────────────────────────────────────
@@ -198,6 +205,8 @@ if [ "$FULL" = "1" ]; then
             node tools/archaeology/runtime-stat-verify.mjs
     else
         echo ""
+        FAMILIES_SKIPPED=$((FAMILIES_SKIPPED + 1))
+        SKIPPED_NAMES="${SKIPPED_NAMES:+$SKIPPED_NAMES, }runtime-stat"
         echo "SKIP  runtime-stat: build-perf/doom.js not found"
         echo "      Build with EXTRA_CFLAGS=-DWEB_PERF_COL_STATS -DWEB_PERF_PLANE_STATS ..."
     fi
@@ -213,6 +222,8 @@ if [ "$FULL" = "1" ]; then
             node tools/archaeology/size-ledger.mjs
     else
         echo ""
+        FAMILIES_SKIPPED=$((FAMILIES_SKIPPED + 2))
+        SKIPPED_NAMES="${SKIPPED_NAMES:+$SKIPPED_NAMES, }wasm-stamp, size-ledger"
         echo "SKIP  wasm-stamp: build/doom.wasm not found (run make first)"
         echo "SKIP  size-ledger: build/doom.wasm not found (run make first)"
     fi
@@ -265,11 +276,19 @@ else
     echo "  Full gate: +${FULL_CLAIMS} (run with --full; needs instrumented build)"
 fi
 echo "  Unverifiable: ${UNVERIFIABLE} (see claims.json — hand-checked at doc-write time)"
+if [ "$FAMILIES_SKIPPED" -gt 0 ]; then
+    echo "  NOT RUN: ${FAMILIES_SKIPPED} verifier famil(ies) skipped — ${SKIPPED_NAMES}"
+    echo "           the coverage figure above is the CEILING, not what this run checked"
+fi
 echo ""
 
 # ── Final verdict ──────────────────────────────────────────────────────────────
 if [ "${FAMILIES_FAILED}" -gt 0 ]; then
     echo "FAIL  verify-all: ${FAMILIES_FAILED} check(s) failed"
     exit 1
+fi
+if [ "$FAMILIES_SKIPPED" -gt 0 ]; then
+    echo "PASS (INCOMPLETE)  verify-all: checks that ran are green, ${FAMILIES_SKIPPED} famil(ies) skipped"
+    exit 0
 fi
 echo "ALL PASS  verify-all: all checks green"
