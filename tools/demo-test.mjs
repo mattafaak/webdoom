@@ -38,6 +38,48 @@ const buildDir = buildDirIdx >= 0 ? process.argv[buildDirIdx + 1]
                : fakeFlatRender   ? 'build-fakeflat'
                : potatoRender     ? 'build-potato'
                : 'build';
+
+// ── argv validation (task 21.6) ──────────────────────────────────────────────
+// Every flag above is read with process.argv.includes(), which cannot tell a
+// typo from an absent flag: `--render-low` (for `--render --low-detail`) ran
+// the SIM suite and printed "PASS — all demos bit-identical to golden (13
+// demos)".  A reviewer reading that line sees a green render gate over the full
+// count.  This is the documented trap in CLAUDE.md and it was still live.
+const BOOL_FLAGS = new Set([
+    '--record', '--render', '--low-detail', '--render-wide', '--sim-wide',
+    '--render-fakeflat', '--render-potato',
+]);
+const VALUE_FLAGS = new Set(['--cross', '--build-dir']);
+const USAGE = 'usage: demo-test.mjs [--record] [--render [--low-detail] | --render-wide | ' +
+              '--sim-wide | --render-fakeflat | --render-potato] [--cross BIN] [--build-dir DIR]';
+for (let i = 2; i < process.argv.length; i++) {
+    const a = process.argv[i];
+    if (VALUE_FLAGS.has(a)) {
+        if (i + 1 >= process.argv.length) {
+            console.error(`FAIL: ${a} needs a value\n${USAGE}`);
+            process.exit(2);
+        }
+        i++;                       // consume the value
+        continue;
+    }
+    if (BOOL_FLAGS.has(a)) continue;
+    console.error(`FAIL: unrecognised argument '${a}'\n${USAGE}`);
+    process.exit(2);
+}
+// Selecting two gate families runs only the first and silently skips the rest.
+const MODES = { '--render': renderMode, '--render-wide': wideRender, '--sim-wide': simWide,
+                '--render-fakeflat': fakeFlatRender, '--render-potato': potatoRender };
+const chosen = Object.keys(MODES).filter(k => MODES[k]);
+if (chosen.length > 1) {
+    console.error(`FAIL: ${chosen.join(' and ')} select different gate families; pick one\n${USAGE}`);
+    process.exit(2);
+}
+// --low-detail is a modifier of --render, not a family of its own: alone it
+// would fall through to the sim gate and be silently ignored.
+if (lowDetail && !renderMode) {
+    console.error(`FAIL: --low-detail only applies to --render (did you mean --render --low-detail?)\n${USAGE}`);
+    process.exit(2);
+}
 const goldenDir = join(root, 'tools/golden');
 mkdirSync(goldenDir, { recursive: true });
 

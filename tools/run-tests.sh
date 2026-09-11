@@ -66,6 +66,17 @@ node tools/demo-test.mjs | tail -2
 echo "── render goldens (per-tic framebuffer hashes) ─────────"
 node tools/demo-test.mjs --render | tail -2
 
+# ── low-detail render goldens (task 14.2b, wired 21.6) ───────────────────────
+# The 13 *-render-low.json goldens were committed and then gated by nothing:
+# --low-detail appeared in demo-test.mjs and in no runner.  A golden family with
+# no runner is maintained by nobody and proves nothing.  It also made the
+# `--render-low` typo (which silently ran the SIM suite and printed a 13-demo
+# PASS) look like a plausible invocation.
+# RED-PROOF: corrupt a *-render-low.json → this leg FAILS, the 320 vanilla
+# render goldens above stay green.
+echo "── low-detail render goldens (web_set_detail path) ─────"
+node tools/demo-test.mjs --render --low-detail | tail -2
+
 # ── wide render goldens (854-px Hor+ per-tic hashes, task 18.2c) ─────────────
 # One bucket at W=854 (the compile-time cap and only UI-exposed widescreen
 # width).  web_set_wide(854) → setblocks=11 → Hor+ full-width render.
