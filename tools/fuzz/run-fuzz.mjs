@@ -85,6 +85,31 @@ if (!existsSync(IWAD_PATH)) {
     process.exit(1);
 }
 
+// Existence was never the question: a nat-doom built before the engine changed
+// is a reference to code that is no longer in the tree, and the differential
+// reports green because both sides agree about the past.  Found 2026-09-11 to
+// be 6 engine/core sources behind (task 21.4).  Gate mode refuses; ad-hoc runs
+// warn, mirroring the absent-binary policy immediately below.
+{
+    const { inspect, provenance } = await import('../artifact-freshness.mjs');
+    const nd = inspect('nat-doom');
+    if (nd.exists) {
+        console.log(`reference: ${provenance('nat-doom')}`);
+        if (nd.newer.length) {
+            const lines = nd.newer.slice(0, 5).map(x => `    ${x.file} (${x.mtime})`).join('\n');
+            if (process.argv.includes('--require-native')) {
+                console.error(`FATAL: --require-native set but ${NAT_DOOM} is STALE — ` +
+                              `${nd.newer.length} of ${nd.sourceCount} sources are newer than it.`);
+                console.error(lines);
+                console.error('Rebuild it: make -C tools/native-sanitize');
+                process.exit(1);
+            }
+            console.warn(`WARNING: nat-doom is stale by ${nd.newer.length} source(s); ` +
+                         'the differential is against an older engine.');
+        }
+    }
+}
+
 const natAvailable = existsSync(NAT_DOOM);
 if (!natAvailable) {
     // Self-consistency is a much weaker oracle than the wasm-vs-native

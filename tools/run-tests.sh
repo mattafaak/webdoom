@@ -7,6 +7,18 @@ cd "$(dirname "$0")/.."
 echo "── lint (clang-format + JS syntax) ─────────────────────"
 bash tools/lint.sh
 
+# ── artifact freshness (task 21.5) ───────────────────────────────────────────
+# This suite builds build-invariants/, build-fakeflat/ and build-potato/ but
+# NOT build/ — yet smoke, the sim and render goldens, size-ledger, music, seek
+# and demo-verify all load build/doom.js.  Without this leg a source edit that
+# was never compiled passes the entire suite, and size-ledger (below) measures a
+# stale wasm against the budget.  The same check covers the two native reference
+# binaries the fuzz gates use; nat-doom was found 6 engine/core sources stale on
+# 2026-09-11, so the ASan gate had been green against code no longer in the tree.
+# RED-PROOF: touch engine/core/r_main.c → this leg FAILS naming the file.
+echo "── artifact freshness (build/ + native references vs sources) ──"
+node tools/artifact-freshness.mjs --all
+
 echo "── archaeology drift (doc figures == manifest == script) "
 bash tools/archaeology/verify-all.sh
 

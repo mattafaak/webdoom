@@ -76,6 +76,26 @@ if (adversarialGate && !existsSync(join(root, 'tools/native-sanitize/nat-doom'))
     process.exit(1);
 }
 
+// ...and requires it to be a reference to THIS engine.  A stale sanitizer build
+// reports 0 findings about code that is no longer in the tree, which is the same
+// vacuous green the existence check above was written to prevent (task 21.4).
+{
+    const { inspect, provenance } = await import('../artifact-freshness.mjs');
+    const nd = inspect('nat-doom');
+    if (nd.exists) {
+        console.log(`reference: ${provenance('nat-doom')}`);
+        if (nd.newer.length && adversarialGate) {
+            console.error(`GATE FAIL: nat-doom is STALE — ${nd.newer.length} of ${nd.sourceCount} ` +
+                          'sources are newer than it; the sanitizer would test an older engine.');
+            console.error(nd.newer.slice(0, 5).map(x => `    ${x.file} (${x.mtime})`).join('\n'));
+            console.error('Rebuild it: make -C tools/native-sanitize');
+            process.exit(1);
+        }
+        if (nd.newer.length)
+            console.warn(`WARNING: nat-doom is stale by ${nd.newer.length} source(s).`);
+    }
+}
+
 const { genMutatedMap } = await import('./gen-map.mjs');
 const createDoom = (await import(join(root, buildDir, 'doom.js'))).default;
 
