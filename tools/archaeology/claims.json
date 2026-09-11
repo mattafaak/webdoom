@@ -995,15 +995,15 @@
     "_note": "computed from claims by tools/archaeology (task 6.3) — do not hand-edit; ea-042..047 added by task 7.2; readme-001/spec-001..003/md-tic-001 added by task 12.1 (published-promise gate); size-001..004 added by task 14.3 (size-ledger gate); readme-001 promoted from unverifiable to measurement-stamp/verified; counts recomputed 2026-07-18",
     "total_in_manifest": 154,
     "by_status": {
-      "verified": 136,
+      "verified": 137,
       "unverifiable": 17
     },
     "by_family": {
       "recipe-crack": 40,
-      "unverifiable": 17,
       "wad-data": 23,
       "source-constant": 40,
       "runtime-stat": 15,
+      "unverifiable": 17,
       "derived-check": 4,
       "measurement-stamp": 11,
       "size-ledger": 4

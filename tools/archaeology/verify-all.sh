@@ -18,7 +18,8 @@
 #     requires EXTRA_CFLAGS instrumented build; omitted from default to keep CI fast.
 #   - measurement-stamp (perf-001..005, perf-009, perf-011, ps-033..034, perf-059):
 #     some are commit-pinned (legitimate drift); ps-033/034 need golden JSON files.
-#   - unverifiable (16 claims): noted in claims.json with reason.
+#   - unverifiable: noted in claims.json with reason.  The count is computed
+#     by claims-summary.mjs and printed below — never typed here (task 21.9).
 #
 # Usage:
 #   bash tools/archaeology/verify-all.sh          # fast tier
@@ -148,7 +149,7 @@ capture_run "recipe-crack / ledger-count (5 claims: ea-029..033)" \
 # 8.1c (FINDING-10): file:line citations rot when code shifts — 844c3d6 moved
 # lines under ~120 of them. This bounds-checks all engine/core citations and
 # verifies doc-named identifiers actually sit near the cited lines.
-capture_run "doc-citations (483 file:line refs; bounds + identifier adjacency)" \
+capture_run "doc-citations (bounds + identifier adjacency; count is the tool's own)" \
     node tools/archaeology/check-citations.mjs
 
 # ── COLORMAP crackers (task 6.3) ───────────────────────────────────────────────
@@ -217,6 +218,13 @@ if [ "$FULL" = "1" ]; then
     fi
 fi
 
+# ── claims.json self-consistency (task 21.9) ──────────────────────────────────
+# The manifest carries a `_summary` block whose own note says "computed from
+# claims … do not hand-edit".  It was hand-edited out of date: verified read 136
+# where the claims compute 137.  Nobody gated the gate's own numbers.
+capture_run "claims _summary (manifest self-consistency)" \
+    node tools/archaeology/claims-summary.mjs --check
+
 # ── Three-way doc drift check ──────────────────────────────────────────────────
 echo "$MERGED_VALUES" > "$SCRIPT_VALUES_FILE"
 echo ""
@@ -229,13 +237,19 @@ fi
 
 # ── Coverage summary ───────────────────────────────────────────────────────────
 echo ""
-FAST_CLAIMS=107  # source-constant(40) + wad-data(23) + recipe-crack(38) + derived-check(4)
-                 # recipe-crack(38) = finesine(3) + gamma(5) + rndtable(3) +
-                 # fixeddiv-proof(3) + fixedmul-proof(2) + aprox-dist(5) +
-                 # angle-roundtrip(2) + colormap(4) + colormap-invuln(4) +
-                 # checkcoord(1) + zlight(1) + ledger(5)
-FULL_CLAIMS=29   # + runtime-stat(15) + measurement-stamp(10) + size-ledger(4)
-UNVERIFIABLE=13  # ea-004..006 retired from unverifiable (superseded by proof)
+# Computed from claims.json, never typed (task 21.9).  The three constants that
+# used to live here had all drifted from the manifest they described:
+# FULL_CLAIMS said 29 against 30, UNVERIFIABLE said 13 against 17 (and the
+# header comment said 16), and an inline breakdown put recipe-crack at 38
+# against 40.  A coverage line nobody can check is a claim, not a measurement.
+_COUNTS="$(node tools/archaeology/claims-summary.mjs --counts)" || {
+    echo "FAIL  verify-all: could not compute claim counts from claims.json"
+    exit 1
+}
+eval "$_COUNTS"
+: "${FAST_CLAIMS:?claims-summary did not set FAST_CLAIMS}"
+: "${FULL_CLAIMS:?claims-summary did not set FULL_CLAIMS}"
+: "${UNVERIFIABLE:?claims-summary did not set UNVERIFIABLE}"
 
 if [ "$FULL" = "1" ]; then
     COVERED=$((FAST_CLAIMS + FULL_CLAIMS))
