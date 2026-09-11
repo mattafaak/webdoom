@@ -37,6 +37,8 @@ import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const record = process.argv.includes('--record');
+const { provenance, recordReason } = await import('./golden-provenance.mjs');
+const RECORD_REASON = record ? recordReason(process.argv) : null;
 const goldenDir = join(root, 'tools/golden');
 mkdirSync(goldenDir, { recursive: true });
 
@@ -127,7 +129,8 @@ for (const [label, wideWidth, goldenFile] of [
     const goldenPath = join(goldenDir, goldenFile);
 
     if (record) {
-        writeFileSync(goldenPath, JSON.stringify({ tics: WITNESS_TICS, trace, width: wideWidth || 320 }));
+        writeFileSync(goldenPath, JSON.stringify({ tics: WITNESS_TICS, trace, width: wideWidth || 320,
+            provenance: provenance('sprite-witness-test.mjs', 'build', RECORD_REASON) }));
         console.log(`recorded ${label}: ${trace.length} hashes, W=${wideWidth || 320}`);
         verified++;
         continue;

@@ -312,6 +312,7 @@ leg sim-diffblit     wad       "diffblit leaves the playsim untouched" -- node t
 # artifact — including the toggle-off byte-identity claim that all four 20.3
 # entries rest on.  "proven" used to mean a human ran md5sum once.
 leg toggle-identity  build     "ledger md5/size claims == the artifacts"    -- node tools/toggle-identity-check.mjs
+leg golden-provenance -        "every golden says where it came from"       -- node tools/golden-provenance.mjs --check
 
 leg sprite-witness  build,wad  "r_things.c:530 cull pin, 320 + 854"    -- node tools/sprite-witness-test.mjs
 

@@ -49,9 +49,9 @@ const BOOL_FLAGS = new Set([
     '--record', '--render', '--low-detail', '--render-wide', '--sim-wide',
     '--render-fakeflat', '--render-potato',
 ]);
-const VALUE_FLAGS = new Set(['--cross', '--build-dir']);
+const VALUE_FLAGS = new Set(['--cross', '--build-dir', '--record-reason']);
 const USAGE = 'usage: demo-test.mjs [--record] [--render [--low-detail] | --render-wide | ' +
-              '--sim-wide | --render-fakeflat | --render-potato] [--cross BIN] [--build-dir DIR]';
+              '--sim-wide | --render-fakeflat | --render-potato] [--cross BIN] [--build-dir DIR] [--record-reason TEXT]';
 for (let i = 2; i < process.argv.length; i++) {
     const a = process.argv[i];
     if (VALUE_FLAGS.has(a)) {
@@ -66,6 +66,13 @@ for (let i = 2; i < process.argv.length; i++) {
     console.error(`FAIL: unrecognised argument '${a}'\n${USAGE}`);
     process.exit(2);
 }
+// Provenance for anything this run records (task 21.3).  Recording from a dirty
+// tree without a stated reason is refused: a regold asserts the NEW output is
+// correct, and the reason belongs in the artifact.
+const { provenance, recordReason } = await import('./golden-provenance.mjs');
+const RECORD_REASON = record ? recordReason(process.argv) : null;
+const PROV = () => provenance('demo-test.mjs', buildDir, RECORD_REASON);
+
 // Selecting two gate families runs only the first and silently skips the rest.
 const MODES = { '--render': renderMode, '--render-wide': wideRender, '--sim-wide': simWide,
                 '--render-fakeflat': fakeFlatRender, '--render-potato': potatoRender };
@@ -229,7 +236,7 @@ if (renderMode) {
 
             const goldenPath = join(goldenDir, `${name}${goldenSuffix}.json`);
             if (record) {
-                writeFileSync(goldenPath, JSON.stringify({ tics: done, trace }));
+                writeFileSync(goldenPath, JSON.stringify({ tics: done, trace, provenance: PROV() }));
                 console.log(`recorded ${name} ${detailTag}render: ${done} gametics, ${trace.length} hashes`);
                 verified++;
                 continue;
@@ -363,7 +370,7 @@ if (wideRender) {
 
             const goldenPath = join(goldenDir, `${name}-render-wide.json`);
             if (record) {
-                writeFileSync(goldenPath, JSON.stringify({ tics: done, trace, width: WIDE_WIDTH }));
+                writeFileSync(goldenPath, JSON.stringify({ tics: done, trace, width: WIDE_WIDTH, provenance: PROV() }));
                 console.log(`recorded ${name} [wide] render: ${done} gametics, ${trace.length} hashes, W=${WIDE_WIDTH}`);
                 verified++;
                 continue;
@@ -479,7 +486,7 @@ if (fakeFlatRender) {
 
             const goldenPath = join(goldenDir, `${name}-render-fakeflat.json`);
             if (record) {
-                writeFileSync(goldenPath, JSON.stringify({ tics: done, trace }));
+                writeFileSync(goldenPath, JSON.stringify({ tics: done, trace, provenance: PROV() }));
                 console.log(`recorded ${name} [fakeflat] render: ${done} gametics, ${trace.length} hashes`);
                 verified++;
                 continue;
@@ -596,7 +603,7 @@ if (potatoRender) {
 
             const goldenPath = join(goldenDir, `${name}-render-potato.json`);
             if (record) {
-                writeFileSync(goldenPath, JSON.stringify({ tics: done, trace }));
+                writeFileSync(goldenPath, JSON.stringify({ tics: done, trace, provenance: PROV() }));
                 console.log(`recorded ${name} [potato] render: ${done} gametics, ${trace.length} hashes`);
                 verified++;
                 continue;
@@ -798,7 +805,7 @@ for (const [wad, engineName, demos] of MATRIX) {
 
         const goldenPath = join(goldenDir, `${name}.json`);
         if (record) {
-            writeFileSync(goldenPath, JSON.stringify({ tics: done, trace }));
+            writeFileSync(goldenPath, JSON.stringify({ tics: done, trace, provenance: PROV() }));
             console.log(`recorded ${name}: ${done} gametics, ${trace.length} samples`);
             verified++;   // without this, --record ended at the 0-verified guard
             continue;
