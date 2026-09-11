@@ -166,8 +166,23 @@ console.log(`  Tolerance band: max(|run2-run1|, floor) × ${SAFETY_FACTOR}  (flo
 console.log(`  Skipped: worklet (n=0 headless), input_latency/p99 (small-n; baseline notes 35–61ms run-to-run spread)`);
 console.log('');
 
+// `pass` starts true and is only ever set false by a REAL comparison, so a
+// baseline every stage skips produced a confident PASS having compared nothing.
+// That is exactly what tools/golden/browser-pipeline-wbox.json did: it is in the
+// pre-run1/run2 schema, so all six checks took the "no run1/run2 in baseline"
+// branch and wbox — one of the four reference hosts — was gated by a green that
+// measured nothing, indefinitely (task 21.10).
+const compared = rows.filter(r => r.status !== 'SKIP').length;
+if (compared === 0) {
+    console.log(`browser-pipeline-compare: FAIL — 0 of ${rows.length} checks actually compared.`);
+    console.log('  Every stage was skipped, so this baseline gates nothing.  Most likely the');
+    console.log('  baseline predates the two-run schema: re-record it with two runs, or delete');
+    console.log('  it so the host SKIPs loudly instead of passing vacuously.');
+    process.exit(1);
+}
+
 if (pass) {
-    console.log('browser-pipeline-compare: PASS');
+    console.log(`browser-pipeline-compare: PASS (${compared} of ${rows.length} checks compared)`);
     process.exit(0);
 } else {
     console.log('browser-pipeline-compare: FAIL — regression detected (see *** above)');
