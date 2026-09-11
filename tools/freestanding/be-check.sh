@@ -6,6 +6,14 @@
 # This script is intentionally written to fail (non-zero exit) when hashes
 # don't match — do not mask the exit.  See BE-NOTES.md for divergence table.
 #
+# TARGET-GENERIC despite the name.  The script was written for the big-endian
+# PPC rung (13.3a) and the "be-" prefix is historical; the target, the qemu
+# binary, the output binary and the label are all env-overridable, and
+# tools/freestanding/arm-check.sh drives it for 32-bit ARM:
+#
+#   BE_TARGET=arm-linux-musleabihf QEMU_BE=qemu-arm-static \
+#   BE_BIN=.../fs-doom-arm CROSS_LABEL=ARM32 bash be-check.sh
+#
 # Usage:
 #   bash tools/freestanding/be-check.sh [wad_dir] [out_dir]
 #   wad_dir  defaults to repo-root/wads/lib
@@ -22,6 +30,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WAD_DIR="${1:-$REPO_ROOT/wads/lib}"
 OUT_DIR="${2:-$SCRIPT_DIR/out-be}"
 GOLDEN_DIR="$REPO_ROOT/tools/golden"
+CROSS_LABEL="${CROSS_LABEL:-BE}"
 
 mkdir -p "$OUT_DIR"
 
@@ -131,4 +140,13 @@ if [[ $FAILURES -ne 0 ]]; then
     echo "FAIL: $FAILURES demo(s) diverged from golden ($PASSES matched)"
     exit 1
 fi
-echo "PASS: all $PASSES BE demos bit-identical — big-endian port complete"
+# Every demo whose WAD is absent `skip`s WITHOUT touching FAILURES, so a
+# WAD-less run used to print "PASS: all 0 BE demos bit-identical".  A run that
+# compared nothing is not a pass.
+EXPECTED_DEMOS=${#DEMOS[@]}
+if [[ $PASSES -ne $EXPECTED_DEMOS ]]; then
+    echo "FAIL: verified $PASSES of $EXPECTED_DEMOS demos ($CROSS_LABEL) — incomplete run,"
+    echo "      WADs missing or demos skipped. A partial run is not a pass."
+    exit 1
+fi
+echo "PASS: all $PASSES $CROSS_LABEL demos bit-identical vs the golden traces"

@@ -1,3 +1,8 @@
 fs-doom
 obj/
 out/
+fs-doom-arm
+fs-doom-a64
+out-be/
+out-arm/
+fs-doom-be

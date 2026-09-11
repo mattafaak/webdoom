@@ -19,7 +19,8 @@ no filesystem, tightest routines, "runs on everything" — and runs
    cross-validate against instrumented Chocolate Doom (44,580 tics).
    Any change that diverges a single P_Random call is wrong.
 2. **Measure, don't assume.** No optimization lands without before/after
-   numbers on the four reference hosts (wbox, tank, pi5, alder). A
+   numbers on the three live reference hosts (wbox, tank, alder) — see the
+   2026-09-11 fleet amendment below for why pi5 left that list. A
    change that is within noise everywhere is judged on the universal
    axes instead: simpler, smaller, integer-exact, portability-forward.
 3. **Code simplicity beats cleverness.** Prefer deleting code to adding
@@ -51,11 +52,16 @@ no filesystem, tightest routines, "runs on everything" — and runs
   pixel-identical unless the task explicitly declares a visual change.
 - **Net gate**: 2- and 4-client relay tests with per-tic gamestate
   hashes; mid-game drop and drop-in survival.
-- **Perf gate**: `bench.mjs` per-stage numbers on all four hosts;
+- **Perf gate**: `bench.mjs` per-stage numbers on the three live hosts;
   regressions on any host block, wins are recorded in
   `tools/golden/bench-baseline.json`. The browser-pipeline baseline
   (per-frame JS/GPU/audio cost, input latency) joins this gate once
   Phase 12 lands.
+- **Cross-architecture gate**: the freestanding core replays all 13 golden
+  demos bit-identically on 32-bit ARM under qemu-arm-static
+  (`tools/freestanding/arm-check.sh`, suite leg `arm-cross`). This is
+  correctness, not timing, and it is what the old ARM row should have been
+  asserting all along.
 
 ## Reference hardware fleet
 
@@ -63,8 +69,41 @@ no filesystem, tightest routines, "runs on everything" — and runs
 |------|-----|------|
 | wbox | AMD G-T56N (Bobcat) | weakest — the floor; optimizations target here first |
 | tank | i5-8350U (Kaby Lake) | least optimized to date; slow 64-bit idiv |
-| pi5 | Cortex-A76 (aarch64) | ARM reference; most improved from vanilla |
-| alder | i9-12900K | fastest; dev host — fast here proves nothing |
+| alder | i9-12900K | fastest; dev host — fast here proves nothing; also carries the ARM correctness leg |
+| ~~pi5~~ | Cortex-A76 (aarch64) | **retired from the gate 2026-09-11** — see below |
+
+### Fleet amendment, 2026-09-11: pi5 retired, ARM reassigned
+
+pi5 has been unreachable since before 2026-09-11 (`tailscale ping` times out),
+which made the perf gate unrunnable exactly as written — "regressions on any
+host block" cannot be evaluated against a host that does not answer.
+
+What pi5 actually contributed is narrower than "ARM reference" suggests.
+`fleet-bench.sh` ssh'd to it and ran `node tools/bench.mjs` against the **wasm**
+build. wasm is architecture-independent by construction, so that row was a
+PERFORMANCE sample and never tested ARM code generation, the ARM ABI, or ARM
+alignment. There was no ARM correctness coverage to lose.
+
+Timings do not migrate. Emulated cycles are not hardware cycles, and an ARM
+performance number produced under qemu on alder would be fiction — so the perf
+gate is now three hosts, honestly, rather than four with one invented.
+
+Correctness does migrate, and it is the half that was missing. alder now
+cross-builds the freestanding core for 32-bit ARM (zig's bundled musl,
+`arm-linux-musleabihf`) and replays all 13 golden demos under qemu-arm-static,
+asserting per-tic state hashes bit-identical. **Verified 2026-09-11: 13/13.**
+So the ARM row asserts something stronger than it ever did, on a host that is up.
+
+Its committed measurements stay in `tools/golden/bench-baseline.json` and
+`docs/perf.md` as dated evidence — history is not discarded — and the fire-cost
+figures in this file are unchanged. If pi5 returns, adding it back is one line
+in `fleet-bench.sh`.
+
+**Known limit, not fixed here**: the same cross-build for 64-bit aarch64
+(`aarch64-linux-musl`) boots, prints through `W_Init`, and then segfaults on all
+13 demos. This engine has only ever been built 32-bit — wasm32, native `-m32`,
+MIPS32, thumbv6m — so 64-bit cleanliness is an unexplored axis, in the same
+family as the MIPS ABI landmine audit (20.4a). Recorded, not diagnosed.
 
 ## Netcode contract
 

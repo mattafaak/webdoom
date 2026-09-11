@@ -65,6 +65,8 @@ have_build()   { [ -f build/doom.js ] && [ -f build/doom.wasm ]; }
 have_wad()     { local w; for w in "${IWADS[@]}"; do [ -f "wads/lib/$w" ] || return 1; done; }
 have_native()  { [ -x tools/native-sanitize/nat-doom ]; }
 have_fs()      { [ -x tools/freestanding/fs-doom ]; }
+have_zig()     { command -v zig >/dev/null 2>&1; }
+have_qemuarm() { command -v qemu-arm-static >/dev/null 2>&1; }
 have_gcc()     { command -v gcc >/dev/null 2>&1; }
 have_browser() { command -v "${CHROME_BIN:-google-chrome-stable}" >/dev/null 2>&1 || [ -x /opt/google/chrome/chrome ]; }
 have_firefox() { [ -x /usr/bin/firefox ]; }
@@ -77,6 +79,8 @@ need_reason() {   # need_reason <tag> -> prints why it is unmet
         wad)      echo "IWADs absent (run: tools/fetch-wads.sh)" ;;
         native)   echo "nat-doom absent (run: make -C tools/native-sanitize)" ;;
         fs)       echo "fs-doom absent (run: make -C tools/freestanding)" ;;
+        zig)      echo "zig not on PATH (needed to cross-build for ARM)" ;;
+        qemuarm)  echo "qemu-arm-static not on PATH" ;;
         gcc)      echo "gcc not on PATH" ;;
         browser)  echo "Chrome not found (set CHROME_BIN)" ;;
         firefox)  echo "/usr/bin/firefox not found" ;;
@@ -88,6 +92,7 @@ need_reason() {   # need_reason <tag> -> prints why it is unmet
 need_met() {
     case "$1" in
         build) have_build ;; wad) have_wad ;; native) have_native ;; gcc) have_gcc ;; fs) have_fs ;;
+        zig) have_zig ;; qemuarm) have_qemuarm ;;
         browser) have_browser ;; firefox) have_firefox ;; emsdk) have_emsdk ;;
         baseline) have_baseline ;;
         *) return 1 ;;
@@ -326,6 +331,14 @@ leg sprite-witness  build,wad  "r_things.c:530 cull pin, 320 + 854"    -- node t
 leg native-asan     native,wad "13 demos under ASan/UBSan (README's claim)"  -- bash tools/native-sanitize/run-all.sh wads/lib tools/native-sanitize/out sim
 leg freestanding-sim fs,wad    "fs-doom 13/13 == vanilla (rung 1 proof)"     -- bash tools/freestanding/run-check.sh
 leg ro-wad          fs,wad     "WAD blob stays read-only over 13 demos (XIP)" -- bash tools/freestanding/ro-wad-check.sh
+# The ARM reference, on alder (F4).  spec.md lists pi5 as "ARM reference", but
+# what pi5 ran was node bench.mjs against the WASM build -- a performance
+# sample, and wasm is architecture-independent, so the ARM row never tested ARM
+# codegen, ABI or alignment.  pi5 is also down.  Timings cannot move to alder
+# (emulated cycles are not hardware cycles); correctness can, and it is the
+# half that was missing.  zig cross-builds the freestanding core for 32-bit ARM
+# and qemu-arm-static replays all 13 golden demos.
+leg arm-cross       zig,qemuarm,wad "freestanding core 13/13 on 32-bit ARM" -- bash tools/freestanding/arm-check.sh
 leg demo-verify-cli build,wad  "the shipped 19.4 CLI itself, --all mode"     -- node tools/demo-verify.mjs --all
 
 # ── netcode determinism ──────────────────────────────────────────────────────

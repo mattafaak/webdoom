@@ -25,7 +25,6 @@ WAD=doom.wad
 # pi5 may require an explicit user if your local username differs; set FLEET_PI5.
 FLEET_WBOX=${FLEET_WBOX:-wbox}
 FLEET_TANK=${FLEET_TANK:-tank}
-FLEET_PI5=${FLEET_PI5:-pi5}
 
 # Host definitions: "hostkey:ssh_target" pairs.
 # alder is local (no ssh); use the literal string "local" for the ssh target.
@@ -33,8 +32,19 @@ declare -a HOST_KEYS=(
     "alder-i9-12900K:local"
     "wbox-amd-g-t56n:${FLEET_WBOX}"
     "tank-i5-8350U:${FLEET_TANK}"
-    "pi5-aarch64:${FLEET_PI5}"
 )
+
+# pi5 is OPT-IN since 2026-09-11 (spec.md fleet amendment).  It has been
+# unreachable since before then, and a default host that cannot answer makes
+# "regressions on any host block" unevaluable — the gate stops meaning anything
+# while still looking like it covers four hosts.  Its ARM role was a wasm
+# PERFORMANCE sample, never ARM correctness; the correctness half now runs on
+# alder as the `arm-cross` suite leg.  Set FLEET_PI5 to bring it back:
+#     FLEET_PI5=jwhited@pi5 bash tools/fleet-bench.sh
+if [[ -n "${FLEET_PI5:-}" ]]; then
+    HOST_KEYS+=("pi5-aarch64:${FLEET_PI5}")
+    echo "fleet-bench: pi5 included via FLEET_PI5=${FLEET_PI5}"
+fi
 
 # Remote working directory.
 REMOTE_DIR="\$HOME/.cache/webdoom-bench"
@@ -209,7 +219,7 @@ for hk, rf in zip(host_keys, result_files):
             print(f"  WARNING: could not parse {rf}: {e}", file=sys.stderr)
 
 # Canonical host order for display
-ORDER = ["alder-i9-12900K", "wbox-amd-g-t56n", "tank-i5-8350U", "pi5-aarch64"]
+ORDER = ["alder-i9-12900K", "wbox-amd-g-t56n", "tank-i5-8350U", "pi5-aarch64"]   # pi5 renders only when FLEET_PI5 brought it in
 DEMOS = ["demo1", "demo2", "demo3"]
 STAGES = ["frame_ms", "bsp_ms", "planes_ms", "masked_ms"]
 STAGE_NAMES = ["frame", "bsp  ", "planes", "masked"]
