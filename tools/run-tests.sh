@@ -369,10 +369,11 @@ leg ro-wad          fs,wad     "WAD blob stays read-only over 13 demos (XIP)" --
 leg arm-cross       zig,qemuarm,wad "freestanding core 13/13 on 32-bit ARM" -- bash tools/freestanding/arm-check.sh
 # The N64 rung of the same argument, and the strongest one: a 93.75 MHz
 # big-endian MIPS console, a 12.4 MB WAD read in place out of cartridge space,
-# and the whole 44,580-tic golden set reproduced bit-for-bit.  ~13 min -- the
-# longest leg in the suite by a wide margin, and it is here rather than in the
-# out-of-suite registry because it is now green and a gate nobody runs rots.
-leg n64-demos       n64,wad    "13/13 demo sim-hashes on emulated N64 (~13 min)" -- bash tools/n64/run-n64-demos.sh
+# and the whole 44,580-tic golden set reproduced bit-for-bit.  MEASURED 8m19s
+# for the 13 demos (23:30:40 -> 23:38:59, 2026-09-11) -- the longest leg in the
+# suite by a wide margin, and it is here rather than in the out-of-suite
+# registry because it is now green and a gate nobody runs rots.
+leg n64-demos       n64,wad    "13/13 demo sim-hashes on emulated N64 (~8 min)" -- bash tools/n64/run-n64-demos.sh
 leg demo-verify-cli build,wad  "the shipped 19.4 CLI itself, --all mode"     -- node tools/demo-verify.mjs --all
 
 # ── netcode determinism ──────────────────────────────────────────────────────

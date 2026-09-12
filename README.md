@@ -54,7 +54,7 @@ the game/map/skill/mode; anyone hits START; 3-2-1, everyone's in.
 ## Tests
 
 ```sh
-tools/run-tests.sh            # everything: 74 legs, ~15 min
+tools/run-tests.sh            # everything: 81 legs, ~25 min
 tools/run-tests.sh --quick    # no WADs, no build, no browser — what CI runs
 tools/run-tests.sh --list     # the leg registry
 ```
@@ -106,6 +106,13 @@ so. The workflow prints the list it did not cover.
 - **native ASan/UBSan**: `tools/native-sanitize/` builds the engine for
   the native host with AddressSanitizer and UndefinedBehaviorSanitizer;
   runs the demo suite to surface OOB reads invisible in wasm
+- **cross-architecture**: the same 13 golden demos replayed on hardware the
+  browser build never sees. 32-bit ARM under `qemu-arm-static` (zig
+  cross-build), and — the strongest form of the argument — an emulated
+  **Nintendo 64**: 93.75 MHz big-endian MIPS R4300i, the 12.4 MB IWAD read in
+  place out of cartridge space, **44,580 tics with every per-tic simulation
+  hash bit-identical** to the wasm golden (`tools/n64/run-n64-demos.sh`, leg
+  `n64-demos`, ~8 min; needs the mips64 toolchain and ares, so it runs locally)
 - **browser**: CDP-driven Chrome — title → menu → new game → movement,
   audio arms, service worker caches; plus two tabs through the lobby
   into a co-op game. The sw-cache sub-check waits for the service
