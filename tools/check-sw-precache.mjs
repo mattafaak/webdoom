@@ -101,10 +101,34 @@ for (const p of appShell) {
 }
 
 // ── 6. Report ─────────────────────────────────────────────────────────────────
+//
+// A precached path under /engine/ is a BUILD OUTPUT (build/doom.js, doom.wasm).
+// Every other precached path is tracked in the repo, so its absence is real
+// drift and must fail.  Conflating the two made this gate pass on the dev box
+// and fail everywhere else: it sat in the --quick tier, which is defined as "no
+// WAD, no build", and then required build/doom.js to exist.  It only ever ran
+// where a build happened to be lying around, and the FIRST CI run this repo has
+// ever had failed on exactly that.
+//
+// So: build outputs are checked when a build is present, and reported as a
+// NAMED skip when it is not — never silently dropped, and the final line says
+// which of the two happened, because "verified everything" and "verified
+// everything I could reach" must not print the same word.
+const isBuildOutput = u => u.startsWith('/engine/');
+const buildPresent  = existsSync(join(buildDir, 'doom.wasm'));
+const staleTracked  = stale.filter(s => !isBuildOutput(s.url));
+const staleBuild    = stale.filter(s =>  isBuildOutput(s.url));
+
 let fail = false;
-if (stale.length) {
+if (staleTracked.length) {
     console.error('FAIL: precached paths that no longer exist on disk:');
-    for (const { url, disk } of stale) console.error(`  ${url}  (checked: ${disk})`);
+    for (const { url, disk } of staleTracked) console.error(`  ${url}  (checked: ${disk})`);
+    fail = true;
+}
+// A missing build output when the build IS present is drift like any other.
+if (buildPresent && staleBuild.length) {
+    console.error('FAIL: precached build outputs missing from a present build/:');
+    for (const { url, disk } of staleBuild) console.error(`  ${url}  (checked: ${disk})`);
     fail = true;
 }
 if (missing.length) {
@@ -113,4 +137,12 @@ if (missing.length) {
     fail = true;
 }
 if (fail) process.exit(1);
-console.log(`ok  sw.js precache integrity: ${shellList.size} entries, import graph ${appShell.size} paths — no drift`);
+
+const head = `sw.js precache integrity: ${shellList.size} entries, import graph ${appShell.size} paths — no drift`;
+if (buildPresent) {
+    console.log(`ok  ${head}, all ${shellList.size} paths present on disk`);
+} else {
+    const names = staleBuild.map(s => s.url).join(', ');
+    console.log(`ok (INCOMPLETE)  ${head}; ${staleBuild.length} build-output path(s) NOT CHECKED ` +
+                `(${names}) — build/ absent, run: source tools/emsdk-env.sh && make -C engine`);
+}

@@ -67,6 +67,36 @@ jobs:
       - name: Quick tier
         run: bash tools/run-tests.sh --quick
 
+      # The runner shows only the tail of a failing leg, because gate.sh trims.
+      # run-tests.sh already keeps each failing leg's FULL output at
+      # tools/.suite-logs/<leg>.log and says so -- and this workflow was
+      # throwing that away, so the first red it ever produced named two failed
+      # checks and showed neither.  A red whose reason is trimmed off is the
+      # same defect as a green with no reason.
+      - name: Failing leg logs
+        if: failure()
+        run: |
+          shopt -s nullglob
+          logs=(tools/.suite-logs/*.log)
+          if [ ${#logs[@]} -eq 0 ]; then
+            echo "no leg logs kept — the failure was outside a leg"
+            exit 0
+          fi
+          for f in "${logs[@]}"; do
+            echo "═══════════════════════════════════════════════════════════"
+            echo "── $f"
+            echo "═══════════════════════════════════════════════════════════"
+            cat "$f"
+          done
+
+      - name: Keep the leg logs as an artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: suite-logs-node-${{ matrix.node }}
+          path: tools/.suite-logs/
+          if-no-files-found: ignore
+
       - name: What this job did NOT run
         if: always()
         run: |
