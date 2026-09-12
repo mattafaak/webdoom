@@ -30,9 +30,39 @@ const MOUNTS = [
     ['/',        join(root, 'client')],
 ];
 
-const manifest = () => readFileSync(join(root, 'wads/manifest.json'));
+// The manifest, cached against its own mtime.
+//
+// This was `readFileSync(...)` called straight from the request handler. A
+// missing or unreadable wads/manifest.json therefore threw INSIDE a Node
+// 'request' listener -- uncaught, process exit -- so one bad file in the data
+// directory took the game down for everyone on the LAN. That is the exact
+// failure server/ui-assets.js was hardened against in task 23.3 ("One corrupt
+// WAD takes the game down for everyone"); the hardening went into lumpsOf() and
+// stopped one call short of the read beside it.
+//
+// It was also a synchronous disk read on every /api/wads request.
+let manifestCache = null;   // { mtimeMs, body }
+function manifest() {
+    const f = join(root, 'wads/manifest.json');
+    try {
+        const { mtimeMs } = statSync(f);
+        if (!manifestCache || manifestCache.mtimeMs !== mtimeMs)
+            manifestCache = { mtimeMs, body: readFileSync(f) };
+        return manifestCache.body;
+    } catch (e) {
+        // Decline, do not die. Same shape as ui-assets.js.
+        console.error(`webdoom: wads/manifest.json unreadable (${e?.code ?? e?.message}) — serving an empty library`);
+        return Buffer.from('{"wads":[]}');
+    }
+}
 
 function send(res, code, body, headers = {}) {
+    // Two paths could each call send() for one request: the verify body timer
+    // (408) racing req 'error' (400), and the demo POST's 'error' racing its
+    // 'end'. The second call throws ERR_HTTP_HEADERS_SENT, which -- inside an
+    // event handler -- is an uncaught exception. The timer path wrapped its own
+    // send in try/catch; the error paths did not. One guard for all of them.
+    if (res.headersSent || res.writableEnded) return;
     res.writeHead(code, { 'cache-control': 'no-store', ...headers });
     res.end(body);
 }
@@ -72,6 +102,7 @@ const server = createServer((req, res) => {
 
     if (path === '/api/wads')
         return send(res, 200, manifest(), { 'content-type': 'application/json' });
+
 
     // ── demo store API ────────────────────────────────────────────────────────
     //
@@ -249,7 +280,27 @@ const server = createServer((req, res) => {
 
     if (path === '/api/ui-assets') {
         // no-store: a stale hour-long cache kept serving the old logo
-        const assets = uiAssets(join(root, 'wads/lib'), JSON.parse(manifest()));
+        //
+        // JSON.parse(manifest()) was unguarded, and manifest() returns bytes
+        // without parsing them -- so a wads/manifest.json that is present but
+        // not valid JSON threw here, inside a 'request' listener, and ENDED THE
+        // PROCESS. Measured against the shipped server: the request returns
+        // nothing, and so does the next one, because there is no longer a
+        // server. One malformed file in the data directory took the game down
+        // for everyone on the LAN, which is the failure ui-assets.js itself was
+        // hardened against in task 23.3 -- the hardening went into lumpsOf()
+        // and stopped one call short of its own caller.
+        //
+        // The uncaughtException handler at the bottom would now catch this, but
+        // a backstop is not a guard: it cannot answer the request, and the
+        // operator would see a stack trace instead of the reason.
+        let parsed;
+        try { parsed = JSON.parse(manifest()); }
+        catch (e) {
+            console.error(`webdoom: wads/manifest.json is not valid JSON (${e.message}) — /api/ui-assets declines`);
+            return send(res, 503, 'wads/manifest.json is unreadable or not valid JSON — run tools/fetch-wads.sh');
+        }
+        const assets = uiAssets(join(root, 'wads/lib'), parsed);
         return assets
             ? send(res, 200, assets, { 'content-type': 'application/json' })
             : send(res, 404, 'no IWAD available');
@@ -270,7 +321,18 @@ const server = createServer((req, res) => {
             'cache-control': prefix === '/wads/' ? 'public, max-age=31536000, immutable' : 'no-store',
         };
         res.writeHead(200, headers);
-        createReadStream(file).pipe(res);
+        // statSync above and the open below are not atomic: a file deleted or
+        // truncated in between emits 'error' on the stream, and an unhandled
+        // stream 'error' is an uncaught exception -- process exit, for one
+        // vanished file. Headers are already sent here, so the only honest
+        // recovery is to destroy the response and let the client see a truncated
+        // body rather than a dead server.
+        const stream = createReadStream(file);
+        stream.on('error', err => {
+            console.error(`webdoom: read failed for ${file} — ${err?.code ?? err?.message}`);
+            res.destroy();
+        });
+        stream.pipe(res);
         return;
     }
     send(res, 404, 'not found');
@@ -278,6 +340,29 @@ const server = createServer((req, res) => {
 
 const game = createGame();
 server.on('upgrade', (req, socket, head) => game.upgrade(req, socket, head));
+
+// LAST RESORT, not a substitute for the guards above.
+//
+// There was no uncaughtException or unhandledRejection handler anywhere in
+// server/, so any throw reaching the top of a request listener ended the
+// process -- and with it everyone's game. The specific paths that could do it
+// are fixed above; this is here because the next one has not been found yet,
+// and a DOOM night should not end because of it.
+//
+// It deliberately does NOT swallow silently: the error is printed in full, and
+// a fatal one during startup still exits, because a server that cannot bind or
+// cannot read its own tree should fail loudly rather than limp.
+let started = false;
+const survive = (kind) => (err) => {
+    console.error(`webdoom: ${kind} — the request that caused this is lost, the server is not:`);
+    console.error(err?.stack ?? err);
+    if (!started) {
+        console.error('webdoom: ...but this happened before the server was listening, so exiting');
+        process.exit(1);
+    }
+};
+process.on('uncaughtException', survive('uncaught exception'));
+process.on('unhandledRejection', survive('unhandled rejection'));
 
 // Without this, a listen failure is an unhandled 'error' event: the process dies
 // with a stack trace, and any harness that spawned it and then slept for a fixed
@@ -297,6 +382,7 @@ server.on('error', err => {
 });
 
 server.listen(PORT, HOST, async () => {
+    started = true;
     // one lobby, any route in: LAN and tailnet clients land in the same
     // game because everything relays through this server
     const { networkInterfaces } = await import('node:os');

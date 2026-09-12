@@ -160,6 +160,79 @@ async function fuzzStaticHTTP() {
 console.log('http fuzz test — static path attacks against the real server:');
 await fuzzStaticHTTP();
 
+// ── a hostile DATA DIRECTORY, not a hostile request ──────────────────────────
+//
+// `JSON.parse(manifest())` in the /api/ui-assets route was unguarded, and
+// manifest() returns bytes without parsing them -- so a wads/manifest.json that
+// is PRESENT but not valid JSON threw inside a 'request' listener and ENDED THE
+// PROCESS. Measured against the shipped server: the request returns nothing,
+// and so does the next one, because there is no longer a server. One malformed
+// file in the data directory took the game down for everyone on the LAN.
+//
+// That is the failure server/ui-assets.js was hardened against in task 23.3 --
+// "One corrupt WAD takes the game down for everyone on the LAN" -- and the
+// hardening went into lumpsOf() and stopped one call short of its own caller.
+//
+// This runs against a TEMPORARY tree rather than the repo, because the repo's
+// own manifest is the one the rest of the suite needs. Same layout, same
+// server, node_modules symlinked.
+async function fuzzHostileDataDir() {
+    const { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, copyFileSync, rmSync, readdirSync } =
+        await import('node:fs');
+    const { tmpdir } = await import('node:os');
+
+    const tree = mkdtempSync(join(tmpdir(), 'webdoom-datadir-'));
+    try {
+        mkdirSync(join(tree, 'server'));
+        mkdirSync(join(tree, 'wads/lib'), { recursive: true });
+        mkdirSync(join(tree, 'client'));
+        mkdirSync(join(tree, 'build'));
+        for (const f of readdirSync(join(root, 'server')).filter(f => /\.(js|json)$/.test(f)))
+            copyFileSync(join(root, 'server', f), join(tree, 'server', f));
+        symlinkSync(join(root, 'server/node_modules'), join(tree, 'server/node_modules'));
+        writeFileSync(join(tree, 'client/index.html'), '<!doctype html><title>x</title>');
+
+        const cases = [
+            ['manifest is not valid JSON', 'not json {{{',              '/api/ui-assets'],
+            ['manifest is absent',          null,                        '/api/ui-assets'],
+            ['manifest is absent',          null,                        '/api/wads'],
+            ['manifest is empty',           '',                          '/api/wads'],
+        ];
+        for (const [label, body, path] of cases) {
+            const mf = join(tree, 'wads/manifest.json');
+            if (body === null) { try { rmSync(mf); } catch { /* already gone */ } }
+            else writeFileSync(mf, body);
+
+            const port = PORT_BASE++;
+            const srv = spawn('node', [join(tree, 'server/serve.js')], {
+                env: { ...process.env, DOOM_PORT: String(port), DOOM_HOST: '127.0.0.1' },
+                stdio: ['ignore', 'ignore', 'ignore'],
+            });
+            let exited = false;
+            srv.on('exit', () => { exited = true; });
+            for (let i = 0; i < 40 && !exited; i++) {
+                await sleep(100);
+                if (await healthCheck('127.0.0.1', port)) break;
+            }
+            // The request itself may legitimately decline (503/404). What must
+            // not happen is the server going away.
+            try {
+                await fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(4000) });
+            } catch { /* a declined or aborted request is not the thing under test */ }
+            await sleep(300);
+            const alive = !exited && await healthCheck('127.0.0.1', port);
+            check(`${label}: GET ${path} leaves the server up`, alive,
+                  `process exited=${exited}, still answering=${alive}`);
+            srv.kill();
+        }
+    } finally {
+        rmSync(tree, { recursive: true, force: true });
+    }
+}
+
+console.log('\nhostile data directory — the server must decline, not die:');
+await fuzzHostileDataDir();
+
 const failed = results.filter(r => !r.ok);
 const total = results.length;
 console.log(`\n${failed.length
