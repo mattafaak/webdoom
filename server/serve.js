@@ -7,7 +7,7 @@ import { join, normalize, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createGame } from './game.js';
 import { uiAssets } from './ui-assets.js';
-import { putDemo, getDemo, PER_DEMO_CAP,
+import { putDemo, getDemo, PER_DEMO_CAP, storeStats,
          putAttestation, getAttestation, ATTEST_BODY_CAP } from './demo-store.js';
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
@@ -111,6 +111,22 @@ const server = createServer((req, res) => {
         return;
     }
 
+    // GET /api/demos/stats — what the store is actually holding.
+    //
+    // storeStats() was exported and labelled "for tests" and had no caller
+    // anywhere: not in server/, not in client/, not in tools/.  So the one
+    // instrument built to show the store's footprint was not reachable, and the
+    // attestation leak (task A3) grew with nothing able to observe it.  A store
+    // with no readout is a store nobody can prove is bounded.
+    //
+    // Counts and byte totals only — no ids, no content, nothing that would let
+    // an unauthenticated LAN caller enumerate what other people have uploaded.
+    if (path === '/api/demos/stats') {
+        if (req.method !== 'GET') return send(res, 405, 'method not allowed');
+        return send(res, 200, JSON.stringify(storeStats()),
+                    { 'content-type': 'application/json' });
+    }
+
     const demoMatch = path.match(/^\/api\/demos\/([0-9a-f]{64})$/);
     if (demoMatch) {
         if (req.method !== 'GET') return send(res, 405, 'method not allowed');
@@ -151,8 +167,14 @@ const server = createServer((req, res) => {
             if (req.method === 'GET') {
                 const attest = getAttestation(vid);
                 if (!attest) return send(res, 404, 'no attestation stored for this demo');
+                // trace is a Uint32Array (task A3).  JSON.stringify would render
+                // a typed array as an OBJECT -- {"0":123,"1":456} -- silently
+                // changing this endpoint's contract, so build the array body
+                // from join() instead.  tics and storedAt are validated
+                // non-negative integers, so interpolating them is safe.
                 return send(res, 200,
-                    JSON.stringify({ tics: attest.tics, trace: attest.trace, storedAt: attest.storedAt }),
+                    `{"tics":${attest.tics},"trace":[${attest.trace.join(',')}],`
+                    + `"storedAt":${attest.storedAt}}`,
                     { 'content-type': 'application/json' });
             }
             if (req.method !== 'POST') return send(res, 405, 'method not allowed');

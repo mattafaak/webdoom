@@ -16,10 +16,10 @@ const { PER_DEMO_CAP, TOTAL_QUOTA, TTL_MS, FRAGMENT_MAX } =
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let PORT_BASE = 8880;
-function spawnServer() {
+function spawnServer(extraEnv = {}) {
     const port = PORT_BASE++;
     const srv = spawn('node', [join(root, 'server/serve.js')], {
-        env: { ...process.env, DOOM_PORT: port, DOOM_HOST: '127.0.0.1' },
+        env: { ...process.env, DOOM_PORT: port, DOOM_HOST: '127.0.0.1', ...extraEnv },
         stdio: ['ignore', 'ignore', 'pipe'],
     });
     let crashed = false;
@@ -321,6 +321,72 @@ ok('server did not crash', !didCrash());
     kill();
 }
 
+// ── 8. Attestations are RECLAIMED when their demo goes (task A3) ─────────────
+//
+// The three sites that delete a demo -- gcExpired(), evictOldest() and
+// getDemo()'s expiry branch -- each deleted from `store` and left the
+// attestation behind.  deleteAttestation() was exported, documented "called
+// when demo is evicted", and called from nowhere; the only pruning was the
+// lazy one in getAttestation(), which fires only if somebody asks for that
+// exact id AFTER its demo is already gone.  So every evicted or expired demo
+// orphaned its trace permanently, in a store with no quota, no sweep and no
+// accounting.
+//
+// Section 6 above covers attestation VALIDATION -- happy path, 413, 400 -- and
+// asserted nothing about reclamation, which is why this went unseen.
+//
+// Driven against a real server with a small quota and a 1 s TTL, so both the
+// eviction path and the expiry path actually execute rather than being
+// asserted by inspection.
+{
+    const QUOTA = 24_000;                 // bytes of demo; ~3 x 8 KB demos
+    const s2 = spawnServer({
+        WEBDOOM_DEMO_QUOTA: String(QUOTA),
+        WEBDOOM_DEMO_TTL_MS: '1000',
+    });
+    try {
+        await waitReady(s2.port);
+        const stats = async () => JSON.parse((await request('GET', `${s2.base}/api/demos/stats`)).body);
+        const upload = async (n) => {
+            const r = await request('POST', `${s2.base}/api/demos?wad=doom.wad`, minimalDemo(n),
+                { 'content-type': 'application/octet-stream' });
+            return JSON.parse(r.body).id;
+        };
+        const attest = async (id, len) => request('POST', `${s2.base}/api/demos/${id}/verify`,
+            Buffer.from(JSON.stringify({ tics: len, trace: Array.from({ length: len }, (_, i) => i) })),
+            { 'content-type': 'application/json' });
+
+        const probe = await stats();
+        ok('GET /api/demos/stats reports the attestation store', typeof probe.attestBytes === 'number');
+
+        // --- eviction: fill past the demo quota and watch the traces go with it
+        const first = await upload(8_000);
+        await attest(first, 500);
+        const afterFirst = await stats();
+        ok('attestation accounted after store (bytes > 0)', afterFirst.attestBytes === 2000);
+
+        for (let i = 1; i <= 5; i++) { const id = await upload(8_000 + i); await attest(id, 500); }
+        const afterFill = await stats();
+        ok('demo store stayed inside its quota', afterFill.usedBytes <= QUOTA);
+        ok('evicted demos took their attestations with them',
+           afterFill.attestCount === afterFill.count);
+        ok('attestation bytes match the surviving attestations',
+           afterFill.attestBytes === afterFill.attestCount * 2000);
+        ok('the evicted demo\'s attestation is gone from the API',
+           (await request('GET', `${s2.base}/api/demos/${first}/verify`)).status === 404);
+
+        // --- expiry: the TTL path is the other half, and it was equally blind
+        await sleep(1200);
+        const afterTtl = await stats();
+        ok('expired demos are swept', afterTtl.count === 0);
+        ok('expired demos leave no attestation behind', afterTtl.attestCount === 0);
+        ok('attestation byte accounting returns to zero', afterTtl.attestBytes === 0);
+        ok('no crash across the reclamation suite', !s2.didCrash());
+    } finally {
+        s2.kill();
+    }
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n  ${passes} passed, ${failures} failed`);
@@ -328,5 +394,5 @@ if (failures) {
     console.log(`demo-store-fuzz-test: ${failures} failure(s)`);
     process.exit(1);
 }
-console.log('PASS — demo-store-fuzz-test: all demo store checks green');
+console.log(`PASS — demo-store-fuzz-test: ${passes} demo store checks green`);
 process.exit(0);
