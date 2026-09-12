@@ -30,6 +30,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
+import { computeSummary } from './claims-summary.mjs';
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const INDEX = join(root, 'docs/claims-index.md');
 const claims = JSON.parse(readFileSync(join(root, 'tools/archaeology/claims.json'), 'utf8')).claims;
@@ -100,10 +101,39 @@ if (!stated) fail('claims-index: no "**Total claims: N**" line to check against'
 else if (Number(stated[1]) !== rows.length)
     fail(`claims-index: the document says "Total claims: ${stated[1]}" but the table has ${rows.length} rows`);
 
+// 7. The document's OTHER two counts, which nothing checked.
+//
+// Invariant 6 above computes "Total claims: N" from the table and was added by
+// task 21.9 under the doctrine that a count is computed, never typed.  Two more
+// counts in the same file's header were typed and stayed typed: the fast-tier
+// size and the number of unverifiable claims.  Both had drifted -- the header
+// said 105 and 16 where the manifest says 107 and 17 -- inside the very
+// document that exists to be the claims inventory.
+// The tier split is computed by claims-summary.mjs, which is the file task 21.9
+// created to be the one computer of these numbers.  Re-deriving it here would
+// make a SECOND definition of "fast tier" -- and a second definition is how the
+// first draft of this check got 111 where the manifest says 107, by forgetting
+// that size-ledger rides in the full tier.  Ask the computer.
+const text7 = readFileSync(INDEX, 'utf8');
+const summary = computeSummary();
+const nFast = summary.fast;
+const nUnverifiable = summary.unverifiable;
+
+for (const [label, re, want] of [
+    ['fast tier',   /fast tier \((\d+) claims/,                       nFast],
+    ['unverifiable', /markers for the (\d+) unverifiable claims/,      nUnverifiable],
+]) {
+    const m = re.exec(text7);
+    if (!m) fail(`claims-index: no "${label}" count in the header to check against`);
+    else if (Number(m[1]) !== want)
+        fail(`claims-index: header says ${m[1]} ${label} claims, the manifest has ${want}`);
+}
+
 if (bad) { console.log(`\nclaims-index-check: ${bad} problem(s)`); process.exit(1); }
 
 const by = {};
 for (const r of rows) by[r.status] = (by[r.status] ?? 0) + 1;
 console.log(`PASS claims-index-check: ${rows.length} rows — ` +
             Object.entries(by).sort().map(([k, v]) => `${v} ${k}`).join(', ') +
-            `; all ${Object.keys(claims).length} manifest ids listed, all reproducer paths resolve`);
+            `; all ${Object.keys(claims).length} manifest ids listed, all reproducer paths resolve, ` +
+            `header counts (${nFast} fast, ${nUnverifiable} unverifiable) computed`);

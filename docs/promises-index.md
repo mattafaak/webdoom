@@ -8,9 +8,13 @@ that closes it.
 
 **Scope**: this index covers what `docs/claims-index.md` never covered:
 qualitative/behavioral promises and the published figures in README, spec, and
-magic-data. Do not confuse the two — `claims-index.md` gates 182 quantitative
-claims across the five archaeology docs; this index gates the 28 promises that
-live outside that corpus.
+magic-data. Do not confuse the two — `claims-index.md` inventories the
+quantitative claims across the five archaeology docs (154 in the manifest, 204
+index rows; `claims-index-check.mjs` prints the split and asserts it). This
+figure used to read "gates 182 quantitative claims", which matches no count the
+tooling produces. This index covers the 44 promises that
+live outside that corpus. (Both figures used to be typed and both had drifted;
+they are asserted against the tables now — see the note under the summary.)
 
 **Gate**: `node tools/archaeology/doc-drift.mjs` — extended by task 12.1 to
 cover README.md (README_HINTS), spec.md (SPEC_HINTS), and the remaining 7
@@ -18,7 +22,7 @@ magic-data.md figures (new PUBLIC_HINTS entries). Run the drift checker to
 verify all machine-checkable figures; the qualitative promises below are indexed
 here with dispositions.
 
-**34 promises. Counts are asserted against the table by `tools/archaeology/promises-index-check.mjs`, not typed here — the header and the summary used to disagree (5/8/15 against 5/10/13).**
+**44 promises. Counts are asserted against the table by `tools/archaeology/promises-index-check.mjs`, not typed here — the header and the summary used to disagree (5/8/15 against 5/10/13), and the checker itself matched only three of the four Parts until this pass.**
 
 ---
 
@@ -123,23 +127,33 @@ family). Two figures remain ungateable.
 | spec.md | 8 | 3 | 4 | 1 |
 | perf.md (not-machine-verified) | 10 | 1 | 3 | 6 |
 | magic-data.md | 16 | 14 | 1 | 1 |
-| **Total** | **28** (excl. magic-data) / **44** (incl.) | **5** / **19** | **10** / **11** | **13** / **14** |
+| **Total** | **44** | **18** | **10** | **12** |
 
-> Note: magic-data.md figures are separately tracked because they have their own
-> gate mechanism (PUBLIC_HINTS). The "28 promises" headline count covers Parts A–C
-> (README + spec + perf); Part D adds 16 magic-data figures for a full inventory
-> of 44 entries.
+> Note: magic-data.md figures have their own gate mechanism (PUBLIC_HINTS) but
+> are counted here like every other row. The table above used to carry two
+> totals — "28 (excl. magic-data) / 44 (incl.)" — and a per-disposition split
+> ("5/19 gated, 10/11 evidenced, 13/14 flagged") that matched neither the
+> checker nor the rows. There is one inventory and one set of counts now, and
+> `promises-index-check.mjs` computes them.
 
-**34 promises in the table.** Counts are asserted against it by
+**44 promises in the table.** Counts are asserted against it by
 `tools/archaeology/promises-index-check.mjs` rather than typed — the header and this
 line used to disagree (5/8/15 against 5/10/13), which is how six stale dispositions
 survived to task 24.1.
 
+It said **34** until this pass, and the reason is worth keeping: the checker
+matched a row by `cells.length === 6`, which is the shape of Parts A, B and D.
+Part C — the ten perf.md figures — has a sixth column for the inline reason, so
+all ten were dropped without a word, and the document's own breakdown below
+listed Parts A, B and D and simply omitted C. A checker that silently skips a
+whole section reports a number that is true of nothing.
+
 - Part A: 10 — 2 evidenced, 3 flagged, 1 gated, 3 partial, 1 resolved
 - Part B: 8 — 4 evidenced, 2 flagged, 2 gated
+- Part C: 10 — 3 evidenced, 6 flagged, 1 gated
 - Part D: 16 — 1 evidenced, 1 flagged, 14 gated
 
-Whole table: 7 evidenced, 6 flagged, 17 gated, 3 partial, 1 resolved.
+Whole table: 10 evidenced, 12 flagged, 18 gated, 3 partial, 1 resolved.
 
 `PARTIAL` is new in 24.1 and earns its place: three promises are compound, and calling
 them GATED or FLAGGED was wrong in both directions. "stock Chrome / Edge / Firefox" has

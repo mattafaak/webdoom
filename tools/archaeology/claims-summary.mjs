@@ -75,12 +75,22 @@ export function computeSummary() {
 
 const args = process.argv.slice(2);
 const mode = args.find(a => a.startsWith('--'));
-if (args.length !== 1 || !['--counts', '--check', '--regen'].includes(mode)) {
+// computeSummary() is this repo's ONE definition of the tier split, so other
+// checks should import it rather than re-derive it -- and one that did got 111
+// where the manifest says 107, by forgetting that size-ledger rides in the full
+// tier.  Importing was impossible until this guard: the CLI ran at module load,
+// so `import { computeSummary }` exited 2 with a usage message.
+const RUN_AS_CLI = import.meta.url === `file://${process.argv[1]}`;
+if (RUN_AS_CLI && (args.length !== 1 || !['--counts', '--check', '--regen'].includes(mode))) {
     console.error('usage: claims-summary.mjs --counts | --check | --regen');
     process.exit(2);
 }
+if (!RUN_AS_CLI) {
+    // imported for computeSummary(); nothing below this point should run
+}
 
-const r = computeSummary();
+const r = RUN_AS_CLI ? computeSummary() : null;
+if (RUN_AS_CLI) {
 
 // A family the tier map does not know would vanish from the coverage line
 // without changing any number — the silent shape this file exists to prevent.
@@ -141,3 +151,5 @@ if (diffs.length) {
 }
 console.log(`PASS claims _summary matches the manifest (${r.total} claims: ` +
             `fast ${r.fast}, full ${r.full}, unverifiable ${r.unverifiable})`);
+
+}   // RUN_AS_CLI

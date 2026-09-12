@@ -3,7 +3,7 @@
 Prior initiatives archived: `Plans-refinement-complete.md` (26/26),
 `Plans-understanding-complete.md` (Phases 6–11),
 `Plans-floor-initiative-complete.md` (Phases 12–15, 32/32 at 8305c4a),
-`Plans-field-fixes-complete.md` (round 3 Phases 16–19, 24/24 at 1f9f1e5).
+`Plans-field-fixes-complete.md` (round 3 Phases 16–19, 22/22 at 1f9f1e5).
 
 
 # Planning round 3 (2026-07-21) — field fixes, music, widescreen, community tooling, the floor campaign

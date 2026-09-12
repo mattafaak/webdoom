@@ -11,11 +11,20 @@
 # is not distributable, so a public runner has no IWADs — and without IWADs the
 # marquee gates (13 sim goldens, 5 render golden families, netplay, drop-in,
 # the browser suite, the ASan and freestanding legs) cannot run AT ALL.  This
-# runs the --quick tier, which is every leg that needs no WAD, no build and no
-# browser, and the summary step below states plainly what it did not cover.
+# runs the --quick tier and the summary step below states plainly what it did
+# not cover.
 #
-# The full 74-leg suite still runs on a host with the WAD library, a built
-# engine and Chrome:  bash tools/run-tests.sh --require-complete
+# The quick tier is NOT simply "every leg that needs no WAD, no build and no
+# browser", which is what this comment used to say.  Two things make that false:
+# `golden-provenance` declares no prerequisite at all and still sits below the
+# tier gate (it reads only committed tools/golden/*.json), and `lint-c` and
+# `doc-drift` do have prerequisites -- clang-format pinned to major 22, and gcc.
+# On ubuntu-latest lint-c SKIPs, so this job is 12 legs run and 1 skipped.
+#
+# The full suite (81 legs at the time of writing -- `tools/run-tests.sh --list`
+# prints the current number, and the runner now asserts its own total against
+# that registry) still runs on a host with the WAD library, a built engine and
+# Chrome:  bash tools/run-tests.sh --require-complete
 # To have CI run it too, add a self-hosted runner with those prerequisites and
 # a second job with `runs-on: self-hosted`; nothing else changes.
 

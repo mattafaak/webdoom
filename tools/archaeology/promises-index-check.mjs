@@ -33,11 +33,21 @@ const text  = readFileSync(INDEX, 'utf8');
 const runTests = readFileSync(join(root, 'tools/run-tests.sh'), 'utf8');
 
 const cells = l => l.split(/(?<!\\)\|/).map(c => c.trim());
+// Parts A, B and D are five-column tables; Part C (the perf.md figures) has a
+// sixth column for the inline reason.  `c.length === 6` therefore matched A, B
+// and D and dropped ALL TEN Part C rows -- silently, so this check reported
+// "34 promises" over a table of 44 and the document's own summary counted the
+// same section two different ways.  Take the disposition from the last cell and
+// the section shape stops mattering.
 const rows = [];
+let part = '?';
 for (const line of text.split('\n')) {
+    const pm = /^## Part ([A-D])\b/.exec(line);
+    if (pm) { part = pm[1]; continue; }
     if (!/^\|\s*[a-z]+-\d+\s*\|/.test(line)) continue;
     const c = cells(line);
-    if (c.length === 6) rows.push({ id: c[1], source: c[2], promise: c[3], disp: c[4] });
+    if (c.length < 6) continue;
+    rows.push({ id: c[1], source: c[2], promise: c[3], disp: c[c.length - 2], part });
 }
 
 let bad = 0;
@@ -93,6 +103,9 @@ for (const m of text.matchAll(/\*\*(\d+) promises[^*]*\*\*/g))
 if (bad) { console.log(`\npromises-index-check: ${bad} problem(s)`); process.exit(1); }
 const by = {};
 for (const r of rows) by[VOCAB.find(v => r.disp.startsWith(`**${v}`))] = (by[VOCAB.find(v => r.disp.startsWith(`**${v}`))] ?? 0) + 1;
+const byPart = {};
+for (const r of rows) byPart[r.part] = (byPart[r.part] ?? 0) + 1;
 console.log(`PASS promises-index-check: ${rows.length} promises — ` +
             Object.entries(by).sort().map(([k, v]) => `${v} ${k.toLowerCase()}`).join(', ') +
+            `; parts ` + Object.entries(byPart).sort().map(([k, v]) => `${k}=${v}`).join(' ') +
             '; every named leg and tool exists, README figure agrees');

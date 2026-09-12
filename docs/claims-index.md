@@ -6,12 +6,12 @@ verifiers; task 6.3 wires them into `verify-all.sh` and a CI drift-check.
 Task 6.4 annotates each doc figure with its reproducer so the corpus is
 auditable claim-by-claim without consulting this index.
 
-**Gate**: `bash tools/archaeology/verify-all.sh` — fast tier (105 claims,
+**Gate**: `bash tools/archaeology/verify-all.sh` — fast tier (107 claims,
 ~4 s); `--full` adds runtime-stat + measurement-stamp families.
 
 **Docs annotated**: `engine-archaeology.md`, `renderer.md`, `playsim.md`,
 `formats.md`, `perf.md` — each carries section-level "Reproduce:" lines
-and inline `*(not machine-verified)*` markers for the 16 unverifiable claims.
+and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 
 ## Taxonomy
 
