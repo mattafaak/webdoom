@@ -278,6 +278,9 @@ leg gm-config       -    "the GM backend's operator config path (25.1)" -- node 
 # nothing anywhere checked them (task 24.2).
 leg claims-index    -    "the claims index does not overclaim"        -- node tools/archaeology/claims-index-check.mjs
 leg promises-index  -    "the promises index has not gone stale"      -- node tools/archaeology/promises-index-check.mjs
+# web.h is the core<->platform contract spec.md tenet 5 points a bare-metal port
+# at.  It declared 5 of 73 exports and got one arity wrong (task 25.2).
+leg web-contract    -    "web.h matches the exports it declares"      -- node tools/web-contract-check.mjs
 leg gate-census     -    "every gate is wired or registered with a reason" -- node tools/gate-census.mjs
 
 if [ "$TIER" = "quick" ]; then
