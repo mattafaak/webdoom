@@ -17,6 +17,10 @@
 //   2. every export taking a POINTER must be declared.  Those are the calls
 //      whose bound the callee cannot derive, and every one of them has already
 //      been the site of a defect (task 23).
+//   3. every declaration must resolve to a definition under engine/.  Rule 1
+//      SKIPS a declaration it cannot pair, so deleting a function and leaving
+//      its declaration behind used to pass -- the header would keep describing
+//      a contract the engine no longer implements.
 //
 // usage: node tools/web-contract-check.mjs
 // Copyright (C) 2026, GPL-2.0-or-later.
@@ -26,6 +30,7 @@ import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const WEB  = join(root, 'engine/web');
+const CORE = join(root, 'engine/core');
 const header = readFileSync(join(WEB, 'web.h'), 'utf8');
 
 const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, '');
@@ -71,7 +76,30 @@ if (undeclared.length) fail(
     undeclared.map(n => `    ${n} (${defs.get(n).params})  [${defs.get(n).file}]`).join('\n') +
     '\n  These are the calls whose bound the callee cannot derive. Declare them with the bound stated.');
 
+// 3. every declaration must have a DEFINITION somewhere in the engine.
+//
+// Rule 1 skips a declaration it cannot pair (`if (!def) continue`) because 12
+// of the 21 are ordinary C functions rather than KEEPALIVE exports -- mus_*,
+// W_WebFile*, D_DoomFrame -- and those are legitimately absent from `defs`.
+// The cost of that skip was that DELETING a function while leaving its
+// declaration behind passed silently: web.h would keep describing a contract
+// the engine no longer implements, which is the one thing this file exists to
+// prevent.  Found when web_level_state was removed with the QoL overlays.
+const cFiles = [];
+for (const d of [WEB, CORE])
+    for (const f of readdirSync(d).filter(n => n.endsWith('.c')))
+        cFiles.push(strip(readFileSync(join(d, f), 'utf8')));
+const defined = name =>
+    cFiles.some(src => new RegExp(`(^|\\n)[A-Za-z_][^;()\\n]*\\b${name}\\s*\\(`).test(src));
+const stale = [...decls.keys()].filter(n => !defs.has(n) && !defined(n));
+if (stale.length) fail(
+    `web-contract: ${stale.length} declaration(s) in web.h have no definition anywhere under engine/`,
+    stale.map(n => `    ${n}`).join('\n') +
+    '\n  A header that describes a function the engine does not implement is the folklore\n' +
+    '  spec.md tenet 5 says this file exists to prevent. Delete the declaration with the code.');
+
 if (bad) { console.log(`\nweb-contract-check: ${bad} problem(s)`); process.exit(1); }
 console.log(`PASS web-contract-check: ${defs.size} exports, ${decls.size} declarations — ` +
             `all ${ptrExports.length} pointer-taking exports are in the contract, ` +
-            'and every declaration matches its definition');
+            'every declaration matches its definition, and all ' +
+            `${decls.size} resolve to a definition under engine/`);
