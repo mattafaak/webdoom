@@ -96,7 +96,15 @@ function rateOk(ws) {
     return true;
 }
 
-export function createGame(log = console.log) {
+// servedWads: () => string[] of the WAD filenames this server actually serves.
+// Without it the lobby accepted any character-sanitised `wad` string and cast
+// it to every client in the `launch` frame -- so one lobby member could steer
+// the whole table into a WAD nobody has, and each client hit it as a TypeError
+// inside bootDoom (stackFor returns [], main.js reads wads[0].file).  Defaults
+// to a source that names nothing, which REFUSES every wad change rather than
+// accepting every one: a caller that cannot say what it serves should not be
+// able to hand out arbitrary names.
+export function createGame(log = console.log, servedWads = () => []) {
     // --- lobby state -------------------------------------------------------
     const lobby = new Map();        // slot → {ws, name} (name null = color default)
     let params = defaultParams();
@@ -202,8 +210,18 @@ export function createGame(log = console.log) {
             }
             if (m.t === 'params') {
                 const p = { ...params, ...m.params };
+                // Character-sanitising a filename says nothing about whether
+                // this server HAS it.  A name we do not serve keeps the
+                // current one and says so, rather than being cast to everyone.
+                const wantWad = String(p.wad).replace(/[^a-z0-9_.-]/g, '');
+                let served = [];
+                try { served = servedWads() ?? []; }
+                catch (e) { log(`lobby: cannot read the WAD library (${e?.message ?? e}) — refusing every wad change`); }
+                const wadOk = Array.isArray(served) && served.includes(wantWad);
+                if (!wadOk && wantWad !== params.wad)
+                    log(`lobby: refusing wad "${wantWad}" — not in this server's library; keeping "${params.wad}"`);
                 params = {
-                    wad: String(p.wad).replace(/[^a-z0-9_.-]/g, ''),
+                    wad: wadOk ? wantWad : params.wad,
                     episode: Math.max(1, Math.min(9, +p.episode || 1)),
                     map: Math.max(1, Math.min(32, +p.map || 1)),
                     skill: Math.max(1, Math.min(5, +p.skill || 3)),

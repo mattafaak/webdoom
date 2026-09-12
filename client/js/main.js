@@ -147,6 +147,14 @@ if (_perfmarks) {
 //         G_RecordDemo is armed before D_DoomLoop's G_BeginRecording fires.
 //         The caller (lobby.js) controls the stop-and-share lifecycle.
 export async function bootDoom({ wads, args = [], net = null, onQuit = null, record = false }) {
+    // stackFor() in lobby.js returns [] for a WAD this client's manifest does
+    // not list, and line ~162 below then reads wads[0].file.  A `launch` frame
+    // naming a WAD we do not have -- which the server accepted without checking
+    // its own library -- reached that as a TypeError from inside the boot, past
+    // the point where the landing page had already been hidden.  A refusal with
+    // a reason is what the callers' .catch() is for.
+    if (!Array.isArray(wads) || wads.length === 0 || !wads[0]?.file)
+        throw new Error('this browser has no copy of that WAD — ask the host which one the game is using');
     const canvas = document.getElementById('screen');
     document.getElementById('landing').hidden = true;
     canvas.hidden = false;

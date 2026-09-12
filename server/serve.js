@@ -371,7 +371,17 @@ const server = createServer((req, res) => {
     send(res, 404, 'not found');
 });
 
-const game = createGame();
+// The lobby's `wad` param is cast to every client in the `launch` frame, so the
+// server has to know what it serves.  Read per call, not once: manifest() is
+// already mtime-keyed, so an operator adding a WAD needs no restart here either.
+const servedWads = () => {
+    try { return (JSON.parse(manifest()).wads ?? []).map(w => w.file).filter(Boolean); }
+    catch (e) {
+        console.error(`webdoom: wads/manifest.json unreadable (${e?.message ?? e}) — the lobby will refuse every wad change`);
+        return [];
+    }
+};
+const game = createGame(console.log, servedWads);
 server.on('upgrade', (req, socket, head) => game.upgrade(req, socket, head));
 
 // LAST RESORT, not a substitute for the guards above.

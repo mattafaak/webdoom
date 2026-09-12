@@ -198,6 +198,14 @@ export function createMenu(font, host, opts = {}) {
             return;
         }
         const n = screen().items.length;
+        // A screen with no items: (sel + n - 1) % n is NaN, sel becomes NaN,
+        // and every later render reads items[NaN].  Escape and Backspace still
+        // have to work -- an empty picker you cannot leave is the worse bug --
+        // so they are handled before the guard.
+        if (n === 0) {
+            if (e.code === 'Escape' || e.code === 'Backspace') { e.preventDefault(); back(); }
+            return;
+        }
         const item = screen().items[sel];
         // rows per column (for column jumps in wrapped multi-column lists)
         const rows = [...root.querySelectorAll('.items .row')];
@@ -222,8 +230,9 @@ export function createMenu(font, host, opts = {}) {
     // mouse wheel moves the cursor (and the skull-hover already re-selects)
     root.addEventListener('wheel', e => {
         if (hidden || entry || !screen()) return;
-        e.preventDefault();
         const n = screen().items.length;
+        if (n === 0) return;            // same NaN as onKey, one scroll away
+        e.preventDefault();
         sel = (sel + (e.deltaY > 0 ? 1 : n - 1)) % n;
         render();
     }, { passive: false });

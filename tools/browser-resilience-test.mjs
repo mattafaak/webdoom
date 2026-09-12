@@ -441,6 +441,141 @@ await runTest('5-storage-quota', async () => {
     }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 6. A WAD THIS CLIENT DOES NOT HAVE.
+//    lobby.js's stackFor() returns [] for a WAD absent from the manifest, and
+//    bootDoom then read wads[0].file -- a TypeError from inside the boot, AFTER
+//    the landing page had been hidden and the canvas shown.  The only ownsWad
+//    check was on the demo path; MP launch and spectate had none, and the
+//    server accepted any wad name without checking its own library (H6).
+//    Graceful = a named refusal, with the launcher still on screen.
+// ═══════════════════════════════════════════════════════════════════════════
+await runTest('6-wad-this-client-lacks', async () => {
+    const tab = await openTab();
+    try {
+        if (!await waitForMenu(tab)) throw new Error('menu did not appear');
+
+        const r = await tab.ev(`(async () => {
+            const m = await import('/js/main.js');
+            try { await m.bootDoom({ wads: [] }); return { threw: false }; }
+            catch (e) { return { threw: true, name: e?.constructor?.name ?? '?', msg: String(e?.message ?? e) }; }
+        })()`);
+        assert(r?.threw, 'bootDoom resolved for a WAD stack this client does not have');
+        assert(r.name !== 'TypeError',
+            `refusal was a ${r.name}, not a stated reason: ${r.msg}`);
+        assert(/WAD/i.test(r.msg), `refusal did not name the problem: ${r.msg}`);
+
+        // The launcher must still be there -- the pre-fix path hid it first.
+        const landingUp = await tab.ev(`document.getElementById('landing')?.hidden === false`);
+        const canvasDown = await tab.ev(`document.getElementById('screen')?.hidden === true`);
+        assert(landingUp, 'the landing page was hidden by a boot that never started');
+        assert(canvasDown, 'the game canvas was shown by a boot that never started');
+
+        // CONTROL: a NON-empty stack gets past this guard and fails further
+        // in, on the fetch.  Without it, a bootDoom that refused everything
+        // would satisfy the arm above.
+        const ctl = await tab.ev(`(async () => {
+            const m = await import('/js/main.js');
+            try { await m.bootDoom({ wads: [{ file: 'no-such-file.wad', sha: 'deadbeef' }] }); return 'resolved'; }
+            catch (e) { return String(e?.message ?? e); }
+        })()`);
+        assert(!/this browser has no copy/i.test(String(ctl)),
+            `the guard fired on a non-empty stack too — it refuses everything: ${ctl}`);
+    } finally { tab.close(); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 7. THE SERVER ANSWERS, AND HAS NO IWAD.
+//    /api/ui-assets 404s with PLAIN TEXT when wads/lib holds no IWAD -- an
+//    ordinary, documented state.  doomfont.js called .json() with no res.ok
+//    check, the SyntaxError landed in lobby.js's one catch, and the operator
+//    was told "cannot reach server" about a server that was up and answering.
+// ═══════════════════════════════════════════════════════════════════════════
+await runTest('7-server-has-no-iwad', async () => {
+    const tab = await openTab();
+    try {
+        if (!await waitForMenu(tab)) throw new Error('menu did not appear');
+
+        // Answer /api/ui-assets exactly as the server does with no IWAD.
+        tab.on('Fetch.requestPaused', p => {
+            tab.cdp('Fetch.fulfillRequest', {
+                requestId: p.requestId,
+                responseCode: 404,
+                responseHeaders: [{ name: 'content-type', value: 'text/plain; charset=utf-8' }],
+                body: Buffer.from('no IWAD available').toString('base64'),
+            });
+        });
+        await tab.cdp('Fetch.enable', { patterns: [{ urlPattern: '*/api/ui-assets*' }] });
+        // The service worker is network-first with a cache fallback for the
+        // shell, and CDP's Fetch domain on a PAGE target does not see requests
+        // the worker makes -- so without this the reload was served the real
+        // payload and the probe measured nothing (it reported exactly that:
+        // "no message at all").
+        await tab.cdp('Network.enable', {});
+        await tab.cdp('Network.setBypassServiceWorker', { bypass: true });
+        await tab.cdp('Page.reload');
+
+        let statusText = '';
+        for (let i = 0; i < 40; i++) {
+            await sleep(500);
+            statusText = (await tab.ev(`document.getElementById('status')?.textContent`)) ?? '';
+            if (statusText.length > 0) break;
+        }
+        assert(statusText.length > 0, 'no message at all when the server has no IWAD');
+        assert(/IWAD|ui-assets/i.test(statusText),
+            `the reason was not named — the operator is told "${statusText}" about a server that answered`);
+        assert(!/^cannot reach server$/i.test(statusText),
+            'still reporting an unreachable server for one that answered 404');
+        // THIS ONE IS LOAD-BEARING.  Without it the arm above passed against
+        // the unfixed tree: .json() on a plain-text 404 throws
+        //   Unexpected token 'n', "no IWAD a"... is not valid JSON
+        // and the SERVER'S OWN BODY TEXT inside the parser's message satisfied
+        // a search for "IWAD".  A message that happens to contain the right
+        // word is not a message that says the right thing.
+        assert(!/JSON|Unexpected token/i.test(statusText),
+            `the message is a parser error, not a reason: "${statusText}"`);
+    } finally { tab.close(); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 8. A MENU SCREEN WITH NO ITEMS.
+//    (sel + n - 1) % n is NaN when n === 0, sel stays NaN, and every later
+//    render reads items[NaN] -- a menu with no cursor and no way to choose.
+//    Reachable: mapPick() builds its list from entry(params.wad)?.maps ?? [],
+//    so a lobby whose wad this client's manifest does not list opens WHICH
+//    EPISODE? with nothing on it.
+// ═══════════════════════════════════════════════════════════════════════════
+await runTest('8-empty-menu-screen', async () => {
+    const tab = await openTab();
+    try {
+        if (!await waitForMenu(tab)) throw new Error('menu did not appear');
+
+        const r = await tab.ev(`(async () => {
+            const [{ loadDoomFont }, { createMenu }] =
+                await Promise.all([import('/js/doomfont.js'), import('/js/menu.js')]);
+            const font = await loadDoomFont();
+            const root = document.createElement('div');
+            root.id = 'probe-menu';
+            document.body.appendChild(root);
+            const menu = createMenu(font, root, {});
+            menu.reset({ title: 'EMPTY', items: [] });
+            for (const code of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'])
+                window.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
+            root.dispatchEvent(new WheelEvent('wheel', { deltaY: 1, bubbles: true, cancelable: true }));
+            // Now give it a real screen: a NaN cursor survives refresh(), whose
+            // reset is \`if (sel >= items.length) sel = 0\` -- and NaN >= 2 is false.
+            menu.refresh({ title: 'TWO', items: [{ label: 'A' }, { label: 'B' }] });
+            return {
+                selected: root.querySelectorAll('.row.sel').length,
+                rows: root.querySelectorAll('.row').length,
+            };
+        })()`);
+        assert(r?.rows >= 2, `the probe menu rendered ${r?.rows ?? 0} rows — nothing was measured`);
+        assert(r.selected === 1,
+            `${r.selected} of ${r.rows} rows selected after an empty screen — the cursor is NaN`);
+    } finally { tab.close(); }
+});
+
 // ── Results ───────────────────────────────────────────────────────────────────
 console.log('\n── resilience results ──────────────────────────────────────');
 let allPassed = true;
@@ -454,7 +589,7 @@ for (const r of results) {
 }
 
 if (allPassed) {
-    console.log('PASS — all 5 resilience paths graceful');
+    console.log(`PASS — all ${results.length} resilience paths graceful`);
     cleanup(0);
 } else {
     console.log('FAIL — one or more resilience paths not graceful');

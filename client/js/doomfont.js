@@ -11,7 +11,22 @@ const COLOR_BASE = { Green: 0x70, Indigo: 0x60, Brown: 0x40, Red: 0xb0 };
 const FONT_RANGE = [0xb0, 0xbf];        // STCFN glyphs live in the red run
 
 export async function loadDoomFont() {
-    const { lumps, titles = {} } = await (await fetch('/api/ui-assets')).json();
+    // The server answers 404 with PLAIN TEXT when it has no IWAD in wads/lib --
+    // an ordinary, documented state, not a failure.  Without a res.ok check,
+    // .json() threw a SyntaxError, which lobby.js's one catch reported as
+    // "cannot reach server": the server was up and answering, and the operator
+    // was sent to look at the network.
+    const res = await fetch('/api/ui-assets');
+    if (!res.ok)
+        throw new Error(res.status === 404
+            ? 'the server has no IWAD in wads/lib — run tools/fetch-wads.sh there'
+            : `the server declined /api/ui-assets (HTTP ${res.status})`);
+    let payload;
+    try { payload = await res.json(); }
+    catch { throw new Error('/api/ui-assets did not answer with JSON'); }
+    const { lumps, titles = {} } = payload ?? {};
+    if (!lumps || typeof lumps !== 'object' || !lumps.PLAYPAL)
+        throw new Error('/api/ui-assets carried no palette — the IWAD it read is not usable');
     const playpal = b64(lumps.PLAYPAL);
 
     function decodePatch(bytes, remapBase = null, pal = playpal) {
@@ -111,6 +126,9 @@ export async function loadDoomFont() {
     }
 
     function patch(name, scale = 2) {
+        // A lump the IWAD does not carry: b64(undefined) is a TypeError out of
+        // menu.js's constructor, which is not a place with a recovery path.
+        if (typeof lumps[name] !== 'string') return null;
         const c = decodePatch(b64(lumps[name]));
         if (!c) return null;
         const out = document.createElement('canvas');

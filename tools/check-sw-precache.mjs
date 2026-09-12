@@ -18,9 +18,12 @@ const buildDir = join(root, 'build');
 
 // ── 1. Parse sw.js SHELL precache list ───────────────────────────────────────
 const swSrc = readFileSync(join(clientDir, 'sw.js'), 'utf8');
-const addAllMatch = swSrc.match(/c\.addAll\(\[([\s\S]*?)\]\)/);
+// The list moved out of c.addAll() when the install handler stopped being
+// all-or-nothing (H9).  Parsing the array itself is also more honest: this
+// check is about the LIST, and it should not care how the worker installs it.
+const addAllMatch = swSrc.match(/const SHELL_FILES = \[([\s\S]*?)\];/);
 if (!addAllMatch) {
-    console.error('FAIL: could not find c.addAll([...]) in sw.js');
+    console.error('FAIL: could not find `const SHELL_FILES = [...]` in sw.js');
     process.exit(1);
 }
 const shellList = new Set(

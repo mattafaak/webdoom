@@ -677,7 +677,13 @@ function leaveLobby() {
         countdown = createCountdown(font, $('countdown'));
     } catch (err) {
         console.error(err);
-        status('cannot reach server');
+        // "cannot reach server" was printed for EVERY failure in this block,
+        // including the server answering perfectly with no IWAD to offer.  A
+        // genuinely unreachable server keeps that wording (it is true, and
+        // tools/browser-resilience-test.mjs keys its early exit on it); an
+        // answered request that we could not use now says what it was.
+        const msg = String(err?.message ?? err);
+        status(/fetch|network|load failed/i.test(msg) ? `cannot reach server — ${msg}` : msg);
         return;
     }
 
