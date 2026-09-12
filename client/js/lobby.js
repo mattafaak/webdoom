@@ -639,11 +639,20 @@ function leaveLobby() { resetToLauncher(); }
     // index.html -- the only inline event handler in the codebase, and the one
     // thing a script-src CSP would silently break. Wired here instead.
     document.getElementById('sw-reload')?.addEventListener('click', () => location.reload());
+    // Was this page already controlled when we registered?  sw.js calls
+    // skipWaiting() + clients.claim(), so on a FIRST visit the brand-new worker
+    // claims this already-loaded page and fires controllerchange -- and the
+    // banner below used to read that as "a new version replaced the old one".
+    // It has no old one.  Every first-time visitor was told to reload, on a
+    // page that had just finished loading.  controllerchange cannot tell the
+    // two apart; the controller's existence BEFORE registration can.
+    const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('/sw.js').catch(() => {});
         // When a new service worker takes control mid-session, surface a
         // non-intrusive reload prompt rather than silently serving a mixed
         // old/new asset state. The prompt never interrupts an active match.
         navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!hadController) return;   // first claim, not an update
             const el = document.getElementById('sw-update');
             if (el) el.hidden = false;
         });
