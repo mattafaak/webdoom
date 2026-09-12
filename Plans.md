@@ -62,6 +62,14 @@ silent regold. Every new client module updates the SHELL precache
 | 20.7a | RP2040 bring-up + WHD asset pipeline: bring engine/core up on RP2040 using the freestanding shim pattern (11.1a precedent); prepare reduced-size WAD pipeline (WHD-format headless extract); document underclocking method (pico-sdk frequency define or overclock register) | RP2040 ROM boots to D_DoomMain (rp2040-doom toolchain or pico-sdk); WHD asset pipeline script committed (tools/rp2040/prep-whd.sh or equivalent); underclocking method documented with ≥2 tested clock steps; partial filed as partial (no fabrication) | 20.1b | cc:完了 [1f2efb2] |
 | 20.7b | RP2040 floor clock measurement: sweep RP2040 clock downward from 100 MHz in steps; at each step run 13/13 demos tic-exact check (sim hash match); find minimum clock where all 13 pass; update atlas row with measured floor + variance | measured floor clock committed (tools/rp2040/clock-sweep-log.txt); atlas row updated: minimum MHz for 13/13 tic-exact, method, variance (≥3 retests at floor clock); FINDING filed if floor > 100 MHz; no "record" claim — the number is the deliverable | 20.7a | cc:決定 [25.5 PARKED] |
 
+> **These four sections are ROUND 3's planning apparatus, and the tasks they
+> rank, sequence and validate — 16.x through 19.x — were archived to
+> `Plans-field-fixes-complete.md` when that round closed 22/22 at `1f9f1e5`.
+> They are kept as the record of how that round was planned, not as live
+> guidance: a reader looking for what is open should read the task tables
+> above, where 20.x onward live. (Round 6 flagged them; they were four
+> sections of forward-looking prose about work that had already shipped.)**
+
 ## Priority matrix (round 3)
 
 - **Required**: 16.1–16.5 (the field bugs — every one hits the spec's stated
@@ -220,7 +228,7 @@ into the engine, and hostile lump content — are now gates.
 | 23.3 | Non-terminating patch decoder (`doomfont.js`) and the corrupt-WAD server exit (`ui-assets.js`) | both reproduced; loop bounded; server declines instead of dying; red-proofed 5/5 | 22.1 | cc:完了 [a1b0420] |
 | 23.4 | Demo buffer bounds: `web_play_demo_buf` takes no length and overscans; the `#demo=` fragment path applies no cap | length parameter, all 6 call sites; a no-length call is rejected; 19.4 gates green | 22.1 | cc:完了 [9c800a2] |
 | 23.5 | Unchecked `_malloc` returns (6 JS + 3 C sites) | every site checks; C sites I_Error into the fail-soft path | 22.1 | cc:完了 [9c800a2] |
-| 23.6 | Server resource and liveness: the `verifyInFlight` half-open wedge, uncapped spectators, unbounded history bursts | wedge reproduced and red-proofed (two wrong fixes first); 15 s body timeout; MAX_SPECTATORS; backpressure on both history bursts. `attestStore` pruning and a spectate fuzz leg remain | 22.1 | cc:完了(partial) [9c800a2] |
+| 23.6 | Server resource and liveness: the `verifyInFlight` half-open wedge, uncapped spectators, unbounded history bursts | wedge reproduced and red-proofed (two wrong fixes first); 15 s body timeout; MAX_SPECTATORS; backpressure on both history bursts. `attestStore` pruning landed in round 5's A3 (8078cbc: reclaimed by age and by total bytes, red-proofed). A spectate fuzz leg is still the open half | 22.1 | cc:完了(partial) [9c800a2, A3 8078cbc] |
 | 23.7 | Relay closed on quit and on engine error; `doom.netQuit` wired | socket no longer outlives the engine; net + browser gates green | 22.1 | cc:完了 [see 23.7b] |
 | 23.7b | The per-boot leak set: ~11 input listeners, the qol rAF loop + 5 DOM nodes, a duplicate `#settings` panel, a GL program/VBO/2 textures with no dispose. None of input/qol/settings/video exposes a teardown | a single teardown(); play→quit→play×3 leaks nothing, MEASURED not asserted: without it listeners 23→38→53 (+15/cycle), `#settings` 1→2→3 (duplicate ids), `#stage` children 13→19→25; with it 7/0/7 flat. `browser-teardown` leg | 23.7 | cc:完了 [90a7f93] |
 | 23.8 | Fuzz the untested direction: hostile SERVER frames at the engine | `tools/hostile-server-test.mjs`, 13 cases, by observation not inference; red-proofed | 23.1 | cc:完了 [7764c94] |

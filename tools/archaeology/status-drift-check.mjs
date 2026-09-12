@@ -189,6 +189,44 @@ else {
                + `over ${rows.length} rows (${rows.map(r => r[1]).join(', ')})`);
 }
 
+// ── rule 4: a decision record's handoff list vs its own addendum ────────────
+//
+// decision-18.1 §9 listed four deferred items and read as four outstanding
+// ones for seven weeks after three of them landed.  The addendum BELOW the
+// list said two of them were fixed, and the list above it said nothing — so
+// the document contradicted itself, in the over-reporting direction, and the
+// claims machinery cannot see prose like that at all.
+//
+// The rule is narrow on purpose: where a decision record SAYS "items N and M
+// above were fixed", the items it names must carry a resolution marker
+// (~~strikethrough~~, RESOLVED, or CLOSED).  It grades only what the document
+// itself asserts, so it cannot invent a verdict about work it does not
+// understand.
+const decisionDocs = docs.filter(f => /docs\/decision-[^/]+\.md$/.test(f));
+let handoffClaims = 0;
+for (const f of decisionDocs) {
+    const text = read(f);
+    if (!text) continue;
+    // "Items 1 and 2 above were fixed in 18.2b" / "Item 3 above was fixed"
+    for (const m of text.matchAll(/Items?\s+([\d]+(?:\s*(?:,|and)\s*\d+)*)\s+above\s+(?:was|were)\s+fixed/gi)) {
+        const ids = m[1].split(/\s*(?:,|and)\s*/).map(Number).filter(Number.isFinite);
+        for (const n of ids) {
+            handoffClaims++;
+            // The numbered item as the document writes it: "N. ..." at a line
+            // start, up to the next numbered item or a blank-line boundary.
+            const item = new RegExp(`^${n}\\.\\s[\\s\\S]*?(?=^\\d+\\.\\s|^#|^\\s*$)`, 'm').exec(text);
+            if (!item) {
+                fail(`${f}: says item ${n} above was fixed, and there is no item ${n} in a numbered list`,
+                     '    The addendum and the list have drifted apart entirely.');
+                continue;
+            }
+            if (!/~~|RESOLVED|CLOSED/i.test(item[0]))
+                fail(`${f}: item ${n} is claimed fixed by an addendum and still reads as open`,
+                     `    ${item[0].split('\n')[0].slice(0, 90)}`);
+        }
+    }
+}
+
 // ── the check must be able to find its own inputs ────────────────────────────
 if (landed.length < 3)
     fail(`status-drift: found only ${landed.length} LANDED ledger candidate(s) with an identifier-shaped `
@@ -197,11 +235,15 @@ if (!todos.length && !verdicts.length)
     fail('status-drift: found no cc:TODO rows AND no verdict headings in Plans.md — the marker format changed');
 if (!existsSync(join(root, 'docs/optimization-ledger.md')))
     fail('status-drift: the optimization ledger is missing');
+if (!decisionDocs.length)
+    fail('status-drift: no docs/decision-*.md found — rule 4 is grading nothing');
 
 if (bad) {
     console.log(`\nstatus-drift: ${bad} contradiction(s)`);
     process.exit(1);
 }
+console.log(`PASS status-drift: ${decisionDocs.length} decision record(s), ${handoffClaims} handoff item(s) `
+          + 'claimed fixed by an addendum and marked as such in the list above it;');
 console.log(`PASS status-drift: ledger totals recomputed from ${rows.length} candidate rows `
           + `(${tally.LANDED} landed, ${tally.KILLED} killed, ${tally.SURVIVES} surviving) and they match the Totals line; `);
 console.log(`PASS status-drift: ${landed.length} landed ledger candidates (${landed.map(c => c.id).join(', ')}) `
