@@ -174,23 +174,50 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     let running = false;
     let syncHandle = null;   // set after startSync; referenced in onDoomError closure
     let relayHandle = null;  // set after the relay attaches; same reason
+
+    // ── ONE owner for "the engine is gone — put the player back on the launcher"
+    //
+    // The quit path and the two error paths used to be different code, and only
+    // one of them worked.  doom.onQuit tore everything down and then called the
+    // CALLER's onQuit callback — which is the thing that re-renders the menu
+    // (lobby.js returnToMenu).  onDoomError and the rAF catch called
+    // restoreOnFailure() instead: un-hide #landing, and stop.
+    //
+    // But lobby.js calls menu.hide() before booting, and menu.render() opens
+    // `root.replaceChildren(); if (hidden || !screen()) return;`.  So after any
+    // post-boot I_Error the player got a VISIBLE landing page with an EMPTY menu
+    // in it — `booted` still true, the fire still paused, the lobby socket still
+    // open — and only a page reload recovered.  The comment here read "tenet-4
+    // fail-soft: landing page restored".  The landing ELEMENT was restored; the
+    // menu inside it was not, which is the half the player needs.
+    //
+    // Every exit path goes through endSession() now, so there is one answer to
+    // "what happens when the engine stops" instead of three.
+    let released = false;
+    let releaseResources = () => {};   // reassigned below, once the handles exist
+    const endSession = (reason) => {
+        if (released) return;          // I_Error then a propagating throw is one exit
+        released = true;
+        running = false;
+        // Reads fileMap directly — no wasm calls, so this is safe after abort().
+        try { syncHandle?.flush?.(); } catch { /* dead instance */ }
+        try { releaseResources(); } catch { /* boot died before construction */ }
+        loading.hide();
+        canvas.hidden = true;
+        document.getElementById('landing').hidden = false;
+        // The caller's callback is what re-renders the launcher.  It runs on
+        // EVERY exit now, not only the clean one.
+        try { onQuit?.(); } catch { /* launcher gone */ }
+        // After the callback, so the launcher's own reset cannot overwrite it.
+        if (reason) { try { status(reason); } catch { /* DOM unavailable */ } }
+    };
+
     const doom = await createDoom({
         print: t => console.log(t),
         printErr: t => console.warn(t),
-        // tenet-4 fail-soft: engine death (I_Error → abort()) ⇒ landing page
+        // tenet-4 fail-soft: engine death (I_Error → abort()) ⇒ launcher menu
         // restored + user-visible error + canvas/game state torn down.
-        onDoomError: msg => {
-            running = false;
-            // Final flush reads fileMap directly — no wasm calls, safe after abort().
-            syncHandle?.flush?.();
-            restoreOnFailure(canvas);
-            status(`engine error: ${msg}`);
-            // Same on the crash path: an I_Error leaves the engine dead, and a
-            // live relay would keep feeding a dead instance.
-            try { relayHandle?.quit?.(); } catch { /* already closed */ }
-            try { window.doomAudio?.stop?.(); } catch { /* dead instance */ }
-            try { syncHandle?.stop?.(); } catch { /* dead instance */ }
-        },
+        onDoomError: msg => endSession(`engine error: ${msg}`),
     });
 
     // no filesystem: WADs live once in the heap, small files in a JS Map
@@ -317,13 +344,9 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     // and let the front end return to the main menu (a fresh wasm boots
     // on the next PLAY — this instance force-exits).
     running = true;
-    doom.onQuit = () => {
-        running = false;
-        // Final flush: I_Quit already called M_SaveDefaults() so fileMap is
-        // fully up-to-date. Read it directly — no wasm calls needed (engine
-        // is about to force-exit).  Fire-and-forget; IDB write completes
-        // asynchronously even after wasm exits.
-        syncHandle?.flush?.();
+    // Everything the boot allocated, released in one place.  doom.onQuit and
+    // both error paths call this through endSession().
+    releaseResources = () => {
         // Close the relay.  Nothing did: relay.quit() exists and was called
         // only from the node harnesses, and no client file ever assigned
         // doom.netQuit, so the engine's D_QuitNetGame hook fired into nothing.
@@ -348,8 +371,10 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
         try { syncHandle?.stop?.(); } catch { /* dead instance */ }
         // task 19.3: remove scrubber panel if present.
         try { scrubberHandle?.destroy?.(); scrubberHandle = null; } catch { /* no-op */ }
-        onQuit?.();
     };
+
+    // I_Quit: a clean exit, so no reason string — the launcher just comes back.
+    doom.onQuit = () => endSession(null);
 
     // rafTime: DOMHighResTimeStamp provided by requestAnimationFrame — used for
     // jitter measurement (interval between consecutive rAF invocations).
@@ -388,13 +413,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
             // ws-001 fix: surface the error, restore landing, tear down.
             // Guard on running: onDoomError (I_Error/abort) may have already
             // cleaned up before the throw propagates here — do not double-restore.
-            if (running) {
-                running = false;
-                try { restoreOnFailure(canvas); } catch { /* DOM torn down */ }
-                try { status(`engine error: ${err?.message ?? String(err)}`); } catch { /* DOM unavailable */ }
-                try { window.doomAudio?.stop?.(); } catch { /* dead instance */ }
-                try { syncHandle?.stop?.(); } catch { /* dead instance */ }
-            }
+            if (running) endSession(`engine error: ${err?.message ?? String(err)}`);
             return;
         }
         // task 18.3: detect deferred resize consumed by web_frame() this tick.

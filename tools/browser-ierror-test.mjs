@@ -4,8 +4,24 @@
 // Verifies that when the engine fires I_Error (onDoomError callback), the page
 // recovers gracefully:
 //   • landing page is restored (not left on a blank canvas)
+//   • THE MENU INSIDE IT IS RENDERED — see below
 //   • a user-visible error message is shown in #status
 //   • the game canvas is hidden
+//
+// WHAT THIS TEST USED TO MISS
+// ---------------------------
+// It asserted `!#landing.hidden` and called that "landing page restored", and
+// its failure string said "user stuck on blank canvas".  The canvas was
+// correctly hidden; the player was stuck on a blank PAGE.  lobby.js calls
+// menu.hide() before booting, and menu.render() opens
+// `root.replaceChildren(); if (hidden || !screen()) return;` — so #landing came
+// back VISIBLE AND EMPTY, because the error path never called the caller's
+// onQuit callback and so lobby.js's returnToMenu() never ran.  Only a reload
+// recovered.  The assertion checked the container, not the contents.
+//
+// The selector that catches it was already in this file: the boot step below
+// waits for `#dmenu .row[data-label="SINGLE PLAYER"]` before clicking it.  The
+// recovery assertion uses the same one now.
 //
 // Trigger: after the game boots, we call doom.onDoomError() directly via CDP.
 // This is the exact JS handler fixed in client/js/main.js — the "call path"
@@ -130,12 +146,26 @@ await sleep(300);
 const landingVisible = await ev(`!document.getElementById('landing').hidden`);
 const canvasHidden   = await ev(`document.getElementById('screen').hidden`);
 const statusText     = await ev(`document.getElementById('status')?.textContent`);
+// The same selector the boot step waits on, asked again after the error.
+const menuRows       = await ev(`document.querySelectorAll('#dmenu .row').length`);
+const canPlayAgain   = await ev(`!!document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]')`);
 
 let failed = false;
 
 if (!landingVisible) {
     console.error('FAIL: landing page not restored after I_Error — user stuck on blank canvas');
     failed = true;
+}
+if (!menuRows) {
+    console.error('FAIL: #landing is visible but the menu inside it is EMPTY (0 rows) — '
+                + 'the container was restored, not the launcher; only a reload recovers');
+    failed = true;
+} else if (!canPlayAgain) {
+    console.error(`FAIL: menu rendered ${menuRows} row(s) after I_Error but SINGLE PLAYER is not among them — `
+                + 'the player cannot start another game');
+    failed = true;
+} else {
+    console.log(`  ok  launcher menu re-rendered: ${menuRows} rows, SINGLE PLAYER reachable`);
 }
 if (!canvasHidden) {
     console.error('FAIL: game canvas still visible after I_Error');
@@ -162,5 +192,6 @@ if (failed) {
     cleanup(1);
 }
 
-console.log('PASS — I_Error recovery: landing restored, error message shown, canvas hidden');
+console.log(`PASS — I_Error recovery: 5 assertions — landing restored, launcher menu re-rendered `
+          + `(${menuRows} rows), SINGLE PLAYER reachable, canvas hidden, error message shown`);
 cleanup(0);
