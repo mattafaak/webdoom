@@ -11,7 +11,7 @@ import { loadPersisted, startSync } from './persist.js';
 import { wadCacheGet, wadCachePut } from './wad-cache.js';
 import { libraryGetBytes } from './wad-library.js';
 import { createScrubberUI } from './scrubber.js';
-import { wideWidth } from './wide-utils.js';
+import { wideWidth, paniniStrength } from './wide-utils.js';
 
 const status = msg => { document.getElementById('status').textContent = msg; };
 
@@ -296,11 +296,6 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
 
     // Compute Panini/cylindrical remap strength from current aspect ratio.
     // 0.0 at 4:3 or narrower; 0.4 at 21:9 or wider.  Returns 0 when disabled.
-    function paniniStrength(w, enabled) {
-        if (!enabled) return 0.0;
-        const aspect = w / SCREEN_H;
-        return Math.min(0.4, Math.max(0, (aspect - 4/3) / (21/9 - 4/3)) * 0.4);
-    }
 
     // Apply initial panini state (OFF by default per settings default).
     renderer.setPaniniStrength(paniniStrength(renderW, input.settings.panini));

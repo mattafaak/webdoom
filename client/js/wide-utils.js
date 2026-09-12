@@ -20,3 +20,19 @@ export function wideWidth() {
     const w = Math.round(240 * aspect / 2) * 2;
     return Math.max(320, Math.min(854, w));
 }
+
+// Panini/cylindrical remap strength for a given render width.
+//
+// The same drift, a second time: this lived verbatim in BOTH main.js and
+// settings.js, the latter carrying the comment "matches main.js
+// paniniStrength()" — a comment is not a mechanism, and wide-utils.js was
+// created after the wideWidth() copies diverged for precisely this reason
+// (task 25.3).
+//
+// 0.0 at 4:3 or narrower, rising linearly to 0.4 at 21:9 and clamped there.
+// Returns 0 when the remap is disabled.
+export function paniniStrength(width, enabled) {
+    if (!enabled) return 0.0;
+    const aspect = width / 200;
+    return Math.min(0.4, Math.max(0, (aspect - 4 / 3) / (21 / 9 - 4 / 3)) * 0.4);
+}

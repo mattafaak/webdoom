@@ -10,15 +10,10 @@
 //          loud status notice is shown).
 import { ACTIONS, saveSettings, defaultSettings } from './input.js';
 import { sf2GetCurrentMeta } from './sf2-library.js';
-import { wideWidth } from './wide-utils.js';
+import { wideWidth, paniniStrength } from './wide-utils.js';
 
-// Compute Panini/cylindrical remap strength (matches main.js paniniStrength()).
-// 0.0 at 4:3 or narrower; 0.4 at 21:9+.  Returns 0 when disabled.
-function computePaniniStrength(w, enabled) {
-    if (!enabled) return 0.0;
-    const aspect = w / 200;
-    return Math.min(0.4, Math.max(0, (aspect - 4/3) / (21/9 - 4/3)) * 0.4);
-}
+// Panini strength comes from wide-utils.js — one definition (task 25.3).
+const computePaniniStrength = paniniStrength;
 
 // wideWidth() imported from wide-utils.js — single source of truth
 // for the aspect→width mapping (shared with main.js boot path).
