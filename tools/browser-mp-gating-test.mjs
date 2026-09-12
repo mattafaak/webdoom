@@ -17,6 +17,7 @@
 //
 // usage: node tools/browser-mp-gating-test.mjs [url]
 import { spawn } from 'node:child_process';
+import { chromeBin, reapOnExit } from './chrome-harness.mjs';
 import { mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -31,7 +32,7 @@ const DOOM_PORT = 8688;
 const userDataDir = mkdtempSync(join(tmpdir(), 'chrome-mpgate-'));
 
 let server = null;
-const chrome = spawn('google-chrome-stable', [
+const chrome = spawn(chromeBin(), [
     '--headless=new', `--remote-debugging-port=${CDP_PORT}`,
     '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
     '--disable-gpu',
@@ -39,7 +40,8 @@ const chrome = spawn('google-chrome-stable', [
     '--autoplay-policy=no-user-gesture-required',
     `--user-data-dir=${userDataDir}`,
     'about:blank',
-], { stdio: 'ignore' });
+], { stdio: 'ignore', detached: true });
+reapOnExit(chrome);
 
 const cleanup = code => {
     if (server) { try { server.kill(); } catch (_) {} }

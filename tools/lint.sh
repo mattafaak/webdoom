@@ -137,6 +137,20 @@ if [ "$DO_JS" = "1" ] && ! node "$REPO_ROOT/tools/check-pipe-exit.mjs"; then
 fi
 
 # ---------------------------------------------------------------------------
+# One port, one claimant (see tools/check-cdp-ports.mjs)
+#
+# Seven ports were declared twice -- four CDP debugging ports and three HTTP
+# ones.  Legs run sequentially so a collision usually passes, which is why it
+# went unnoticed; what it is not harmless for is an ORPHAN, where one leg's leak
+# becomes the next leg's red and the red lands on the innocent leg.  README
+# names exactly that (orphaned Chrome, exhausted /tmp) behind the T07 flake.
+# ---------------------------------------------------------------------------
+
+if [ "$DO_JS" = "1" ] && ! node "$REPO_ROOT/tools/check-cdp-ports.mjs"; then
+    ERRORS=1
+fi
+
+# ---------------------------------------------------------------------------
 # Executable bit on scripts README tells a user to run BARE
 #
 # README.md's quick start says `tools/run-tests.sh`, with no interpreter.  If

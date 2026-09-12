@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // HOL (head-of-line blocking) measurement for webdoom netplay.
-// Connects as 2 players (server on localhost:8671 by default), plays for 15s,
+// Connects as 2 players (server on localhost:8694 by default), plays for 15s,
 // records bundle-arrival timestamps at client-0, and reports inter-arrival
 // gap distribution vs the 28.57 ms tic period.
 //
@@ -18,7 +18,7 @@ process.on('uncaughtException', e => {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const argBase = process.argv[2];
-const PORT = argBase ? null : 8671;
+const PORT = argBase ? null : 8694;
 const base = argBase ?? `ws://127.0.0.1:${PORT}`;
 
 const { connectLobby, attachRelay, launchArgs } =

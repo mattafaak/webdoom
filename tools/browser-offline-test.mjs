@@ -43,13 +43,14 @@
 // run); a fresh profile forces the online phase to actually fill the caches
 // before we go offline.
 //
-// Dedicated server on port 8672 (not 8668): run-tests.sh keeps its own
+// Dedicated server on port 8692 (not 8668): run-tests.sh keeps its own
 // server alive for the remaining suites; killing 8668 from inside this test
 // would break all subsequent browser gates.
 //
 // Usage: node tools/browser-offline-test.mjs [url]
-// url defaults to http://127.0.0.1:8672/ matching the embedded server below.
+// url defaults to http://127.0.0.1:8692/ matching the embedded server below.
 import { spawn } from 'node:child_process';
+import { chromeBin, reapOnExit } from './chrome-harness.mjs';
 import { mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -57,7 +58,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const OFFLINE_PORT = 8672;
+const OFFLINE_PORT = 8692;
 const url = process.argv[2] ?? `http://127.0.0.1:${OFFLINE_PORT}/`;
 const CDP_PORT = 9242;   // dedicated — does not clash with any other suite
 
@@ -66,14 +67,15 @@ const userDataDir = mkdtempSync(join(tmpdir(), 'chrome-offline-test-'));
 
 let server = null;
 let serverKilledIntentionally = false;
-const chrome = spawn('google-chrome-stable', [
+const chrome = spawn(chromeBin(), [
     '--headless=new', `--remote-debugging-port=${CDP_PORT}`,
     '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
     '--use-angle=swiftshader', '--window-size=1280,960',
     '--autoplay-policy=no-user-gesture-required',
     `--user-data-dir=${userDataDir}`,
     'about:blank',
-], { stdio: 'ignore' });
+], { stdio: 'ignore', detached: true });
+reapOnExit(chrome);
 
 const cleanup = code => {
     if (server) { try { server.kill(); } catch (_) {} }

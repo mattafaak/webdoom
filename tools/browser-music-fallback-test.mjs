@@ -16,10 +16,11 @@
 //
 // usage: node tools/browser-music-fallback-test.mjs [url] [outdir]
 import { spawn } from 'node:child_process';
+import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
 import { existsSync } from 'node:fs';
 
 const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
-const CDP_PORT = 9241;
+const CDP_PORT = 9235;
 
 // Resolve Chrome binary: CHROME_BIN env > /opt/google/chrome/chrome (container) >
 // google-chrome-stable (system PATH).  Use --disable-gpu (not --use-angle=swiftshader)
@@ -29,11 +30,12 @@ const CHROME_BIN =
     (existsSync('/opt/google/chrome/chrome') ? '/opt/google/chrome/chrome' : 'google-chrome-stable');
 
 const chrome = spawn(CHROME_BIN, [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`,
+    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, chromeProfileArg(),
     '--no-first-run', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
     '--window-size=1280,960',
     '--autoplay-policy=no-user-gesture-required', 'about:blank',
-], { stdio: 'ignore' });
+], { stdio: 'ignore', detached: true });
+reapOnExit(chrome);
 const cleanup = code => { chrome.kill(); process.exit(code); };
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));

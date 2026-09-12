@@ -22,6 +22,7 @@
 //
 // Usage: node tools/browser-insecure-test.mjs
 import { spawn } from 'node:child_process';
+import { chromeBin, reapOnExit } from './chrome-harness.mjs';
 import { existsSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -57,7 +58,8 @@ const chrome = spawn(CHROME_BIN, [
     '--host-resolver-rules=MAP insecure.test 127.0.0.1',
     `--user-data-dir=${userDataDir}`,
     'about:blank',
-], { stdio: 'ignore' });
+], { stdio: 'ignore', detached: true });
+reapOnExit(chrome);
 
 const cleanup = code => {
     if (server) { try { server.kill(); } catch (_) {} }

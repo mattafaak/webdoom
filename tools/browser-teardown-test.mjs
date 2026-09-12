@@ -37,12 +37,14 @@
 // usage: node tools/browser-teardown-test.mjs [url]
 // Copyright (C) 2026, GPL-2.0-or-later.
 import { spawn } from 'node:child_process';
-const CDP = 9268;
-const CHROME = process.env.CHROME_BIN ?? 'google-chrome-stable';
+import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
+const CDP = 9236;
+const CHROME = chromeBin();
 const chrome = spawn(CHROME, [
-    '--headless=new', `--remote-debugging-port=${CDP}`, '--no-first-run', '--no-sandbox',
+    '--headless=new', `--remote-debugging-port=${CDP}`, chromeProfileArg(), '--no-first-run', '--no-sandbox',
     '--use-angle=swiftshader', '--autoplay-policy=no-user-gesture-required', 'about:blank',
-], { stdio: 'ignore' });
+], { stdio: 'ignore', detached: true });
+reapOnExit(chrome);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 await sleep(1500);
 const url = process.argv[2] ?? 'http://127.0.0.1:8666/';

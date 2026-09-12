@@ -8,6 +8,7 @@
 //   T03 SP-PICK → SP-LOADING  (click game title → bootDoom starts)
 //   T04 SP-LOADING → IN-GAME-SP  (bootDoom resolves)
 import { spawn } from 'node:child_process';
+import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -15,12 +16,13 @@ const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
 const outdir = process.argv[3] ?? '/tmp';
 const CDP_PORT = 9223;
 
-const chrome = spawn('google-chrome-stable', [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`,
+const chrome = spawn(chromeBin(), [
+    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, chromeProfileArg(),
     '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
     '--use-angle=swiftshader', '--window-size=1280,960',
     '--autoplay-policy=no-user-gesture-required', 'about:blank',
-], { stdio: 'ignore' });
+], { stdio: 'ignore', detached: true });
+reapOnExit(chrome);
 const cleanup = code => { chrome.kill(); process.exit(code); };
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));

@@ -18,6 +18,7 @@
 //
 // usage: node tools/browser-demo-test.mjs [url] [outdir]
 import { spawn } from 'node:child_process';
+import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -26,8 +27,8 @@ const outdir  = process.argv[3] ?? '/tmp';
 const CDP_PORT = 9272;
 const TARGET_TICKS = 50;   // 13 + 50*4 + 1 = 214 bytes — well below FRAGMENT_MAX=6000
 
-const chrome = spawn('google-chrome-stable', [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`,
+const chrome = spawn(chromeBin(), [
+    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, chromeProfileArg(),
     '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
     '--use-angle=swiftshader', '--window-size=1280,960',
     '--autoplay-policy=no-user-gesture-required',
@@ -37,7 +38,8 @@ const chrome = spawn('google-chrome-stable', [
     '--disable-background-timer-throttling',
     '--disable-renderer-backgrounding',
     'about:blank',
-], { stdio: 'ignore' });
+], { stdio: 'ignore', detached: true });
+reapOnExit(chrome);
 const cleanup = code => { chrome.kill(); process.exit(code); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 await sleep(1500);

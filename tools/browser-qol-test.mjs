@@ -21,17 +21,19 @@
 // Usage: node tools/browser-qol-test.mjs [url]
 
 import { spawn } from 'node:child_process';
+import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
 
 const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
 const CDP = 9271;
-const CHROME_BIN = process.env.CHROME_BIN ?? 'google-chrome-stable';
+const CHROME_BIN = chromeBin();
 
 const chrome = spawn(CHROME_BIN, [
-    '--headless=new', `--remote-debugging-port=${CDP}`,
+    '--headless=new', `--remote-debugging-port=${CDP}`, chromeProfileArg(),
     '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
     '--use-angle=swiftshader', '--autoplay-policy=no-user-gesture-required',
     '--window-size=1280,960', 'about:blank',
-], { stdio: 'ignore' });
+], { stdio: 'ignore', detached: true });
+reapOnExit(chrome);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const cleanup = code => { chrome.kill(); process.exit(code); };
 const fail = msg => { console.error('FAIL:', msg); cleanup(1); };

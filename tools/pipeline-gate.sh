@@ -2,7 +2,7 @@
 # tools/pipeline-gate.sh — browser-pipeline metrics vs this host's baseline.
 #
 # Hostname-gated: a host with no committed baseline cannot be compared, and must
-# say so rather than pass.  Dedicated port 8677 (12.2b stale-server lesson).
+# say so rather than pass.  Dedicated port 8693 (12.2b stale-server lesson).
 #
 # Extracted from run-tests.sh in task 21.1.  The inline version ended with
 #     node tools/browser-pipeline-compare.mjs ... ; _BP_RC=$? ; if [ $_BP_RC -ne 0 ]
@@ -20,7 +20,7 @@ if [ ! -f "$BASELINE" ]; then
     exit 0
 fi
 
-PORT=8677
+PORT=8693
 CURRENT="$(mktemp -t browser-pipeline-current-XXXXXX.json)"
 SRV=""
 cleanup() {

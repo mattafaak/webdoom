@@ -26,6 +26,7 @@
 //   CDP_PORT    — Chrome DevTools Protocol port (default: 9224, avoids 9223)
 
 import { spawn, execFileSync } from 'node:child_process';
+import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
 import { existsSync }          from 'node:fs';
 import { join, dirname }       from 'node:path';
 import { fileURLToPath }       from 'node:url';
@@ -43,10 +44,10 @@ const EXPLICIT_URL  = urlIdx >= 0 ? args[urlIdx + 1] : null;
 const DURATION_SECS = durIdx >= 0 ? Number(args[durIdx + 1]) : 60;
 
 // ── Config (env overrides) ─────────────────────────────────────────────────────
-const CHROME_BIN   = process.env.CHROME_BIN ?? 'google-chrome-stable';
+const CHROME_BIN = chromeBin();
 const CDP_PORT     = Number(process.env.CDP_PORT ?? 9224);
 const DEFAULT_URL  = 'http://127.0.0.1:8666/';
-const SPAWN_PORT   = 8669;   // used only when we spawn our own server
+const SPAWN_PORT   = 8690;   // used only when we spawn our own server
 
 const hostname = os.hostname();
 const sleep    = ms => new Promise(r => setTimeout(r, ms));
@@ -107,7 +108,7 @@ if (!EXPLICIT_URL) {
 // ── 2. Launch Chrome headlessly ────────────────────────────────────────────────
 chrome = spawn(CHROME_BIN, [
     '--headless=new',
-    `--remote-debugging-port=${CDP_PORT}`,
+    `--remote-debugging-port=${CDP_PORT}`, chromeProfileArg(),
     '--no-first-run',
     '--no-sandbox',
     '--disable-gpu-sandbox',
@@ -115,7 +116,8 @@ chrome = spawn(CHROME_BIN, [
     '--window-size=1280,960',
     '--autoplay-policy=no-user-gesture-required',
     'about:blank',
-], { stdio: 'ignore' });
+], { stdio: 'ignore', detached: true });
+reapOnExit(chrome);
 chrome.on('error', e => fail(`chrome spawn: ${e.message}`));
 await sleep(1500);
 

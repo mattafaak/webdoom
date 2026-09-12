@@ -79,7 +79,20 @@ have_n64()     { [ -x "${N64_INST:-$HOME/toolchains/n64}/bin/mips64-elf-gcc" ] &
                  command -v ares >/dev/null 2>&1 && \
                  command -v xvfb-run >/dev/null 2>&1; }
 have_gcc()     { command -v gcc >/dev/null 2>&1; }
-have_browser() { command -v "${CHROME_BIN:-google-chrome-stable}" >/dev/null 2>&1 || [ -x /opt/google/chrome/chrome ]; }
+# An explicit CHROME_BIN is the ONLY answer when it is set.  This used to read
+# `command -v "${CHROME_BIN:-google-chrome-stable}" || [ -x /opt/... ]`, so a
+# CHROME_BIN pointing at nothing still satisfied the probe via the /opt fallback
+# while the legs spawned the missing binary -- observed: browser-sp and persist
+# PASSED (they hardcoded google-chrome-stable) while browser-qol and
+# browser-teardown died ENOENT, in one run.  tools/chrome-harness.mjs resolves
+# it in exactly this order, so the probe and the spawn cannot disagree.
+have_browser() {
+    if [ -n "${CHROME_BIN:-}" ]; then
+        command -v "$CHROME_BIN" >/dev/null 2>&1 || [ -x "$CHROME_BIN" ]
+    else
+        command -v google-chrome-stable >/dev/null 2>&1 || [ -x /opt/google/chrome/chrome ]
+    fi
+}
 have_firefox() { [ -x /usr/bin/firefox ]; }
 have_emsdk()   { [ -x "${EMSDK_DIR:-$HOME/projects/bee-kettle-doom/emsdk}/upstream/emscripten/emcc" ]; }
 have_baseline(){ [ -f "tools/golden/browser-pipeline-$(hostname).json" ]; }

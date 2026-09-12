@@ -22,10 +22,11 @@
 //   url defaults to http://127.0.0.1:8666/
 
 import { spawn } from 'node:child_process';
+import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
 
 const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
 const CDP = 9270;
-const CHROME_BIN = process.env.CHROME_BIN ?? 'google-chrome-stable';
+const CHROME_BIN = chromeBin();
 
 // Expected bucket is derived from the PAGE's measured aspect with the same
 // thresholds as wideBucket() — headless Chrome's viewport height is not
@@ -37,11 +38,12 @@ const CHROME_BIN = process.env.CHROME_BIN ?? 'google-chrome-stable';
 const bucketFor = a => Math.max(320, Math.min(854, Math.round(240 * a / 2) * 2));
 let WIDE_BUCKET = 426; // recomputed from the live page after boot
 const chrome = spawn(CHROME_BIN, [
-    '--headless=new', `--remote-debugging-port=${CDP}`,
+    '--headless=new', `--remote-debugging-port=${CDP}`, chromeProfileArg(),
     '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
     '--use-angle=swiftshader', '--autoplay-policy=no-user-gesture-required',
     '--window-size=1280,720', 'about:blank',
-], { stdio: 'ignore' });
+], { stdio: 'ignore', detached: true });
+reapOnExit(chrome);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const cleanup = code => { chrome.kill(); process.exit(code); };
 const fail = msg => { console.error('FAIL:', msg); cleanup(1); };

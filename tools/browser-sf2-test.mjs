@@ -35,6 +35,7 @@
 //
 // Usage: node tools/browser-sf2-test.mjs [url]
 import { spawn }       from 'node:child_process';
+import { chromeBin, reapOnExit } from './chrome-harness.mjs';
 import { mkdtempSync } from 'node:fs';
 import { join }        from 'node:path';
 import { tmpdir }      from 'node:os';
@@ -62,7 +63,8 @@ const chrome = spawn(CHROME_BIN, [
     '--autoplay-policy=no-user-gesture-required',
     `--user-data-dir=${userDataDir}`,
     'about:blank',
-], { stdio: 'ignore' });
+], { stdio: 'ignore', detached: true });
+reapOnExit(chrome);
 
 const cleanup = code => {
     if (server) { try { server.kill(); } catch (_) {} }

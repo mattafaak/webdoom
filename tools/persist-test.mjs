@@ -2,11 +2,13 @@
 // the fresh engine FS from IndexedDB. Also tests ws-008 teardown: after
 // doom.onQuit() the sync interval must stop firing (no unhandled rejections).
 import { spawn } from 'node:child_process';
-const CDP = 9230;
-const chrome = spawn('google-chrome-stable', [
-    '--headless=new', `--remote-debugging-port=${CDP}`, '--no-first-run', '--no-sandbox',
+import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
+const CDP = 9234;
+const chrome = spawn(chromeBin(), [
+    '--headless=new', `--remote-debugging-port=${CDP}`, chromeProfileArg(), '--no-first-run', '--no-sandbox',
     '--use-angle=swiftshader', '--autoplay-policy=no-user-gesture-required', 'about:blank',
-], { stdio: 'ignore' });
+], { stdio: 'ignore', detached: true });
+reapOnExit(chrome);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 await sleep(1500);
 const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
