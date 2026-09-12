@@ -313,15 +313,31 @@ const ALL_MATRIX = [
     ['plutonia.wad', 'plutonia.wad', ['demo1', 'demo2', 'demo3']],
 ];
 
+// Every demo the matrix declares.  The expected count was derivable from
+// ALL_MATRIX from the day it was written and was never used as a floor, so a
+// checkout with no WADs skipped all 13 and this CLI -- the one a community
+// member runs to verify a shared demo -- printed
+//     PASS — all 0 golden demos VERIFIED
+// and exited 0.  The `continue` on a missing WAD sits BEFORE total++, so the
+// denominator counted only what was found: a denominator that cannot disagree
+// with its numerator is not a measurement.
+//
+// demo-test.mjs got this control in task 21.2 and demo-verify-test.mjs has its
+// own MIN_ASSERTIONS floor, so the tool under test was the only one of the
+// three without one.
+const ALL_EXPECTED = ALL_MATRIX.reduce((n, [, , demos]) => n + demos.length, 0);
+
 async function runAll() {
     await loadEngine();
     let failures = 0;
     let total = 0;
+    const skipped = [];
 
     for (const [wad, , demos] of ALL_MATRIX) {
         const wadPath = join(wadDir, wad);
         if (!existsSync(wadPath)) {
-            console.log(`skip ${wad}: not fetched`);
+            console.log(`skip ${wad}: not fetched (${demos.length} demo(s) unverified)`);
+            skipped.push(`${wad} (${demos.length})`);
             continue;
         }
         const wadBytes = readFileSync(wadPath);
@@ -359,11 +375,23 @@ async function runAll() {
     if (!outputJson) {
         if (failures) {
             console.log(`\n${failures}/${total} golden demo(s) FAILED`);
+        } else if (total < ALL_EXPECTED) {
+            // Never the word PASS over a partial set.  Naming the shortfall and
+            // what caused it is the difference between "it verified nothing" and
+            // "it verified everything", which used to read the same.
+            console.log(`\nINCOMPLETE — ${total} of ${ALL_EXPECTED} golden demos verified, `
+                      + `${ALL_EXPECTED - total} unverified`);
+            console.log(`  missing WADs: ${skipped.join(', ') || '(none — matrix shrank?)'}`);
+            console.log('  run tools/fetch-wads.sh, or pass a single demo explicitly');
         } else {
-            console.log(`\nPASS — all ${total} golden demos VERIFIED`);
+            console.log(`\nPASS — all ${total} of ${ALL_EXPECTED} golden demos VERIFIED`);
         }
     }
-    process.exit(failures > 0 ? 1 : 0);
+    // A run that verified less than the whole matrix is not a pass.  Exit 2
+    // rather than 1 so a caller can tell "could not run" from "ran and failed"
+    // -- the two sharing a word is the defect this closes.
+    if (failures > 0) process.exit(1);
+    process.exit(total < ALL_EXPECTED ? 2 : 0);
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
