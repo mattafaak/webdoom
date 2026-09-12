@@ -31,3 +31,5 @@ nvr/
 assets/
 # per-leg logs kept by run-tests.sh when a leg fails
 tools/.suite-logs/
+# qemu-user core dumps (cross-arch experiments; see tools/freestanding/arm-check.sh)
+qemu_*.core
