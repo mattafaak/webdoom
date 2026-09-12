@@ -74,6 +74,7 @@ for (const f of order) {
 // 2. present in the manifest, or importable
 const manifestPath = join(root, 'wads/manifest.json');
 let manifestNote = '';
+let incomplete = false;
 if (existsSync(manifestPath)) {
     const raw = JSON.parse(readFileSync(manifestPath, 'utf8'));
     const wads = raw.wads ?? raw;
@@ -87,7 +88,15 @@ if (existsSync(manifestPath)) {
     }
     manifestNote = `, all reachable via the ${served.size}-entry manifest or the importer`;
 } else {
-    manifestNote = ' (INCOMPLETE — no wads/manifest.json on this host, so the served-WAD half was not checked)';
+    // The marker goes at the FRONT of the verdict, not the end.
+    // run-tests.sh's summary table truncates a headline to the column width, so
+    // a qualifier at the end is invisible exactly where a reader looks: CI's
+    // table showed this leg as a plain "PASS — check-menu-reachable: 7
+    // GAME_ORDER entries..." while the full line said the served-WAD half had
+    // not been checked at all. Same family as "a failing check must not wear a
+    // passing headline", one step milder.
+    incomplete = true;
+    manifestNote = ' — no wads/manifest.json on this host, so the served-WAD half was NOT checked';
 }
 
 if (bad) {
@@ -95,5 +104,5 @@ if (bad) {
                 'select and never load is worse than one that is absent');
     process.exit(1);
 }
-console.log(`PASS — check-menu-reachable: ${order.length} GAME_ORDER entries, ` +
-            `${refused.size} importer refusal(s), none of them offered${manifestNote}`);
+console.log(`PASS${incomplete ? ' (INCOMPLETE)' : ''} — check-menu-reachable: ${order.length} ` +
+            `GAME_ORDER entries, ${refused.size} importer refusal(s), none of them offered${manifestNote}`);
