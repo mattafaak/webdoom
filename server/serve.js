@@ -55,6 +55,21 @@ const server = createServer((req, res) => {
     if (LOG_REQ) process.stderr.write(`${req.method} ${path} ${req.headers['user-agent'] ?? '-'}\n`);
     if (path.includes('..')) return send(res, 400, 'bad path');
 
+    // Operator configuration.  docs/decision-17.2a Decision 5 deferred the
+    // SpessaSynth URL wiring to 17.2b; 17.2b wired the backend picker and the
+    // soundfont bytes but never this, so setGmMode's third parameter had no
+    // caller and the GM path could never activate — it always logged
+    // "no spessaSynthUrl configured" and fell back to OPL (task 25.1).
+    //
+    // Env-supplied, matching DOOM_PORT/DOOM_HOST/WEBDOOM_MAX_CONNS, and empty
+    // by default: SpessaSynth is operator-hosted by decision (never a CDN, not
+    // vendored, not a package.json dependency), so only the operator knows the
+    // URL.  Read-only, no parameters.
+    if (path === '/api/config')
+        return send(res, 200, JSON.stringify({
+            spessaSynthUrl: process.env.WEBDOOM_SPESSASYNTH_URL || null,
+        }), { 'content-type': 'application/json' });
+
     if (path === '/api/wads')
         return send(res, 200, manifest(), { 'content-type': 'application/json' });
 

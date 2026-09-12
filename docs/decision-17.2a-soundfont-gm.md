@@ -83,6 +83,27 @@ this task. The settings UI for switching to GM is deferred to task 17.2b. The in
 routing in `audio.js` accepts a `setGmMode(enabled, soundfontUrl)` call (for 17.2b to
 wire), but the initial value of `gmEnabled` is always `false`.
 
+**Amendment, 2026-09-12 (task 25.1).** 17.2b wired two of the three parameters — the
+backend picker (`settings.js`) and the soundfont bytes (`lobby.js`) — but never the
+SpessaSynth URL this decision names. Nothing passed `setGmMode`'s third argument, so
+`gmSpessaSynthUrl` was permanently `null`, `arm()` always took the SKIP branch, and the
+GM backend could not activate under **any** configuration. It was not dead code — the
+machinery is complete and the fallback is deliberately gated by `browser-sf2-test` [5] —
+it was an unfinished integration that read as a delivered feature.
+
+The operator supplies the URL through the server, matching how everything else here is
+configured and keeping SpessaSynth operator-hosted per Decision 1:
+
+```sh
+WEBDOOM_SPESSASYNTH_URL=https://your.server/spessasynth/index.js ./start.sh
+```
+
+`serve.js` reports it at `GET /api/config` (`null` when unset) and `audio.js`'s `arm()`
+reads it once per page. Gated by `tools/gm-config-test.mjs`. What that gate does **not**
+prove is that SpessaSynth then loads and produces audible GM — it cannot, because
+Decision 1 deliberately keeps SpessaSynth out of this repository, so there is nothing for
+a test to load. That residual is stated rather than papered over.
+
 ## Decision 6: Size Budget Impact
 
 This task touches only client-side JavaScript (no engine/wasm changes). The size-ledger

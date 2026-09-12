@@ -151,6 +151,8 @@ export function createAudio(doom) {
     // gmSpessaSynthUrl: operator-hosted SpessaSynth URL (null = not configured).
     // Always null in test/CI; real playback requires operator to host the lib.
     let gmSpessaSynthUrl = null;
+    // Fetched at most once per page: a missing endpoint must not retry per arm().
+    let gmConfigFetched = false;
     // gmSynth: SpessaSynth Synthetizer instance (null until loaded).
     let gmSynth = null;
     // gmMidiQueue: MIDI byte arrays queued before synth is ready to receive events.
@@ -240,6 +242,20 @@ export function createAudio(doom) {
         let gmSyncSkip = false;
 
         if (gmEnabled) {
+            // Ask the server once for the operator's SpessaSynth URL.  Nothing
+            // ever passed setGmMode's third parameter — decision-17.2a's
+            // Decision 5 deferred that wiring to 17.2b, and 17.2b wired the
+            // backend picker and the soundfont bytes but not this — so the GM
+            // path could never activate and always logged "no spessaSynthUrl
+            // configured" (task 25.1).  Doing it here rather than at the three
+            // call sites means all of them benefit without a signature change.
+            if (!gmSpessaSynthUrl && !gmConfigFetched) {
+                gmConfigFetched = true;
+                try {
+                    const cfg = await (await fetch('/api/config')).json();
+                    if (cfg?.spessaSynthUrl) gmSpessaSynthUrl = String(cfg.spessaSynthUrl);
+                } catch { /* no config endpoint: stays null, OPL fallback below */ }
+            }
             if (gmSpessaSynthUrl && gmSf2Bytes?.byteLength > 0) {
                 // GM path: URL + sf2 both present — attempt lazy-load of SpessaSynth.
                 // Synthetizer(targetNode, sf2ArrayBuffer) — SpessaSynth API (v3+).
@@ -299,7 +315,7 @@ export function createAudio(doom) {
                 // No URL or no sf2: SKIP loudly — do NOT build gm-main sink.
                 // Fall through to OPL path so music plays immediately.
                 const reason = !gmSpessaSynthUrl
-                    ? 'no spessaSynthUrl configured'
+                    ? 'no spessaSynthUrl configured (set WEBDOOM_SPESSASYNTH_URL on the server)'
                     : 'no sf2 loaded';
                 console.warn('[audio] SpessaSynth SKIP:', reason, '→ OPL fallback');
                 setStatus('music: OPL fallback (GM soundfont unavailable)');

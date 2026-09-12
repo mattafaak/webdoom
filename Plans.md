@@ -197,7 +197,24 @@ into the engine, and hostile lump content — are now gates.
 
 Suite: **74 legs, 74 passed, 0 skipped** (the 74th is `arm-cross`, see the pi5 migration).
 
-## Phases 24–25 (planned, not started)
+## Phase 24: docs, promises, and the CI claim
 
-Docs/promises truth-up and the CI claim; dead code, the `web.h` contract, and
-the Phase 20 disposition. Detail in the round-4 plan.
+| Task | 内容 | DoD | Depends | Status |
+|------|------|-----|---------|--------|
+| 24.1 | `promises-index.md` truth-up (six stale entries, self-contradicting counts) | every entry re-derived; counts computed | 22.1 | cc:TODO |
+| 24.2 | Reconcile `claims-index.md` with `claims.json` (50 rows gated by nothing; 8 cite a path that does not exist) | each gated, demoted with a reason, or removed | 21.9 | cc:TODO |
+| 24.3 | Make CI real, or stop claiming it | `.github/workflows/ci.yml` runs `--quick` on node 20/24 and states what it did not cover; README/engine-archaeology corrected; `lint` split so a runner without the pinned clang-format reports a counted SKIP; the WAD-less clone case fixed (it was RED) | 21.1, 21.8 | cc:完了 [642e2c0] |
+| 24.4 | Stale-doc sweep (n64 BRING-UP, renderer §13, bare-metal banner, ledger bsp figure) | each corrected or banner-dated | 22.1 | cc:TODO |
+| 24.5 | Document the four shipped render toggles in renderer.md / perf.md | each documented with its golden family and gate | 21.12 | cc:TODO |
+
+## Phase 25: dead code, the contract, and Phase 20
+
+| Task | 内容 | DoD | Depends | Status |
+|------|------|-----|---------|--------|
+| 25.1 | The GM SoundFont backend could not activate under any configuration | operator path wired (`WEBDOOM_SPESSASYNTH_URL` → `/api/config` → `arm()`), gated by `tools/gm-config-test.mjs`, decision-17.2a amended | 22.1 | cc:完了 [this commit] |
+| 25.2 | `web.h` becomes the contract it is designated to be (5 of ~45 exports, wrong arity, 4 forked copies) | one header, correct arity, bounds contracts stated | 23.x | cc:TODO |
+| 25.3 | Duplication cleanup (`paniniStrength`, the two ring-buffer worklets, attachRelay/attachSpectate) | one definition each; gates green | 25.1 | cc:TODO |
+| 25.4 | Fix Phase 20's dependency defect (20.5a gated on hardware) and close 20.4c (`-timedemo` does not engage on N64) | 20.5a re-pointed; one demo trace bit-identical, then 13/13 | 22.1 | cc:TODO |
+| 25.5 | Decide 20.6b and 20.7b explicitly | written verdict; no task sits TODO without a stated blocker | 22.1 | cc:TODO |
+
+Suite: **76 legs, 76 passed, 0 skipped**.
