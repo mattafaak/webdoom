@@ -28,11 +28,27 @@ export function createMenu(font, host, opts = {}) {
     // the skull. Skull ×3 ≈ 57px; body text ×5 ≈ 45px sits just under it.
     const skulls = [font.patch('M_SKULL1', 3), font.patch('M_SKULL2', 3)];
     const logo = font.patch('M_DOOM', 3);
-    setInterval(() => {
-        skullFlip = !skullFlip;
-        const on = root.querySelector('.row.sel .skull');
-        if (on && skulls[+skullFlip]) on.replaceChildren(skulls[+skullFlip]);
-    }, 250);
+    // The skull blink is a querySelector over the launcher's DOM every 250 ms.
+    // It used to be armed once, with the handle discarded, so it kept running
+    // for the life of the page -- including through every frame of gameplay,
+    // where the launcher is hidden and there is no skull to flip.  It follows
+    // visibility now; browser-teardown-test.mjs reads the live timers DURING
+    // play and fails on any the launcher owns.
+    let blink = null;
+    const startBlink = () => {
+        if (blink !== null) return;
+        blink = setInterval(() => {
+            skullFlip = !skullFlip;
+            const on = root.querySelector('.row.sel .skull');
+            if (on && skulls[+skullFlip]) on.replaceChildren(skulls[+skullFlip]);
+        }, 250);
+    };
+    const stopBlink = () => {
+        if (blink === null) return;
+        clearInterval(blink);
+        blink = null;
+    };
+    startBlink();
 
     const screen = () => stack[stack.length - 1];
 
@@ -221,8 +237,8 @@ export function createMenu(font, host, opts = {}) {
         // re-render current screen after data changes (roster updates — NOT a
         // screen transition; no flare, no onTransition)
         refresh(s) { if (s) stack[stack.length - 1] = s; if (sel >= screen().items.length) sel = 0; render(); },
-        hide() { hidden = true; render(); },
-        show() { hidden = false; render(); },
+        hide() { hidden = true; stopBlink(); render(); },
+        show() { hidden = false; startBlink(); render(); },
         // pop n screens without onBack side effects (picker flows)
         unwind(n = 1) {
             let changed = 0;

@@ -11,6 +11,7 @@ export function createCountdown(font, host) {
     ctx.imageSmoothingEnabled = false;      // keep the pixel font crisp when scaled
     let current = null;         // offscreen canvas of what's on display
     let raf = 0;
+    let fallbackTimer = 0;      // dismiss()'s background-tab safety net
     let n = 0;                  // show() call index, picks the exit effect
 
     const easeOut = t => 1 - (1 - t) * (1 - t);
@@ -146,11 +147,17 @@ export function createCountdown(font, host) {
             melt(current, null, finish);            // GO dissolves into the level
             current = null;
             // background tabs pause rAF — the overlay may never finish
-            // melting there, but it must still come down
-            setTimeout(finish, 2500);
+            // melting there, but it must still come down.  The handle is kept
+            // so reset() can cancel it: a countdown dismissed and then reset
+            // (aborted launch, host left, back to the lobby) used to re-hide
+            // the host 2.5 s later, on top of whatever had replaced it.
+            clearTimeout(fallbackTimer);
+            fallbackTimer = setTimeout(() => { fallbackTimer = 0; finish(); }, 2500);
         },
         reset() {
             cancelAnimationFrame(raf);
+            clearTimeout(fallbackTimer);
+            fallbackTimer = 0;
             current = null;
             n = 0;
             drawStatic(null);
