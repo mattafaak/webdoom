@@ -83,6 +83,12 @@ have_browser() { command -v "${CHROME_BIN:-google-chrome-stable}" >/dev/null 2>&
 have_firefox() { [ -x /usr/bin/firefox ]; }
 have_emsdk()   { [ -x "${EMSDK_DIR:-$HOME/projects/bee-kettle-doom/emsdk}/upstream/emscripten/emcc" ]; }
 have_baseline(){ [ -f "tools/golden/browser-pipeline-$(hostname).json" ]; }
+# The 18 legs below share one server on 8668.  Making that a PREREQUISITE, rather
+# than an `if` wrapped around the whole block, is what lets each of them report
+# its own named SKIP -- see the browser-suite comment for what the aggregate skip
+# was hiding.
+SHARED_UP=0
+have_shared()  { [ "$SHARED_UP" = "1" ]; }
 
 need_reason() {   # need_reason <tag> -> prints why it is unmet
     case "$1" in
@@ -99,6 +105,7 @@ need_reason() {   # need_reason <tag> -> prints why it is unmet
         firefox)  echo "/usr/bin/firefox not found" ;;
         emsdk)    echo "emsdk not found (run: tools/setup-emsdk.sh)" ;;
         baseline) echo "no browser-pipeline baseline for host $(hostname)" ;;
+        shared)   echo "shared browser server on 8668 not started" ;;
         *)        echo "unmet prerequisite '$1'" ;;
     esac
 }
@@ -108,7 +115,7 @@ need_met() {
         zig) have_zig ;; qemuarm) have_qemuarm ;; clangfmt) have_clangfmt ;;
         n64) have_n64 ;;
         browser) have_browser ;; firefox) have_firefox ;; emsdk) have_emsdk ;;
-        baseline) have_baseline ;;
+        baseline) have_baseline ;; shared) have_shared ;;
         *) return 1 ;;
     esac
 }
@@ -211,7 +218,13 @@ serve_start() {   # serve_start <port>
     local pid=$!
     SERVERS+=("$pid")
     for i in $(seq 1 60); do
-        if curl -fsS -o /dev/null "http://127.0.0.1:$port/" 2>/dev/null; then
+        # --max-time is load-bearing, not belt-and-braces.  Without it curl waits
+        # forever for a response, so a process that ACCEPTS on this port and then
+        # says nothing -- a squatter, a wedged orphan from an earlier run -- hangs
+        # the readiness loop indefinitely instead of failing it.  Observed: the
+        # suite sat on this line past its own 300 s timeout with the leg neither
+        # running nor skipping.  A poll that cannot time out is not a poll.
+        if curl -fsS --max-time 3 -o /dev/null "http://127.0.0.1:$port/" 2>/dev/null; then
             assert_port_owned "$port" "$pid" || return 1
             return 0
         fi
@@ -252,6 +265,17 @@ list_legs() {
              printf "  %-22s %-18s %s\n", id, needs, desc
          }' "$1"
 }
+# How many legs the registry declares for a tier.  The summary compares what it
+# accounted for against this: see the coverage check at the end for why.
+count_legs() {   # count_legs <file> <quick|full>
+    awk -v tier="$2" '
+        /^if \[ "\$QUICK_ONLY" = "0" \]; then$/ { full_section = 1 }
+        /^[[:space:]]*leg[[:space:]]+[a-z0-9-]+[[:space:]]/ {
+            if (tier == "full" || !full_section) n++
+        }
+        END { print n+0 }' "$1"
+}
+
 if [ "$LIST" = "1" ]; then
     list_legs "$0"
     n=$(list_legs "$0" | wc -l)
@@ -404,49 +428,55 @@ leg hostile-server  build,wad  "hostile server frames vs the engine (23.8)" -- n
 leg wad-content-fuzz build,wad "hostile GENMIDI/MUS lump payloads (23.2)" -- node tools/wad-content-fuzz-test.mjs
 
 # ── browser suite ────────────────────────────────────────────────────────────
-# One shared server for the 16 legs that only need a page to load.  Started
+# One shared server for the 18 legs that only need a page to load.  Started
 # once, torn down by the single EXIT trap, readiness polled rather than slept.
+#
+# THE AGGREGATE SKIP THIS REPLACED
+# -------------------------------
+# These legs used to sit inside `if have_browser && have_build && have_wad`,
+# and the else branch emitted ONE row -- `browser-suite SKIP` -- and incremented
+# SKIPPED once.  So on a host without Chrome or without IWADs the closing line
+# read something like "64 legs: 63 passed, 0 failed, 1 skipped" for a registry
+# of 81, and seventeen legs vanished with nothing naming them.  It looked
+# exactly like a complete run.
+#
+# Now the shared server is a PREREQUISITE (`shared`) like any other, so each leg
+# reports its own SKIP with its own reason and the count is honest.  The
+# coverage check at the end asserts the total against the registry.
 if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^persist$'; then
+    U=http://127.0.0.1:8668/
     if have_browser && have_build && have_wad; then
-        if serve_start 8668; then
-            U=http://127.0.0.1:8668/
-            leg browser-sp        browser,build,wad "title -> menu -> new game -> movement" -- node tools/browser-test.mjs "$U"
-            leg browser-net       browser,build,wad "2 tabs through the lobby into co-op"   -- node tools/browser-net-test.mjs "$U"
-            leg browser-join      browser,build,wad "browser drop-in"                       -- node tools/browser-join-test.mjs "$U"
-            leg persist           browser,build,wad "settings/keybind persistence"          -- node tools/persist-test.mjs "$U"
-            leg browser-resilience browser,build,wad "fetch/sw/visibility/gamepad failures" -- node tools/browser-resilience-test.mjs "$U"
-            leg browser-lobby     browser,build,wad "lobby state machine, 25 edges"         -- node tools/browser-lobby-test.mjs "$U"
-            leg browser-fire      browser,build,wad "PSX fire background + reduced-motion"  -- node tools/browser-fire-test.mjs "$U" /tmp
-            leg browser-ierror    browser,build,wad "I_Error surfaces, no wedge"            -- node tools/browser-ierror-test.mjs "$U"
-            leg browser-rafdeath  browser,build,wad "rAF death recovery"                    -- node tools/browser-rafdeath-test.mjs "$U"
-            leg browser-wide      browser,build,wad "widescreen toggle"                     -- node tools/browser-wide-toggle-test.mjs "$U"
-            leg browser-qol       browser,build,wad "QoL batch + F8 vanilla toggle"         -- node tools/browser-qol-test.mjs "$U"
-            leg browser-wadimport browser,build,wad "user WAD import (16.6a)"               -- node tools/browser-wadimport-test.mjs "$U"
-            leg browser-mp-gating browser,build,wad "local-WAD MP gating (16.6b)"           -- node tools/browser-mp-gating-test.mjs "$U"
-            leg browser-sf2       browser,build,wad "SoundFont UX (17.2b)"                  -- node tools/browser-sf2-test.mjs "$U"
-            leg browser-offline   browser,build,wad "offline single player"                 -- node tools/browser-offline-test.mjs
-            leg browser-demo      browser,build,wad "demo permalink replay (19.2)"          -- node tools/browser-demo-test.mjs "$U"
-            # The old runner gave this its own server on 8669 "per the 12.2b
-            # stale-server lesson".  That lesson was about a STALE server being
-            # picked up; this runner starts its own, polls it ready and tears it
-            # down from one trap, so the shared secure-context server is fine and
-            # the test itself only patches audioWorklet client-side.
-            leg browser-music-fallback browser,build,wad "BufferSink fallback, audioWorklet=undefined" -- node tools/browser-music-fallback-test.mjs "$U"
-            # play -> quit -> play must accumulate nothing (task 23.7b).  Measured
-            # across three cycles: growth that repeats per cycle is a leak, a one-off
-            # difference is not.
-            leg browser-teardown  browser,build,wad "play->quit->play x3 leaks nothing"      -- node tools/browser-teardown-test.mjs "$U"
-            serve_stop_all
-        else
-            echo "SKIP browser suite: could not start a server on 8668"
-            printf 'browser-suite\tSKIP\t0\tcould not start server on 8668\n' >> "$SUMMARY"
-            SKIPPED=$((SKIPPED + 1))
+        if serve_start 8668; then SHARED_UP=1; else
+            echo "  note: shared browser server on 8668 did not start — the 18 legs below will each SKIP"
         fi
-    else
-        echo "SKIP browser suite: prerequisites absent"
-        printf 'browser-suite\tSKIP\t0\tbrowser/build/wad prerequisite absent\n' >> "$SUMMARY"
-        SKIPPED=$((SKIPPED + 1))
     fi
+    leg browser-sp            browser,build,wad,shared "title -> menu -> new game -> movement" -- node tools/browser-test.mjs "$U"
+    leg browser-net           browser,build,wad,shared "2 tabs through the lobby into co-op"   -- node tools/browser-net-test.mjs "$U"
+    leg browser-join          browser,build,wad,shared "browser drop-in"                       -- node tools/browser-join-test.mjs "$U"
+    leg persist               browser,build,wad,shared "settings/keybind persistence"          -- node tools/persist-test.mjs "$U"
+    leg browser-resilience    browser,build,wad,shared "fetch/sw/visibility/gamepad failures" -- node tools/browser-resilience-test.mjs "$U"
+    leg browser-lobby         browser,build,wad,shared "lobby state machine, 25 edges"         -- node tools/browser-lobby-test.mjs "$U"
+    leg browser-fire          browser,build,wad,shared "PSX fire background + reduced-motion"  -- node tools/browser-fire-test.mjs "$U" /tmp
+    leg browser-ierror        browser,build,wad,shared "I_Error surfaces, no wedge"            -- node tools/browser-ierror-test.mjs "$U"
+    leg browser-rafdeath      browser,build,wad,shared "rAF death recovery"                    -- node tools/browser-rafdeath-test.mjs "$U"
+    leg browser-wide          browser,build,wad,shared "widescreen toggle"                     -- node tools/browser-wide-toggle-test.mjs "$U"
+    leg browser-qol           browser,build,wad,shared "QoL batch + F8 vanilla toggle"         -- node tools/browser-qol-test.mjs "$U"
+    leg browser-wadimport     browser,build,wad,shared "user WAD import (16.6a)"               -- node tools/browser-wadimport-test.mjs "$U"
+    leg browser-mp-gating     browser,build,wad,shared "local-WAD MP gating (16.6b)"           -- node tools/browser-mp-gating-test.mjs "$U"
+    leg browser-sf2           browser,build,wad,shared "SoundFont UX (17.2b)"                  -- node tools/browser-sf2-test.mjs "$U"
+    leg browser-offline       browser,build,wad,shared "offline single player"                 -- node tools/browser-offline-test.mjs
+    leg browser-demo          browser,build,wad,shared "demo permalink replay (19.2)"          -- node tools/browser-demo-test.mjs "$U"
+        # The old runner gave this its own server on 8669 "per the 12.2b
+        # stale-server lesson".  That lesson was about a STALE server being
+        # picked up; this runner starts its own, polls it ready and tears it
+        # down from one trap, so the shared secure-context server is fine and
+        # the test itself only patches audioWorklet client-side.
+    leg browser-music-fallback browser,build,wad,shared "BufferSink fallback, audioWorklet=undefined" -- node tools/browser-music-fallback-test.mjs "$U"
+        # play -> quit -> play must accumulate nothing (task 23.7b).  Measured
+        # across three cycles: growth that repeats per cycle is a leak, a one-off
+        # difference is not.
+    leg browser-teardown  browser,build,wad,shared "play->quit->play x3 leaks nothing"      -- node tools/browser-teardown-test.mjs "$U"
+    [ "$SHARED_UP" = "1" ] && serve_stop_all
 fi
 
 # These three own their servers (dedicated ports, per the 12.2b stale-server
@@ -478,6 +508,32 @@ printf '  %d legs: %d passed, %d failed, %d skipped  (tier: %s)\n' \
 if [ "$TOTAL" -eq 0 ]; then
     echo "  SUITE VACUOUS: 0 legs ran — check --only ids against --list"
     exit 1
+fi
+
+# ── coverage: does the total account for the whole registry? ─────────────────
+#
+# TOTAL is built by adding up what ran, so it could only ever answer "how many
+# legs did I reach", never "how many are there".  Nothing compared the two, and
+# the browser block's aggregate skip collapsed 18 legs into one SKIPPED
+# increment — so a WAD-less or Chrome-less host printed a perfectly plausible
+# "64 legs: 63 passed, 0 failed, 1 skipped" against a registry of 81 and lost
+# seventeen without a word.
+#
+# demo-test.mjs has had exactly this control since task 21.2 (EXPECTED_DEMOS
+# from MATRIX, assertFullCoverage), one level down from where it was needed.
+# --only is the one case where a shortfall is the point, so it is exempt.
+if [ "${#ONLY[@]}" -eq 0 ]; then
+    REGISTRY=$(count_legs "$0" "$TIER")
+    if [ "$REGISTRY" -lt 10 ]; then
+        echo "  SUITE COVERAGE BROKEN: registry discovery found only $REGISTRY legs for tier $TIER"
+        exit 1
+    fi
+    if [ "$TOTAL" -ne "$REGISTRY" ]; then
+        echo "  SUITE COVERAGE: accounted for $TOTAL of $REGISTRY legs in the $TIER registry" \
+             "— $((REGISTRY - TOTAL)) neither ran, failed nor skipped"
+        exit 1
+    fi
+    printf '  coverage: %d of %d registry legs accounted for (tier: %s)\n' "$TOTAL" "$REGISTRY" "$TIER"
 fi
 if [ "$FAILED" -gt 0 ]; then
     echo "  SUITE FAILED: ${FAILED_IDS[*]}"
