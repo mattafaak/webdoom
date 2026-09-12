@@ -154,8 +154,15 @@ and `run-tests.sh` never built `build/`, the artifact almost every leg loads.
 - Four gates that existed and ran nowhere are wired — including the native ASan
   demo suite `README.md` already advertised.
 - **The build is byte-reproducible**: `build/doom.wasm` rebuilt from a clean
-  tree returns to its documented md5 `c669142745449ff04bd2fef30fa17412`, and so
-  does `build-sbskip`. The ledger said "proven"; now it is re-provable.
+  tree returns to its documented md5 — measured 2026-09-11 at b80d729, where
+  that md5 was `c669142745449ff04bd2fef30fa17412` / 356,775 B — and so does
+  `build-sbskip`. The ledger said "proven"; now it is re-provable.
+  **The hash itself is not a constant and this line used to read as though it
+  were**: be0c271 (25.2) changed `engine/web/web.h`, so the shipping artifact is
+  `3edea657b5a54395613fef9cd2dbc539` / 357,101 B today. What is durable is the
+  reproducibility, not the digit string. The current value is checked against
+  the artifact on every suite run by `tools/toggle-identity-check.mjs`; quoting
+  it here would only re-create the drift.
 
 ## Open findings (see docs/2026-09-11-suite-baseline.md)
 

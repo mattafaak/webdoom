@@ -127,8 +127,15 @@ drifting once before, 5,461,072 -> 4,930,352, closed by task 14.4.)
 
 Not a defect — a fact the project asserted and had never re-verified. Rebuilding
 `build/doom.wasm` from a clean tree returns **exactly** the md5 the optimization
-ledger records as "proven", `c669142745449ff04bd2fef30fa17412`, at 356,775
-bytes; `build-sbskip` likewise reproduces `1fa7322e5b2325ca585aa712a3aa1167`.
+ledger recorded as "proven" *at landing (b80d729, 2026-09-11)*,
+`c669142745449ff04bd2fef30fa17412`, at 356,775 bytes; `build-sbskip` likewise
+reproduced `1fa7322e5b2325ca585aa712a3aa1167`.
+
+> Both figures are this document's date, not the present. be0c271 (task 25.2)
+> changed `engine/web/web.h` the next day and the artifact moved with it —
+> `3edea657b5a54395613fef9cd2dbc539` / 357,101 B. The claim that survives is
+> reproducibility; the digits are a snapshot. `tools/toggle-identity-check.mjs`
+> holds the current values against the artifacts on every run.
 Re-recording the 13 sim goldens from that build produced byte-identical files.
 So on the pinned toolchain the artifacts, and the goldens taken from them, are
 reproducible rather than merely once-measured. `tools/toggle-identity-check.mjs`

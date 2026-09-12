@@ -109,5 +109,44 @@ if (!checked) {
                 `(no artifacts built) — this is not a pass`);
     process.exit(1);
 }
+
+// ── every md5 in the ledger is either CHECKED or explicitly HISTORICAL ───────
+//
+// The four "landing evidence" lines carried their own toggle-off/toggle-on
+// hashes in prose -- no backticks, no path -- so CLAIM above never saw them.
+// All eight had gone stale: every one still read its 2026-07 value while the
+// table rows beside them had been corrected, and this checker reported 8 of 8
+// verified over a file that contradicted itself four times.
+//
+// A second, unchecked copy of a checked fact is drift with a delay on it. So an
+// md5 in this document must now be one of two things: inside a row this script
+// verifies, or marked `at landing (<commit>)` and therefore a statement about
+// history rather than about the artifact on disk.
+const HEX = /[0-9a-f]{32}/g;
+const verified = new Set(claims.map(c => c.md5));
+const loose = [];
+// Historical-ness is judged from the text immediately BEFORE each hash, not
+// from the whole line: the diffblit row carries its current (checked) md5 and
+// its superseded landing md5 in one long cell, so a line-wide exemption would
+// have let a stale present-tense hash hide behind a historical one beside it.
+for (const line of text.split('\n')) {
+    if (!/md5/i.test(line)) continue;
+    let m;
+    HEX.lastIndex = 0;
+    while ((m = HEX.exec(line)) !== null) {
+        if (verified.has(m[0])) continue;           // a row this script checked
+        const before = line.slice(Math.max(0, m.index - 60), m.index);
+        if (/landing/i.test(before)) continue;      // a statement about history
+        loose.push({ h: m[0], line: line.trim().slice(0, 100) });
+    }
+}
+if (loose.length) {
+    console.log(`FAIL toggle-identity: ${loose.length} md5(s) in the ledger are neither checked ` +
+                `against an artifact nor marked "at landing (<commit>)":`);
+    for (const l of loose) console.log(`    ${l.h}  ${l.line}`);
+    console.log('  A present-tense hash that nothing verifies is drift waiting to happen.');
+    process.exit(1);
+}
 console.log(`PASS toggle-identity: ${checked} of ${claims.length} ledger md5 claims verified against ` +
-            `the artifacts${absent ? `, ${absent} not built` : ''}`);
+            `the artifacts${absent ? `, ${absent} not built` : ''}; ` +
+            `every other md5 in the ledger is marked historical`);

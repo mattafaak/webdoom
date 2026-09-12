@@ -259,7 +259,7 @@ The tools/baremetal linker (doom.ld) has no explicit 4 MiB stack block; stack is
 remains above .bss (implicitly ~several MiB of headroom in QEMU, practically ≪1 MiB used).
 The task lands as a **proof-and-gate** step: 1 MiB is proven sufficient for all 13 golden demos
 and wired as a repeatable `make check-stack-1m` gate. The ASan build at the same 1 MiB limit
-reports 0 stack-overflow hits across all 13 demos. Wasm artifact md5 unchanged: `1931aa623bd0e90e408d1ddd9c9b3c28`.
+reports 0 stack-overflow hits across all 13 demos. Wasm artifact md5 unchanged at landing (14.2g): `1931aa623bd0e90e408d1ddd9c9b3c28`.
 
 ---
 
@@ -671,8 +671,20 @@ compiler's source-line counter so the toggle-off binary is byte-identical to mas
 
 **Verdict: LANDED — task 20.3a**
 
+> **On the md5s in the "landing evidence" lines below.** They are the values at
+> the landing commit and are marked "at landing" for that reason. The CURRENT
+> values live in each variant's byte-identity table row, which
+> `tools/toggle-identity-check.mjs` verifies against the artifacts on every
+> suite run. Until that marker was added, these four lines all read
+> `toggle-off md5 c669142745…` in the present tense while
+> the table rows beside them read `3edea657b5a54395613fef9cd2dbc539` — the
+> artifact's actual md5 — so this file contradicted itself four times and passed
+> 8/8, because the checker's regex only matches the backticked table form.
+> `Plans.md` and the 2026-09-11 suite baseline cite the same stale hash as the
+> proof that the build is byte-reproducible; both are corrected.
+
 20.3a landing evidence: unconditional solid-colour flat fill, no distance threshold.
-toggle-off md5 c669142745449ff04bd2fef30fa17412 · toggle-on md5 b2cc4f756075afe7d344400f3b0e11a4
+toggle-off md5 at landing (6d19915) c669142745449ff04bd2fef30fa17412 · toggle-on md5 at landing (6d19915) b2cc4f756075afe7d344400f3b0e11a4
 Measured gain: doom.wad demo3 p50 **1,110,572 → 860,682 instr/tic = −249,890 instr/tic (−22.5% whole)**.
 First attempt (distance-threshold) regressed +2.4% — documented above as negative data.
 
@@ -698,7 +710,7 @@ Skip `ST_drawWidgets(false)` in `ST_diffDraw()` when the full set of widget-visi
 **Verdict: LANDED — task 20.3b**
 
 20.3b landing evidence: status-bar widget-state snapshot comparison, skip on no-change.
-toggle-off md5 c669142745449ff04bd2fef30fa17412 · toggle-on md5 1fa7322e5b2325ca585aa712a3aa1167
+toggle-off md5 at landing (2d7756c) c669142745449ff04bd2fef30fa17412 · toggle-on md5 at landing (2d7756c) 1fa7322e5b2325ca585aa712a3aa1167
 toggle-on pixel-identical to toggle-off (13/13 render demos PASS with build-sbskip).
 timedemo icount: p50 1,110,737 → 1,091,409 instr/tic (−1.7% p50; +0.9% mean due to overhead > skip-rate in timedemo context).
 Real-play gain measurable only in static-HUD intervals; timedemo is a documented limitation of this technique.
@@ -728,7 +740,7 @@ Draw only even-numbered `dc_x` columns; the adjacent odd column is filled by a s
 **Verdict: LANDED — task 20.3c**
 
 20.3c landing evidence: potato half-width column renderer, even-column memcpy duplication.
-toggle-off md5 c669142745449ff04bd2fef30fa17412 · toggle-on md5 08e1273dddcf71751a4075badb61b83a
+toggle-off md5 at landing (085a5ba) c669142745449ff04bd2fef30fa17412 · toggle-on md5 at landing (085a5ba) 08e1273dddcf71751a4075badb61b83a
 Measured gain: doom.wad demo3 p50 **1,091,809 → 926,504 instr/tic = −165,305 instr/tic (−15.1% whole)**.
 Non-overlap with C2 low-detail: potato halves texture reads at full column count; low-detail halves column count at full texture cost — orthogonal axes.
 
@@ -759,5 +771,5 @@ Trade-off: one `memcmp(SCREENHEIGHT bytes = 200 B)` per column per frame regardl
 **Verdict: LANDED — task 20.3d**
 
 20.3d landing evidence: I_FinishUpdate differential blit — column-major snapshot, skip unchanged columns.
-toggle-off md5 c669142745449ff04bd2fef30fa17412 · toggle-on md5 6e36c3e618de75f3f755405eda39a0d0 (corrected 21.12; b150eec's figure predates 22fa00f)
+toggle-off md5 at landing (b150eec) c669142745449ff04bd2fef30fa17412 · toggle-on md5 at landing (b150eec) 6e36c3e618de75f3f755405eda39a0d0 (corrected 21.12; b150eec's figure predates 22fa00f)
 FINDING: I_FinishUpdate transfer path not separately instrumented by icount or bench.mjs; timedemo structurally ill-suited (≈100% columns dirty). bench.mjs sim-fps (no-draw, does not call I_FinishUpdate): 208,412 → 207,159 fps (−0.6%, within noise). Real-play static-scene benefit is the design target; negative timedemo result is an honest documented limitation, not a kill-rule trigger (same precedent as 20.3b SBSKIP).
