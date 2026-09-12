@@ -17,7 +17,10 @@
 // Playback contract:
 //   1. Allocate wasm heap memory and copy .lmp bytes in (_malloc + HEAPU8.set).
 //   2. Optionally call web_set_singletics(1) for wall-clock-free replay.
-//   3. Call web_play_demo_buf(heapPtr).  Returns 0 on success, -1 on error.
+//   3. Call web_play_demo_buf(heapPtr, len).  Returns 0 on success, -1 on
+//   error.
+//      `len` is the size of the buffer at heapPtr and is mandatory: without
+//      it the terminator scan is unbounded with respect to the allocation.
 //      Internally calls G_InitNew from the demo header, then sets demoplayback.
 //   4. Drive frames with web_frame() until web_demo_playing() returns 0.
 //
@@ -138,15 +141,30 @@ EMSCRIPTEN_KEEPALIVE int web_demo_playing (void)
 // crash the wasm runtime.  Size is computed by scanning for DEMOMARKER after
 // the header; since each tic occupies exactly 4 bytes the scan steps 4 bytes
 // at a time to avoid false positives on movement/button data.
-EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr)
+EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr, int len)
 {
     byte* raw = (byte*) (size_t) heapPtr;
     byte* p = raw;
+    byte* end;
     int ver, i, total;
     skill_t skill;
     int episode, map;
     byte* scan;
     byte* zone_buf;
+
+    // The caller's buffer length, which this function had no way to know.
+    // It read the 13-byte header before any validation and then scanned for
+    // the terminator up to raw + 1 MiB + 16 -- the SERVER's PER_DEMO_CAP, not
+    // the size of the allocation in front of it.  A 20-byte demo from a URL
+    // fragment therefore got a ~1 MB overread (task 23.4).
+    //
+    // A caller that passes no length gets len == 0 under emscripten's
+    // marshalling and is rejected here, which is the safe direction: every
+    // in-tree caller was updated, and anything else fails loudly instead of
+    // silently overscanning.
+    if (len < 14) /* 13-byte header + at least one 4-byte tic */
+        return -1;
+    end = raw + len;
 
     ver = (int) *p++;
     if (ver != VERSION && ver != 109)
@@ -170,10 +188,10 @@ EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr)
     // header. Bounded: a hostile shared demo with no marker must not walk the
     // whole wasm heap (server PER_DEMO_CAP is 1 MiB; +16 covers header slack).
     scan = p;
-    while (scan < raw + (1024 * 1024 + 16) && *scan != WEBDEMO_MARKER)
+    while (scan < end && *scan != WEBDEMO_MARKER)
         scan += 4;
-    if (*scan != WEBDEMO_MARKER)
-        return -1; /* no terminator within cap — reject */
+    if (scan >= end || *scan != WEBDEMO_MARKER)
+        return -1; /* no terminator inside the buffer — reject */
     if (scan == p)
         return -1;              /* hostile: 0-tic demo (marker at first tic) —
                                    nothing to replay; rejecting avoids the

@@ -163,7 +163,7 @@ async function verifyDemo(lmpBytes, wadPath, golden) {
     // Load .lmp into wasm heap and start playback.
     const lmpPtr = doom._malloc(lmpBytes.length);
     doom.HEAPU8.set(lmpBytes, lmpPtr);
-    const rc = doom._web_play_demo_buf(lmpPtr);
+    const rc = doom._web_play_demo_buf(lmpPtr, lmpBytes.length);
     if (rc !== 0)
         return { ok: false, error: `web_play_demo_buf returned ${rc} (bad version or no marker)` };
 

@@ -191,6 +191,9 @@ export function createAudio(doom) {
         doom._web_music_init(ctx.sampleRate);
 
         musicScratch = doom._malloc(4 * 2 * 16384);
+        // 0 means the allocation failed; web_music_render would then write its
+        // frames over address 0.  Music is optional -- degrade, do not corrupt.
+        if (!musicScratch) { console.warn('webdoom: no memory for the music buffer; music disabled'); return null; }
 
         // Detect insecure origin before attempting addModule so we can give an
         // accurate status message: on http://<LAN-IP> ctx.audioWorklet is

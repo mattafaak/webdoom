@@ -87,7 +87,15 @@ export async function parseDemoUrl() {
         if (b64) {
             try {
                 const bytes = _fromBase64Url(b64);
-                return { bytes, wad, source: 'fragment' };
+                // FRAGMENT_MAX was enforced only when WRITING a share link, so
+                // a hand-made URL could put any amount of base64 through this
+                // path.  Enforce it on the way in as well (task 23.4).
+                if (bytes.length > FRAGMENT_MAX) {
+                    console.warn(`demo: fragment is ${bytes.length} bytes, over the ` +
+                                 `${FRAGMENT_MAX}-byte limit — ignoring`);
+                } else {
+                    return { bytes, wad, source: 'fragment' };
+                }
             } catch { /* malformed — fall through to server param */ }
         }
     }
@@ -129,8 +137,9 @@ export function startReplay(doom, bytes) {
     if (typeof doom._web_set_singletics === 'function')
         doom._web_set_singletics(1);
     const ptr = doom._malloc(bytes.length);
+    if (!ptr) throw new Error(`out of memory for a ${bytes.length}-byte demo`);
     doom.HEAPU8.set(bytes, ptr);
-    const rc = doom._web_play_demo_buf(ptr);
+    const rc = doom._web_play_demo_buf(ptr, bytes.length);
     // Note: ptr is intentionally NOT freed — the zone copy in web_play_demo_buf
     // owns the data; the malloc'd raw copy can be freed but the zone buffer
     // outlives playback.  Both are reclaimed when the wasm instance exits.

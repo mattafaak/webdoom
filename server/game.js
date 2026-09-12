@@ -20,6 +20,14 @@ const JOIN_TIMEOUT_MS = +(process.env.WEBDOOM_JOIN_TIMEOUT || 30000);  // reclai
 // Resource caps — all sized well above legitimate LAN 4-player play at 35 Hz.
 // 4 players × 2 sockets each + 10 lobby observers = 18 legit; 50 gives 2.7× headroom.
 const MAX_CONNS = +(process.env.WEBDOOM_MAX_CONNS || 50);
+// Spectators were capped only by MAX_CONNS, which is shared with PLAYERS: 46
+// observers could exhaust the budget and lock real players out of /ws/game,
+// and each one forced a full-history burst into the Node heap on connect.
+// Spectating needs no slot and no credential, so it is the cheapest way in.
+const MAX_SPECTATORS = +(process.env.WEBDOOM_MAX_SPECTATORS || 8);
+// Above this many bytes queued on one socket, that peer is not keeping up and
+// is dropped rather than allowed to grow the server's heap without bound.
+const SEND_BACKLOG_CAP = +(process.env.WEBDOOM_SEND_BACKLOG || 4 * 1024 * 1024);
 // 4 players × 35 Hz = 140 msg/s aggregate; per-conn cap at 300 gives a single client
 // 2× the full-table aggregate — plenty for legit play, kills flood attacks.
 const RATE_CAP_PER_SEC = +(process.env.WEBDOOM_RATE_CAP || 300);
@@ -253,7 +261,25 @@ export function createGame(log = console.log) {
     function spectateConnect(ws) {
         safeWs(ws, log, 'spectate');
         if (!session) { try { ws.terminate(); } catch {} return; }
-        for (const b of session.history) ws.send(b);
+        if (session.spectators.size >= MAX_SPECTATORS) {
+            log(`spectate: cap hit (${session.spectators.size}/${MAX_SPECTATORS}) — refusing`);
+            ws.on('error', () => {});
+            try { ws.terminate(); } catch {}
+            return;
+        }
+        // Backpressure: the history burst is sent unconditionally, and ws.send()
+        // buffers in the Node heap when the socket cannot keep up.  A slow or
+        // deliberately-stalled observer would otherwise pull the whole session
+        // history into memory with no ceiling.
+        for (const b of session.history) {
+            if (ws.bufferedAmount > SEND_BACKLOG_CAP) {
+                log(`spectate: observer too slow (${ws.bufferedAmount} B buffered) — dropping`);
+                ws.on('error', () => {});
+                try { ws.terminate(); } catch {}
+                return;
+            }
+            ws.send(b);
+        }
         session.spectators.add(ws);
         log(`spectate: observer connected (history ${session.history.length} tics)`);
         ws.on('close', () => {
@@ -297,7 +323,15 @@ export function createGame(log = console.log) {
         if (!p.ingame) {
             p.joining = true;
             p.reservedAt = p.reservedAt || Date.now();
-            for (const b of session.history) ws.send(b);
+            for (const b of session.history) {
+                if (ws.bufferedAmount > SEND_BACKLOG_CAP) {
+                    log(`game: ${COLORS[slot]} too slow to catch up (${ws.bufferedAmount} B buffered) — dropping`);
+                    ws.on('error', () => {});
+                    try { ws.terminate(); } catch {}
+                    return;
+                }
+                ws.send(b);
+            }
             log(`game: ${COLORS[slot]} catching up (${session.history.length} tics)`);
         }
 

@@ -94,7 +94,7 @@ function linearPlay(demoBytes) {
             doom._web_set_singletics(1);
             const ptr = doom._malloc(demoBytes.length);
             doom.HEAPU8.set(demoBytes, ptr);
-            doom._web_play_demo_buf(ptr);
+            doom._web_play_demo_buf(ptr, demoBytes.length);
             const hashes = [];
             let lastTic = -1;
             for (let i = 0; i < RECORD_TICKS + 10; i++) {
@@ -124,7 +124,7 @@ async function seekTo(demoBytes, targetTic, fakeOff = 0) {
     doom._web_set_singletics(1);
     const ptr = doom._malloc(demoBytes.length);
     doom.HEAPU8.set(demoBytes, ptr);
-    doom._web_play_demo_buf(ptr);
+    doom._web_play_demo_buf(ptr, demoBytes.length);
 
     const seekTarget = targetTic + fakeOff;
     const t0 = performance.now();
@@ -150,7 +150,7 @@ async function zoneHwmFlatTest(demoBytes, seekPoints) {
     doom._web_set_singletics(1);
     const ptr = doom._malloc(demoBytes.length);
     doom.HEAPU8.set(demoBytes, ptr);
-    doom._web_play_demo_buf(ptr);
+    doom._web_play_demo_buf(ptr, demoBytes.length);
 
     doom._web_zone_hwm_reset();
     const hwms = [];

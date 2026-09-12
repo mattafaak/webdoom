@@ -44,6 +44,10 @@ const LOG_REQ = !!process.env.LOG_REQUESTS;
 // Rate limit flag for POST /api/demos/:id/verify (task 19.4).
 // Only one verify request may be in flight at a time (returns 429 otherwise).
 let verifyInFlight = false;
+let verifyTimer = null;
+// Generous for a <=4 MiB attestation on a LAN; short enough that a silent
+// client cannot hold the single verify slot for Node's 300 s requestTimeout.
+const VERIFY_BODY_TIMEOUT_MS = 15_000;
 
 const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
@@ -142,18 +146,42 @@ const server = createServer((req, res) => {
             if (verifyInFlight) return send(res, 429, 'verify in progress — try again');
             verifyInFlight = true;
 
+            // This flag is a concurrency LOCK, and it was released only from
+            // req 'end' and req 'error'.  A client that announces a
+            // Content-Length and then simply stops writing -- WITHOUT closing
+            // the socket -- fires neither, so the lock was held and every later
+            // verify got 429 from one idle connection.  Reproduced 2026-09-11
+            // (task 23.6); bounded in practice only by Node's 300 s
+            // requestTimeout, so: a five-minute denial for one silent socket.
+            //
+            // res.on('close') is NOT sufficient and was tried first: with the
+            // socket held open the response is never finished and never closes.
+            // A lock without a timeout is a wedge waiting for a slow client, so
+            // the timer is the fix and 'close' is the fast path beside it.
+            const releaseSlot = () => {
+                if (verifyTimer) { clearTimeout(verifyTimer); verifyTimer = null; }
+                verifyInFlight = false;
+            };
+            verifyTimer = setTimeout(() => {
+                verifyTimer = null;
+                verifyInFlight = false;
+                try { send(res, 408, 'verify body timed out'); } catch { /* already sent */ }
+                req.destroy();
+            }, VERIFY_BODY_TIMEOUT_MS);
+            res.on('close', releaseSlot);
+
             let size = 0;
             const chunks = [];
             req.on('data', chunk => {
                 size += chunk.length;
                 if (size <= ATTEST_BODY_CAP) chunks.push(chunk);
             });
-            req.on('error', () => { setImmediate(() => { verifyInFlight = false; }); send(res, 400, 'read error'); });
+            req.on('error', () => { setImmediate(releaseSlot); send(res, 400, 'read error'); });
             req.on('end', () => {
                 // Defer flag clear to next event-loop tick so concurrent requests
                 // that arrive while body events fire synchronously still see
                 // verifyInFlight=true and receive 429 (rate limit).
-                const clearFlag = () => setImmediate(() => { verifyInFlight = false; });
+                const clearFlag = () => setImmediate(releaseSlot);
 
                 if (size > ATTEST_BODY_CAP) {
                     clearFlag();

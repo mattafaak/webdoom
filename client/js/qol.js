@@ -22,6 +22,8 @@ export function createQolUI(doom, input) {
     // ── Shared HEAP buffer for web_level_state (9 ints × 4 bytes) ────────────
     // Allocated once; freed on page unload (in practice the page is short-lived).
     const LS_INTS = 9;
+    // The existing check is for the EXPORT, not the RESULT: _malloc can be
+    // present and still return 0.  Both are handled by the falsy test below.
     const lsBuf = doom._malloc ? doom._malloc(LS_INTS * 4) : 0;
     const lsBase = lsBuf >> 2;  // HEAP32 index base
 

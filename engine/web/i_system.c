@@ -31,8 +31,18 @@ ticcmd_t* I_BaseTiccmd (void)
 
 byte* I_ZoneBase (int* size)
 {
+    byte* base;
+
     *size = ZONESIZE;
-    return (byte*) malloc (ZONESIZE);
+    base = (byte*) malloc (ZONESIZE);
+    // The zone allocator writes its first block header here immediately, so a
+    // NULL return is a write to address 0 rather than a diagnosable failure.
+    // I_Error is the fail-soft path the engine already has: it unwinds to
+    // onDoomError, which restores the landing page and shows the message.
+    if (!base)
+        I_Error ("I_ZoneBase: failed to allocate %d bytes for the zone",
+                 ZONESIZE);
+    return base;
 }
 
 // Time origin is module load; wraps are impossible within a session.
@@ -72,7 +82,14 @@ void I_EndRead (void) {}
 
 byte* I_AllocLow (int length)
 {
-    return (byte*) calloc (1, length);
+    byte* p;
+
+    if (length < 0)
+        I_Error ("I_AllocLow: negative length %d", length);
+    p = (byte*) calloc (1, length);
+    if (!p)
+        I_Error ("I_AllocLow: failed to allocate %d bytes", length);
+    return p;
 }
 
 void I_StartFrame (void) {}

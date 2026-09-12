@@ -194,6 +194,11 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     wads.forEach((w, i) => {
         const name = i === 0 ? (ENGINE_NAME[w.file] ?? w.file) : w.file;
         const p = doom._malloc(bytes[i].length);
+        // _malloc returns 0 on failure, and HEAPU8.set(bytes, 0) then writes
+        // the ENTIRE WAD over address 0 -- the null page, the shadow stack and
+        // static data -- with no error.  Reachable: the WAD stack holds up to
+        // 40 entries and imported files have no size cap.
+        if (!p) throw new Error(`out of memory registering ${name} (${bytes[i].length} bytes)`);
         doom.HEAPU8.set(bytes[i], p);
         doom.ccall('web_register_file', null,
             ['string', 'number', 'number'], [name, p, bytes[i].length]);

@@ -88,6 +88,10 @@ byte* W_WebFile (const char* path, int* len)
     if (n < 0)
         return NULL;
     buf = (byte*) malloc (n);
+    // js_file_copy is an unbounded HEAPU8.set(bytes, dest): a NULL dest writes
+    // the whole file over address 0.
+    if (!buf)
+        return NULL;
     js_file_copy (name, buf);
     web_register_file (name, buf, n);
     *len = n;

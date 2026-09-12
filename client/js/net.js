@@ -67,6 +67,7 @@ export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, nam
 
     const scratch = doom._web_net_scratch();
     const ingamePtr = doom._malloc(8);
+    if (!ingamePtr) throw new Error('out of memory for the per-tic ingame ring');
     let live = false;               // once true, bundles just fill netcmds
     const queue = [];               // bundles awaiting go()/catchUp
 
@@ -163,6 +164,7 @@ export function attachSpectate(doom, baseUrl, { numplayers, slots = null, names 
 
     const scratch = doom._web_net_scratch();
     const ingamePtr = doom._malloc(8);
+    if (!ingamePtr) throw new Error('out of memory for the per-tic ingame ring');
 
     const deliver = data => {
         const b = new Uint8Array(data);

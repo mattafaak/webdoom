@@ -103,7 +103,7 @@ async function verifyDemoBytes(lmpBytes, wadPath, golden) {
 
     const lmpPtr = doom._malloc(lmpBytes.length);
     doom.HEAPU8.set(lmpBytes, lmpPtr);
-    const rc = doom._web_play_demo_buf(lmpPtr);
+    const rc = doom._web_play_demo_buf(lmpPtr, lmpBytes.length);
     if (rc !== 0)
         return { ok: false, error: `web_play_demo_buf returned ${rc}` };
 
