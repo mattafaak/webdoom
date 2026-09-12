@@ -166,8 +166,13 @@ and `run-tests.sh` never built `build/`, the artifact almost every leg loads.
   waits; "the server never sends welcome": it does, and the instrumented probe
   logged `frames: welcome,roster` while the wait timed out). net-fuzz went
   1/8 → 8/8, edge likewise, and the full suite is **71/71, exit 0**.
-- **F2** `verify-all --full` red: perf-009 `__heap_base` 5,042,320 vs a
-  documented 4,721,456 — static data grew ~321 KB. Understand before restamping.
+- **F2** CLOSED. Attributed by experiment before restamping: rebuilding at
+  `MAXSCREENWIDTH` 320 gives 4,722,016, within 560 B of the old stamp, so the
+  320,960 B growth is the 18.2a widescreen dimension separation, not a
+  regression. Restamped with the attribution in `claims.json`; perf-012 and
+  perf-059 moved with it; both stampers now read the expected value from the
+  manifest instead of carrying a copy. **`verify-all --full`: ALL PASS, 137
+  claims, 0 skipped.**
 - **F3** wbox has no gating baseline until one is recorded ON wbox (no repo,
   build or WADs there today).
 - **F4** the four-host perf gate is unrunnable as `spec.md` writes it: pi5 down.

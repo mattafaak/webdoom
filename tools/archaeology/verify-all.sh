@@ -208,7 +208,12 @@ if [ "$FULL" = "1" ]; then
         FAMILIES_SKIPPED=$((FAMILIES_SKIPPED + 1))
         SKIPPED_NAMES="${SKIPPED_NAMES:+$SKIPPED_NAMES, }runtime-stat"
         echo "SKIP  runtime-stat: build-perf/doom.js not found"
-        echo "      Build with EXTRA_CFLAGS=-DWEB_PERF_COL_STATS -DWEB_PERF_PLANE_STATS ..."
+        echo "      Build it with:"
+        echo "        source tools/emsdk-env.sh && (cd engine && make -j8 \\"
+        echo "          EXTRA_CFLAGS=\"-DWEB_PERF_COL_STATS -DWEB_PERF_PLANE_STATS \\"
+        echo "                       -DWEB_PERF_SPECHIT_STATS -DWEB_PERF_TELEPORT_STATS \\"
+        echo "                       -DWEB_PERF_DRAWSEG_STATS -DWEB_PERF_OPENINGS_STATS\" \\"
+        echo "          BUILD=../build-perf OUT=../build-perf/doom.js)"
     fi
 
     capture_run "measurement-stamp / stamp-check (7 claims)" \

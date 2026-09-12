@@ -3,6 +3,7 @@ wads/
 build/
 build-fakeflat/
 build-invariants/
+build-perf/
 build-potato/
 build-diffblit/
 build-sbskip/

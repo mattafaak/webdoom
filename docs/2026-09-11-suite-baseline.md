@@ -92,16 +92,33 @@ directly, `browser-lobby-test` runs in the browser, `spectate-test` creates no
 raw sockets, and `spectate-inject-test` polls rather than awaiting a named
 frame. These two were the only instances.
 
-### F2 — `verify-all.sh --full` is red: perf-009 `__heap_base` (OPEN)
+### F2 — `verify-all --full` red on perf-009 `__heap_base` (CLOSED)
 
 The suite only ever runs the fast tier, so this had no way to surface. The
 script measures `__heap_base = 5,042,320`; doc and manifest say `4,721,456`.
 Static data has grown ~321 KB since the stamp was taken.
 
-This is **not** a number to restamp. `docs/optimization-ledger.md` carries
-BSS-diet candidates C4-C6 precisely because static size matters to the
-bare-metal targets, and a 321 KB growth is the kind of thing those candidates
-exist to answer. Understand it, then stamp it.
+It was not restamped blind. **Attributed by experiment**: rebuilding with
+`MAXSCREENWIDTH` back at 320 gives `__heap_base` = 4,722,016 — within **560
+bytes** of the old stamp. So 320,400 of the 320,960-byte growth is the 18.2a
+widescreen dimension separation (320 → 854 scales `visplanes`, `openings` and
+the per-column arrays), which `spec.md` sanctions; the residual 560 B is
+everything else since, including the 23.x guards. Not a regression, and the
+BSS-diet candidates C4-C6 are not implicated.
+
+Restamped with that attribution recorded in `claims.json`. The dependent
+figures moved with it: perf-012 (peak heap 25.12 → 25.42 MB), perf-059 (worst
+PWAD combo 26.12 → 26.43 MB), and perf.md's memory table (static data 515 →
+828 KB, headroom 6.88 → 6.58 MB).
+
+Both stampers stopped carrying their own copy of the number — `wasm-stamp.mjs`
+and `stamp-check.mjs` read the expected values from `claims.json` now, which is
+the 21.9 principle: perf-059 is derived from perf-009, so a hand-typed copy has
+to be edited in two places or the gate contradicts itself.
+
+**`verify-all --full` is now ALL PASS, 137 claims, zero families skipped** — the
+instrumented `build-perf/` tree was built so `runtime-stat` runs too, and the
+skip message now prints the exact command to build it.
 
 (Prior art: `Plans-floor-initiative-complete.md:100` records the same claim
 drifting once before, 5,461,072 -> 4,930,352, closed by task 14.4.)

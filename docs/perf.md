@@ -119,17 +119,20 @@ Command: `node tools/zone-measure.mjs` (reports `__heap_base` + peak formula)
 | Region | Size | Notes |
 |--------|------|-------|
 | C shadow stack | 4 MB | `STACK_SIZE=4MB` in `engine/Makefile`; lives at start of linear memory |
-| Static data (DATA + BSS) | 515 KB | initialized tables + zero-init; measured via `__heap_base − 4 MB`; was 1,237 KB before the phase-14 BSS diets (14.2d/e/f) |
-| **Stack + static total (`__heap_base`)** | **4.50 MB** | = 4,721,456 bytes; heap begins here |
+| Static data (DATA + BSS) | 828 KB | initialized tables + zero-init; measured via `__heap_base − 4 MB`; was 1,237 KB before the phase-14 BSS diets (14.2d/e/f), then 515 KB until the 18.2a widescreen dimension separation took MAXSCREENWIDTH 320→854 |
+| **Stack + static total (`__heap_base`)** | **4.81 MB** | = 5,042,416 bytes; heap begins here |
 | Zone pool (one `malloc(ZONESIZE)`) | 4 MB | `ZONESIZE` in `engine/web/web.h` (32 MB pre-14.2c); `I_ZoneBase()` in `engine/web/i_system.c` |
 | WAD copy (one `malloc(wad.length)`) | up to 16.61 MB | plutonia.wad, worst case |
-| **Peak heap address** | **~25.12 MB** | = heap_base + zone + worst WAD |
-| **Headroom vs 32 MB** | **~6.88 MB** | slack above worst-case single-IWAD load |
+| **Peak heap address** | **~25.42 MB** | = heap_base + zone + worst WAD |
+| **Headroom vs 32 MB** | **~6.58 MB** | slack above worst-case single-IWAD load |
 
 ### INITIAL_MEMORY floor experiment
 
-Measured `__heap_base` = 4,721,456 B (post-14.2f).  Worst-case WAD = plutonia.wad
-(17,420,824 bytes).  Zone = 4,194,304 B.  Peak = 26,336,584 B ≈ 25.12 MB.
+Measured `__heap_base` = 5,042,416 B (post-18.2a widescreen; was 4,721,456 B
+post-14.2f — the 320,960 B growth is MAXSCREENWIDTH 320→854 scaling visplanes,
+openings and the per-column arrays, proven by rebuilding at 320: 4,722,016 B).
+Worst-case WAD = plutonia.wad (17,420,824 bytes).  Zone = 4,194,304 B.
+Peak = 26,657,544 B ≈ 25.42 MB.
 
 The floor-experiment table below is the original pre-14.2c record (64 MB /
 32 MB-zone era). Task 14.2c re-established the shipping floor at 32 MiB
@@ -1245,14 +1248,14 @@ the 32 MB linear memory: plutonia.wad + 4 MB zone + 4.50 MB static).
 
 | combo | IWAD (bytes) | PWAD (bytes) | combined | total peak (+ zone + static) |
 |-------|-------------|-------------|---------|------------------------------|
-| tnt.wad + tnt31.wad | 18,195,736 | 282,000 | 18,477,736 (17.62 MB) | 4.50 + 4 + 17.62 = **26.12 MB** |
+| tnt.wad + tnt31.wad | 18,195,736 | 282,000 | 18,477,736 (17.62 MB) | 4.81 + 4 + 17.62 = **26.43 MB** |
 | doom2.wad + nerve.wad | 14,604,584 | 3,819,855 | 18,424,439 (17.57 MB) | 4.50 + 4 + 17.57 = **26.07 MB** |
 | doom.wad + sigil.wad | 12,408,292 | 4,640,210 | 17,048,502 (16.27 MB) | 4.50 + 4 + 16.27 = **24.77 MB** |
 | plutonia.wad (no PWAD) | 17,420,824 | — | 17,420,824 (16.61 MB) | **25.12 MB** (§3 baseline) |
 
-Worst real combo: **tnt.wad + tnt31.wad** at 26.12 MB peak — fits the 32 MB
+Worst real combo: **tnt.wad + tnt31.wad** at 26.43 MB peak — fits the 32 MB
 linear memory with 5.88 MB headroom.
-Reproduce (26.12 MB peak): `node tools/archaeology/stamp-check.mjs`
+Reproduce (26.43 MB peak): `node tools/archaeology/stamp-check.mjs`
 
 Note: `tnt.wad` at 18.20 MB is slightly larger than `plutonia.wad` at
 17.42 MB, making it the worst single IWAD, not plutonia.wad as stated in §3.

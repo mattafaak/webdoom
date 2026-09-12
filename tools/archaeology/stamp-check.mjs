@@ -100,13 +100,22 @@ function gzipSize(path) {
 
 // ── perf-059: worst PWAD combo peak heap (tnt.wad + tnt31.wad) ──────────────
 // Formula: __heap_base + ZONESIZE + tnt.wad_size + tnt31.wad_size
-// __heap_base = 4,721,456 bytes (linker constant; see perf-009; post-14.2f)
+// __heap_base: read from claims.json (see perf-009); restamped 2026-09-11 for the
+// 18.2a widescreen dimension separation, attribution recorded in the manifest notes.
 // ZONESIZE    = 4,194,304 bytes (4 MiB since 14.2c; see perf-008/perf-010)
 // tnt.wad     = 18,195,736 bytes (measured here)
 // tnt31.wad   = 282,000 bytes (measured here)
-// perf.md Axis 4: 4.50 + 4 + 17.62 = 26.12 MB
+// perf.md Axis 4.  Both this and HEAP_BASE come from claims.json rather than
+// being typed here: perf-059 is DERIVED from perf-009, so the 2026-09-11
+// heap_base restamp moved it too, and a gate carrying its own copy of the
+// number it checks has to be edited in two places or it contradicts itself.
 {
-    const HEAP_BASE  = 4721456;
+    const EXPECTED_PWAD_MB = JSON.parse(
+        readFileSync(join(root, 'tools/archaeology/claims.json'), 'utf8')
+    ).claims['perf-059'].expected;
+    const HEAP_BASE  = Number(JSON.parse(
+        readFileSync(join(root, 'tools/archaeology/claims.json'), 'utf8')
+    ).claims['perf-009'].expected);
     const ZONE_SIZE  = 4194304;
     const tntPath    = join(root, 'wads/lib/tnt.wad');
     const tnt31Path  = join(root, 'wads/lib/tnt31.wad');
@@ -120,8 +129,9 @@ function gzipSize(path) {
         const MB = totalBytes / (1024 * 1024);
         const mbRounded = Math.round(MB * 100) / 100; // 2 decimal places
         check('perf-059',
-              `worst PWAD heap = ${tntSz}+${tnt31Sz}+heap+zone = ${MB.toFixed(2)} MB ≈ 26.12 MB`,
-              '26.12', MB.toFixed(2));
+              `worst PWAD heap = ${tntSz}+${tnt31Sz}+heap+zone = ${MB.toFixed(2)} MB ` +
+              `≈ ${EXPECTED_PWAD_MB} MB`,
+              EXPECTED_PWAD_MB, MB.toFixed(2));
     }
 }
 
