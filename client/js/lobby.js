@@ -53,8 +53,14 @@ function stackFor(file) {
 
 // Curated order; grouped entries (Master Levels) fold into a submenu so
 // each screen stays short.
+// hacx.wad was here and could never load: absent from the server manifest (the
+// only one of the eight that was) and explicitly refused by wad-import.js as
+// "HACX v2 is not vanilla-engine compatible".  So it could not be served and it
+// could not be imported -- a menu row with no reachable destination, which
+// README then advertised as part of the shipped library.
+// tools/check-menu-reachable.mjs gates the class.
 const GAME_ORDER = ['doom.wad', 'doom2.wad', 'sigil.wad', 'nerve.wad',
-    'tnt.wad', 'plutonia.wad', 'chex.wad', 'hacx.wad'];
+    'tnt.wad', 'plutonia.wad', 'chex.wad'];
 
 const sortedGames = () => manifest.filter(w => !w.patch && !w.group)
     .sort((a, b) => {

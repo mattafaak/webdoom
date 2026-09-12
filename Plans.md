@@ -186,7 +186,7 @@ and `run-tests.sh` never built `build/`, the artifact almost every leg loads.
   the decision it asked for was taken the same day: `spec.md`'s 2026-09-11 fleet
   amendment retires pi5 and the tenet now says "the three live reference hosts"
   (commit 3bf5c6b, "closes F4"). This line said OPEN for a day after that, in
-  two documents, which is what `tools/archaeology/status-drift.mjs` now exists
+  two documents, which is what `tools/archaeology/status-drift-check.mjs` now exists
   to catch. The narrower thing that IS open — the perf gate has no suite leg,
   and `browser-pipeline` has a baseline only for alder — is F3.
 
@@ -283,3 +283,64 @@ capture cycles/tic from the debug port, and fill in the atlas row.
 binary* on a 386 as a baseline for the atlas row. It does not measure this
 codebase, and no change here can move the number. The atlas comparison is the
 whole of its value.
+
+---
+
+# Planning round 5 (2026-09-12) — the gates that pass while the thing they name is broken
+
+Contract: root `spec.md`, unamended. Opened after a polish audit found that
+round 4 had repaired the gates that *could not fail*, and that a second class
+remained: gates that pass while the thing they are named for is broken.
+
+Three shipped fixes did not run. Two shipped verifier CLIs printed a green
+verdict over zero observations. One document contradicted itself four times
+inside the file its own checker reads, and passed 8/8. None of it was
+sloppiness — every one sits exactly one level out from a control this project
+already built and red-proofed.
+
+## Phase A: fixes that shipped and never ran
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| A1 | 23.7b's GL `dispose()` landed in `createRenderer2D`, whose scope has no `gl`/`prog`/`quad`/`_textures` — so the WebGL2 path had no dispose at all and the canvas2d path threw into its own catch | moved; `browser-teardown` counts GL objects (its header named them and measured only DOM); pre-fix tree reads net 6→12→18 per boot, post-fix 18 created / net 0 | cc:完了 |
+| A2 | `onDoomError` and the rAF catch restored `#landing` but never called the caller's `onQuit`, so the menu inside it stayed empty — an `I_Error` stranded the player on a blank page | one `endSession()` owns every exit; `browser-ierror` asserts a menu row using the selector already in the file; pre-fix reads 0 rows | cc:完了 |
+| A3 | `deleteAttestation` exported, documented "called when demo is evicted", called from nowhere — every evicted or expired demo orphaned up to 800 KB, unbounded, invisible to `storeStats` (which had no caller) | all three deletion sites wired; quota + byte accounting + `Uint32Array`; `GET /api/demos/stats`; `demo-store-fuzz` drives eviction and expiry against a real server; red-proof 3 failures | cc:完了 |
+
+## Phase C: gates that could pass without checking
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| C1 | The suite added up what ran and never compared it to the registry; 18 browser legs skipped as ONE row, so a Chrome-less host printed "64 legs … 1 skipped" against a registry of 81 | per-leg named SKIPs via a `shared` prerequisite; coverage assertion vs the tier registry; red-proofed. Also: `serve_start`'s readiness curl had no `--max-time` and hung the suite on a squatter | cc:完了 |
+| C2 | `demo-verify.mjs` (the shipped 19.4 CLI) printed "PASS — all 0 golden demos VERIFIED"; `freestanding/run-check.sh` printed `$PASSES/$PASSES`; `native-sanitize/run-all.sh` printed a bare "all demos passed" over 13 skips, with `|| echo "ok"` standing in for an observation | each takes its denominator from its own matrix, reports INCOMPLETE with the missing WADs named, exits 2; ro-wad stops sharing freestanding-sim's headline | cc:完了 |
+| C3 | `artifact-freshness` registered 3 artifacts; the six variant trees were unregistered, and `render-*` legs needed only `wad` while `build-*` needed `emsdk` — so a stale tree could print a full-count PASS | all six registered; 7 legs take a `fresh-<variant>` prerequisite; red-proofed. **Found `build-perf` stale on its first run** — the tree `verify-all --full`'s 15 runtime-stat claims come from | cc:完了 |
+| C4 | Six legs whose summary row said nothing or the wrong thing — `browser-demo`'s green row was a Chrome deprecation warning; `lint`'s was its own nested sub-check | every one quotes what it observed; `browser-qol`/`browser-wide` hold their stages to a list; `browser-demo` gains a floor | cc:完了 |
+| C5 | 21 legs launched Chrome and disagreed: `CHROME_BIN` honoured by 6, profile isolation by 6, cleanup by 7, and SEVEN duplicated ports | `chrome-harness.mjs` (bin, profile, group-reaping); all ports distinct; `check-cdp-ports.mjs` in lint. **That check's first version passed by not looking** — its name pattern required a character before "PORT" | cc:完了 |
+
+## Phase D: documents that contradict the record
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| D1 | The ledger stated the toggle-off md5 eight times — four table rows current, four prose lines stale — and `toggle-identity-check` passed 8/8 because its regex saw only the table form. `Plans.md` and the baseline cite the stale hash as the byte-reproducibility proof | history marked "at landing (<commit>)"; the checker fails on any md5 that is neither checked nor historical, judged per-hash not per-line; red-proofed | cc:完了 |
+| D2 | Nothing verified a sentence of the form "X is still open" against the project's own record of X — four live contradictions, two of them written BY doc-hygiene tasks | `status-drift-check.mjs`; all four corrected; archives exempt whole-file and listed by name | cc:完了 |
+| D3 | Counts typed rather than computed, inside the two documents whose job is inventory. `promises-index-check` matched rows by `cells.length === 6` and silently dropped all ten Part C rows | every count computed; the checker sees all four Parts (A=10 B=8 C=10 D=16); `claims-summary.mjs` made importable so there is one definition of the tier split | cc:完了 |
+| D5 | 26 documents, README linked 8 | `docs/README.md`; `docs-index-check.mjs` gates both directions | cc:完了 |
+
+## Phase E/F: what this round did NOT do
+
+Named so the next pass does not have to rediscover the scope:
+
+- **B1–B3 (server and client trust boundaries)** — `manifest()` is a bare
+  `readFileSync` in the request handler with no `uncaughtException` anywhere in
+  `server/`, so a corrupt `wads/manifest.json` exits the process; `net.js` does
+  a bare `JSON.parse` on lobby traffic while the server hardened exactly that
+  direction; `ping()` has no timeout and its `.catch` can never fire; no
+  security headers, and one inline `onclick` that a CSP would break.
+- **E2/E3 (settings robustness, accessibility)** — localStorage is unvalidated
+  user input; a newly-added keybind renders as "undefined"; "Reset defaults"
+  desynchronises the live overlays; rebinding has no cancel and `Escape` is
+  bindable. The complete ARIA inventory across `client/` is seven lines.
+- **F: the perf gate has no leg at all.** `spec.md:55-57` makes it a required
+  gate; neither `bench.mjs` nor `fleet-bench.sh` appears in `run-tests.sh`, and
+  `gate-census`'s name heuristic cannot see either. `browser-pipeline` gates one
+  host — alder, of which spec.md's own table says "fast here proves nothing".
+  This is the largest spec-vs-reality gap in the repo.

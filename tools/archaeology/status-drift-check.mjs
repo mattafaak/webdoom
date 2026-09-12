@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// tools/archaeology/status-drift.mjs — a document may not contradict the
+// tools/archaeology/status-drift-check.mjs — a document may not contradict the
 // project's own record of what is done.
 //
 // WHY THIS EXISTS
@@ -36,7 +36,12 @@
 // discovery finds nothing — a checker that quietly matches zero candidates is
 // the shape this whole round is about.
 //
-// usage: node tools/archaeology/status-drift.mjs
+// Named `-check.mjs` deliberately: tools/gate-census.mjs discovers gates by a
+// NAME heuristic, and `status-drift.mjs` did not match it — so the one check
+// built to catch silent drift would itself have been invisible to the orphan
+// census. 38 of the tools tree is in that blind spot; a new gate should not be.
+//
+// usage: node tools/archaeology/status-drift-check.mjs
 // Copyright (C) 2026, GPL-2.0-or-later.
 import { readFileSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';

@@ -337,6 +337,18 @@ leg promises-index  -    "the promises index has not gone stale"      -- node to
 # at.  It declared 5 of 73 exports and got one arity wrong (task 25.2).
 leg web-contract    -    "web.h matches the exports it declares"      -- node tools/web-contract-check.mjs
 leg gate-census     -    "every gate is wired or registered with a reason" -- node tools/gate-census.mjs
+# A document may not contradict the project's own record of what is done.  The
+# claims machinery checks NUMBERS against code and nothing checked STATUS prose:
+# task 24.4's own stale-doc banner said "ZONESIZE is still open" about a change
+# that shipped in July (round 5, D2).
+leg status-drift    -    "no doc contradicts a landed verdict"        -- node tools/archaeology/status-drift-check.mjs
+# 26 documents, 8 linked from README.  A document nobody links is one nobody
+# reads, and adding one is when it is cheap to say where it belongs (D5).
+leg docs-index      -    "every doc is reachable from docs/README.md" -- node tools/archaeology/docs-index-check.mjs
+# The launcher may not offer a game that can never load: hacx.wad sat in
+# GAME_ORDER, absent from the manifest and refused by the importer, while
+# README advertised it as part of the shipped library (E1).
+leg menu-reachable  -    "no GAME_ORDER entry is unreachable"         -- node tools/check-menu-reachable.mjs
 
 if [ "$TIER" = "quick" ]; then
     QUICK_ONLY=1
@@ -359,7 +371,7 @@ leg gm-frames       build,wad  "GM/GUS pump chain + DMXGUS mapping"    -- node t
 # ── the sim-safety gate: an assert names the broken invariant at its call site,
 #    which a golden diff cannot do.  It runs BEFORE the goldens for that reason.
 leg build-invariants emsdk     "compile -DWEBDOOM_INVARIANTS"          -- bash tools/build-toggle.sh WEBDOOM_INVARIANTS build-invariants
-leg sim-invariants   wad,fresh-invariants       "13 demos under armed invariant asserts" -- node tools/demo-test.mjs --build-dir build-invariants
+leg sim-invariants   wad,fresh-invariants     "13 demos under armed invariant asserts" -- node tools/demo-test.mjs --build-dir build-invariants
 
 # ── differential + goldens ───────────────────────────────────────────────────
 leg fuzz-diff       native,wad "20 mutated demos: wasm == native"      -- node tools/fuzz/run-fuzz.mjs --seeds 20 --parallel 8 --require-native
@@ -372,7 +384,7 @@ leg sim-wide        build,wad  "wide ENABLED must match sim goldens"   -- node t
 leg build-fakeflat   emsdk     "compile -DWEBDOOM_FAKEFLAT"            -- bash tools/build-toggle.sh WEBDOOM_FAKEFLAT build-fakeflat
 leg render-fakeflat  wad,fresh-fakeflat       "fakeflat render goldens (20.3a)"       -- node tools/demo-test.mjs --render-fakeflat
 leg build-potato     emsdk     "compile -DWEBDOOM_POTATO"              -- bash tools/build-toggle.sh WEBDOOM_POTATO build-potato
-leg render-potato    wad,fresh-potato       "potato render goldens (20.3c)"         -- node tools/demo-test.mjs --render-potato
+leg render-potato    wad,fresh-potato         "potato render goldens (20.3c)"         -- node tools/demo-test.mjs --render-potato
 
 # ── 20.3b and 20.3d shipped with no regression gate at all (task 21.12) ───────
 # run-tests.sh built and gated only fakeflat and potato.  Both of these are
@@ -381,8 +393,8 @@ leg render-potato    wad,fresh-potato       "potato render goldens (20.3c)"     
 # the toggle build, which is exactly the proof the ledger records.  Their only
 # surviving evidence until now was an md5 typed into a document.
 leg build-sbskip     emsdk     "compile -DWEBDOOM_SBSKIP"              -- bash tools/build-toggle.sh WEBDOOM_SBSKIP build-sbskip
-leg render-sbskip    wad,fresh-sbskip       "sbskip pixel-identical to vanilla (20.3b)" -- node tools/demo-test.mjs --render --build-dir build-sbskip
-leg sim-sbskip       wad,fresh-sbskip       "sbskip leaves the playsim untouched"   -- node tools/demo-test.mjs --build-dir build-sbskip
+leg render-sbskip    wad,fresh-sbskip         "sbskip pixel-identical to vanilla (20.3b)" -- node tools/demo-test.mjs --render --build-dir build-sbskip
+leg sim-sbskip       wad,fresh-sbskip         "sbskip leaves the playsim untouched"   -- node tools/demo-test.mjs --build-dir build-sbskip
 leg build-diffblit   emsdk     "compile -DWEBDOOM_DIFFBLIT"            -- bash tools/build-toggle.sh WEBDOOM_DIFFBLIT build-diffblit
 leg render-diffblit  wad,fresh-diffblit       "diffblit pixel-identical to vanilla (20.3d)" -- node tools/demo-test.mjs --render --build-dir build-diffblit
 leg sim-diffblit     wad,fresh-diffblit       "diffblit leaves the playsim untouched" -- node tools/demo-test.mjs --build-dir build-diffblit

@@ -20,7 +20,7 @@ source. 349 KB of wasm, zero client install, zero-config multiplayer.
   [docs/netcode.md](docs/netcode.md)); verified by a headless harness
   that compares per-tic gamestate hashes across real clients
 - Server carries the WAD library (Ultimate Doom, Doom II, Final Doom,
-  SIGIL, Master Levels, NRFTL, Chex Quest, HACX); clients cache by
+  SIGIL, Master Levels, NRFTL, Chex Quest); clients cache by
   content hash via a service worker — second load is instant, single
   player works offline
 
