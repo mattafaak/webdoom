@@ -48,8 +48,8 @@ extern volatile int rp2040_timedemo_gametics;
 extern jmp_buf      rp2040_demo_jmp;
 
 // Screen buffers (fixed allocation, no malloc).
-// V_Init calls I_AllocLow once with MAXSCREENWIDTH*SCREENHEIGHT*4.
-// With MAXSCREENWIDTH=320, SCREENHEIGHT=200: 256,000 bytes.
+// V_Init calls I_AllocLow once with SCREENWIDTH*SCREENHEIGHT*4.
+// With SCREENWIDTH=320, SCREENHEIGHT=200: 256,000 bytes.
 #define RP2040_ALLOCLOW_SIZE (320 * 200 * 4)
 
 // Smooth-render and wipe suppression (demo-mode).

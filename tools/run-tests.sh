@@ -115,7 +115,7 @@ have_browser() {
 have_firefox() { [ -x /usr/bin/firefox ]; }
 have_emsdk()   { [ -x "${EMSDK_DIR:-$HOME/projects/bee-kettle-doom/emsdk}/upstream/emscripten/emcc" ]; }
 have_baseline(){ [ -f "tools/golden/browser-pipeline-$(hostname).json" ]; }
-# The 18 legs below share one server on 8668.  Making that a PREREQUISITE, rather
+# The 17 legs below share one server on 8668.  Making that a PREREQUISITE, rather
 # than an `if` wrapped around the whole block, is what lets each of them report
 # its own named SKIP -- see the browser-suite comment for what the aggregate skip
 # was hiding.
@@ -423,8 +423,6 @@ leg fuzz-diff       native,wad "20 mutated demos: wasm == native"      -- node t
 leg sim-goldens     build,wad  "13 demos, per-tic gamestate hashes"    -- node tools/demo-test.mjs
 leg render-goldens  build,wad  "13 demos, per-tic framebuffer hashes"  -- node tools/demo-test.mjs --render
 leg render-low      build,wad  "low-detail render goldens (14.2b)"     -- node tools/demo-test.mjs --render --low-detail
-leg render-wide     build,wad  "854-px Hor+ render goldens (18.2c)"    -- node tools/demo-test.mjs --render-wide
-leg sim-wide        build,wad  "wide ENABLED must match sim goldens"   -- node tools/demo-test.mjs --sim-wide
 
 leg build-fakeflat   emsdk     "compile -DWEBDOOM_FAKEFLAT"            -- bash tools/build-toggle.sh WEBDOOM_FAKEFLAT build-fakeflat
 leg render-fakeflat  wad,fresh-fakeflat       "fakeflat render goldens (20.3a)"       -- node tools/demo-test.mjs --render-fakeflat
@@ -450,7 +448,6 @@ leg sim-diffblit     wad,fresh-diffblit       "diffblit leaves the playsim untou
 leg toggle-identity  build     "ledger md5/size claims == the artifacts"    -- node tools/toggle-identity-check.mjs
 leg golden-provenance -        "every golden says where it came from"       -- node tools/golden-provenance.mjs --check
 
-leg sprite-witness  build,wad  "r_things.c:530 cull pin, 320 + 854"    -- node tools/sprite-witness-test.mjs
 
 # ── gates that existed and ran nowhere until the census (task 21.11) ──────────
 # README.md advertises the native ASan/UBSan demo suite as part of the gate set;
@@ -480,7 +477,6 @@ leg n64-demos       n64,wad,slow    "13/13 demo sim-hashes on emulated N64 (~8 m
 leg demo-verify-cli build,wad  "the shipped 19.4 CLI itself, --all mode"     -- node tools/demo-verify.mjs --all
 
 # ── netcode determinism ──────────────────────────────────────────────────────
-leg mixed-width-net build,wad  "P0=320 vs P1=854 per-tic hash"         -- node tools/mixed-width-net-test.mjs
 leg net-2p          build,wad  "2 real wasm clients through the relay" -- node tools/net-test.mjs 2
 leg net-4p          build,wad  "4 real wasm clients through the relay" -- node tools/net-test.mjs 4
 leg join-coop       build,wad  "drop-in determinism, co-op"            -- node tools/join-test.mjs
@@ -513,7 +509,7 @@ leg hostile-lobby   -          "hostile server frames vs the lobby client"  -- n
 leg wad-content-fuzz build,wad "hostile GENMIDI/MUS lump payloads (23.2)" -- node tools/wad-content-fuzz-test.mjs
 
 # ── browser suite ────────────────────────────────────────────────────────────
-# One shared server for the 18 legs that only need a page to load.  Started
+# One shared server for the 17 legs that only need a page to load.  Started
 # once, torn down by the single EXIT trap, readiness polled rather than slept.
 #
 # THE AGGREGATE SKIP THIS REPLACED
@@ -532,7 +528,7 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
     U=http://127.0.0.1:8668/
     if have_browser && have_build && have_wad; then
         if serve_start 8668; then SHARED_UP=1; else
-            echo "  note: shared browser server on 8668 did not start — the 18 legs below will each SKIP"
+            echo "  note: shared browser server on 8668 did not start — the 17 legs below will each SKIP"
         fi
     fi
     leg browser-sp            browser,build,wad,shared "title -> menu -> new game -> movement" -- node tools/browser-test.mjs "$U"
@@ -547,7 +543,6 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
     leg browser-fire          browser,build,wad,shared "PSX fire background + reduced-motion"  -- node tools/browser-fire-test.mjs "$U" /tmp
     leg browser-ierror        browser,build,wad,shared "I_Error surfaces, no wedge"            -- node tools/browser-ierror-test.mjs "$U"
     leg browser-rafdeath      browser,build,wad,shared "rAF death recovery"                    -- node tools/browser-rafdeath-test.mjs "$U"
-    leg browser-wide          browser,build,wad,shared "widescreen toggle"                     -- node tools/browser-wide-toggle-test.mjs "$U"
     leg browser-wadimport     browser,build,wad,shared "user WAD import (16.6a)"               -- node tools/browser-wadimport-test.mjs "$U"
     leg browser-mp-gating     browser,build,wad,shared "local-WAD MP gating (16.6b)"           -- node tools/browser-mp-gating-test.mjs "$U"
     leg browser-sf2           browser,build,wad,shared "SoundFont UX (17.2b)"                  -- node tools/browser-sf2-test.mjs "$U"
@@ -631,7 +626,7 @@ fi
 #
 # TOTAL is built by adding up what ran, so it could only ever answer "how many
 # legs did I reach", never "how many are there".  Nothing compared the two, and
-# the browser block's aggregate skip collapsed 18 legs into one SKIPPED
+# the browser block's aggregate skip collapsed the whole block into one SKIPPED
 # increment — so a WAD-less or Chrome-less host printed a perfectly plausible
 # "64 legs: 63 passed, 0 failed, 1 skipped" against a registry of 81 and lost
 # seventeen without a word.

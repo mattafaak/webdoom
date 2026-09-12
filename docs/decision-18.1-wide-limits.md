@@ -2,7 +2,16 @@
 
 **Date**: 2026-07-22
 **Task**: 18.1 — Wide-limit telemetry + memory arithmetic for widescreen preparation
-**Status**: LANDED
+**Status**: LANDED, then **ARCHIVE 2026-09-12 — the feature it sized was removed.**
+
+> **ARCHIVE.** Widescreen was reverted on 2026-09-12 (spec.md §"Widescreen view
+> — REVERSED"): `MAXSCREENWIDTH` is gone, the render width is the compile-time
+> constant 320 again, and every wide leg and golden was deleted. This record is
+> kept, not deleted, because its §5 arithmetic is what the revert was checked
+> against: it predicted 4,722,016 B for `__heap_base` at 320, and the revert
+> measured 4,722,048 B. The telemetry, the limit measurements and the
+> visplane/drawseg/openings analysis all still describe the current renderer at
+> 320; only the W=854 columns are historical.
 
 ---
 

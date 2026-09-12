@@ -10,16 +10,9 @@
 //          loud status notice is shown).
 import { ACTIONS, saveSettings, defaultSettings } from './input.js';
 import { sf2GetCurrentMeta } from './sf2-library.js';
-import { wideWidth, paniniStrength } from './wide-utils.js';
 import { setStatus, teardownLedger } from './ui.js';
 
-// Panini strength comes from wide-utils.js — one definition (task 25.3).
-const computePaniniStrength = paniniStrength;
-
-// wideWidth() imported from wide-utils.js — single source of truth
-// for the aspect→width mapping (shared with main.js boot path).
-
-export function createSettingsUI(input, doom, renderer) {
+export function createSettingsUI(input, doom) {
     // Teardown ledger (task 23.7b) — see input.js for why.
     const { on, off: _teardownAll } = teardownLedger();
 
@@ -71,8 +64,6 @@ export function createSettingsUI(input, doom, renderer) {
         <label><input type="checkbox" id="mmove" ${s.mouseY === 'move' ? 'checked' : ''}> Mouse Y moves player (1993 style)</label>
         <label><input type="checkbox" id="arun" ${s.alwaysRun ? 'checked' : ''}> Always run</label>
         <label><input type="checkbox" id="smooth" ${s.smooth ? 'checked' : ''}> Smooth rendering (uncapped fps)</label>
-        <label><input type="checkbox" id="wideMode" ${s.wideMode ? 'checked' : ''}> Wide mode (aspect-adaptive Hor+) — reload persists</label>
-        <label><input type="checkbox" id="panini" ${s.panini ? 'checked' : ''}> Cylindrical remap (Panini) — wide-angle only, OFF by default</label>
         <label>Music backend
           <select id="musicBackend">
             <option value="opl2"${backend === 'opl2' ? ' selected' : ''}>OPL2 (mono, default, offline-safe)</option>
@@ -122,25 +113,6 @@ export function createSettingsUI(input, doom, renderer) {
             saveSettings(s);
             doom?._web_set_smooth(s.smooth ? 1 : 0);
         };
-        // wide-fix: wide mode — calls web_set_wide() with aspect-adaptive bucket.
-        // wideWidth() computes the exact-fit Hor+ width for the window (16:9 → 426,
-        // 21:9 → 560, ≥32:9 → 854; ≤4:3 → 320 = effective off).
-        // The frame loop in main.js detects web_screenwidth() change and
-        // calls renderer.resize() + toggles the .wide CSS class.
-        panel.querySelector('#wideMode').onchange = e => {
-            s.wideMode = e.target.checked;
-            saveSettings(s);
-            doom?._web_set_wide(s.wideMode ? wideWidth() : 320);
-        };
-        // task 18.3: Panini/cylindrical remap — updates shader uniform immediately.
-        panel.querySelector('#panini').onchange = e => {
-            s.panini = e.target.checked;
-            saveSettings(s);
-            if (renderer) {
-                const w = doom?._web_screenwidth?.() ?? 320;
-                renderer.setPaniniStrength(computePaniniStrength(w, s.panini));
-            }
-        };
         panel.querySelector('#musicBackend').onchange = e => {
             s.musicBackend = e.target.value;
             // Keep legacy opl3 bool in sync for backward compatibility.
@@ -180,11 +152,6 @@ export function createSettingsUI(input, doom, renderer) {
     // settings in one go (Reset defaults).
     function applyAll() {
         doom?._web_set_smooth?.(s.smooth ? 1 : 0);
-        doom?._web_set_wide?.(s.wideMode ? wideWidth() : 320);
-        if (renderer) {
-            const w = doom?._web_screenwidth?.() ?? 320;
-            renderer.setPaniniStrength?.(computePaniniStrength(w, s.panini));
-        }
         if (s.musicBackend === 'gm') {
             window.doomAudio?.setGmMode?.(true, null);
         } else {

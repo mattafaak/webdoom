@@ -117,7 +117,7 @@ HUlib_drawTextLine
 	    && c <= '_')
 	{
 	    w = SHORT(l->f[c - l->sc]->width);
-	    if (x+w > screenwidth)
+	    if (x+w > SCREENWIDTH)
 		break;
 	    V_DrawPatchDirect(x, l->y, FG, l->f[c - l->sc]);
 	    x += w;
@@ -125,14 +125,14 @@ HUlib_drawTextLine
 	else
 	{
 	    x += 4;
-	    if (x >= screenwidth)
+	    if (x >= SCREENWIDTH)
 		break;
 	}
     }
 
     // draw the cursor if requested
     if (drawcursor
-	&& x + SHORT(l->f['_' - l->sc]->width) <= screenwidth)
+	&& x + SHORT(l->f['_' - l->sc]->width) <= SCREENWIDTH)
     {
 	V_DrawPatchDirect(x, l->y, FG, l->f['_' - l->sc]);
     }
@@ -159,7 +159,7 @@ void HUlib_eraseTextLine(hu_textline_t* l)
 	for (y=l->y ; y<l->y+lh ; y++)
 	{
 	    if (y < viewwindowy || y >= viewwindowy + viewheight)
-		R_VideoErase(0, y, screenwidth, 1); /* erase entire row */
+		R_VideoErase(0, y, SCREENWIDTH, 1); /* erase entire row */
 	    else
 	    {
 		R_VideoErase(0,                          y, viewwindowx, 1); /* left border */

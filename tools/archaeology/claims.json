@@ -141,7 +141,7 @@
     "rdr-004": {
       "family": "source-constant",
       "command": "node tools/archaeology/source-constant-verify.mjs",
-      "expected": "54656",
+      "expected": "20480",
       "status": "verified"
     },
     "rdr-005": {
@@ -599,9 +599,9 @@
     "perf-009": {
       "family": "measurement-stamp",
       "command": "node tools/archaeology/wasm-stamp.mjs",
-      "expected": "5042416",
+      "expected": "4722048",
       "status": "verified",
-      "notes": "restamped 2026-09-11: 4,721,456 -> 5,042,416.  ATTRIBUTED, not just observed: building with MAXSCREENWIDTH back at 320 gives 4,722,016, within 560 B of the old stamp, so 320,400 of the 320,960 B growth is the 18.2a widescreen dimension separation (MAXSCREENWIDTH 320->854 scales visplanes, openings and the per-column arrays).  The residual 560 B is everything else since, including the 23.x guards."
+      "notes": "restamped 2026-09-12: 5,042,464 -> 4,722,048, widescreen removed.  The 2026-09-11 stamp (4,721,456 -> 5,042,416) had ATTRIBUTED the growth to the 18.2a widescreen dimension separation by rebuilding at MAXSCREENWIDTH=320 and measuring 4,722,016; the real revert landed 32 B from that prediction, which is the evidence it removed widescreen and nothing else.  Note the pre-revert value had itself drifted 48 B from its stamp unnoticed: perf-009 is a --full-tier claim and no suite leg runs it."
     },
     "perf-011": {
       "family": "measurement-stamp",
@@ -780,9 +780,9 @@
     "perf-059": {
       "family": "measurement-stamp",
       "command": "node tools/archaeology/stamp-check.mjs",
-      "expected": "26.43",
+      "expected": "26.13",
       "status": "verified",
-      "notes": "derived from perf-009; moved with the 2026-09-11 heap_base restamp (18.2a widescreen). Headroom vs 32 MiB is now 5.57 MB."
+      "notes": "derived from perf-009; moved again with the 2026-09-12 heap_base restamp (widescreen removed, 4.81 -> 4.50 MB). Headroom vs 32 MiB is now 5.87 MB."
     },
     "ea-018": {
       "family": "recipe-crack",
@@ -931,7 +931,7 @@
     "readme-001": {
       "family": "measurement-stamp",
       "command": "node tools/archaeology/size-ledger.mjs",
-      "expected": "349",
+      "expected": "348",
       "status": "verified",
       "notes": "Wasm binary size in README.md, in KB (round(raw_bytes/1024)). Source: build/doom.wasm at task 14.2d base (31e436a); 356,206 B \u2192 round/1024 = 348 KB. NOT derived from perf.md \u00a71 commit-pinned table (perf-001=357,978 is pinned to 6de6256 and legitimately drifts). Machine-verified by size-ledger.mjs (task 14.3): checks README.md KB == round(actual_build_bytes/1024) and claims.json expected == same value; hard fail on any divergence. doc-drift.mjs README_HINTS also hard-fails if README diverges from this expected value. Update command: (cd engine && make) && node tools/archaeology/size-ledger.mjs \u2014 FAIL output shows the correct KB value; update README.md and this expected field to match."
     },
@@ -987,7 +987,7 @@
     "size-004": {
       "family": "size-ledger",
       "command": "node tools/archaeology/size-ledger.mjs",
-      "expected": "349",
+      "expected": "348",
       "status": "verified",
       "notes": "README.md KB figure as verified by size-ledger.mjs.  This is the SAME FACT as readme-001 and the two had drifted apart (348 vs 349) with nothing comparing them; claims-index-check.mjs now asserts they agree (task 24.2)."
     }

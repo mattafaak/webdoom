@@ -76,9 +76,6 @@ int			centery;
 fixed_t			centerxfrac;
 fixed_t			centeryfrac;
 fixed_t			projection;
-// Hor+ widescreen (task 18.2b): 4:3 focal half-width capped at 160 px.
-// Identity at W=320 (equals centerxfrac); diverges at wider widths.
-fixed_t			centerxfrac_nonwide;
 
 // just for profiling purposes
 int			framecount;	
@@ -115,7 +112,7 @@ int			viewangletox[FINEANGLES/2];
 // The xtoviewangleangle[] table maps a screen pixel
 // to the lowest viewangle that maps back to x ranges
 // from clipangle to -clipangle.
-angle_t			xtoviewangle[MAXSCREENWIDTH+1];
+angle_t			xtoviewangle[SCREENWIDTH+1];
 
 
 // UNUSED.
@@ -649,9 +646,7 @@ void R_InitLightTables (void)
 	startmap = ((LIGHTLEVELS-1-i)*2)*NUMCOLORMAPS/LIGHTLEVELS;
 	for (j=0 ; j<MAXLIGHTZ ; j++)
 	{
-	    // Hor+ (18.2b): use 4:3 half-width reference (160) so the zlight
-	    // table is independent of MAXSCREENWIDTH for widescreen builds.
-	    scale = FixedDiv ((DOOM_ORIGHALF*FRACUNIT), (j+1)<<LIGHTZSHIFT);
+	    scale = FixedDiv (((SCREENWIDTH/2)*FRACUNIT), (j+1)<<LIGHTZSHIFT);
 	    scale >>= LIGHTSCALESHIFT;
 	    level = startmap - scale/DISTMAP;
 	    
@@ -706,7 +701,7 @@ void R_ExecuteSetViewSize (void)
 
     if (setblocks == 11)
     {
-	scaledviewwidth = screenwidth;
+	scaledviewwidth = SCREENWIDTH;
 	viewheight = SCREENHEIGHT;
     }
     else
@@ -723,14 +718,7 @@ void R_ExecuteSetViewSize (void)
     centerxfrac = centerx<<FRACBITS;
     centeryfrac = centery<<FRACBITS;
 
-    // Hor+ widescreen (task 18.2b): focal length is capped at the 4:3
-    // half-width (160 px) so that the vertical FOV matches vanilla regardless
-    // of screen width.  At W=320 centerxfrac_nonwide == centerxfrac
-    // (pure identity: no change to 320 goldens).
-    centerxfrac_nonwide = centerxfrac < (DOOM_ORIGHALF<<FRACBITS)
-                          ? centerxfrac
-                          : (DOOM_ORIGHALF<<FRACBITS);
-    projection = centerxfrac_nonwide;
+    projection = centerxfrac;
 
     if (!detailshift)
     {
@@ -762,16 +750,8 @@ void R_ExecuteSetViewSize (void)
 	
     R_InitTextureMapping ();
     
-    // psprite scales — Hor+ (18.2b/18.2c fix): weapon sprites always render at
-    // vanilla 4:3 scale.  Use DOOM_ORIGHALF (160) as the reference half-width so
-    // both standard and low-detail modes produce the vanilla ratio.
-    //   W=320 standard: centerxfrac_nonwide=160F → pspritescale=FRACUNIT ✓
-    //   W=320 low-detail: centerxfrac_nonwide=80F → pspritescale=FRACUNIT/2 ✓
-    //   W=854 wide: centerxfrac_nonwide=160F (capped) → pspritescale=FRACUNIT ✓
-    // Previous formula FixedDiv(centerxfrac, centerxfrac_nonwide) was identity for
-    // standard 320px but gave FRACUNIT (wrong) in low-detail (broke render-low goldens).
-    pspritescale  = FixedDiv(centerxfrac_nonwide, DOOM_ORIGHALF << FRACBITS);
-    pspriteiscale = FixedDiv(DOOM_ORIGHALF << FRACBITS, centerxfrac_nonwide);
+    pspritescale = FRACUNIT*viewwidth/SCREENWIDTH;
+    pspriteiscale = FRACUNIT*SCREENWIDTH/viewwidth;
     
     // thing clipping
     for (i=0 ; i<viewwidth ; i++)
@@ -799,9 +779,7 @@ void R_ExecuteSetViewSize (void)
 	startmap = ((LIGHTLEVELS-1-i)*2)*NUMCOLORMAPS/LIGHTLEVELS;
 	for (j=0 ; j<MAXLIGHTSCALE ; j++)
 	{
-	    // Hor+ (18.2b): use 4:3 reference width so the scalelight table
-	    // is independent of MAXSCREENWIDTH for widescreen builds.
-	    level = startmap - j*DOOM_ORIGWIDTH/(viewwidth<<detailshift)/DISTMAP;
+	    level = startmap - j*SCREENWIDTH/(viewwidth<<detailshift)/DISTMAP;
 	    
 	    if (level < 0)
 		level = 0;

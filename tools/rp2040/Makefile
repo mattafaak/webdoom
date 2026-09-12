@@ -31,7 +31,6 @@ RP2040_ZONE_KB ?= 256
 CFLAGS  := -mcpu=cortex-m0plus -mthumb -mfloat-abi=soft \
             -O1 -std=gnu89 \
             -DNORMALUNIX \
-            -DMAXSCREENWIDTH=320 \
             -DRP2040_ZONE_KB=$(RP2040_ZONE_KB) \
             -Dalloca=__builtin_alloca \
             -fno-strict-aliasing \

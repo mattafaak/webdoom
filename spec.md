@@ -34,7 +34,7 @@ shipped, gated feature that the contract never claimed at all.
 | **Persistence**: savegames and config across reloads, per IWAD | `persist` |
 | Offline single player once a WAD is cached | `browser-offline`, `sw-precache` |
 | Rebindable keys, gamepad, and a settings dialog | `browser-settings` |
-| Widescreen (Hor+), freelook, and interpolation — all render-side | `render-wide`, `sim-wide`, `browser-wide`, `mixed-width-net` |
+| Freelook and frame interpolation — render-side, opt-in | **ungated** — promises-index spc-011 |
 | Music: in-engine OPL2/OPL3, or a GM SoundFont backend | `opl-mode`, `gm-frames`, `gm-config`, `browser-sf2`, `browser-music-fallback` |
 | **Five compile-time render variants**, each pixel-identical or explained | `render-fakeflat`, `render-potato`, `render-sbskip`, `render-diffblit`, `toggle-identity` |
 | **A freestanding core** with no OS, and an N64 correctness leg | `freestanding-sim`, `ro-wad`, `arm-cross`, `n64-demos` |
@@ -264,21 +264,36 @@ The primary player environment is plain-HTTP on a LAN/tailnet address
   `S_*` calls driven by gamestate; sample generation only via JS pulls.
   A peer with no audio at all stays tic-identical.
 
-## Widescreen view (decision record, 2026-07-21)
+## Widescreen view — REVERSED 2026-09-12
 
-Sanctioned the same way freelook was: **render-side only, opt-in**.
-Crispy-style Hor+ (vanilla vertical FOV and world scale; extra columns
-are true rays). A wide player sees more of the world, including in MP —
-accepted and recorded, like freelook. Hard rules:
+Sanctioned 2026-07-21 as render-side-only, opt-in Hor+, and **removed**. It
+was never a flag around unmodified code: it added a second focal length
+(`centerxfrac_nonwide`), a sprite anchor correction (`anchor_offset`), a
+status-bar flank filler (`ST_FillFlatFlanks`), a `WIDESCREENDELTA` offset on
+every HUD widget, a runtime `screenwidth`, and a compile-time
+`MAXSCREENWIDTH` of 854 that sized every per-column static array. The owner
+did not use it and did not like how it looked.
 
-- The 320×200 default path stays **byte-identical** (render goldens are
-  never regolded for this; if they move, the change is wrong).
-- Wide mode gets its own golden family per aspect bucket.
-- Mixed-width netgames must remain per-tic sync-identical.
-- The status bar keeps 4:3 proportions (centered, flat-filled flanks).
-- Any client-side projection remap (progressive Panini/cylindrical for
-  very wide aspects) is a post-process on the palettized image,
-  off-by-default and outside all goldens.
+The revert is proven the way the original rule demanded: **the 320 goldens did
+not move.** All six families are byte- or pixel-identical across 13 demos —
+`sim-goldens`, `render-goldens`, `render-low`, `render-fakeflat`,
+`render-potato`, `render-sbskip`, `render-diffblit` — with no regold.
+Independently, `__heap_base` fell 5,042,464 → 4,722,048, and
+`claims.json` `perf-009` had recorded 4,722,016 as the measured value for a
+320-wide build: 32 bytes apart, so what came out was widescreen and nothing
+else. `doom.wasm` shrank 357,060 → 355,893 bytes (README 349 → 348 KB).
+
+Retired with it: legs `render-wide`, `sim-wide`, `browser-wide`,
+`mixed-width-net` and `sprite-witness`, 14 golden files,
+`tools/wide-experiment/`, and `bench.mjs --wide`. `docs/decision-18.1-wide-limits.md`
+is archived, not deleted — it holds the BSS arithmetic this revert was checked
+against.
+
+`sprite-witness` pinned the vanilla sprite cull `abs(tx) > (tz<<2)` and its
+own header claimed only the 854 arm could see a tightened cull. That was
+tested before deleting it: with the cull at `tz<<1`, **10 of 13 render goldens
+fail at 320** (first divergence plutonia-demo3 tic 169). The pin's subject is
+covered by `render-goldens`, so the leg was redundant rather than load-bearing.
 
 ## Browser matrix (task 15.2 decision record, 2026-07-19)
 

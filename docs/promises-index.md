@@ -12,7 +12,7 @@ magic-data. Do not confuse the two — `claims-index.md` inventories the
 quantitative claims across the five archaeology docs (154 in the manifest, 204
 index rows; `claims-index-check.mjs` prints the split and asserts it). This
 figure used to read "gates 182 quantitative claims", which matches no count the
-tooling produces. This index covers the 44 promises that
+tooling produces. This index covers the 45 promises that
 live outside that corpus. (Both figures used to be typed and both had drifted;
 they are asserted against the tables now — see the note under the summary.)
 
@@ -22,7 +22,7 @@ magic-data.md figures (new PUBLIC_HINTS entries). Run the drift checker to
 verify all machine-checkable figures; the qualitative promises below are indexed
 here with dispositions.
 
-**44 promises. Counts are asserted against the table by `tools/archaeology/promises-index-check.mjs`, not typed here — the header and the summary used to disagree (5/8/15 against 5/10/13), and the checker itself matched only three of the four Parts until this pass.**
+**45 promises. Counts are asserted against the table by `tools/archaeology/promises-index-check.mjs`, not typed here — the header and the summary used to disagree (5/8/15 against 5/10/13), and the checker itself matched only three of the four Parts until this pass.**
 
 ---
 
@@ -41,10 +41,10 @@ here with dispositions.
 
 | id | source | promise | disposition |
 |----|--------|---------|-------------|
-| rme-001 | README:5 | "349 KB of wasm" | **GATED** — `readme-001` + `size-004` in claims.json; `doc-drift.mjs` README_HINTS and `size-ledger.mjs` size-004a/b both fail if README diverges. The two ids state the same fact and `claims-index-check.mjs` asserts they agree (they had drifted, 348 vs 349, task 24.2). |
+| rme-001 | README:5 | "348 KB of wasm" | **GATED** — `readme-001` + `size-004` in claims.json; `doc-drift.mjs` README_HINTS and `size-ledger.mjs` size-004a/b both fail if README diverges. The two ids state the same fact and `claims-index-check.mjs` asserts they agree (they had drifted, 348 vs 349, task 24.2). |
 | rme-002 | README:7 | "Runs in stock Chrome / Edge / Firefox" | **PARTIAL** — Chromium gated by 21 CDP legs. Firefox gated since 15.2 by the `firefox-smoke` leg (UA + JS execution + /api/wads); it does NOT assert a rendered frame, which spec.md §browser-matrix records. **Edge has a VERDICT as of round 6 rather than a flag** (spec.md §browser-matrix "Edge — verdict"): it is Chromium, sharing Blink, V8, WebGL2, the WASM engine and the service worker with the gated Chrome, so a dedicated leg would re-run the same engine through a second binary. Untested by policy, not by oversight. The row stays PARTIAL because Firefox's half is still a smoke test that asserts no rendered frame. |
-| rme-003 | README:8–9 | "Uncapped framerate with 35 Hz-exact game logic (Crispy-style interpolation; vanilla mode toggle in settings, F8)" | **PARTIAL** — the F8 half was gated by `browser-qol-test`, which pressed F8 and asserted the panel opened; that test went with the QoL overlays it covered, and `browser-settings-test` still drives the same panel through F8. The uncapped-framerate interpolation and the vanilla-mode toggle's *effect* remain unasserted — opening the panel is not the same as proving the toggle changes rendering. |
-| rme-004 | README:10–11 | "rebindable keys, analog twin-stick gamepad" | **PARTIAL** — the REBIND half is gated as of round 6: `tools/browser-settings-test.mjs` (leg `browser-settings`, 19 assertions) drives the rebind UI through capture, Escape-cancels, the conflict swap, a partial stored bind map and Reset defaults, and red-proofed at 12 failures against the pre-fix tree. `browser-resilience-test` still covers gamepad hotplug (connect + disconnect) only, so **the analog twin-stick path remains ungated** — a headless runner has no stick to push, and a synthetic Gamepad object would gate the shim rather than the path. |
+| rme-003 | README:8–9 | "Uncapped framerate with 35 Hz-exact game logic (Crispy-style interpolation; vanilla mode toggle in settings, F8)" | **PARTIAL** — the F8 half was gated by `browser-qol-test`, which pressed F8 and asserted the panel opened; that test went with the QoL overlays it covered, and `browser-settings-test` still drives the same panel through F8. The uncapped-framerate interpolation and the vanilla-mode toggle's *effect* remain unasserted — opening the panel is not the same as proving the toggle changes rendering, and `sim-wide`, the leg that covered the render-side-option class, went with widescreen; see `spc-011`. |
+| rme-004 | README:10–11 | "rebindable keys, analog twin-stick gamepad" | **PARTIAL** — the REBIND half is gated as of round 6: `tools/browser-settings-test.mjs` (leg `browser-settings`, 29 assertions) drives the rebind UI through capture, Escape-cancels, the conflict swap, a partial stored bind map and Reset defaults. `browser-resilience-test` still covers gamepad hotplug (connect + disconnect) only, so **the analog twin-stick path remains ungated** — a headless runner has no stick to push, and a synthetic Gamepad object would gate the shim rather than the path. |
 | rme-005 | README:24–25 | "second load is instant, single player works offline" | **PARTIAL** — "single player works offline" is gated: `browser-offline-test` boots SP from the SW cache with the network down ("offline SP boot from SW cache proven"), and `check-sw-precache` gates the SHELL list both ways. The precache bug this row used to flag (fire.js / countdown.js missing) was fixed — `client/sw.js:13` lists both. **"second load is instant" is a performance claim and has no gate.** |
 | rme-006 | README:17–18 | "measured < 1 ms/tick on the weakest network host" (fire) | **EVIDENCED** — perf.md §fire: wbox 0.0722 ms/tick (best-of-10 × 2000, 2026-07-16); ~14× under budget. Node microbench (not browser). Committed in perf.md; not CI-automated (requires JS bench). |
 | rme-007 | README:67–70 | "cross-validated tic-for-tic against an instrumented Chocolate Doom... 44,580 tics identical" | **EVIDENCED** — re-verified 2026-07-17 (task 12.5): SDL2 packages present on CachyOS host; `bash tools/build-choco-reference.sh` RC=0; `node tools/demo-test.mjs --cross` 13/13 demos PASS, 44,580 tics identical. Expected value in claims.json md-tic-001=44580 unchanged. Not gateable in CI (requires external binary + WADs); run on demand via the two commands above. |
@@ -66,6 +66,7 @@ here with dispositions.
 | spc-006 | spec.md:48–49 | "The browser-pipeline baseline (per-frame JS/GPU/audio cost, input latency) joins this gate once Phase 12 lands" | **EVIDENCED** — task 12.2b (2026-07-18, commit 5a71e12): `tools/browser-pipeline.mjs` collects per-stage `?perfmarks=1` distributions. Input latency: alder p50=8–9 ms (half-frame quantization at 60 fps); upload p99=0.2 ms; rAF callback p50=0.2 ms p99=0.9 ms. AudioWorklet unmeasured in headless Chrome (headless limitation — not a gap in the instrument). Goldens: `tools/golden/browser-pipeline-{alder,wbox}.json`. Gate: `node tools/browser-pipeline.mjs` exits 0 if collector runs without error; numeric baselines are golden-filed. |
 | spc-007 | spec.md:17–20 | "all 13 IWAD demos replay tic-identical against golden traces and cross-validate against instrumented Chocolate Doom (44,580 tics)" | **GATED** — sim gate (demo-test.mjs) is live CI. Cross-validation re-verified 2026-07-17 (task 12.5): 44,580 tics confirmed; see rme-007. |
 | spc-008 | spec.md:64–67 | Reference hardware fleet host names (wbox/tank/pi5/alder) | **EVIDENCED** — fleet is documented in spec.md table and bench-baseline.json column headers match exactly. No drift gate; names are configuration, not numeric. |
+| spc-011 | spec.md "What ships" | "Freelook and frame interpolation — render-side, opt-in" | **FLAGGED(no gate — the invariance leg that covered this class was `sim-wide`, and it was deleted with widescreen 2026-09-12)** — `sim-wide` was the only leg proving a render-side option cannot reach the playsim; freelook (`_web_set_pitch`) and interpolation (`_web_set_smooth`) are the two survivors of that class and neither is asserted. `demo-test.mjs` pins `_web_set_smooth(0)` before every run, so the golden families are blind to both. Closing it means a sim-invariance leg for the render options: the 13 demos with smooth and pitch ON, sim traces byte-exact against the existing goldens, plus a vacuity arm proving the mode was actually active. Recorded here rather than left implied, because the row it replaces used to read as gated. |
 
 ---
 
@@ -136,7 +137,7 @@ family). Two figures remain ungateable.
 > checker nor the rows. There is one inventory and one set of counts now, and
 > `promises-index-check.mjs` computes them.
 
-**44 promises in the table.** Counts are asserted against it by
+**45 promises in the table.** Counts are asserted against it by
 `tools/archaeology/promises-index-check.mjs` rather than typed — the header and this
 line used to disagree (5/8/15 against 5/10/13), which is how six stale dispositions
 survived to task 24.1.

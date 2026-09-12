@@ -407,7 +407,7 @@ sprites (r_segs.c:734-743).
 ### 4.3 `openings[]` — shared clip-array pool
 
 ```c
-#define MAXOPENINGS  (MAXSCREENWIDTH*64)  // vanilla; was *64; webdoom raised to *256, reverted 14.2f (peak 2527)
+#define MAXOPENINGS  (SCREENWIDTH*64)  // vanilla; was *64; webdoom raised to *256, reverted 14.2f (peak 2527)
 short openings[MAXOPENINGS];
 short* lastopening;
 ```
@@ -421,9 +421,10 @@ or `maskedtexturecol` carves out a slice of `openings[]` via `lastopening`
 Vanilla MAXOPENINGS is `SCREENWIDTH*64 = 20480` at width 320. Webdoom raised
 the ratio to ×256 as a robustness measure, then reverted to the vanilla ×64
 in task 14.2f after measuring peak usage of 2527 across the 13-demo corpus
-(8.1× margin). Since task 18.2c the array dimension uses the widescreen
-compile cap: `MAXSCREENWIDTH*64 = 54656` (MAXSCREENWIDTH=854; runtime width
-still bounds actual usage, so the 320-px margin arithmetic is unchanged). Overflow is guarded in r_segs.c (fail-soft: drops masked
+(8.1× margin). Task 18.2c re-dimensioned the array on the widescreen compile
+cap (`MAXSCREENWIDTH*64 = 54656` at 854 px); widescreen was removed and
+webdoom MAXOPENINGS is `SCREENWIDTH*64 = 20480` again, identical to vanilla.
+Overflow is guarded in r_segs.c (fail-soft: drops masked
 midtex or clears silhouette bit rather than writing past array end).
 The RANGECHECK path (r_plane.c:384-387) still I_Errors on overflow in debug builds.
 

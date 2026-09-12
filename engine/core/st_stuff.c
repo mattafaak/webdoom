@@ -260,7 +260,7 @@ rcsid[] = "$Id: st_stuff.c,v 1.6 1997/02/03 22:45:13 b1 Exp $";
     (strlen(mapnames[(gameepisode-1)*9+(gamemap-1)]))
 
 #define ST_MAPTITLEX \
-    (screenwidth - ST_MAPWIDTH * ST_CHATFONTWIDTH)
+    (SCREENWIDTH - ST_MAPWIDTH * ST_CHATFONTWIDTH)
 
 #define ST_MAPTITLEY		0
 #define ST_MAPHEIGHT		1
@@ -496,51 +496,14 @@ extern char*	mapnames[];
 //
 void ST_Stop(void);
 
-// ST_FillFlatFlanks — Hor+ widescreen (18.2b).
-// Tiles firstflat across the left- and right-flank columns of screens[BG]
-// that fall outside the 320-px STBAR zone when WIDESCREENDELTA > 0.
-// Flat is 64×64 bytes, row-major; screen buffer is column-major.
-// No-ops when WIDESCREENDELTA == 0 (i.e. W=320).
-static void ST_FillFlatFlanks(int wsd)
-{
-    int x, y;
-    const byte* flat;
-    if (wsd <= 0)
-        return;
-    flat = (const byte*)W_CacheLumpNum(firstflat, PU_CACHE);
-    for (x = 0; x < screenwidth; x++)
-    {
-        if (x >= wsd && x < wsd + DOOM_ORIGWIDTH)
-            continue; // STBAR zone — will be painted by V_DrawPatch
-        for (y = 0; y < ST_HEIGHT; y++)
-            screens[BG][x * SCREENHEIGHT + y] = flat[((y & 63) << 6) | (x & 63)];
-    }
-}
-
 void ST_refreshBackground(void)
 {
     if (st_statusbaron)
     {
-        int wsd = WIDESCREENDELTA;
-
-        if (wsd > 0)
-        {
-            // Hor+ widescreen: fill flanks then draw STBAR centred.
-            ST_FillFlatFlanks(wsd);
-            V_DrawPatch(wsd, 0, BG, sbar);
-            if (netgame)
-                V_DrawPatch(wsd + ST_FX, 0, BG, faceback);
-            // Copy entire status-bar row (including flat flanks) to FG.
-            V_CopyRect(0, 0, BG, screenwidth, ST_HEIGHT, 0, ST_Y, FG);
-        }
-        else
-        {
-            // Vanilla 320-px path — byte-identical to pre-widescreen.
-            V_DrawPatch(ST_X, 0, BG, sbar);
-            if (netgame)
-                V_DrawPatch(ST_FX, 0, BG, faceback);
-            V_CopyRect(ST_X, 0, BG, ST_WIDTH, ST_HEIGHT, ST_X, ST_Y, FG);
-        }
+        V_DrawPatch(ST_X, 0, BG, sbar);
+        if (netgame)
+            V_DrawPatch(ST_FX, 0, BG, faceback);
+        V_CopyRect(ST_X, 0, BG, ST_WIDTH, ST_HEIGHT, ST_X, ST_Y, FG);
     }
 }
 
@@ -1399,14 +1362,10 @@ void ST_createWidgets(void)
 {
 
     int i;
-    // 18.2c: Hor+ widescreen offset.  All widget x-coords are specified in
-    // the 320-px STBAR coordinate system; adding WIDESCREENDELTA shifts them
-    // to the correct column on wider canvases.  Evaluates to 0 at W=320.
-    int wsd = WIDESCREENDELTA;
 
     // ready weapon ammo
     STlib_initNum(&w_ready,
-		  ST_AMMOX + wsd,
+		  ST_AMMOX,
 		  ST_AMMOY,
 		  tallnum,
 		  &plyr->ammo[weaponinfo[plyr->readyweapon].ammo],
@@ -1418,7 +1377,7 @@ void ST_createWidgets(void)
 
     // health percentage
     STlib_initPercent(&w_health,
-		      ST_HEALTHX + wsd,
+		      ST_HEALTHX,
 		      ST_HEALTHY,
 		      tallnum,
 		      &plyr->health,
@@ -1427,7 +1386,7 @@ void ST_createWidgets(void)
 
     // arms background
     STlib_initBinIcon(&w_armsbg,
-		      ST_ARMSBGX + wsd,
+		      ST_ARMSBGX,
 		      ST_ARMSBGY,
 		      armsbg,
 		      &st_notdeathmatch,
@@ -1437,7 +1396,7 @@ void ST_createWidgets(void)
     for(i=0;i<6;i++)
     {
 	STlib_initMultIcon(&w_arms[i],
-			   ST_ARMSX + wsd + (i%3)*ST_ARMSXSPACE,
+			   ST_ARMSX + (i%3)*ST_ARMSXSPACE,
 			   ST_ARMSY+(i/3)*ST_ARMSYSPACE,
 			   arms[i], (int *) &plyr->weaponowned[i+1],
 			   &st_armson);
@@ -1445,7 +1404,7 @@ void ST_createWidgets(void)
 
     // frags sum
     STlib_initNum(&w_frags,
-		  ST_FRAGSX + wsd,
+		  ST_FRAGSX,
 		  ST_FRAGSY,
 		  tallnum,
 		  &st_fragscount,
@@ -1454,7 +1413,7 @@ void ST_createWidgets(void)
 
     // faces
     STlib_initMultIcon(&w_faces,
-		       ST_FACESX + wsd,
+		       ST_FACESX,
 		       ST_FACESY,
 		       faces,
 		       &st_faceindex,
@@ -1462,7 +1421,7 @@ void ST_createWidgets(void)
 
     // armor percentage - should be colored later
     STlib_initPercent(&w_armor,
-		      ST_ARMORX + wsd,
+		      ST_ARMORX,
 		      ST_ARMORY,
 		      tallnum,
 		      &plyr->armorpoints,
@@ -1470,21 +1429,21 @@ void ST_createWidgets(void)
 
     // keyboxes 0-2
     STlib_initMultIcon(&w_keyboxes[0],
-		       ST_KEY0X + wsd,
+		       ST_KEY0X,
 		       ST_KEY0Y,
 		       keys,
 		       &keyboxes[0],
 		       &st_statusbaron);
 
     STlib_initMultIcon(&w_keyboxes[1],
-		       ST_KEY1X + wsd,
+		       ST_KEY1X,
 		       ST_KEY1Y,
 		       keys,
 		       &keyboxes[1],
 		       &st_statusbaron);
 
     STlib_initMultIcon(&w_keyboxes[2],
-		       ST_KEY2X + wsd,
+		       ST_KEY2X,
 		       ST_KEY2Y,
 		       keys,
 		       &keyboxes[2],
@@ -1492,7 +1451,7 @@ void ST_createWidgets(void)
 
     // ammo count (all four kinds)
     STlib_initNum(&w_ammo[0],
-		  ST_AMMO0X + wsd,
+		  ST_AMMO0X,
 		  ST_AMMO0Y,
 		  shortnum,
 		  &plyr->ammo[0],
@@ -1500,7 +1459,7 @@ void ST_createWidgets(void)
 		  ST_AMMO0WIDTH);
 
     STlib_initNum(&w_ammo[1],
-		  ST_AMMO1X + wsd,
+		  ST_AMMO1X,
 		  ST_AMMO1Y,
 		  shortnum,
 		  &plyr->ammo[1],
@@ -1508,7 +1467,7 @@ void ST_createWidgets(void)
 		  ST_AMMO1WIDTH);
 
     STlib_initNum(&w_ammo[2],
-		  ST_AMMO2X + wsd,
+		  ST_AMMO2X,
 		  ST_AMMO2Y,
 		  shortnum,
 		  &plyr->ammo[2],
@@ -1516,7 +1475,7 @@ void ST_createWidgets(void)
 		  ST_AMMO2WIDTH);
 
     STlib_initNum(&w_ammo[3],
-		  ST_AMMO3X + wsd,
+		  ST_AMMO3X,
 		  ST_AMMO3Y,
 		  shortnum,
 		  &plyr->ammo[3],
@@ -1525,7 +1484,7 @@ void ST_createWidgets(void)
 
     // max ammo count (all four kinds)
     STlib_initNum(&w_maxammo[0],
-		  ST_MAXAMMO0X + wsd,
+		  ST_MAXAMMO0X,
 		  ST_MAXAMMO0Y,
 		  shortnum,
 		  &plyr->maxammo[0],
@@ -1533,7 +1492,7 @@ void ST_createWidgets(void)
 		  ST_MAXAMMO0WIDTH);
 
     STlib_initNum(&w_maxammo[1],
-		  ST_MAXAMMO1X + wsd,
+		  ST_MAXAMMO1X,
 		  ST_MAXAMMO1Y,
 		  shortnum,
 		  &plyr->maxammo[1],
@@ -1541,7 +1500,7 @@ void ST_createWidgets(void)
 		  ST_MAXAMMO1WIDTH);
 
     STlib_initNum(&w_maxammo[2],
-		  ST_MAXAMMO2X + wsd,
+		  ST_MAXAMMO2X,
 		  ST_MAXAMMO2Y,
 		  shortnum,
 		  &plyr->maxammo[2],
@@ -1549,7 +1508,7 @@ void ST_createWidgets(void)
 		  ST_MAXAMMO2WIDTH);
 
     STlib_initNum(&w_maxammo[3],
-		  ST_MAXAMMO3X + wsd,
+		  ST_MAXAMMO3X,
 		  ST_MAXAMMO3Y,
 		  shortnum,
 		  &plyr->maxammo[3],
@@ -1591,5 +1550,5 @@ void ST_Init (void)
        as screens[0..3] so V_CopyRect/V_DrawPatch addressing is consistent.
        Allocate SCREENWIDTH*SCREENHEIGHT; only the top ST_HEIGHT rows of each
        column are used for status-bar content. */
-    screens[4] = (byte *) Z_Malloc(MAXSCREENWIDTH*SCREENHEIGHT, PU_STATIC, 0);
+    screens[4] = (byte *) Z_Malloc(SCREENWIDTH*SCREENHEIGHT, PU_STATIC, 0);
 }

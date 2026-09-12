@@ -317,9 +317,9 @@ const DOC_HINTS = {
                  transform: v => String(320 * parseInt(v, 10)) },
 
     'rdr-004': { doc_file: 'renderer.md',
-                 needle: 'MAXSCREENWIDTH*64',
-                 extract_re: /MAXSCREENWIDTH\*(\d+) = \d+/,
-                 transform: v => String(854 * parseInt(v, 10)) },
+                 needle: 'webdoom MAXOPENINGS',
+                 extract_re: /webdoom MAXOPENINGS is `SCREENWIDTH\*(\d+) = \d+`/,
+                 transform: v => String(320 * parseInt(v, 10)) },
 
     'rdr-005': { doc_file: 'renderer.md',
                  // Table: "| MAXVISPLANES | 128 | 1024 | ..."

@@ -19,8 +19,8 @@ static byte webpalette[256 * 3];
 static int paletteversion; // bumped on every I_SetPalette
 
 // Row-major presentation buffer: JS reads this.  Populated by I_FinishUpdate.
-// Sized to MAXSCREENWIDTH; only the first screenwidth columns are populated.
-static byte web_rowmajor_buf[MAXSCREENWIDTH * SCREENHEIGHT];
+// Sized to SCREENWIDTH; only the first SCREENWIDTH columns are populated.
+static byte web_rowmajor_buf[SCREENWIDTH * SCREENHEIGHT];
 
 #ifdef WEBDOOM_DIFFBLIT
 /* --- 20.3d WEBDOOM_DIFFBLIT: differential blit behind compile-time toggle ---
@@ -39,13 +39,14 @@ static byte web_rowmajor_buf[MAXSCREENWIDTH * SCREENHEIGHT];
    pattern: any fill value could legitimately occur as a full column of
    screens[0], which would make memcmp report "unchanged" and leave a stale
    wrong-stride column in web_rowmajor_buf. The flag has no such collision.
-   web_prev_screenwidth starts at 0 (less than any real screenwidth) so the
-   first call always invalidates, and every screenwidth change invalidates
-   again so the buffer is re-transposed with the correct row stride. */
-static byte web_prev_col[MAXSCREENWIDTH * SCREENHEIGHT];
-static int web_prev_screenwidth; /* 0 at startup → force full refresh */
-static int web_prev_valid;       /* snapshot usable for skip decisions */
-#endif                           /* WEBDOOM_DIFFBLIT */
+   web_prev_valid is 0 in BSS at startup, so the first call cannot skip and
+   every column is transposed.  This used to be a second variable comparing
+   the render width against its previous value, which was needed while the
+   width could change at runtime (Hor+ widescreen); the width is a constant
+   again, and the flag alone already covers the first call. */
+static byte web_prev_col[SCREENWIDTH * SCREENHEIGHT];
+static int web_prev_valid; /* snapshot usable for skip decisions */
+#endif                     /* WEBDOOM_DIFFBLIT */
 /* Reset line counter so the toggle-off binary stays byte-identical to master.
    void I_InitGraphics was at physical line 25 — update if i_video.c moves. */
 #line 25
@@ -70,14 +71,7 @@ void I_FinishUpdate (void)
     const byte* src = screens[0];
     int x, y;
 #ifdef WEBDOOM_DIFFBLIT
-    if (screenwidth != web_prev_screenwidth)
-    {
-        /* Width change or first call: every column must be re-transposed
-           with the new stride, so no skip may fire this frame. */
-        web_prev_valid = 0;
-        web_prev_screenwidth = screenwidth;
-    }
-    for (x = 0; x < screenwidth; x++)
+    for (x = 0; x < SCREENWIDTH; x++)
     {
         const byte* col = src + x * SCREENHEIGHT;
         byte* prv = web_prev_col + x * SCREENHEIGHT;
@@ -85,16 +79,16 @@ void I_FinishUpdate (void)
             continue;                    /* column unchanged — skip transpose */
         memcpy (prv, col, SCREENHEIGHT); /* update snapshot */
         for (y = 0; y < SCREENHEIGHT; y++)
-            web_rowmajor_buf[y * screenwidth + x] = col[y];
+            web_rowmajor_buf[y * SCREENWIDTH + x] = col[y];
     }
     web_prev_valid = 1;
 #else
 #line 45
-    for (x = 0; x < screenwidth; x++)
+    for (x = 0; x < SCREENWIDTH; x++)
     {
         const byte* col = src + x * SCREENHEIGHT;
         for (y = 0; y < SCREENHEIGHT; y++)
-            web_rowmajor_buf[y * screenwidth + x] = col[y];
+            web_rowmajor_buf[y * SCREENWIDTH + x] = col[y];
     }
 #endif /* WEBDOOM_DIFFBLIT */
 #line 51
@@ -103,7 +97,7 @@ void I_FinishUpdate (void)
 void I_ReadScreen (byte* scr)
 {
     // Copy raw column-major bytes; callers (wipe, screenshot) handle layout.
-    memcpy (scr, screens[0], screenwidth * SCREENHEIGHT);
+    memcpy (scr, screens[0], SCREENWIDTH * SCREENHEIGHT);
 }
 
 // --- JS bridge ---------------------------------------------------------

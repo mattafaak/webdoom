@@ -62,7 +62,7 @@ byte* I_ZoneBase(int* size)
 }
 
 // ── Screen buffers (V_Init calls I_AllocLow once) ────────────────────────────
-// With MAXSCREENWIDTH=320: 320*200*4 = 256,000 bytes.
+// With SCREENWIDTH=320: 320*200*4 = 256,000 bytes.
 // These live in BSS (SRAM).
 static byte rp2040_screenbufs[RP2040_ALLOCLOW_SIZE] __attribute__((aligned(4)));
 

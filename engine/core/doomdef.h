@@ -105,35 +105,20 @@ typedef enum
 #define	SCREEN_MUL		1
 #define	INV_ASPECT_RATIO	0.625 // 0.75, ideally
 
-// Compile-time maximum screen width: governs static array dimensions and
-// fixed-size allocations.  Set to 854 (16:9 widescreen cap, per §5.5 of
-// docs/decision-18.1-wide-limits.md — static-max strategy, +205 KB BSS vs
-// W=320, both widths fit in INITIAL_MEMORY=32 MB with ~6 MB headroom).
-// Override with -DMAXSCREENWIDTH=N on the compiler command line if needed.
-// Runtime width (loop bounds, column indices, stride) uses screenwidth below.
-#ifndef MAXSCREENWIDTH
-#define MAXSCREENWIDTH  854
+// The render width is a compile-time constant, as in vanilla.  Task 18.2
+// made it a runtime variable (`SCREENWIDTH`) behind a compile-time cap
+// (`SCREENWIDTH`, 854) so Hor+ widescreen could resize the view; that cost
+// 320,400 bytes of BSS in the static arrays sized from the cap, and it is
+// reverted -- widescreen is gone.  Loop bounds, column indices, stride and
+// static array declarations all read this one name again.
+#ifndef SCREENWIDTH
+#define SCREENWIDTH 320
 #endif
 
 #ifndef SCREENHEIGHT
 #define SCREENHEIGHT 200
 //(int)(SCREEN_MUL*BASE_WIDTH*INV_ASPECT_RATIO) //200
 #endif
-
-// Runtime screen width — initialized to DOOM_ORIGWIDTH (320) by default.
-// MAXSCREENWIDTH is the compile-time array-size cap, not the startup value.
-// web_set_wide(W) changes this at runtime for Hor+ widescreen (task 18.2c).
-// Loop bounds, column indices, and stride comparisons use this; static array
-// declarations use MAXSCREENWIDTH.
-extern int screenwidth;
-
-// Hor+ widescreen: original Doom 4:3 design width and half-width.
-// WIDESCREENDELTA is the number of pixels to shift 2D-overlay content
-// rightward so that 320-px-wide assets appear centred on a wider screen.
-// Both evaluate to 0 at W=320 (WIDESCREENDELTA is the identity offset).
-#define DOOM_ORIGWIDTH      320
-#define DOOM_ORIGHALF       (DOOM_ORIGWIDTH / 2)   /* 160 */
-#define WIDESCREENDELTA     ((screenwidth - DOOM_ORIGWIDTH) / 2)
 
 
 

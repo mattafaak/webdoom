@@ -56,7 +56,8 @@ vague is not.
 ## What will be declined
 
 - Gameplay-visible changes beyond vanilla (render-side is fine, and
-  opt-in render-side is how freelook and widescreen landed).
+  opt-in render-side is how freelook landed — though note widescreen came in
+  the same way and was removed again in 2026-09-12 for not being used).
 - Safari/iOS support — an explicit non-goal with a decision record.
 - A new dependency, unless it replaces more code than it adds.
 - Anything that needs game data to be redistributed.

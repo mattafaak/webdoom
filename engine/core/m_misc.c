@@ -92,7 +92,7 @@ M_DrawText
 	}
 		
 	w = SHORT (hu_font[c]->width);
-	if (x+w > screenwidth)
+	if (x+w > SCREENWIDTH)
 	    break;
 	if (direct)
 	    V_DrawPatchDirect(x, y, 0, hu_font[c]);
@@ -517,9 +517,9 @@ void M_ScreenShot (void)
        (bytes_per_line = SCREENWIDTH), so untranspose here — a raw
        I_ReadScreen copy would produce a spatially transposed PCX. */
     linear = screens[2];
-    for (x=0 ; x<screenwidth ; x++)
+    for (x=0 ; x<SCREENWIDTH ; x++)
 	for (y=0 ; y<SCREENHEIGHT ; y++)
-	    linear[y*screenwidth+x] = screens[0][x*SCREENHEIGHT+y];
+	    linear[y*SCREENWIDTH+x] = screens[0][x*SCREENHEIGHT+y];
 
     // find a file name to save it to
     strcpy(lbmname,"DOOM00.pcx");
@@ -536,7 +536,7 @@ void M_ScreenShot (void)
 
     // save the pcx file
     WritePCXfile (lbmname, linear,
-		  screenwidth, SCREENHEIGHT,
+		  SCREENWIDTH, SCREENHEIGHT,
 		  W_CacheLumpName ("PLAYPAL",PU_CACHE));
 	
     players[consoleplayer].message = "screen shot";

@@ -171,10 +171,10 @@ V_CopyRect
 	 
 #ifdef RANGECHECK 
     if (srcx<0
-	||srcx+width >screenwidth
+	||srcx+width >SCREENWIDTH
 	|| srcy<0
 	|| srcy+height>SCREENHEIGHT
-	||destx<0||destx+width >screenwidth
+	||destx<0||destx+width >SCREENWIDTH
 	|| desty<0
 	|| desty+height>SCREENHEIGHT
 	|| (unsigned)srcscrn>4
@@ -222,7 +222,7 @@ V_DrawPatch
     x -= SHORT(patch->leftoffset); 
 #ifdef RANGECHECK 
     if (x<0
-	||x+SHORT(patch->width) >screenwidth
+	||x+SHORT(patch->width) >SCREENWIDTH
 	|| y<0
 	|| y+SHORT(patch->height)>SCREENHEIGHT
 	|| (unsigned)scrn>4)
@@ -293,7 +293,7 @@ V_DrawPatchFlipped
     x -= SHORT(patch->leftoffset); 
 #ifdef RANGECHECK 
     if (x<0
-	||x+SHORT(patch->width) >screenwidth
+	||x+SHORT(patch->width) >SCREENWIDTH
 	|| y<0
 	|| y+SHORT(patch->height)>SCREENHEIGHT
 	|| (unsigned)scrn>4)
@@ -362,7 +362,7 @@ V_DrawPatchDirect
 
 #ifdef RANGECHECK 
     if (x<0
-	||x+SHORT(patch->width) >MAXSCREENWIDTH
+	||x+SHORT(patch->width) >SCREENWIDTH
 	|| y<0
 	|| y+SHORT(patch->height)>SCREENHEIGHT
 	|| (unsigned)scrn>4)
@@ -372,7 +372,7 @@ V_DrawPatchDirect
 #endif
 
     //	V_MarkRect (x, y, SHORT(patch->width), SHORT(patch->height));
-    desttop = destscreen + y*MAXSCREENWIDTH/4 + (x>>2);
+    desttop = destscreen + y*SCREENWIDTH/4 + (x>>2);
 
     w = SHORT(patch->width);
     for ( col = 0 ; col<w ; col++)
@@ -385,13 +385,13 @@ V_DrawPatchDirect
 	while (column->topdelta != 0xff )
 	{
 	    source = (byte *)column + 3;
-	    dest = desttop + column->topdelta*MAXSCREENWIDTH/4;
+	    dest = desttop + column->topdelta*SCREENWIDTH/4;
 	    count = column->length;
 
 	    while (count--)
 	    {
 		*dest = *source++;
-		dest += MAXSCREENWIDTH/4; 
+		dest += SCREENWIDTH/4; 
 	    } 
 	    column = (column_t *)(  (byte *)column + column->length 
 				    + 4 ); 
@@ -420,7 +420,7 @@ V_DrawBlock
 	 
 #ifdef RANGECHECK 
     if (x<0
-	||x+width >screenwidth
+	||x+width >SCREENWIDTH
 	|| y<0
 	|| y+height>SCREENHEIGHT
 	|| (unsigned)scrn>4 )
@@ -467,7 +467,7 @@ V_GetBlock
 	 
 #ifdef RANGECHECK 
     if (x<0
-	||x+width >screenwidth
+	||x+width >SCREENWIDTH
 	|| y<0
 	|| y+height>SCREENHEIGHT
 	|| (unsigned)scrn>4 )
@@ -501,8 +501,8 @@ void V_Init (void)
 		
     // stick these in low dos memory on PCs
 
-    base = I_AllocLow (MAXSCREENWIDTH*SCREENHEIGHT*4);
+    base = I_AllocLow (SCREENWIDTH*SCREENHEIGHT*4);
 
     for (i=0 ; i<4 ; i++)
-	screens[i] = base + i*MAXSCREENWIDTH*SCREENHEIGHT;
+	screens[i] = base + i*SCREENWIDTH*SCREENHEIGHT;
 }

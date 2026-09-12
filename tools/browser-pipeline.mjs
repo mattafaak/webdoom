@@ -348,12 +348,12 @@ const result = {
         // task 18.3: canvas_info — metadata stage, not a timing distribution.
         // Not in browser-pipeline-compare.mjs CHECKS; baseline has no run1/run2
         // so compare SKIPS it.  Records canvas dimensions + renderer kind at
-        // end of the collection run.  320×200 = standard (wideMode off default).
+        // end of the collection run.  320×200 is the only size there is.
         canvas_info: {
             width:        canvasWidth,
             height:       canvasHeight,
             rendererKind: rendererKind,
-            note: 'task 18.3: DOM canvas dimensions and renderer kind at end of run. Not a timing stage; not regression-checked. 320×200 with wideMode off (default); 854×200 when wide enabled.',
+            note: 'task 18.3: DOM canvas dimensions and renderer kind at end of run. Not a timing stage; not regression-checked. Always 320×200 — widescreen was removed 2026-09-12.',
         },
     },
 };

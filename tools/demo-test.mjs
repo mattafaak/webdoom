@@ -10,9 +10,6 @@
 //        node tools/demo-test.mjs --record    # (re)write sim golden traces
 //        node tools/demo-test.mjs --render    # verify render goldens (absent golden = FAIL)
 //        node tools/demo-test.mjs --render --record  # force re-record render goldens
-//        node tools/demo-test.mjs --render-wide --record  # record 854-px wide render goldens
-//        node tools/demo-test.mjs --render-wide  # verify 854-px wide render goldens
-//        node tools/demo-test.mjs --sim-wide    # sim-invariance: wide ENABLED, must match sim goldens
 //        node tools/demo-test.mjs --render-fakeflat --record  # record fakeflat render goldens
 //        node tools/demo-test.mjs --render-fakeflat  # verify fakeflat render goldens
 //        node tools/demo-test.mjs --render-potato --record  # record potato render goldens
@@ -25,8 +22,6 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const record = process.argv.includes('--record');
 const renderMode = process.argv.includes('--render');
 const lowDetail = process.argv.includes('--low-detail'); // 14.2b: low-detail render goldens
-const wideRender = process.argv.includes('--render-wide'); // 18.2c: 854-px wide render goldens
-const simWide   = process.argv.includes('--sim-wide');    // 18.2c: sim-invariance gate
 const fakeFlatRender = process.argv.includes('--render-fakeflat'); // 20.3a: WEBDOOM_FAKEFLAT render goldens
 const potatoRender   = process.argv.includes('--render-potato');   // 20.3c: WEBDOOM_POTATO render goldens
 const crossIdx = process.argv.indexOf('--cross');
@@ -46,12 +41,12 @@ const buildDir = buildDirIdx >= 0 ? process.argv[buildDirIdx + 1]
 // demos)".  A reviewer reading that line sees a green render gate over the full
 // count.  This is the documented trap in CLAUDE.md and it was still live.
 const BOOL_FLAGS = new Set([
-    '--record', '--render', '--low-detail', '--render-wide', '--sim-wide',
+    '--record', '--render', '--low-detail',
     '--render-fakeflat', '--render-potato',
 ]);
 const VALUE_FLAGS = new Set(['--cross', '--build-dir', '--record-reason']);
-const USAGE = 'usage: demo-test.mjs [--record] [--render [--low-detail] | --render-wide | ' +
-              '--sim-wide | --render-fakeflat | --render-potato] [--cross BIN] [--build-dir DIR] [--record-reason TEXT]';
+const USAGE = 'usage: demo-test.mjs [--record] [--render [--low-detail] | ' +
+              '--render-fakeflat | --render-potato] [--cross BIN] [--build-dir DIR] [--record-reason TEXT]';
 for (let i = 2; i < process.argv.length; i++) {
     const a = process.argv[i];
     if (VALUE_FLAGS.has(a)) {
@@ -74,7 +69,7 @@ const RECORD_REASON = record ? recordReason(process.argv) : null;
 const PROV = () => provenance('demo-test.mjs', buildDir, RECORD_REASON);
 
 // Selecting two gate families runs only the first and silently skips the rest.
-const MODES = { '--render': renderMode, '--render-wide': wideRender, '--sim-wide': simWide,
+const MODES = { '--render': renderMode,
                 '--render-fakeflat': fakeFlatRender, '--render-potato': potatoRender };
 const chosen = Object.keys(MODES).filter(k => MODES[k]);
 if (chosen.length > 1) {
@@ -245,7 +240,7 @@ if (renderMode) {
             // This branch used to share the `record` arm above AND increment
             // `verified`, so deleting a golden re-created it from the build
             // under test and still printed the full-count PASS line — a silent,
-            // self-authorising regold.  The wide/fakeflat/potato families never
+            // self-authorising regold.  The fakeflat/potato families never
             // had this hole; the two oldest and most load-bearing gates did.
             if (!existsSync(goldenPath)) {
                 console.log(`FAIL ${name} ${detailTag}render: golden absent ` +
@@ -278,134 +273,6 @@ if (renderMode) {
     assertFullCoverage(`${detailTag}render`, verified);
     console.log(record ? `${detailTag}render golden traces written`
                        : `PASS — all ${detailTag}render goldens pixel-identical (${verified} demos)`);
-    process.exit(0);
-}
-
-// ── wide render mode (18.2c: --render-wide) ─────────────────────────────────
-//
-// Records/verifies per-tic FNV-1a 32-bit hashes of the 854×200-px framebuffer
-// with wide mode enabled (web_set_wide(854) → setblocks=11 Hor+ path).
-//
-// Design notes:
-//   - Wide golden suffix: -render-wide.json  (separate from -render.json).
-//   - Hash covers 854*200 = 170 800 bytes (full wide framebuffer row-major).
-//   - web_set_wide(854) is called BEFORE the frame loop; the first web_frame()
-//     consumes the pending width (sets screenwidth=854, R_SetViewSize(11),
-//     ST_Start()) so subsequent frames render at full 854-px width.
-//   - No auto-record-if-absent: missing goldens are hard errors.  Use --record
-//     for the initial recording run.
-//   - Storage plan: 1 bucket at W=854 (the compile-time cap and only UI-exposed
-//     widescreen width).  13 demos × ~20–70 KB each ≈ 0.3–0.9 MB total.
-//     (hashes are 32-bit ints per tic; a 2000-tic demo = 8 KB per golden.)
-
-const WIDE_WIDTH = 854;
-
-if (wideRender) {
-    function fnv1aWide(heapu8, fbPtr, palVer, w) {
-        let h = 0x811c9dc5;
-        const end = fbPtr + w * 200;
-        for (let i = fbPtr; i < end; i++) {
-            h = Math.imul(h ^ heapu8[i], 0x01000193);
-        }
-        h = Math.imul(h ^ ( palVer        & 0xff), 0x01000193);
-        h = Math.imul(h ^ ((palVer >>> 8)  & 0xff), 0x01000193);
-        h = Math.imul(h ^ ((palVer >>> 16) & 0xff), 0x01000193);
-        h = Math.imul(h ^ ((palVer >>> 24) & 0xff), 0x01000193);
-        return h >>> 0;
-    }
-
-    let failures = 0;
-    let verified = 0;
-
-    for (const [wad, engineName, demos] of MATRIX) {
-        const path = join(root, 'wads/lib', wad);
-        if (!existsSync(path)) { console.log(`skip ${wad}: not fetched`); continue; }
-        const wadBytes = readFileSync(path);
-
-        for (const demo of demos) {
-            let done = null;
-            const doom = await createDoom({
-                print: () => {},
-                printErr: t => { const m = /timed (\d+) gametics/.exec(t); if (m) done = +m[1]; },
-                onDoomError: msg => { if (!/timed \d+ gametics/.test(msg)) done = `error: ${msg}`; },
-            });
-            {
-                const p = doom._malloc(wadBytes.length);
-                doom.HEAPU8.set(wadBytes, p);
-                doom.ccall('web_register_file', null, ['string', 'number', 'number'],
-                    [engineName, p, wadBytes.length]);
-            }
-
-            const trace = [];
-            try {
-                // No -nodraw: full Hor+ render path must run.
-                doom.callMain(['-timedemo', demo]);
-                doom._web_set_smooth(0);
-                // Activate 854-px wide mode before the frame loop.
-                // The first web_frame() consumes pending_wide_width:
-                //   screenwidth=854, R_SetViewSize(11), ST_Start().
-                doom._web_set_wide(WIDE_WIDTH);
-                const fbPtr = doom._web_framebuffer();
-                let lastTic = -1;
-                for (let i = 0; i < 200000 && done === null; i++) {
-                    doom._web_wipe_skip();
-                    doom._web_frame();
-                    const tic = doom._web_gametic();
-                    if (tic !== lastTic) {
-                        trace.push(fnv1aWide(doom.HEAPU8, fbPtr,
-                            doom._web_palette_version(), WIDE_WIDTH));
-                        lastTic = tic;
-                    }
-                }
-            } catch (e) {
-                if (done === null) done = `threw: ${String(e).slice(0, 80)}`;
-            }
-
-            const name = `${wad.replace('.wad', '')}-${demo}`;
-            if (typeof done !== 'number') {
-                console.log(`FAIL ${name} [wide] render: ${done ?? 'never finished'}`);
-                failures++;
-                continue;
-            }
-
-            const goldenPath = join(goldenDir, `${name}-render-wide.json`);
-            if (record) {
-                writeFileSync(goldenPath, JSON.stringify({ tics: done, trace, width: WIDE_WIDTH, provenance: PROV() }));
-                console.log(`recorded ${name} [wide] render: ${done} gametics, ${trace.length} hashes, W=${WIDE_WIDTH}`);
-                verified++;
-                continue;
-            }
-            // No auto-record: missing golden is a hard error.
-            if (!existsSync(goldenPath)) {
-                console.log(`FAIL ${name} [wide] render: golden absent (run --render-wide --record first)`);
-                failures++;
-                continue;
-            }
-
-            const golden = JSON.parse(readFileSync(goldenPath));
-            if (golden.tics !== done) {
-                console.log(`FAIL ${name} [wide] render: ran ${done} gametics, golden ${golden.tics}`);
-                failures++;
-                continue;
-            }
-            let diverged = -1;
-            for (let i = 0; i < golden.trace.length; i++) {
-                if (golden.trace[i] !== trace[i]) { diverged = i; break; }
-            }
-            if (diverged >= 0) {
-                console.log(`FAIL ${name} [wide] render: PIXEL DESYNC at tic ${diverged} of ${golden.trace.length}`);
-                failures++;
-            } else {
-                console.log(`PASS ${name} [wide] render: ${done} gametics pixel-identical (W=${WIDE_WIDTH})`);
-                verified++;
-            }
-        }
-    }
-
-    if (failures) { console.log(`${failures} wide render golden(s) failed`); process.exit(1); }
-    assertFullCoverage('wide render', verified);
-    console.log(record ? `wide render golden traces written (W=${WIDE_WIDTH})`
-                       : `PASS — all wide render goldens pixel-identical (W=${WIDE_WIDTH}, ${verified} demos)`);
     process.exit(0);
 }
 
@@ -639,113 +506,6 @@ if (potatoRender) {
     assertFullCoverage('[potato] render', verified);
     console.log(record ? `[potato] render golden traces written`
                        : `PASS — all [potato] render goldens pixel-identical (${verified} demos)`);
-    process.exit(0);
-}
-
-// ── sim-invariance gate (18.2c: --sim-wide) ─────────────────────────────────
-//
-// Runs sim mode with wide ENABLED (web_set_wide(854)) and verifies that the
-// sim traces are byte-exact matches of the existing standard sim goldens.
-// This proves sim-invariance: the game logic (P_Random, player position, etc.)
-// is not affected by the screenwidth change.
-//
-// Assertion: after the first web_frame(), web_screenwidth() > 320.
-// If this assertion fails, the deferred resize did not take effect and the
-// wide path was not exercised — the gate is invalid.
-//
-// golden: existing sim goldens (no auto-record; absent golden = error).
-
-if (simWide) {
-    let failures = 0;
-    let verified = 0;
-
-    for (const [wad, engineName, demos] of MATRIX) {
-        const path = join(root, 'wads/lib', wad);
-        if (!existsSync(path)) { console.log(`skip ${wad}: not fetched`); continue; }
-        const wadBytes = readFileSync(path);
-
-        for (const demo of demos) {
-            const goldenPath = join(goldenDir,
-                `${wad.replace('.wad', '')}-${demo}.json`);
-            if (!existsSync(goldenPath)) {
-                console.log(`FAIL ${wad.replace('.wad', '')}-${demo} sim-wide: golden absent`);
-                failures++;
-                continue;
-            }
-            const golden = JSON.parse(readFileSync(goldenPath));
-
-            let done = null;
-            const doom = await createDoom({
-                print: () => {},
-                printErr: t => { const m = /timed (\d+) gametics/.exec(t); if (m) done = +m[1]; },
-                onDoomError: msg => { if (!/timed \d+ gametics/.test(msg)) done = `error: ${msg}`; },
-            });
-            {
-                const p = doom._malloc(wadBytes.length);
-                doom.HEAPU8.set(wadBytes, p);
-                doom.ccall('web_register_file', null, ['string', 'number', 'number'],
-                    [engineName, p, wadBytes.length]);
-            }
-
-            const trace = [];
-            let screenwidthAfterFirstFrame = 0;
-            try {
-                doom.callMain(['-timedemo', demo, '-nodraw']);
-                doom._web_set_wide(WIDE_WIDTH);
-                let lastTic = -1;
-                let firstFrame = true;
-                for (let i = 0; i < 200000 && done === null; i++) {
-                    doom._web_frame();
-                    if (firstFrame) {
-                        screenwidthAfterFirstFrame = doom._web_screenwidth();
-                        firstFrame = false;
-                    }
-                    const tic = doom._web_gametic();
-                    if (tic !== lastTic) {
-                        trace.push(doom._web_state_hash() >>> 0);
-                        lastTic = tic;
-                    }
-                }
-            } catch (e) {
-                if (done === null) done = `threw: ${String(e).slice(0, 80)}`;
-            }
-
-            const name = `${wad.replace('.wad', '')}-${demo}`;
-            if (typeof done !== 'number') {
-                console.log(`FAIL ${name} sim-wide: ${done ?? 'never finished'}`);
-                failures++;
-                continue;
-            }
-
-            // Assert that wide was actually active during the run.
-            if (screenwidthAfterFirstFrame <= 320) {
-                console.log(`FAIL ${name} sim-wide: screenwidth assert failed ` +
-                    `(got ${screenwidthAfterFirstFrame}, expected >${320})`);
-                failures++;
-                continue;
-            }
-
-            if (golden.tics !== done) {
-                console.log(`FAIL ${name} sim-wide: ran ${done} gametics, golden ${golden.tics}`);
-                failures++;
-                continue;
-            }
-            let diverged = -1;
-            for (let i = 0; i < golden.trace.length; i++)
-                if (golden.trace[i] !== trace[i]) { diverged = i; break; }
-            if (diverged >= 0) {
-                console.log(`FAIL ${name} sim-wide: DESYNC at tic ${diverged} (sim not invariant under wide!)`);
-                failures++;
-            } else {
-                console.log(`PASS ${name} sim-wide: ${done} gametics, screenwidth=${screenwidthAfterFirstFrame}, byte-exact`);
-                verified++;
-            }
-        }
-    }
-
-    if (failures) { console.log(`${failures} sim-wide check(s) failed`); process.exit(1); }
-    assertFullCoverage('sim-wide', verified);
-    console.log(`PASS — sim invariant under wide (W=${WIDE_WIDTH}): ${verified} demos byte-exact`);
     process.exit(0);
 }
 

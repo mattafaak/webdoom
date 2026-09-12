@@ -57,8 +57,6 @@ export const defaultSettings = () => ({
     musicBackend: 'opl2',  // task 17.2b: 'opl2' | 'opl3' | 'gm'
     padDeadzone: 0.15,
     padTurnSpeed: 1.0,
-    wideMode: false,       // task 18.3: 854-px Hor+ wide render; false = 320 (default)
-    panini: false,         // task 18.3: cylindrical remap shader; OFF by default
 });
 
 // The shape localStorage is ALLOWED to have.  spec.md tenet 4 names "the
@@ -81,8 +79,6 @@ const SCHEMA = {
     alwaysRun:      { bool: true },
     smooth:         { bool: true },
     opl3:           { bool: true },
-    wideMode:       { bool: true },
-    panini:         { bool: true },
 };
 
 // KeyboardEvent.code is alphanumeric; anything else was not written by us.

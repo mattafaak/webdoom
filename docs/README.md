@@ -58,7 +58,6 @@ heading rather than the top.
 |---|---|
 | [decision-17.2a-soundfont-gm.md](decision-17.2a-soundfont-gm.md) | the SoundFont GM backend: why, and what is never bundled |
 | [decision-17.3-gus-flavor.md](decision-17.3-gus-flavor.md) | GUS flavour via DMXGUS, without the proprietary patches |
-| [decision-18.1-wide-limits.md](decision-18.1-wide-limits.md) | widescreen: the BSS arithmetic and the limits it forced |
 
 ## Hardware bring-ups
 
@@ -77,6 +76,7 @@ Read the banner first — all three carry a dated status.
 
 | document | what it is |
 |---|---|
+| [decision-18.1-wide-limits.md](decision-18.1-wide-limits.md) | widescreen: the BSS arithmetic and the limits it forced. **Archived 2026-09-12** — widescreen was removed; kept because its §5 arithmetic is what the revert was checked against |
 | [retrospective.md](retrospective.md) | the 2026-07-16 refinement-pass retrospective. Self-declared archive: its body describes that date, not this one |
 | [Plans-refinement-complete.md](Plans-refinement-complete.md) | the refinement initiative's task table, 26/26. Holds the regold lesson `tools/golden-provenance.mjs` cites by line |
 | [Plans-understanding-complete.md](Plans-understanding-complete.md) | phases 6–11, understanding-on-trial |

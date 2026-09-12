@@ -20,36 +20,6 @@
 extern int detailLevel;
 extern int screenblocks;
 
-//
-// web_set_wide (18.2c): deferred widescreen resize.
-//
-// Stores the requested pixel width in pending_wide_width; the change is
-// applied at the *start* of the next web_frame() call, before D_Display
-// runs.  This is the only safe point: the renderer tables (xtoviewangle,
-// distscale, scalelight, psprite scales, …) must be rebuilt in one
-// coherent batch before any column/plane drawing begins.
-//
-// Rules enforced here:
-//   - w > DOOM_ORIGWIDTH → setblocks=11 (full-width render, Hor+).
-//   - w == DOOM_ORIGWIDTH → setblocks=10 (320-px centre, vanilla).
-//   - ST_Start() is called after the width change so widget x-coords
-//     (ST_createWidgets) are re-initialised with the correct WIDESCREENDELTA.
-//   - Do NOT call web_set_wide() from inside D_DoomFrame / I_FinishUpdate.
-//
-static int pending_wide_width = 0;
-
-EMSCRIPTEN_KEEPALIVE void web_set_wide (int w)
-{
-    // Clamp: screenwidth beyond MAXSCREENWIDTH overruns the framebuffer
-    // and render tables.  JS now computes exact-fit widths from the window
-    // shape, so the bound must live here, not in the caller.
-    if (w < DOOM_ORIGWIDTH)
-        w = DOOM_ORIGWIDTH;
-    if (w > MAXSCREENWIDTH)
-        w = MAXSCREENWIDTH;
-    pending_wide_width = w;
-}
-
 int main (int argc, char** argv)
 {
     myargc = argc;
@@ -62,20 +32,6 @@ int main (int argc, char** argv)
 
 EMSCRIPTEN_KEEPALIVE void web_frame (void)
 {
-    // Deferred width change: consume BEFORE D_Display so render tables
-    // and ST widgets are rebuilt for the new screenwidth this frame.
-    if (pending_wide_width > 0)
-    {
-        int w = pending_wide_width;
-        pending_wide_width = 0;
-        screenwidth = w;
-        // setblocks=11 → scaledviewwidth=screenwidth (full Hor+ width).
-        // setblocks=10 → scaledviewwidth=320 (vanilla centre).
-        R_SetViewSize (w > DOOM_ORIGWIDTH ? 11 : 10, detailLevel);
-        // Re-initialise HUD widgets with the new WIDESCREENDELTA so
-        // health/ammo numerals appear inside the centred STBAR zone.
-        ST_Start ();
-    }
     D_DoomFrame ();
 }
 
@@ -291,14 +247,6 @@ EMSCRIPTEN_KEEPALIVE int web_state_hash (void)
 EMSCRIPTEN_KEEPALIVE int web_gametic (void)
 {
     return gametic;
-}
-
-// web_screenwidth (18.2c): returns the current runtime screenwidth.
-// Used by the sim-invariance gate to assert screenwidth > 320 when
-// wide mode is active (proving the deferred resize took effect).
-EMSCRIPTEN_KEEPALIVE int web_screenwidth (void)
-{
-    return screenwidth;
 }
 
 //

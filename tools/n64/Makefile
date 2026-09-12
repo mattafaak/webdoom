@@ -80,7 +80,6 @@ COMMON_FLAGS := -mabi=o64 -march=vr4300 -mtune=vr4300 \
                 -O2 \
                 -D__BIG_ENDIAN__ \
                 -DNORMALUNIX \
-                -DMAXSCREENWIDTH=320 \
                 -DN64_ZONE_KB=$(N64_ZONE_KB) \
                 -DN64_WAD_OFFSET=$(N64_WAD_OFFSET) \
                 -DN64_WAD_LEN=$(N64_WAD_LEN) \

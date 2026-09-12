@@ -10,7 +10,6 @@ import { loadPersisted, startSync } from './persist.js';
 import { wadCacheGet, wadCachePut } from './wad-cache.js';
 import { libraryGetBytes } from './wad-library.js';
 import { createScrubberUI } from './scrubber.js';
-import { wideWidth, paniniStrength } from './wide-utils.js';
 import { setStatus as status, loading } from './ui.js';
 
 // The engine identifies games by 1993 filenames. Ultimate Doom must be
@@ -314,27 +313,13 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     status('');
     canvas.focus();
     const input = createInput(doom, canvas, loadSettings());
-    const settingsUI = createSettingsUI(input, doom, renderer);
+    const settingsUI = createSettingsUI(input, doom);
     doom._web_set_smooth(input.settings.smooth ? 1 : 0);
 
-    // task 18.3 / wide-fix: aspect-bucket selection — apply persisted wide mode on boot.
-    // web_set_wide() is deferred; web_frame() consumes it on the first tick.
-    // renderW tracks the actual engine screenwidth after each web_frame() call.
-    const SCREEN_H = 200; // DOOM's native framebuffer height (constant)
-    let renderW = 320;
-    // Exact-fit width (wide-fix): same wideWidth() as the settings toggle
-    // path — a hardcoded 854 here made every reload re-apply the extreme
-    // ultrawide bucket regardless of display shape.
-    if (input.settings.wideMode) {
-        const fitW = wideWidth();
-        if (fitW > 320) doom._web_set_wide(fitW);
-    }
-
-    // Compute Panini/cylindrical remap strength from current aspect ratio.
-    // 0.0 at 4:3 or narrower; 0.4 at 21:9 or wider.  Returns 0 when disabled.
-
-    // Apply initial panini state (OFF by default per settings default).
-    renderer.setPaniniStrength(paniniStrength(renderW, input.settings.panini));
+    // DOOM's framebuffer is 320x200 and does not change size.  Task 18.3 made
+    // the width runtime-variable for Hor+ widescreen; that is gone, so the
+    // frame loop no longer has to watch web_screenwidth() for a resize.
+    const SCREEN_W = 320, SCREEN_H = 200;
 
     // Apply persisted music backend (task 17.1: OPL2/OPL3; task 17.2b: GM).
     // musicBackend supersedes the legacy opl3 bool; fall back gracefully.
@@ -425,21 +410,6 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
             if (running) endSession(`engine error: ${err?.message ?? String(err)}`);
             return;
         }
-        // task 18.3: detect deferred resize consumed by web_frame() this tick.
-        // web_screenwidth() returns the new screenwidth after the deferred
-        // pending_wide_width is applied at the start of web_frame().
-        const newW = doom._web_screenwidth();
-        if (newW !== renderW) {
-            renderW = newW;
-            renderer.resize(renderW, SCREEN_H);
-            canvas.classList.toggle('wide', renderW > 320);
-            // Display aspect for W columns × 200 rows at DOOM's 1:1.2 pixel
-            // aspect = W/240.  The .wide CSS rule reads this var; without it
-            // the rule was hardcoded to 854/200, which squashed narrower
-            // render widths into a letterboxed strip (field report).
-            canvas.style.setProperty('--wide-aspect', renderW / 240);
-            renderer.setPaniniStrength(paniniStrength(renderW, input.settings.panini));
-        }
         // Test-harness hook: set window._doomFrameHook = fn() before boot
         // to intercept each frame (e.g. for per-tic hash collection in CDP
         // browser tests).  No-op in production (window._doomFrameHook is
@@ -447,7 +417,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
         window._doomFrameHook?.();
         const v = doom._web_palette_version();
         renderer.draw(
-            doom.HEAPU8.subarray(fb, fb + renderW * SCREEN_H),
+            doom.HEAPU8.subarray(fb, fb + SCREEN_W * SCREEN_H),
             doom.HEAPU8.subarray(pal, pal + 768),
             v !== palVersion,
         );
