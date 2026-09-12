@@ -2,6 +2,16 @@
 
 **Task 13.5 — The north star as arithmetic.**
 **Task 20.1 — v2 rows: 386 chase budget, N64 VR4300, Genesis+Sega CD (parked), sub-100 MHz MCU.**
+
+> **RP2040 row, parked 2026-09-12 (task 25.5).** The atlas cites kilograham's
+> rp2040-doom as a proven-sufficient anchor, which is true of *that* port and not
+> of this one. webdoom's own measured footprint (20.7a) is **1,082,104 B of SRAM
+> against 270,336 B available — 4.00× over**, ~1,565 KB over with a real zone,
+> and a WHD gzip WAD of 5,536 KB against 1,761 KB of flash. 20.7b (the measured
+> floor clock) is therefore parked on arithmetic, not on hardware: buying a board
+> does not unblock a build that does not fit. Unblocking needs the C4–C6 BSS
+> diets, a WHD-class asset pipeline, and probably external PSRAM.
+
 Commit date: 2026-07-18 (13.5); 2026-07-21 (20.1). All inputs are pre-existing measured artifacts;
 this document does arithmetic, not new measurements.
 

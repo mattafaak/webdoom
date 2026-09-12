@@ -36,7 +36,7 @@ silent regold. Every new client module updates the SHELL precache
 | 20.4c | N64 ares 13/13 demo gate: automate 13/13 demo runs under ares; per-tic sim hashes verified against 11.1a freestanding golden traces; gate exits 0 on all-match, non-zero on any divergence | tools/n64/run-n64-demos.sh committed; exits 0 with 13/13 bit-identical sim-hash matches vs 11.1a goldens; drift-proved: corrupt a golden hash → FAIL naming it, restore → PASS; verify-all green | 20.4b | cc:TODO |
 | 20.4d | N64 SummerCart64 hardware evidence + fps: load ROM on real N64 via SummerCart64; capture UART log; compare against ares expected output; measure fps on hardware + ares (both committed) | committed UART capture (tools/n64/sc64-uart.log) showing D_DoomMain + at least one demo completing; fps committed for both ares and hardware; any ares divergence filed as FINDING; partial filed as partial (no fabrication) | 20.4c | cc:TODO |
 | 20.5 | **DECOMPOSED** N64 sub-phase B (the first): RDP-rasterized columns/spans while the playsim stays bit-exact — no demo-exact vanilla port has ever shipped RDP-assisted rendering | (superseded — see 20.5a–20.5b) | 20.4 | cc:分割 |
-| 20.5a | N64 RDP renderer + ares gate: implement RDP-rasterized column/span rendering alongside existing software path; enable via `WEBDOOM_RDP_RENDER` build flag; playsim untouched — ares 13/13 sim gate must still pass | ares 13/13 sim gate (20.4c script) exits 0 with RDP path enabled (sim hashes unchanged — render path does not affect playsim); own render golden set committed for RDP visual output (not vanilla); engine/core diff vs master = 0 lines (RDP path in tools/n64/ shim only) | 20.4d | cc:TODO |
+| 20.5a | **Depends corrected 25.4a: was 20.4d (hardware), now 20.4c.** N64 RDP renderer + ares gate: implement RDP-rasterized column/span rendering alongside existing software path; enable via `WEBDOOM_RDP_RENDER` build flag; playsim untouched — ares 13/13 sim gate must still pass | ares 13/13 sim gate (20.4c script) exits 0 with RDP path enabled (sim hashes unchanged — render path does not affect playsim); own render golden set committed for RDP visual output (not vanilla); engine/core diff vs master = 0 lines (RDP path in tools/n64/ shim only) | 20.4c | cc:TODO |
 | 20.5b | N64 RDP hardware speedup measurement: run sub-phase A ROM and sub-phase B ROM on real N64 via SummerCart64; measure fps for both; commit comparison | committed fps comparison (tools/n64/rdp-speedup.md): sub-phase A fps vs sub-phase B fps on hardware (≥1 map/area); speedup % stated; FINDING filed if RDP is slower or within noise; no record claim — the numbers are the deliverable | 20.5a | cc:TODO |
 | 20.6 | **DECOMPOSED** 386 test bed: 86Box bench harness (cycle-configurable 386DX-40 profile) + icount-scoreboard reduction campaign toward the 1,142,857 cycles/tic budget; candidates flow from 20.2/20.3 | (superseded — see 20.6a–20.6b) | 20.1b | cc:分割 |
 | 20.6a | 86Box harness: configure 86Box with cycle-configurable 386DX-40 profile; automated boot to DOS + DOOM launch + icount capture via 86Box debug port; red-provable | tools/386/run-386box.sh committed; exits 0 on successful DOOM icount run (cycles/tic received + printed); exits non-zero on boot/launch failure; drift-proved: corrupt boot image → FAIL, restore → PASS; 386DX-40 baseline cycles/tic committed | 20.1b | cc:完了 [bed8573] |
@@ -215,6 +215,49 @@ Suite: **74 legs, 74 passed, 0 skipped** (the 74th is `arm-cross`, see the pi5 m
 | 25.2 | `web.h` becomes the contract it is designated to be (5 of ~45 exports, wrong arity, 4 forked copies) | one header, correct arity, bounds contracts stated | 23.x | cc:TODO |
 | 25.3 | Duplication cleanup (`paniniStrength`, the two ring-buffer worklets, attachRelay/attachSpectate) | one definition each; gates green | 25.1 | cc:TODO |
 | 25.4 | Fix Phase 20's dependency defect (20.5a gated on hardware) and close 20.4c (`-timedemo` does not engage on N64) | 20.5a re-pointed; one demo trace bit-identical, then 13/13 | 22.1 | cc:TODO |
-| 25.5 | Decide 20.6b and 20.7b explicitly | written verdict; no task sits TODO without a stated blocker | 22.1 | cc:TODO |
+| 25.5 | Decide 20.6b and 20.7b explicitly | verdicts written below: 20.7b PARKED on arithmetic, 20.6b PURSUABLE with a named plan | 22.1 | cc:完了 [this commit] |
 
 Suite: **77 legs, 77 passed, 0 skipped**.
+
+## 25.5 verdicts — 20.6b and 20.7b
+
+These sat in the same TODO bucket while being stuck in completely different ways.
+
+### 20.7b (RP2040 floor clock): **PARKED on arithmetic**, per the Sega CD precedent
+
+The deliverable is "the measured minimum clock at which 13/13 demos stay
+tic-exact". You cannot measure a clock for a build that does not fit, and it
+misses by a factor of four:
+
+| | measured |
+|---|---|
+| SRAM needed (.data + .bss) | 1,082,104 B |
+| RP2040 SRAM available | 270,336 B (264 KB) |
+| deficit | 811,768 B — **4.00×** |
+| deficit with a real zone (1,028 KB min) | ~1,565 KB |
+| WHD gzip WAD vs flash | 5,536 KB vs 1,761 KB |
+
+**Buying hardware does not unblock this**, which is why it is worth writing
+down: the blocker is a footprint, not an absence. `rp2040js` is installed and
+equally blocked (ELF at 0x8000 rather than XIP, plus the same overflow).
+
+What would unblock it, in order: the BSS diets already sitting in
+`docs/optimization-ledger.md` as C4–C6 (MAXVISPLANES, MAXDRAWSEGS, MAXOPENINGS),
+a WHD-class asset pipeline, and probably external PSRAM. That is a phase, not a
+task.
+
+### 20.6b (386 icount scoreboard): **PURSUABLE** — not blocked on anything scarce
+
+The harness boots 86Box headlessly and the BIOS ROMs are fetchable. What is
+missing is two freely-obtainable assets nobody has fetched: a FreeDOS disk image
+and the DOS `DOOM.EXE` (shareware v1.9 **is** freely redistributable). Unstarted
+work with a known path, not an infeasibility.
+
+Named plan: build a FreeDOS 1.3 HDD image with `mtools`, place `DOOM.EXE` and a
+`timedemo.bat` in `C:\DOOM\`, boot under the existing `tools/386/run-386box.sh`,
+capture cycles/tic from the debug port, and fill in the atlas row.
+
+**Worth stating before anyone spends a day on it**: this measures *id's DOS
+binary* on a 386 as a baseline for the atlas row. It does not measure this
+codebase, and no change here can move the number. The atlas comparison is the
+whole of its value.
