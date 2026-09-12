@@ -40,6 +40,7 @@ REPO="$PWD"
 
 TIER=full
 PERF=0
+NO_SLOW=0
 REQUIRE_COMPLETE=0
 ONLY=()
 LIST=0
@@ -56,6 +57,13 @@ while [ $# -gt 0 ]; do
         # is the whole difference between a gate that is opt-in and a gate that
         # does not exist.
         --perf)             PERF=1; shift ;;
+        # n64-demos is 435 s of an 1,129 s suite -- 39% of the whole run in one
+        # leg, on a toolchain almost no host has.  --no-slow is for iterating;
+        # it is NOT a quieter default.  The leg still SKIPs with its reason
+        # named and counted, and --require-complete still fails on it, because
+        # a shorter run is exactly the thing that must not be mistaken for a
+        # complete one.
+        --no-slow)          NO_SLOW=1; shift ;;
         --full)             TIER=full; shift ;;
         --only)             ONLY+=("$2"); shift 2 ;;
         --list)             LIST=1; shift ;;
@@ -114,6 +122,7 @@ have_baseline(){ [ -f "tools/golden/browser-pipeline-$(hostname).json" ]; }
 SHARED_UP=0
 have_shared()  { [ "$SHARED_UP" = "1" ]; }
 have_perf()    { [ "$PERF" = "1" ]; }
+have_notslow() { [ "$NO_SLOW" = "0" ]; }
 # PRESENT is not the same as CURRENT, and for the compile-time variants the
 # difference was load-bearing: `build-fakeflat` needs emsdk while
 # `render-fakeflat` needed only `wad`, so on a host without emsdk the build leg
@@ -138,6 +147,7 @@ need_reason() {   # need_reason <tag> -> prints why it is unmet
         emsdk)    echo "emsdk not found (run: tools/setup-emsdk.sh)" ;;
         baseline) echo "no browser-pipeline baseline for host $(hostname)" ;;
         shared)   echo "shared browser server on 8668 not started" ;;
+        slow)     echo "--no-slow given: this leg is 39% of the suite runtime (measured 435 s of 1,129 s)" ;;
         perf)     echo "perf tier not requested (run: tools/run-tests.sh --perf; ~30 s measured, needs wbox and tank up)" ;;
         fresh-*)  echo "build-${1#fresh-} absent or stale (node tools/artifact-freshness.mjs build-${1#fresh-})" ;;
         *)        echo "unmet prerequisite '$1'" ;;
@@ -149,7 +159,7 @@ need_met() {
         zig) have_zig ;; qemuarm) have_qemuarm ;; clangfmt) have_clangfmt ;;
         n64) have_n64 ;;
         browser) have_browser ;; firefox) have_firefox ;; emsdk) have_emsdk ;;
-        baseline) have_baseline ;; shared) have_shared ;; perf) have_perf ;;
+        baseline) have_baseline ;; shared) have_shared ;; perf) have_perf ;; slow) have_notslow ;;
         fresh-*) have_fresh "build-${1#fresh-}" ;;
         *) return 1 ;;
     esac
@@ -459,7 +469,7 @@ leg arm-cross       zig,qemuarm,wad "freestanding core 13/13 on 32-bit ARM" -- b
 # for the 13 demos (23:30:40 -> 23:38:59, 2026-09-11) -- the longest leg in the
 # suite by a wide margin, and it is here rather than in the out-of-suite
 # registry because it is now green and a gate nobody runs rots.
-leg n64-demos       n64,wad    "13/13 demo sim-hashes on emulated N64 (~8 min)" -- bash tools/n64/run-n64-demos.sh
+leg n64-demos       n64,wad,slow    "13/13 demo sim-hashes on emulated N64 (~8 min)" -- bash tools/n64/run-n64-demos.sh
 leg demo-verify-cli build,wad  "the shipped 19.4 CLI itself, --all mode"     -- node tools/demo-verify.mjs --all
 
 # ── netcode determinism ──────────────────────────────────────────────────────
