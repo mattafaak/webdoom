@@ -174,24 +174,30 @@ const val = sel => ev(`document.querySelector('#settings ${sel}')?.value ?? null
 // crosshair, stats and demo-timer overlays stayed on screen, and wide mode
 // stayed on with its checkbox reading off.  The panel said one thing and the
 // game did another.
+//
+// The crosshair was this section's subject because an OVERLAY is the loudest
+// case: the box says off and the thing is still on the screen.  The QoL
+// overlays are gone, so the subject is now `alwaysRun` -- no overlay to look
+// at, but the same question: does Reset reach the value in force, or only the
+// widget?  The localStorage read-back is what answers it.
 {
     if (!await bootWith({})) hardFail('boot timeout with default settings');
     if (!await openPanel()) hardFail('settings panel would not open (reset case)');
 
-    await ev(`(() => { const c = document.querySelector('#settings #showCrosshair');
+    await ev(`(() => { const c = document.querySelector('#settings #arun');
         c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); return 1; })()`);
     await sleep(200);
-    const onNow = await ev(`document.getElementById('qol-crosshair')?.hidden === false`);
-    check('CONTROL: ticking the crosshair box shows the crosshair',
-        onNow === true, `#qol-crosshair hidden=${!onNow}`);
+    const live = await ev(`(() => { try { return JSON.parse(localStorage.getItem('webdoom.input') || '{}').alwaysRun; } catch { return 'unreadable'; } })()`);
+    check('CONTROL: ticking a box changes the value in force',
+        live === true, `settings.alwaysRun = ${JSON.stringify(live)}`);
 
     await ev(`document.querySelector('#settings #reset').click()`);
     await sleep(300);
-    const boxAfter = await ev(`document.querySelector('#settings #showCrosshair')?.checked`);
-    const overlayAfter = await ev(`document.getElementById('qol-crosshair')?.hidden`);
+    const boxAfter = await ev(`document.querySelector('#settings #arun')?.checked`);
+    const storedAfter = await ev(`(() => { try { return JSON.parse(localStorage.getItem('webdoom.input') || '{}').alwaysRun; } catch { return 'unreadable'; } })()`);
     check('Reset defaults clears the checkbox', boxAfter === false, `checked=${boxAfter}`);
-    check('Reset defaults also takes the overlay off the screen',
-        overlayAfter === true, `#qol-crosshair hidden=${overlayAfter}`);
+    check('Reset defaults also reaches the value in force, not just the widget',
+        storedAfter === false, `settings.alwaysRun = ${JSON.stringify(storedAfter)}`);
 }
 
 // ── 4. rebinding: Escape must cancel, not become the binding ─────────────────

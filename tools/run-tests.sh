@@ -548,7 +548,6 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
     leg browser-ierror        browser,build,wad,shared "I_Error surfaces, no wedge"            -- node tools/browser-ierror-test.mjs "$U"
     leg browser-rafdeath      browser,build,wad,shared "rAF death recovery"                    -- node tools/browser-rafdeath-test.mjs "$U"
     leg browser-wide          browser,build,wad,shared "widescreen toggle"                     -- node tools/browser-wide-toggle-test.mjs "$U"
-    leg browser-qol           browser,build,wad,shared "QoL batch + F8 vanilla toggle"         -- node tools/browser-qol-test.mjs "$U"
     leg browser-wadimport     browser,build,wad,shared "user WAD import (16.6a)"               -- node tools/browser-wadimport-test.mjs "$U"
     leg browser-mp-gating     browser,build,wad,shared "local-WAD MP gating (16.6b)"           -- node tools/browser-mp-gating-test.mjs "$U"
     leg browser-sf2           browser,build,wad,shared "SoundFont UX (17.2b)"                  -- node tools/browser-sf2-test.mjs "$U"

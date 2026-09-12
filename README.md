@@ -64,7 +64,7 @@ the game/map/skill/mode; anyone hits START; 3-2-1, everyone's in.
 ## Tests
 
 ```sh
-tools/run-tests.sh            # everything: 89 legs, ~19 min
+tools/run-tests.sh            # everything: 88 legs, ~19 min
 tools/run-tests.sh --quick    # no WADs, no build, no browser — what CI runs
 tools/run-tests.sh --list     # the leg registry
 ```
@@ -78,7 +78,7 @@ that table, and `--require-complete` turns any skip into a failure.
 IWADs and runs the `--quick` tier — lint, the doc-drift gate, the state-machine
 and precache checks, the gate census, and the three fuzz suites. Everything that
 needs a WAD, a built engine or a browser (the sim and render goldens, netplay,
-the ASan and cross-architecture legs, the 21 browser legs) runs locally and says
+the ASan and cross-architecture legs, the 20 browser legs) runs locally and says
 so. The workflow prints the list it did not cover.
 
 - **lint**: clang-format over the web platform layer + `node --check` over

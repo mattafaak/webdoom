@@ -12,7 +12,10 @@
 //   * qol.js's rAF loop, which stopTickIfIdle() only stops when BOTH live
 //     features are off — with "level stats" on it ran forever, its exceptions
 //     swallowed by a bare catch — plus five nodes appended to #stage
-//   * a second #settings panel sharing the first one's id
+//     (qol.js was deleted in round 7 with the QoL overlays)
+//   * a second #settings panel sharing the first one's id (settings.js was
+//     deleted in round 7; its counter went with it rather than being left to
+//     pass over a selector that can no longer match — see below)
 //   * a program, two shaders, a VBO and two textures on the same GL context,
 //     since getContext returns the SAME context for the same canvas
 //
@@ -169,7 +172,6 @@ await ev(`(() => {
 
 const snapshot = () => ev(`(() => ({
     listeners: [...window.__lt].reduce((n, [, v]) => n + v, 0),
-    settingsPanels: document.querySelectorAll('#settings').length,
     stageKids: document.getElementById('stage')?.childElementCount ?? -1,
     liveTimers: [...Object.values(window.__tmr)].reduce((n, v) => n + v, 0),
     timersCreated: window.__tcreated(),
@@ -216,7 +218,7 @@ for (let cycle = 1; cycle <= 3; cycle++) {
     await sleep(600);
     const s = await snapshot();
     marks.push(s);
-    console.log(`  cycle ${cycle}: net listeners ${s.listeners}, #settings ${s.settingsPanels}, `
+    console.log(`  cycle ${cycle}: net listeners ${s.listeners}, `
               + `#stage children ${s.stageKids}, net GL objects ${s.glObjects} `
               + `(${s.glBreakdown}; ${s.glCreated} created so far, renderer ${s.rendererKind}), `
               + `live timers ${s.liveTimers} (${s.timersCreated} created)`);
@@ -278,11 +280,13 @@ for (const [k, label] of [['listeners', 'net event listeners'],
     if (g > 0) { console.error(`FAIL: ${label} grew by ${g} between cycle 2 and cycle 3 — accumulating per boot`); bad++; }
     else console.log(`  ok  ${label} stable across cycles (${marks[1][k]} -> ${marks[2][k]})`);
 }
-if (marks[2].settingsPanels > 1) { console.error(`FAIL: ${marks[2].settingsPanels} #settings panels — duplicate ids`); bad++; }
-else console.log(`  ok  #settings panels: ${marks[2].settingsPanels}`);
-
+// The '#settings panels' assertion lived here and was REMOVED with settings.js
+// rather than left in place: `querySelectorAll('#settings')` can no longer
+// match anything, so it would have read "ok  #settings panels: 0" forever
+// while measuring nothing.  A gate that cannot fail is not a gate, and the
+// duplicate-id leak it guarded cannot recur for an element that is not created.
 if (bad) fail(`${bad} teardown leak(s)`);
-console.log('PASS — browser-teardown-test: play->quit->play x3, 6 measured dimensions stable '
-          + '(event listeners, #stage children, #settings panels, GL objects, live timers, '
+console.log('PASS — browser-teardown-test: play->quit->play x3, 5 measured dimensions stable '
+          + '(event listeners, #stage children, GL objects, live timers, '
           + 'wasm instances released) + no launcher timer during gameplay');
 done(0);

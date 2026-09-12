@@ -54,9 +54,9 @@ void web_net_setup (int player, int numplayers, int ingamemask);
 // responsibility.
 void web_net_bundle (int tic, ticcmd_t* cmds, byte* ingame, int fabmask);
 
-// out must point to at least 5 ints (level) / 9 ints (demo).  Neither takes a
-// size, so neither can check.
-void web_level_state (int* out);
+// out must point to at least 5 ints.  It does not take a size, so it cannot
+// check.  (web_level_state sat beside this and filled 9; it fed the QoL DOM
+// overlays, which are gone, and it was that header's only consumer.)
 void web_demo_state (int* out);
 
 // out must hold nframes * 2 floats (interleaved stereo).  nframes is NOT

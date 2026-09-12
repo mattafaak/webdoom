@@ -16,8 +16,9 @@
 //
 //   * --user-data-dir set by 6 of 21.  The other 15 shared Chrome's DEFAULT
 //     profile, so localStorage, IndexedDB and service-worker caches persisted
-//     across legs within a single suite run -- and persist-test.mjs and
-//     browser-qol-test.mjs both assert over exactly that state.
+//     across legs within a single suite run -- and persist-test.mjs asserts
+//     over exactly that state.  (browser-qol-test.mjs did too, until the QoL
+//     overlays it covered were deleted.)
 //
 //   * exit/SIGINT/SIGTERM handlers registered by 7 of 21.  README names
 //     orphaned Chrome processes exhausting /tmp as the original cause of the

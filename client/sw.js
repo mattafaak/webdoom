@@ -1,7 +1,7 @@
 // webdoom service worker: WADs are content-hashed (?v=sha8) → cache-first
 // forever; everything else network-first with cache fallback, so repeat
 // loads are instant and single player works offline once a WAD is cached.
-const SHELL = 'webdoom-shell-v13'; // v13: exact-fit wide width + aspect-correct canvas CSS
+const SHELL = 'webdoom-shell-v14'; // v14: qol.js removed (QoL DOM overlays deleted)
 const WADS = 'webdoom-wads-v1';
 
 // The app shell, one entry per file.  tools/check-sw-precache.mjs parses THIS
@@ -13,7 +13,7 @@ const SHELL_FILES = [
     '/js/menu.js', '/js/doomfont.js', '/js/persist.js', '/js/wad-cache.js',
     '/js/fire.js', '/js/countdown.js',
     '/js/wad-import.js', '/js/wad-library.js', '/js/sf2-library.js',
-    '/js/qol.js', '/js/demo.js', '/js/scrubber.js', '/js/wide-utils.js', '/js/idb.js', '/js/ui.js',
+    '/js/demo.js', '/js/scrubber.js', '/js/wide-utils.js', '/js/idb.js', '/js/ui.js',
     '/engine/doom.js', '/engine/doom.wasm',
 ];
 

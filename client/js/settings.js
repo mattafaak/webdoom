@@ -19,7 +19,7 @@ const computePaniniStrength = paniniStrength;
 // wideWidth() imported from wide-utils.js — single source of truth
 // for the aspect→width mapping (shared with main.js boot path).
 
-export function createSettingsUI(input, doom, renderer, qol) {
+export function createSettingsUI(input, doom, renderer) {
     // Teardown ledger (task 23.7b) — see input.js for why.
     const { on, off: _teardownAll } = teardownLedger();
 
@@ -73,11 +73,6 @@ export function createSettingsUI(input, doom, renderer, qol) {
         <label><input type="checkbox" id="smooth" ${s.smooth ? 'checked' : ''}> Smooth rendering (uncapped fps)</label>
         <label><input type="checkbox" id="wideMode" ${s.wideMode ? 'checked' : ''}> Wide mode (aspect-adaptive Hor+) — reload persists</label>
         <label><input type="checkbox" id="panini" ${s.panini ? 'checked' : ''}> Cylindrical remap (Panini) — wide-angle only, OFF by default</label>
-        <hr style="border-color:#400;margin:.5rem 0">
-        <label><input type="checkbox" id="showFullscreen" ${s.showFullscreen ? 'checked' : ''}> Fullscreen button (hover top edge) — OFF by default</label>
-        <label><input type="checkbox" id="showCrosshair" ${s.showCrosshair ? 'checked' : ''}> Crosshair overlay — OFF by default</label>
-        <label><input type="checkbox" id="showStats" ${s.showStats ? 'checked' : ''}> Level stats widget (K/I/S + time) — OFF by default</label>
-        <label><input type="checkbox" id="showDemoTimer" ${s.showDemoTimer ? 'checked' : ''}> Demo timer + progress bar — OFF by default</label>
         <label>Music backend
           <select id="musicBackend">
             <option value="opl2"${backend === 'opl2' ? ' selected' : ''}>OPL2 (mono, default, offline-safe)</option>
@@ -165,19 +160,6 @@ export function createSettingsUI(input, doom, renderer, qol) {
             render();
         };
         panel.querySelector('#pturn').oninput = e => { s.padTurnSpeed = +e.target.value; saveSettings(s); };
-        // task 19.1: QoL feature toggles — delegate to qol API so overlays update live.
-        panel.querySelector('#showFullscreen').onchange = e => {
-            qol?.setShowFullscreen(e.target.checked);
-        };
-        panel.querySelector('#showCrosshair').onchange = e => {
-            qol?.setShowCrosshair(e.target.checked);
-        };
-        panel.querySelector('#showStats').onchange = e => {
-            qol?.setShowStats(e.target.checked);
-        };
-        panel.querySelector('#showDemoTimer').onchange = e => {
-            qol?.setShowDemoTimer(e.target.checked);
-        };
         panel.querySelector('#reset').onclick = () => {
             Object.assign(s, defaultSettings());
             saveSettings(s);
@@ -209,10 +191,6 @@ export function createSettingsUI(input, doom, renderer, qol) {
             doom?._web_set_opl_mode?.(s.opl3 ? 1 : 0);
             window.doomAudio?.setGmMode?.(false, null);
         }
-        qol?.setShowFullscreen(s.showFullscreen);
-        qol?.setShowCrosshair(s.showCrosshair);
-        qol?.setShowStats(s.showStats);
-        qol?.setShowDemoTimer(s.showDemoTimer);
     }
 
     function toggle() {

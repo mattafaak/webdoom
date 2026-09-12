@@ -59,10 +59,6 @@ export const defaultSettings = () => ({
     padTurnSpeed: 1.0,
     wideMode: false,       // task 18.3: 854-px Hor+ wide render; false = 320 (default)
     panini: false,         // task 18.3: cylindrical remap shader; OFF by default
-    showFullscreen: false, // task 19.1: hover fullscreen button; OFF by default
-    showCrosshair: false,  // task 19.1: static crosshair overlay; OFF by default
-    showStats: false,      // task 19.1: level time/stats widget; OFF by default
-    showDemoTimer: false,  // task 19.1: demo timer + progress bar; OFF by default
 });
 
 // The shape localStorage is ALLOWED to have.  spec.md tenet 4 names "the
@@ -87,10 +83,6 @@ const SCHEMA = {
     opl3:           { bool: true },
     wideMode:       { bool: true },
     panini:         { bool: true },
-    showFullscreen: { bool: true },
-    showCrosshair:  { bool: true },
-    showStats:      { bool: true },
-    showDemoTimer:  { bool: true },
 };
 
 // KeyboardEvent.code is alphanumeric; anything else was not written by us.

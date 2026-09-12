@@ -10,7 +10,7 @@
 //   * it quoted README as "351 KB of wasm"; README said 349
 //   * rme-002 said Firefox was untested in CI; a firefox-smoke leg had existed
 //     since 15.2
-//   * rme-003 said "no test flips F8"; browser-qol-test presses it and asserts
+//   * rme-003 said "no test flips F8"; browser-qol-test pressed it and asserted
 //     the panel opens
 //   * rme-005 flagged a sw.js precache bug that had been fixed
 //   * rme-010 tracked a T07 flake fixed in 9ed9671

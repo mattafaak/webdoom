@@ -11,7 +11,8 @@
 //   at module scope, which is a different bug: it caches a null forever if it
 //   loads first.
 //
-//   The teardown ledger stood verbatim in input.js, settings.js and qol.js.
+//   The teardown ledger stood verbatim in input.js, settings.js and qol.js
+//   (qol.js is gone; the ledger it needed is why ui.js owns one copy).
 //   Round 5 added it to stop each boot leaving another live handler on window;
 //   a fourth module needing it would have had to copy it correctly.
 
