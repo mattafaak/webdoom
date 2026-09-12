@@ -7,8 +7,7 @@ import { join, normalize, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createGame } from './game.js';
 import { uiAssets } from './ui-assets.js';
-import { putDemo, getDemo, PER_DEMO_CAP, storeStats,
-         putAttestation, getAttestation, ATTEST_BODY_CAP } from './demo-store.js';
+import { putDemo, getDemo, PER_DEMO_CAP, storeStats } from './demo-store.js';
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const HOST = process.env.DOOM_HOST ?? '0.0.0.0';
@@ -103,14 +102,6 @@ function send(res, code, body, headers = {}) {
 // Logs to stderr so stdout (used by some callers for structured output) is unaffected.
 const LOG_REQ = !!process.env.LOG_REQUESTS;
 
-// Rate limit flag for POST /api/demos/:id/verify (task 19.4).
-// Only one verify request may be in flight at a time (returns 429 otherwise).
-let verifyInFlight = false;
-let verifyTimer = null;
-// Generous for a <=4 MiB attestation on a LAN; short enough that a silent
-// client cannot hold the single verify slot for Node's 300 s requestTimeout.
-const VERIFY_BODY_TIMEOUT_MS = 15_000;
-
 const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
     let path = normalize(url.pathname);
@@ -180,7 +171,10 @@ const server = createServer((req, res) => {
     // anywhere: not in server/, not in client/, not in tools/.  So the one
     // instrument built to show the store's footprint was not reachable, and the
     // attestation leak (task A3) grew with nothing able to observe it.  A store
-    // with no readout is a store nobody can prove is bounded.
+    // with no readout is a store nobody can prove is bounded.  (The attestation
+    // store itself is gone -- it was a CLI verification workflow wired into the
+    // live multiplayer server with no product caller -- but the demo store it
+    // sat beside is still here, and still needs the readout.)
     //
     // Counts and byte totals only — no ids, no content, nothing that would let
     // an unauthenticated LAN caller enumerate what other people have uploaded.
@@ -204,109 +198,6 @@ const server = createServer((req, res) => {
         res.end(rec.bytes);
         return;
     }
-    // ── POST /api/demos/:id/verify — attestation store (task 19.4) ──────────────
-    //
-    // Design choice (b): the endpoint stores and retrieves per-tic attestations
-    // (the full trace hash array produced by tools/demo-verify.mjs running on
-    // the client).  The server does NOT replay the demo (no WASM engine).
-    // This keeps the endpoint lightweight and avoids blocking the server event
-    // loop with a CPU-bound wasm replay.
-    //
-    // POST /api/demos/:id/verify
-    //   Body: JSON { tics: number, trace: number[] }  (max ATTEST_BODY_CAP bytes)
-    //   Returns 200 { stored: true, id }
-    //   Returns 400 on bad id format, bad JSON body, or trace validation failure
-    //   Returns 404 if the demo is not in the store
-    //   Returns 413 if body exceeds ATTEST_BODY_CAP
-    //   Returns 429 if another verify request is in flight (1-concurrent limit)
-    //
-    // GET /api/demos/:id/verify
-    //   Returns 200 { tics, trace, storedAt } if attestation exists
-    //   Returns 404 if no attestation stored for this id
-    {
-        const vMatch = path.match(/^\/api\/demos\/([0-9a-f]{64})\/verify$/);
-        if (vMatch) {
-            const vid = vMatch[1];
-            if (req.method === 'GET') {
-                const attest = getAttestation(vid);
-                if (!attest) return send(res, 404, 'no attestation stored for this demo');
-                // trace is a Uint32Array (task A3).  JSON.stringify would render
-                // a typed array as an OBJECT -- {"0":123,"1":456} -- silently
-                // changing this endpoint's contract, so build the array body
-                // from join() instead.  tics and storedAt are validated
-                // non-negative integers, so interpolating them is safe.
-                return send(res, 200,
-                    `{"tics":${attest.tics},"trace":[${attest.trace.join(',')}],`
-                    + `"storedAt":${attest.storedAt}}`,
-                    { 'content-type': 'application/json' });
-            }
-            if (req.method !== 'POST') return send(res, 405, 'method not allowed');
-
-            // Rate limit: 1 concurrent verify operation.
-            if (verifyInFlight) return send(res, 429, 'verify in progress — try again');
-            verifyInFlight = true;
-
-            // This flag is a concurrency LOCK, and it was released only from
-            // req 'end' and req 'error'.  A client that announces a
-            // Content-Length and then simply stops writing -- WITHOUT closing
-            // the socket -- fires neither, so the lock was held and every later
-            // verify got 429 from one idle connection.  Reproduced 2026-09-11
-            // (task 23.6); bounded in practice only by Node's 300 s
-            // requestTimeout, so: a five-minute denial for one silent socket.
-            //
-            // res.on('close') is NOT sufficient and was tried first: with the
-            // socket held open the response is never finished and never closes.
-            // A lock without a timeout is a wedge waiting for a slow client, so
-            // the timer is the fix and 'close' is the fast path beside it.
-            const releaseSlot = () => {
-                if (verifyTimer) { clearTimeout(verifyTimer); verifyTimer = null; }
-                verifyInFlight = false;
-            };
-            verifyTimer = setTimeout(() => {
-                verifyTimer = null;
-                verifyInFlight = false;
-                try { send(res, 408, 'verify body timed out'); } catch { /* already sent */ }
-                req.destroy();
-            }, VERIFY_BODY_TIMEOUT_MS);
-            res.on('close', releaseSlot);
-
-            let size = 0;
-            const chunks = [];
-            req.on('data', chunk => {
-                size += chunk.length;
-                if (size <= ATTEST_BODY_CAP) chunks.push(chunk);
-            });
-            req.on('error', () => { setImmediate(releaseSlot); send(res, 400, 'read error'); });
-            req.on('end', () => {
-                // Defer flag clear to next event-loop tick so concurrent requests
-                // that arrive while body events fire synchronously still see
-                // verifyInFlight=true and receive 429 (rate limit).
-                const clearFlag = () => setImmediate(releaseSlot);
-
-                if (size > ATTEST_BODY_CAP) {
-                    clearFlag();
-                    return send(res, 413, `attestation body exceeds ${ATTEST_BODY_CAP} byte cap`);
-                }
-                let parsed;
-                try { parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
-                catch (e) { clearFlag(); return send(res, 400, 'invalid JSON body'); }
-                try { putAttestation(vid, parsed.tics, parsed.trace); }
-                catch (e) {
-                    clearFlag();
-                    return send(res, e.status ?? 400, e.message ?? 'attestation error');
-                }
-                send(res, 200, JSON.stringify({ stored: true, id: vid }),
-                    { 'content-type': 'application/json' });
-                clearFlag();
-            });
-            return;
-        }
-    }
-
-    // Path with /verify but bad id format → 400
-    if (path.match(/^\/api\/demos\/[^/]+\/verify$/))
-        return send(res, 400, 'invalid demo id');
-
     // Bad id format (non-hex or wrong length) → 400 (path traversal guard)
     if (path.startsWith('/api/demos/')) return send(res, 400, 'invalid demo id');
 

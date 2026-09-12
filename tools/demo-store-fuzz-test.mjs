@@ -184,129 +184,7 @@ for (const p of traversalCases) {
     ok('POST /api/demos/:id → 405', r.status === 405);
 }
 
-// ── 6. Verify endpoint: happy path + fuzz (task 19.4) ────────────────────────
-//
-// POST /api/demos/:id/verify accepts a JSON attestation {tics, trace}.
-// GET  /api/demos/:id/verify returns the stored attestation.
-// The tests cover: happy path, bad id format/traversal, oversized body (413),
-// rate limit under concurrency (429), and wrong method (405).
-
-let verifyId;
-{
-    // Upload a valid demo to get an id for the verify endpoint tests.
-    const body = minimalDemo(100);
-    const r = await request('POST', `${base}/api/demos?wad=doom.wad`, body,
-        { 'content-type': 'application/octet-stream' });
-    verifyId = JSON.parse(r.body).id;
-}
-
-{
-    // Happy path: POST valid attestation → 200.
-    const attest = JSON.stringify({ tics: 5, trace: [1, 2, 3, 4, 5] });
-    const r = await request('POST', `${base}/api/demos/${verifyId}/verify`,
-        Buffer.from(attest), { 'content-type': 'application/json' });
-    ok('POST /api/demos/:id/verify (valid) → 200', r.status === 200);
-    const j = JSON.parse(r.body);
-    ok('verify response has stored: true', j.stored === true);
-    ok('verify response has id', j.id === verifyId);
-}
-
-{
-    // GET stored attestation → 200 with trace.
-    const r = await request('GET', `${base}/api/demos/${verifyId}/verify`);
-    ok('GET /api/demos/:id/verify → 200', r.status === 200);
-    const j = JSON.parse(r.body);
-    ok('GET verify returns tics', j.tics === 5);
-    ok('GET verify returns trace array', Array.isArray(j.trace) && j.trace.length === 5);
-}
-
-{
-    // Non-existent demo id → 404.
-    const fakeId = 'a'.repeat(64);
-    const attest = JSON.stringify({ tics: 1, trace: [42] });
-    const r = await request('POST', `${base}/api/demos/${fakeId}/verify`,
-        Buffer.from(attest), { 'content-type': 'application/json' });
-    ok('POST verify for unknown demo → 404', r.status === 404);
-}
-
-{
-    // Bad id format (traversal attempt) → 400.
-    const r = await request('POST', `${base}/api/demos/../../../etc/passwd/verify`,
-        Buffer.from('{}'), { 'content-type': 'application/json' });
-    ok('path traversal /verify → 400 or 404', r.status === 400 || r.status === 404);
-}
-
-{
-    // Oversized attestation body → 413.
-    // ATTEST_BODY_CAP is 4 MiB; send 4 MiB + 1 byte.
-    const oversized = Buffer.alloc(4_194_305, 0x20);  // spaces (invalid JSON)
-    const r = await request('POST', `${base}/api/demos/${verifyId}/verify`,
-        oversized, { 'content-type': 'application/json' });
-    ok('oversized attestation body → 413', r.status === 413);
-}
-
-{
-    // Invalid JSON body → 400.
-    const r = await request('POST', `${base}/api/demos/${verifyId}/verify`,
-        Buffer.from('not json'), { 'content-type': 'application/json' });
-    ok('invalid JSON attestation → 400', r.status === 400);
-}
-
-{
-    // Attestation with u32-out-of-range value → 400.
-    const bad = JSON.stringify({ tics: 1, trace: [-1] });
-    const r = await request('POST', `${base}/api/demos/${verifyId}/verify`,
-        Buffer.from(bad), { 'content-type': 'application/json' });
-    ok('out-of-range trace value → 400', r.status === 400);
-}
-
-{
-    // Rate limit: use a raw TCP connection to hold the server's verifyInFlight
-    // flag open.  Send only the HTTP request line + headers on the first
-    // connection (no body, so 'end' never fires and the flag stays true), then
-    // send a second complete request and verify it gets 429.  Finally close the
-    // first socket to release the server.
-    //
-    // Content-Length is set to a non-zero value so the server knows the request
-    // has a body (and waits for it), keeping verifyInFlight=true.
-    const { createConnection } = await import('node:net');
-    const got429 = await new Promise((resolve) => {
-        // Connection 1: send headers only — body never arrives, flag stays open.
-        const sock1 = createConnection(PORT_BASE - 1, '127.0.0.1');
-        sock1.once('connect', async () => {
-            const fakeBody = '{"tics":1,"trace":[1]}';
-            sock1.write(
-                `POST /api/demos/${verifyId}/verify HTTP/1.1\r\n` +
-                `Host: 127.0.0.1\r\n` +
-                `Content-Type: application/json\r\n` +
-                `Content-Length: ${fakeBody.length}\r\n` +
-                `Connection: close\r\n` +
-                `\r\n`
-                // intentionally NOT sending the body
-            );
-            // Give the server one tick to process the headers + set verifyInFlight.
-            await sleep(10);
-
-            // Connection 2: full request — must get 429 (flag still set).
-            const body2 = Buffer.from('{"tics":1,"trace":[42]}');
-            const r2 = await request('POST',
-                `http://127.0.0.1:${PORT_BASE - 1}/api/demos/${verifyId}/verify`,
-                body2, { 'content-type': 'application/json' });
-            sock1.destroy();
-            resolve(r2.status === 429);
-        });
-        sock1.once('error', () => resolve(false));
-    });
-    ok('concurrent verify → 429 when verifyInFlight (rate limit)', got429);
-}
-
-{
-    // Wrong method (DELETE) → 405.
-    const r = await request('DELETE', `${base}/api/demos/${verifyId}/verify`, Buffer.alloc(0));
-    ok('DELETE /api/demos/:id/verify → 405', r.status === 405);
-}
-
-// ── 7. Server stays healthy after all attacks ─────────────────────────────────
+// ── 6. Server stays healthy after all attacks ─────────────────────────────────
 
 {
     const probe = minimalDemo(50);
@@ -321,19 +199,18 @@ ok('server did not crash', !didCrash());
     kill();
 }
 
-// ── 8. Attestations are RECLAIMED when their demo goes (task A3) ─────────────
+// ── 7. Demos are RECLAIMED: eviction and expiry both execute ────────────────
 //
-// The three sites that delete a demo -- gcExpired(), evictOldest() and
-// getDemo()'s expiry branch -- each deleted from `store` and left the
-// attestation behind.  deleteAttestation() was exported, documented "called
-// when demo is evicted", and called from nowhere; the only pruning was the
-// lazy one in getAttestation(), which fires only if somebody asks for that
-// exact id AFTER its demo is already gone.  So every evicted or expired demo
-// orphaned its trace permanently, in a store with no quota, no sweep and no
-// accounting.
+// This section was written for task A3, when a second store lived beside
+// `store` holding per-tic attestations and all three demo-deletion sites --
+// gcExpired(), evictOldest() and getDemo()'s expiry branch -- left the
+// attestation behind.  That store is gone (its endpoint had no product caller),
+// and with it the four assertions about reclaiming traces.
 //
-// Section 6 above covers attestation VALIDATION -- happy path, 413, 400 -- and
-// asserted nothing about reclamation, which is why this went unseen.
+// What must NOT go with it is the half that proves the DEMO store is bounded:
+// nothing else in this suite drives eviction or the TTL sweep.  Deleting the
+// section wholesale because its headline feature was removed would have taken
+// the quota and expiry coverage with it.
 //
 // Driven against a real server with a small quota and a 1 s TTL, so both the
 // eviction path and the expiry path actually execute rather than being
@@ -352,35 +229,25 @@ ok('server did not crash', !didCrash());
                 { 'content-type': 'application/octet-stream' });
             return JSON.parse(r.body).id;
         };
-        const attest = async (id, len) => request('POST', `${s2.base}/api/demos/${id}/verify`,
-            Buffer.from(JSON.stringify({ tics: len, trace: Array.from({ length: len }, (_, i) => i) })),
-            { 'content-type': 'application/json' });
-
         const probe = await stats();
-        ok('GET /api/demos/stats reports the attestation store', typeof probe.attestBytes === 'number');
+        ok('GET /api/demos/stats reports the demo store', typeof probe.usedBytes === 'number');
 
-        // --- eviction: fill past the demo quota and watch the traces go with it
+        // --- eviction: fill past the demo quota and watch the oldest go
         const first = await upload(8_000);
-        await attest(first, 500);
         const afterFirst = await stats();
-        ok('attestation accounted after store (bytes > 0)', afterFirst.attestBytes === 2000);
+        ok('the first demo is accounted (bytes > 0)', afterFirst.usedBytes >= 8_000);
 
-        for (let i = 1; i <= 5; i++) { const id = await upload(8_000 + i); await attest(id, 500); }
+        for (let i = 1; i <= 5; i++) await upload(8_000 + i);
         const afterFill = await stats();
         ok('demo store stayed inside its quota', afterFill.usedBytes <= QUOTA);
-        ok('evicted demos took their attestations with them',
-           afterFill.attestCount === afterFill.count);
-        ok('attestation bytes match the surviving attestations',
-           afterFill.attestBytes === afterFill.attestCount * 2000);
-        ok('the evicted demo\'s attestation is gone from the API',
-           (await request('GET', `${s2.base}/api/demos/${first}/verify`)).status === 404);
+        ok('the evicted demo is gone from the API',
+           (await request('GET', `${s2.base}/api/demos/${first}`)).status === 404);
 
         // --- expiry: the TTL path is the other half, and it was equally blind
         await sleep(1200);
         const afterTtl = await stats();
         ok('expired demos are swept', afterTtl.count === 0);
-        ok('expired demos leave no attestation behind', afterTtl.attestCount === 0);
-        ok('attestation byte accounting returns to zero', afterTtl.attestBytes === 0);
+        ok('expired demos free their bytes', afterTtl.usedBytes === 0);
         ok('no crash across the reclamation suite', !s2.didCrash());
     } finally {
         s2.kill();
