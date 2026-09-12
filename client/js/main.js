@@ -173,6 +173,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     // The assignment `running = true` below (after all setup) starts the loop.
     let running = false;
     let syncHandle = null;   // set after startSync; referenced in onDoomError closure
+    let relayHandle = null;  // set after the relay attaches; same reason
     const doom = await createDoom({
         print: t => console.log(t),
         printErr: t => console.warn(t),
@@ -184,6 +185,9 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
             syncHandle?.flush?.();
             restoreOnFailure(canvas);
             status(`engine error: ${msg}`);
+            // Same on the crash path: an I_Error leaves the engine dead, and a
+            // live relay would keep feeding a dead instance.
+            try { relayHandle?.quit?.(); } catch { /* already closed */ }
             try { window.doomAudio?.stop?.(); } catch { /* dead instance */ }
             try { syncHandle?.stop?.(); } catch { /* dead instance */ }
         },
@@ -209,6 +213,10 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     const relay = net?.spectate
         ? attachSpectate(doom, baseWsUrl, net)
         : net ? attachRelay(doom, baseWsUrl, net) : null;
+    relayHandle = relay;
+    // engine/web/d_net.c calls Module["netQuit"] from D_QuitNetGame.  No client
+    // file had ever assigned it, so that hook fired into nothing.
+    doom.netQuit = () => { try { relay?.quit?.(); } catch { /* already closed */ } };
 
     // Arm demo recording via the -record callMain arg (safe path):
     // G_RecordDemo runs after Z_Init inside D_DoomMain, so the zone
@@ -321,6 +329,15 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
         // is about to force-exit).  Fire-and-forget; IDB write completes
         // asynchronously even after wasm exits.
         syncHandle?.flush?.();
+        // Close the relay.  Nothing did: relay.quit() exists and was called
+        // only from the node harnesses, and no client file ever assigned
+        // doom.netQuit, so the engine's D_QuitNetGame hook fired into nothing.
+        // The socket therefore outlived the engine — its onmessage kept calling
+        // deliver(), which writes into doom.HEAPU8 and calls _web_net_bundle on
+        // an instance I_Quit has force-exited — and it held the server slot, so
+        // nobody else could take that colour.  Starting a second game made a
+        // SECOND live relay beside the first (task 23.7).
+        try { relay?.quit?.(); } catch { /* already closed */ }
         document.exitPointerLock?.();
         canvas.hidden = true;
         document.getElementById('landing').hidden = false;
