@@ -8,6 +8,23 @@ host-independent.
 Per-stage fleet performance numbers live in `tools/golden/bench-baseline.json`.
 The ranked optimization queue arrives with task 2.1.
 
+> **THE FLEET IN THIS DOCUMENT IS FOUR HOSTS; THE GATE IS THREE.** Every `pi5`
+> column, row and section below is measured evidence from before the
+> **2026-09-11 fleet amendment** (`spec.md` §"Fleet amendment, 2026-09-11: pi5
+> retired, ARM reassigned"), which retired pi5 from the perf gate after it
+> stopped answering. The numbers are kept because history is not discarded and
+> they were true when taken — but nothing in this file should be read as a claim
+> about the *current* fleet, which is wbox, tank and alder.
+>
+> What pi5 contributed was also narrower than "ARM reference" suggests:
+> `fleet-bench.sh` ran `bench.mjs` against the **wasm** build, and wasm is
+> architecture-independent by construction, so those rows were a performance
+> sample and never tested ARM codegen, ABI or alignment. The ARM *correctness*
+> half is the `arm-cross` suite leg, on a host that answers.
+>
+> The gate itself is the `perf-fleet` leg (`tools/run-tests.sh --perf`), added
+> in round 6. `spec.md` had required it since it was written and no leg existed.
+
 Quantitative claims are enumerated in `docs/claims-index.md`. Run
 `bash tools/archaeology/verify-all.sh --full` to cross-check all
 verified figures (default fast gate covers source constants; `--full`

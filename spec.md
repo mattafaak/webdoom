@@ -54,9 +54,23 @@ no filesystem, tightest routines, "runs on everything" — and runs
   hashes; mid-game drop and drop-in survival.
 - **Perf gate**: `bench.mjs` per-stage numbers on the three live hosts;
   regressions on any host block, wins are recorded in
-  `tools/golden/bench-baseline.json`. The browser-pipeline baseline
-  (per-frame JS/GPU/audio cost, input latency) joins this gate once
-  Phase 12 lands.
+  `tools/golden/bench-baseline.json`.
+  **How it runs (amended 2026-09-12):** as the `perf-fleet` suite leg, in an
+  OPT-IN tier — `tools/run-tests.sh --perf`. It is opt-in because it reaches
+  other machines, not because it is slow (~26 s measured for all three hosts);
+  a default-tier leg that fails whenever wbox or tank is asleep is a leg people
+  learn to ignore. In the default run it SKIPs with its reason named and
+  counted, so it is visible in the summary table rather than absent from it.
+  The comparison is `fleet-bench.sh --check`, which does **not** write the
+  baseline — the same script's recording mode does, and a gate that rewrites
+  its own reference to match what it just measured cannot fail. Tolerance is
+  20% on per-demo `sum_ms`, set from four observed comparison runs; see the
+  rationale in `fleet-bench.sh`, including why 10% was tried and rejected.
+  **This clause described a gate with no leg at all until round 6.**
+  The browser-pipeline baseline (per-frame JS/GPU/audio cost, input latency)
+  joins this gate once a second host records one — today only alder has one,
+  which finding F3 tracks, and of alder the fleet table below says "fast here
+  proves nothing".
 - **Cross-architecture gate**: the freestanding core replays all 13 golden
   demos bit-identically on 32-bit ARM under qemu-arm-static
   (`tools/freestanding/arm-check.sh`, suite leg `arm-cross`). This is

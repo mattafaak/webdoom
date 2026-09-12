@@ -33,7 +33,12 @@ const ROOTS = ['tools/run-tests.sh'];
 // A tool is "gate-shaped" if its name says it checks something.  Deliberately a
 // name heuristic: it must not need a registry entry to be DISCOVERED, or an
 // unregistered orphan would be invisible to the census meant to find it.
-const GATEISH = /(^|[/-])(test|check|verify|fuzz|gate|witness|precache|smoke|census)[-.]|[-](test|check|gate)\.(mjs|sh)$|(^|\/)run-[a-z0-9-]+\.(mjs|sh)$/;   // a tools/run-*.sh IS a runner
+// `bench` is in the list because spec.md:55 names bench.mjs as the PERF GATE.
+// Without it, tools/bench.mjs and tools/fleet-bench.sh were not gate-shaped, so
+// the census -- whose whole job is finding gates nothing runs -- could never
+// have reported the spec's own required gate as orphaned. It was invisible to
+// the instrument built to notice exactly that.
+const GATEISH = /(^|[/-])(test|check|verify|fuzz|gate|witness|precache|smoke|census|bench)[-.]|[-](test|check|gate|bench)\.(mjs|sh)$|(^|\/)run-[a-z0-9-]+\.(mjs|sh)$/;   // a tools/run-*.sh IS a runner
 
 const tracked = execSync('git ls-files tools', { cwd: root, encoding: 'utf8' })
     .split('\n').filter(Boolean);

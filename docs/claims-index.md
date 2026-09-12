@@ -163,71 +163,71 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | fmt-032 | formats.md:720 | save slot count | 6 (doomsav0–doomsav5) | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | fmt-033 | formats.md:764 | DMX lead-in / lead-out pad size | 16 bytes each | invariant | tools/archaeology/wad-verify.mjs | verified |
 | fmt-034 | formats.md:804 | MUS percussion channel | 15 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
-| perf-001 | perf.md:32 | wasm binary total size (commit 6de6256) | 357,978 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | verified |
-| perf-002 | perf.md:29 | wasm CODE section size (commit 6de6256) | 281,277 bytes | measurement | tools/archaeology/wasm-stamp.mjs (commit-pinned; reports current) | verified |
-| perf-003 | perf.md:30 | wasm DATA section size (commit 6de6256) | 75,283 bytes | measurement | tools/archaeology/wasm-stamp.mjs (commit-pinned; reports current) | verified |
-| perf-004 | perf.md:32 | wasm gzip-9 compressed size (commit 6de6256) | 145,990 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | verified |
-| perf-005 | perf.md:39 | doom.js gzip-9 compressed size | 3,514 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | verified |
-| perf-006 | perf.md:40 | wasm compression ratio (raw / gzip) | 2.45× | derived | 357,978 / 145,990 ≈ 2.45 | derived-from-gated |
-| perf-007 | perf.md:83 | peak zone HWM across all 13 golden demos | 1.36 MB (plutonia demo3) | measurement | tools/zone-measure.mjs | dated-measurement |
-| perf-008 | perf.md:52 | ZONESIZE (hardcoded zone pool) | 32 MB | invariant | tools/archaeology/source-constant-verify.mjs | verified |
-| perf-009 | perf.md:114 | __heap_base (static data end, heap start) | 5,461,072 bytes | measurement | tools/archaeology/wasm-stamp.mjs | verified |
-| perf-010 | perf.md:115 | zone pool malloc size | 4,194,304 bytes | derived | 4 × 1024 × 1024 = 4,194,304 (32 MB pre-14.2c) | derived-from-gated |
-| perf-011 | perf.md:122 | plutonia.wad file size (worst single IWAD) | 17,420,824 bytes | measurement | tools/archaeology/stamp-check.mjs | verified |
-| perf-012 | perf.md:117 | peak heap address worst-case single IWAD | ~25.42 MB | derived | 5,042,416 + 4,194,304 + 17,420,824 = 26,657,544 B ≈ 25.42 MB | derived-from-gated |
-| perf-013 | perf.md:118 | headroom vs 64 MB (single IWAD) | ~10.18 MB | derived | 64 MB − 53.82 MB ≈ 10.18 MB | derived-from-gated |
-| perf-014 | perf.md:131 | INITIAL_MEMORY floor (tested pass/fail boundary) | 56 MB | measurement | requires emcc INITIAL_MEMORY sweep build; no current script | unverifiable |
-| perf-015 | perf.md:174 | all deliverables total gzip-9 wire size | 177.7 KB | measurement | requires all deliverable assets (JS+CSS+HTML+wasm); no current script | unverifiable |
-| perf-016 | perf.md:176 | JS + CSS + HTML gzip-9 total | 35.1 KB | measurement | requires JS+CSS+HTML assets; no current script | unverifiable |
-| perf-017 | perf.md:208 | bsp+segs avg ms/frame — wbox (3-demo avg) | 0.2625 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
-| perf-018 | perf.md:208 | bsp+segs avg ms/frame — tank | 0.0549 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
-| perf-019 | perf.md:208 | bsp+segs avg ms/frame — pi5 | 0.0715 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
-| perf-020 | perf.md:208 | bsp+segs avg ms/frame — alder | 0.0481 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
-| perf-021 | perf.md:209 | planes avg ms/frame — wbox | 0.1566 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
-| perf-022 | perf.md:210 | masked avg ms/frame — wbox | 0.0637 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
-| perf-023 | perf.md:211 | frame-setup avg ms/frame — wbox | 0.0069 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
-| perf-024 | perf.md:212 | render total avg ms/frame — wbox | 0.4897 ms | derived | sum of perf-017/021/022/023 | derived-from-gated |
-| perf-025 | perf.md:213 | sim avg ms/tic — wbox | 0.0706 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
-| perf-026 | perf.md:250 | wbox render fraction of 35 Hz budget | 1.71% | derived | 0.4897 / 28.571 × 100 | derived-from-gated |
-| perf-027 | perf.md:258 | wbox sim fraction of 35 Hz budget | 0.25% | derived | 0.0706 / 28.571 × 100 | derived-from-gated |
-| perf-028 | perf.md:222 | bsp+segs share of wbox render total | 53.6% | derived | 0.2625 / 0.4897 × 100 | derived-from-gated |
-| perf-029 | perf.md:223 | planes share of wbox render total | 32.0% | derived | 0.1566 / 0.4897 × 100 | derived-from-gated |
-| perf-030 | perf.md:224 | masked share of wbox render total | 13.0% | derived | 0.0637 / 0.4897 × 100 | derived-from-gated |
-| perf-031 | perf.md:225 | frame-setup share of wbox render total | 1.4% | derived | 0.0069 / 0.4897 × 100 | derived-from-gated |
-| perf-032 | perf.md:234 | wbox/alder bsp+segs speed ratio | 5.46× | derived | 0.2625 / 0.0481 ≈ 5.46 | derived-from-gated |
-| perf-033 | perf.md:409 | total Chocolate Doom tics cross-validated | 44,580 | measurement | external Chocolate Doom instrumented run; no current script in repo | unverifiable |
-| perf-034 | perf.md:485 | R_DrawColumn calls/frame avg (doom demo1) | 714.8 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
-| perf-035 | perf.md:485 | R_DrawColumn avg pixels/call | 47.9 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
-| perf-036 | perf.md:657 | R_DrawColumn total pixels/frame | 34,203 | derived | tools/archaeology/derived-check.mjs (±1% tolerance; inputs from unverifiable perf-034/035) | verified |
-| perf-037 | perf.md:486 | R_DrawSpan calls/frame avg | 147.8 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
-| perf-038 | perf.md:486 | R_DrawSpan avg pixels/call | 168.2 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
-| perf-039 | perf.md:658 | R_DrawSpan total pixels/frame | 24,854 | derived | tools/archaeology/derived-check.mjs (±1% tolerance; inputs from unverifiable perf-037/038) | verified |
-| perf-040 | perf.md:526 | task-2.2 unroll-4: bsp+segs improvement (wbox) | −3.5% | measurement | historical experiment requiring specific commit comparison; no current script | unverifiable |
-| perf-041 | perf.md:532 | task-2.2 unroll-4: render total improvement (wbox) | −1.5% | measurement | historical experiment requiring specific commit comparison; no current script | unverifiable |
-| perf-042 | perf.md:861 | -Os CODE section size reduction vs -O3 | −33.0% | measurement | requires separate -Os emcc build; no current script | unverifiable |
-| perf-043 | perf.md:863 | -Os gzip-9 wire size reduction | −15.1% | measurement | requires separate -Os emcc build; no current script | unverifiable |
-| perf-044 | perf.md:885 | -Os sim fps regression on wbox | −9.3% | measurement | requires -Os build bench.mjs run; no current script | unverifiable |
-| perf-045 | perf.md:722 | visplane R_FindPlane calls/frame — doom demo1 avg | 33.1 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, ±2% tol) | verified |
-| perf-046 | perf.md:722 | visplane R_FindPlane iters/frame — doom demo1 avg | 205.2 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, ±2% tol) | verified |
-| perf-047 | perf.md:722 | visplane peak count — doom demo1 | 33 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, exact) | verified |
-| perf-048 | perf.md:725 | visplane R_FindPlane calls/frame — tnt demo2 avg | 56.1 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, ±2% tol) | verified |
-| perf-049 | perf.md:725 | visplane R_FindPlane iters/frame — tnt demo2 avg | 451.5 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, ±2% tol) | verified |
-| perf-050 | perf.md:725 | visplane peak count — tnt demo2 (worst recorded) | 68 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, exact) | verified |
-| perf-051 | perf.md:1055 | PSX fire ms/tick — wbox (G-T56N) | 0.072 ms | measurement | fire.js timing requires browser/JS benchmark harness; no current script | unverifiable |
-| perf-052 | perf.md:1053 | PSX fire ms/tick — alder | 0.0078 ms | measurement | fire.js timing requires browser/JS benchmark harness; no current script | unverifiable |
-| perf-053 | perf.md:1054 | PSX fire ms/tick — pi5 | 0.0222 ms | measurement | fire.js timing requires browser/JS benchmark harness; no current script | unverifiable |
-| perf-054 | perf.md:1057 | PSX fire headroom vs 1 ms budget (wbox) | ~14× | derived | 1.0 / 0.072 ≈ 13.9 ≈ 14 | derived-from-gated |
+| perf-001 | perf.md:49 | wasm binary total size (commit 6de6256) | 357,978 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | verified |
+| perf-002 | perf.md:46 | wasm CODE section size (commit 6de6256) | 281,277 bytes | measurement | tools/archaeology/wasm-stamp.mjs (commit-pinned; reports current) | verified |
+| perf-003 | perf.md:47 | wasm DATA section size (commit 6de6256) | 75,283 bytes | measurement | tools/archaeology/wasm-stamp.mjs (commit-pinned; reports current) | verified |
+| perf-004 | perf.md:49 | wasm gzip-9 compressed size (commit 6de6256) | 145,990 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | verified |
+| perf-005 | perf.md:56 | doom.js gzip-9 compressed size | 3,514 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | verified |
+| perf-006 | perf.md:57 | wasm compression ratio (raw / gzip) | 2.45× | derived | 357,978 / 145,990 ≈ 2.45 | derived-from-gated |
+| perf-007 | perf.md:100 | peak zone HWM across all 13 golden demos | 1.36 MB (plutonia demo3) | measurement | tools/zone-measure.mjs | dated-measurement |
+| perf-008 | perf.md:69 | ZONESIZE (hardcoded zone pool) | 32 MB | invariant | tools/archaeology/source-constant-verify.mjs | verified |
+| perf-009 | perf.md:131 | __heap_base (static data end, heap start) | 5,461,072 bytes | measurement | tools/archaeology/wasm-stamp.mjs | verified |
+| perf-010 | perf.md:132 | zone pool malloc size | 4,194,304 bytes | derived | 4 × 1024 × 1024 = 4,194,304 (32 MB pre-14.2c) | derived-from-gated |
+| perf-011 | perf.md:139 | plutonia.wad file size (worst single IWAD) | 17,420,824 bytes | measurement | tools/archaeology/stamp-check.mjs | verified |
+| perf-012 | perf.md:134 | peak heap address worst-case single IWAD | ~25.42 MB | derived | 5,042,416 + 4,194,304 + 17,420,824 = 26,657,544 B ≈ 25.42 MB | derived-from-gated |
+| perf-013 | perf.md:135 | headroom vs 64 MB (single IWAD) | ~10.18 MB | derived | 64 MB − 53.82 MB ≈ 10.18 MB | derived-from-gated |
+| perf-014 | perf.md:148 | INITIAL_MEMORY floor (tested pass/fail boundary) | 56 MB | measurement | requires emcc INITIAL_MEMORY sweep build; no current script | unverifiable |
+| perf-015 | perf.md:191 | all deliverables total gzip-9 wire size | 177.7 KB | measurement | requires all deliverable assets (JS+CSS+HTML+wasm); no current script | unverifiable |
+| perf-016 | perf.md:193 | JS + CSS + HTML gzip-9 total | 35.1 KB | measurement | requires JS+CSS+HTML assets; no current script | unverifiable |
+| perf-017 | perf.md:225 | bsp+segs avg ms/frame — wbox (3-demo avg) | 0.2625 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
+| perf-018 | perf.md:225 | bsp+segs avg ms/frame — tank | 0.0549 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
+| perf-019 | perf.md:225 | bsp+segs avg ms/frame — pi5 | 0.0715 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
+| perf-020 | perf.md:225 | bsp+segs avg ms/frame — alder | 0.0481 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
+| perf-021 | perf.md:226 | planes avg ms/frame — wbox | 0.1566 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
+| perf-022 | perf.md:227 | masked avg ms/frame — wbox | 0.0637 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
+| perf-023 | perf.md:228 | frame-setup avg ms/frame — wbox | 0.0069 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
+| perf-024 | perf.md:229 | render total avg ms/frame — wbox | 0.4897 ms | derived | sum of perf-017/021/022/023 | derived-from-gated |
+| perf-025 | perf.md:230 | sim avg ms/tic — wbox | 0.0706 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
+| perf-026 | perf.md:267 | wbox render fraction of 35 Hz budget | 1.71% | derived | 0.4897 / 28.571 × 100 | derived-from-gated |
+| perf-027 | perf.md:275 | wbox sim fraction of 35 Hz budget | 0.25% | derived | 0.0706 / 28.571 × 100 | derived-from-gated |
+| perf-028 | perf.md:239 | bsp+segs share of wbox render total | 53.6% | derived | 0.2625 / 0.4897 × 100 | derived-from-gated |
+| perf-029 | perf.md:240 | planes share of wbox render total | 32.0% | derived | 0.1566 / 0.4897 × 100 | derived-from-gated |
+| perf-030 | perf.md:241 | masked share of wbox render total | 13.0% | derived | 0.0637 / 0.4897 × 100 | derived-from-gated |
+| perf-031 | perf.md:242 | frame-setup share of wbox render total | 1.4% | derived | 0.0069 / 0.4897 × 100 | derived-from-gated |
+| perf-032 | perf.md:251 | wbox/alder bsp+segs speed ratio | 5.46× | derived | 0.2625 / 0.0481 ≈ 5.46 | derived-from-gated |
+| perf-033 | perf.md:426 | total Chocolate Doom tics cross-validated | 44,580 | measurement | external Chocolate Doom instrumented run; no current script in repo | unverifiable |
+| perf-034 | perf.md:502 | R_DrawColumn calls/frame avg (doom demo1) | 714.8 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
+| perf-035 | perf.md:502 | R_DrawColumn avg pixels/call | 47.9 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
+| perf-036 | perf.md:674 | R_DrawColumn total pixels/frame | 34,203 | derived | tools/archaeology/derived-check.mjs (±1% tolerance; inputs from unverifiable perf-034/035) | verified |
+| perf-037 | perf.md:503 | R_DrawSpan calls/frame avg | 147.8 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
+| perf-038 | perf.md:503 | R_DrawSpan avg pixels/call | 168.2 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
+| perf-039 | perf.md:675 | R_DrawSpan total pixels/frame | 24,854 | derived | tools/archaeology/derived-check.mjs (±1% tolerance; inputs from unverifiable perf-037/038) | verified |
+| perf-040 | perf.md:543 | task-2.2 unroll-4: bsp+segs improvement (wbox) | −3.5% | measurement | historical experiment requiring specific commit comparison; no current script | unverifiable |
+| perf-041 | perf.md:549 | task-2.2 unroll-4: render total improvement (wbox) | −1.5% | measurement | historical experiment requiring specific commit comparison; no current script | unverifiable |
+| perf-042 | perf.md:878 | -Os CODE section size reduction vs -O3 | −33.0% | measurement | requires separate -Os emcc build; no current script | unverifiable |
+| perf-043 | perf.md:880 | -Os gzip-9 wire size reduction | −15.1% | measurement | requires separate -Os emcc build; no current script | unverifiable |
+| perf-044 | perf.md:902 | -Os sim fps regression on wbox | −9.3% | measurement | requires -Os build bench.mjs run; no current script | unverifiable |
+| perf-045 | perf.md:739 | visplane R_FindPlane calls/frame — doom demo1 avg | 33.1 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, ±2% tol) | verified |
+| perf-046 | perf.md:739 | visplane R_FindPlane iters/frame — doom demo1 avg | 205.2 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, ±2% tol) | verified |
+| perf-047 | perf.md:739 | visplane peak count — doom demo1 | 33 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, exact) | verified |
+| perf-048 | perf.md:742 | visplane R_FindPlane calls/frame — tnt demo2 avg | 56.1 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, ±2% tol) | verified |
+| perf-049 | perf.md:742 | visplane R_FindPlane iters/frame — tnt demo2 avg | 451.5 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, ±2% tol) | verified |
+| perf-050 | perf.md:742 | visplane peak count — tnt demo2 (worst recorded) | 68 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, exact) | verified |
+| perf-051 | perf.md:1072 | PSX fire ms/tick — wbox (G-T56N) | 0.072 ms | measurement | fire.js timing requires browser/JS benchmark harness; no current script | unverifiable |
+| perf-052 | perf.md:1070 | PSX fire ms/tick — alder | 0.0078 ms | measurement | fire.js timing requires browser/JS benchmark harness; no current script | unverifiable |
+| perf-053 | perf.md:1071 | PSX fire ms/tick — pi5 | 0.0222 ms | measurement | fire.js timing requires browser/JS benchmark harness; no current script | unverifiable |
+| perf-054 | perf.md:1074 | PSX fire headroom vs 1 ms budget (wbox) | ~14× | derived | 1.0 / 0.072 ≈ 13.9 ≈ 14 | derived-from-gated |
 | perf-055 | perf.md:§v1-fps | wbox v1 fps after int64 change | 21,107 tics/s | measurement | bench-baseline.json (v1.frameThroughput.wbox-amd-g-t56n.after) | dated-measurement |
 | perf-056 | perf.md:§v1-fps | alder v1 fps (pre-int64, f92fc05) | 204,937 tics/s | measurement | bench-baseline.json (v1.frameThroughput.alder.before) | dated-measurement |
 | perf-057 | perf.md:§v1-fps | tank v1 fps (pre-int64) | 105,868 tics/s | measurement | bench-baseline.json (v1.frameThroughput.tank.before) | dated-measurement |
 | perf-058 | perf.md:§v1-fps | pi5 v1 fps (pre-int64) | 79,377 tics/s | measurement | bench-baseline.json (v1.frameThroughput.pi5.before) | dated-measurement |
-| perf-059 | perf.md:966 | worst PWAD combo peak heap (tnt.wad + tnt31.wad) | 54.83 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
-| perf-060 | perf.md:978 | headroom vs 64 MB for worst PWAD combo | 9.17 MB | derived | 64 − 54.83 = 9.17 MB | derived-from-gated |
-| perf-061 | perf.md:1308 | doom.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,218,022 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
-| perf-062 | perf.md:1309 | doom2.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,305,794 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
-| perf-063 | perf.md:1310 | tnt.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,307,707 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
-| perf-064 | perf.md:1311 | plutonia.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,353,868 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
-| perf-065 | perf.md:1313 | worst-case demo p99 instr/tic (doom-demo4, alder, 13.1a) | 2,693,222 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
+| perf-059 | perf.md:983 | worst PWAD combo peak heap (tnt.wad + tnt31.wad) | 54.83 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
+| perf-060 | perf.md:995 | headroom vs 64 MB for worst PWAD combo | 9.17 MB | derived | 64 − 54.83 = 9.17 MB | derived-from-gated |
+| perf-061 | perf.md:1325 | doom.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,218,022 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
+| perf-062 | perf.md:1326 | doom2.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,305,794 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
+| perf-063 | perf.md:1327 | tnt.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,307,707 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
+| perf-064 | perf.md:1328 | plutonia.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,353,868 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
+| perf-065 | perf.md:1330 | worst-case demo p99 instr/tic (doom-demo4, alder, 13.1a) | 2,693,222 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
 
 ---
 | ea-048 | engine-archaeology.md:§6 | HACX COLORMAP mismatches vs the (32-L)/32 euclid recipe | 3,517 / 8,192 | invariant | tools/archaeology/colormap-cross-palette.c | verified |

@@ -39,12 +39,23 @@ cd "$(dirname "$0")/.."
 REPO="$PWD"
 
 TIER=full
+PERF=0
 REQUIRE_COMPLETE=0
 ONLY=()
 LIST=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --quick)            TIER=quick; shift ;;
+        # The perf gate is opt-in because it reaches OTHER MACHINES, not
+        # because it is slow -- measured at ~26 s for all three hosts, against
+        # fleet-bench.sh's own stale comment claiming "bench itself can take
+        # 10 min on wbox". A default-tier leg that fails whenever a teammate's
+        # laptop is asleep is a leg people learn to ignore.
+        #
+        # It SKIPs with its reason NAMED AND COUNTED in the default run, which
+        # is the whole difference between a gate that is opt-in and a gate that
+        # does not exist.
+        --perf)             PERF=1; shift ;;
         --full)             TIER=full; shift ;;
         --only)             ONLY+=("$2"); shift 2 ;;
         --list)             LIST=1; shift ;;
@@ -102,6 +113,7 @@ have_baseline(){ [ -f "tools/golden/browser-pipeline-$(hostname).json" ]; }
 # was hiding.
 SHARED_UP=0
 have_shared()  { [ "$SHARED_UP" = "1" ]; }
+have_perf()    { [ "$PERF" = "1" ]; }
 # PRESENT is not the same as CURRENT, and for the compile-time variants the
 # difference was load-bearing: `build-fakeflat` needs emsdk while
 # `render-fakeflat` needed only `wad`, so on a host without emsdk the build leg
@@ -126,6 +138,7 @@ need_reason() {   # need_reason <tag> -> prints why it is unmet
         emsdk)    echo "emsdk not found (run: tools/setup-emsdk.sh)" ;;
         baseline) echo "no browser-pipeline baseline for host $(hostname)" ;;
         shared)   echo "shared browser server on 8668 not started" ;;
+        perf)     echo "perf tier not requested (run: tools/run-tests.sh --perf; ~30 s measured, needs wbox and tank up)" ;;
         fresh-*)  echo "build-${1#fresh-} absent or stale (node tools/artifact-freshness.mjs build-${1#fresh-})" ;;
         *)        echo "unmet prerequisite '$1'" ;;
     esac
@@ -136,7 +149,7 @@ need_met() {
         zig) have_zig ;; qemuarm) have_qemuarm ;; clangfmt) have_clangfmt ;;
         n64) have_n64 ;;
         browser) have_browser ;; firefox) have_firefox ;; emsdk) have_emsdk ;;
-        baseline) have_baseline ;; shared) have_shared ;;
+        baseline) have_baseline ;; shared) have_shared ;; perf) have_perf ;;
         fresh-*) have_fresh "build-${1#fresh-}" ;;
         *) return 1 ;;
     esac
@@ -524,6 +537,19 @@ fi
 leg browser-insecure browser "real insecure origin: IDB WAD cache + music fallback" -- node tools/browser-insecure-test.mjs
 leg browser-pipeline browser,baseline "per-frame JS/GPU cost vs this host's baseline" -- bash tools/pipeline-gate.sh
 leg firefox-smoke    firefox "Firefox UA executes JS and fetches /api/wads" -- bash tools/firefox-smoke.sh
+
+# ── the perf gate (spec.md §Correctness gates) ───────────────────────────────
+#
+# spec.md:55-57 has required this since it was written -- "bench.mjs per-stage
+# numbers on the three live reference hosts; regressions on any host block" --
+# and there was no leg at all.  Neither bench.mjs nor fleet-bench.sh appeared
+# in this file, and gate-census's name heuristic could not see either, so
+# nothing could even report them as orphaned.
+#
+# --check is what makes it a gate rather than a recorder: fleet-bench.sh
+# normally ENDS by rewriting tools/golden/bench-baseline.json, and a gate that
+# rewrites its own reference to match what it just measured cannot fail.
+leg perf-fleet      perf,build,wad "per-stage render ms on alder+wbox+tank vs baseline" -- bash tools/fleet-bench.sh --check
 
 fi   # QUICK_ONLY
 

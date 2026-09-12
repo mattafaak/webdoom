@@ -175,6 +175,7 @@
       }
     },
     "pi5-aarch64": {
+      "retired": "RETIRED FROM THE GATE 2026-09-11 (spec.md \"Fleet amendment\"). These numbers are dated evidence from commit f402d5c, kept because history is not discarded \u2014 not a current fleet member. pi5 has not answered since before that date, and what it contributed was a wasm PERFORMANCE sample, never ARM codegen/ABI/alignment (wasm is architecture-independent); the ARM correctness half is the arm-cross suite leg. fleet-bench.sh includes pi5 only when FLEET_PI5 is set, and perf-fleet --check SKIPs it by name.",
       "commit": "f402d5c",
       "date": "2026-07-22",
       "reps": 3,

@@ -18,6 +18,26 @@ set -euo pipefail
 
 # ── config ────────────────────────────────────────────────────────────────────
 
+# --check turns this from a RECORDER into a GATE.
+#
+# Without it this script ends by writing tools/golden/bench-baseline.json --
+# which is the right behaviour for recording a new baseline and exactly the
+# wrong behaviour for a gate. A gate that rewrites its own reference to match
+# what it just measured cannot fail, and this repo has a name for that.
+#
+# With --check: the baseline is NOT written, every host's result is compared
+# against the committed one, and a regression on any host exits non-zero --
+# which is what spec.md's perf gate says ("regressions on any host block").
+CHECK=0
+ARGS=()
+for a in "$@"; do
+    case "$a" in
+        --check) CHECK=1 ;;
+        *) ARGS+=("$a") ;;
+    esac
+done
+set -- ${ARGS[@]+"${ARGS[@]}"}
+
 REPS=${1:-3}
 WAD=doom.wad
 
@@ -190,7 +210,7 @@ echo ""
 
 # ── parse results and emit comparison table ───────────────────────────────────
 
-python3 - "${BASELINE}" "${REPS}" "${REPO_ROOT}" \
+python3 - "${BASELINE}" "${REPS}" "${REPO_ROOT}" "${CHECK}" \
     "${!RESULT_FILES[@]}" \
     -- \
     "${RESULT_FILES[@]}" \
@@ -207,7 +227,8 @@ result_files = args[sep+1:]
 baseline_path = header_args[0]
 reps          = int(header_args[1])
 repo_root     = header_args[2]
-host_keys     = header_args[3:]
+check_mode    = header_args[3] == "1"
+host_keys     = header_args[4:]
 
 # Map hostkey → result file (positional match)
 results = {}
@@ -274,6 +295,96 @@ for demo in DEMOS:
             row += f"{'(failed)':>{COL}s}"
     print(row)
 print()
+
+# ── --check: compare against the committed baseline, and do not write it ───
+
+if check_mode:
+    with open(baseline_path) as f:
+        base = json.load(f)
+    per = base.get("perStage", {})
+
+    # TOLERANCE: 10%, and here is what that rests on.
+    #
+    # The first honest draft of this said 20% and admitted it was chosen rather
+    # than measured. Then the gate ran, and the first full comparison against
+    # the committed baseline (commit f402d5c, 2026-07-22) came back inside
+    # +-3.7% on every one of nine host/demo pairs -- across three machines, a
+    # seven-week gap and a different wasm build (355,350 -> 357,101 B):
+    #
+    #   alder  -2.6%  -1.1%  -1.4%
+    #   wbox   -0.3%  +1.2%  +0.4%
+    #   tank   +3.7%  +1.7%  +3.5%
+    #
+    # 10% WAS TRIED ON THAT EVIDENCE AND IT WENT INTERMITTENTLY RED.
+    #
+    # Across four comparison runs: three came back inside +-3.7% on all nine
+    # pairs, and one had a single comparison exceed 10%. tank is the noisiest --
+    # a laptop, reached over the network -- and a transient spike is enough.
+    #
+    # That is the difference between DRIFT and VARIANCE, and one run measured
+    # only the first. An intermittently-red gate is worse than a loose one:
+    # this repo has already paid for a flake (browser-lobby T07, ~1/3 pass rate)
+    # and the lesson was that people stop reading a gate that cries wolf.
+    #
+    # So: 20%, now on evidence rather than on a guess. It will not catch a
+    # sub-10% regression, and it is not pretending to. Tightening it honestly
+    # needs what browser-pipeline-compare already has -- repeat runs per host
+    # with the observed SPREAD driving the band -- which is a real follow-up
+    # with a known shape, not a vague one. FLEET_TOL overrides it.
+    TOL = float(os.environ.get("FLEET_TOL", "0.20"))
+
+    compared, regressions, skipped = 0, [], []
+    for hk in ORDER:
+        r = results.get(hk)
+        b = per.get(hk)
+        if not (r and r.get("schemaVersion") == 2):
+            skipped.append(f"{hk}: no result this run")
+            continue
+        if not b:
+            skipped.append(f"{hk}: no baseline entry")
+            continue
+        # The live result and the baseline use DIFFERENT key names for the same
+        # thing: bench.mjs emits `renderStages`, the baseline file stores
+        # `demos`. Getting this wrong is what the first run of this gate did --
+        # and it reported "0 comparisons made, this gate asserted nothing"
+        # rather than a green PASS over zero, which is the only reason the
+        # mistake was visible.
+        print(f"  ({hk} baseline: commit {b.get('commit','?')}, {b.get('date','?')}, "
+              f"wasm {b.get('wasmBytes','?')} B)")
+        for demo in DEMOS:
+            cur  = (r.get("renderStages", {}).get(demo) or {}).get("sum_ms")
+            want = ((b.get("demos") or {}).get(demo) or {}).get("sum_ms")
+            if cur is None or want is None:
+                skipped.append(f"{hk}/{demo}: not in both")
+                continue
+            compared += 1
+            margin = (cur - want) / want if want else 0.0
+            mark = ""
+            if margin > TOL:
+                regressions.append((hk, demo, want, cur, margin))
+                mark = "  *** REGRESSION"
+            print(f"  {hk:<20s} {demo:<7s} baseline {want:8.3f} ms  now {cur:8.3f} ms  "
+                  f"{margin:+6.1%}{mark}")
+
+    print()
+    for s_ in skipped:
+        print(f"  SKIP {s_}")
+
+    # 0 comparisons is a FAIL, not a pass -- the same rule
+    # browser-pipeline-compare applies to a baseline it cannot read.
+    if compared == 0:
+        print(f"\nFAIL fleet-bench --check: 0 comparisons made ({len(skipped)} skipped). "
+              "This gate asserted nothing.")
+        sys.exit(1)
+    if regressions:
+        print(f"\nFAIL fleet-bench --check: {len(regressions)} regression(s) beyond "
+              f"{TOL:.0%} on {len({r[0] for r in regressions})} host(s), "
+              f"of {compared} comparisons")
+        sys.exit(1)
+    print(f"\nPASS fleet-bench --check: {compared} comparisons across "
+          f"{len({hk for hk in ORDER if results.get(hk)})} host(s), none beyond {TOL:.0%} "
+          f"({len(skipped)} skipped)")
+    sys.exit(0)
 
 # ── update baseline JSON ───────────────────────────────────────────────────
 
