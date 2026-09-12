@@ -532,6 +532,9 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
     leg browser-net           browser,build,wad,shared "2 tabs through the lobby into co-op"   -- node tools/browser-net-test.mjs "$U"
     leg browser-join          browser,build,wad,shared "browser drop-in"                       -- node tools/browser-join-test.mjs "$U"
     leg persist               browser,build,wad,shared "settings/keybind persistence"          -- node tools/persist-test.mjs "$U"
+        # The third direction of tenet 4: localStorage and the rebind UI are
+        # USER input, and had no gate at all.  Also closes promises rme-004.
+    leg browser-settings      browser,build,wad,shared "hostile localStorage + rebind UI"        -- node tools/browser-settings-test.mjs "$U"
     leg browser-resilience    browser,build,wad,shared "fetch/sw/visibility/gamepad failures" -- node tools/browser-resilience-test.mjs "$U"
     leg browser-lobby         browser,build,wad,shared "lobby state machine, 25 edges"         -- node tools/browser-lobby-test.mjs "$U"
     leg browser-fire          browser,build,wad,shared "PSX fire background + reduced-motion"  -- node tools/browser-fire-test.mjs "$U" /tmp

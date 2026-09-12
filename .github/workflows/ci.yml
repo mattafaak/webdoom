@@ -21,7 +21,7 @@
 # `doc-drift` do have prerequisites -- clang-format pinned to major 22, and gcc.
 # On ubuntu-latest lint-c SKIPs, so this job is 12 legs run and 1 skipped.
 #
-# The full suite (81 legs at the time of writing -- `tools/run-tests.sh --list`
+# The full suite (87 legs at the time of writing -- `tools/run-tests.sh --list`
 # prints the current number, and the runner now asserts its own total against
 # that registry) still runs on a host with the WAD library, a built engine and
 # Chrome:  bash tools/run-tests.sh --require-complete
@@ -120,7 +120,7 @@ jobs:
             echo '- netplay 2p/4p, drop-in, spectator, churn, mixed-width'
             echo '- the differential fuzzer and the adversarial ASan map gate'
             echo '- the freestanding and 32-bit-ARM cross-architecture legs'
-            echo '- the 19 browser legs and the browser-pipeline baseline'
+            echo '- the 21 browser legs and the browser-pipeline baseline'
             echo '- three colormap verifier families inside doc-drift (it reports this itself)'
             echo '- the two build-output paths in sw-precache (/engine/doom.js, doom.wasm)'
             echo

@@ -173,9 +173,38 @@ export function createSettingsUI(input, doom, renderer, qol) {
         panel.querySelector('#reset').onclick = () => {
             Object.assign(s, defaultSettings());
             saveSettings(s);
+            // Assigning and re-rendering was the whole of it, so every applier
+            // the onchange handlers call was skipped: the crosshair, stats and
+            // demo-timer overlays stayed on screen and wide mode stayed on,
+            // each with its checkbox now reading off.  The panel said one thing
+            // and the game did another, with no way back but a reload.
+            applyAll();
             render();
         };
         panel.querySelector('#close').onclick = toggle;
+    }
+
+    // Push the whole settings object at everything that holds a copy of part of
+    // it.  The per-control onchange handlers each do their own slice of this;
+    // this is the same set, applied at once, for the paths that change many
+    // settings in one go (Reset defaults).
+    function applyAll() {
+        doom?._web_set_smooth?.(s.smooth ? 1 : 0);
+        doom?._web_set_wide?.(s.wideMode ? wideWidth() : 320);
+        if (renderer) {
+            const w = doom?._web_screenwidth?.() ?? 320;
+            renderer.setPaniniStrength?.(computePaniniStrength(w, s.panini));
+        }
+        if (s.musicBackend === 'gm') {
+            window.doomAudio?.setGmMode?.(true, null);
+        } else {
+            doom?._web_set_opl_mode?.(s.opl3 ? 1 : 0);
+            window.doomAudio?.setGmMode?.(false, null);
+        }
+        qol?.setShowFullscreen(s.showFullscreen);
+        qol?.setShowCrosshair(s.showCrosshair);
+        qol?.setShowStats(s.showStats);
+        qol?.setShowDemoTimer(s.showDemoTimer);
     }
 
     function toggle() {

@@ -41,6 +41,9 @@ for (let i = 0; i <= 9; i++) FIXED['Digit' + i] = 48 + i;
 
 const EV_KEYDOWN = 0, EV_KEYUP = 1, EV_MOUSE = 2;
 
+// Long enough to find a key, short enough that a forgotten capture ends.
+const CAPTURE_TIMEOUT_MS = 8000;
+
 export const defaultSettings = () => ({
     binds: Object.fromEntries(ACTIONS.map(a => [a.id, a.def])),
     mouseSens: 4,          // multiplier; 4 ≈ vanilla's <<2
@@ -60,19 +63,73 @@ export const defaultSettings = () => ({
     showDemoTimer: false,  // task 19.1: demo timer + progress bar; OFF by default
 });
 
+// The shape localStorage is ALLOWED to have.  spec.md tenet 4 names "the
+// network, the WAD, or the user"; localStorage is the third -- editable in
+// devtools, shared by every page on the origin, and carried across versions of
+// this app -- and `{ ...defaultSettings(), ...stored }` validated none of it.
+// A stored mouseSens of "abc" reached the input path as a string and every
+// mouse delta became NaN; the settings panel showed "7", because an
+// <input type=range> with an invalid value renders its midpoint.  The widget
+// is not the value in force.
+//
+// Bounds match the panel's own controls (settings.js: sens 1-12, pturn
+// 0.4-2), so a hand-edited value cannot reach somewhere the UI cannot.
+const SCHEMA = {
+    mouseSens:      { num: [1, 12] },
+    padDeadzone:    { num: [0, 0.9] },
+    padTurnSpeed:   { num: [0.4, 2] },
+    mouseY:         { oneOf: ['off', 'look', 'move'] },
+    musicBackend:   { oneOf: ['opl2', 'opl3', 'gm'] },
+    alwaysRun:      { bool: true },
+    smooth:         { bool: true },
+    opl3:           { bool: true },
+    wideMode:       { bool: true },
+    panini:         { bool: true },
+    showFullscreen: { bool: true },
+    showCrosshair:  { bool: true },
+    showStats:      { bool: true },
+    showDemoTimer:  { bool: true },
+};
+
+// KeyboardEvent.code is alphanumeric; anything else was not written by us.
+const CODE_RE = /^[A-Za-z][A-Za-z0-9]{0,31}$/;
+
+function sanitizeSettings(stored) {
+    const out = defaultSettings();
+    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return out;
+    for (const [k, rule] of Object.entries(SCHEMA)) {
+        if (!(k in stored)) continue;
+        const v = stored[k];
+        if (rule.bool) { if (typeof v === 'boolean') out[k] = v; }
+        else if (rule.oneOf) { if (rule.oneOf.includes(v)) out[k] = v; }
+        else if (rule.num && typeof v === 'number' && Number.isFinite(v))
+            out[k] = Math.min(rule.num[1], Math.max(rule.num[0], v));
+    }
+    // binds PER ACTION, never wholesale.  ACTIONS grows between releases, and
+    // the spread replaced the whole object -- so an action added after a user's
+    // last save had no key, and settings.js rendered keyName(undefined) as the
+    // literal string "undefined" on a button with no way back to its default.
+    const b = stored.binds;
+    if (b && typeof b === 'object' && !Array.isArray(b))
+        for (const a of ACTIONS)
+            if (typeof b[a.id] === 'string' && CODE_RE.test(b[a.id])) out.binds[a.id] = b[a.id];
+    return out;
+}
+
 export function loadSettings() {
-    try {
-        const stored = JSON.parse(localStorage.getItem('webdoom.input') ?? '{}');
-        const s = { ...defaultSettings(), ...stored };
-        // Pre-freelook migration: honor a legacy stored preference, then strip
-        // the key (settings.js now reads/writes mouseY directly — ws-010).
-        if (s.mouseMove === true && !s.mouseY) s.mouseY = 'move';
-        delete s.mouseMove;
-        // task 17.2b migration: if stored settings have opl3:true but no musicBackend,
-        // promote to musicBackend:'opl3' so the 3-way picker reflects the saved state.
-        if (s.opl3 === true && !stored.musicBackend) s.musicBackend = 'opl3';
-        return s;
-    } catch { return defaultSettings(); }
+    let stored;
+    try { stored = JSON.parse(localStorage.getItem('webdoom.input') ?? '{}'); }
+    catch { return defaultSettings(); }
+    const s = sanitizeSettings(stored);
+    // Migrations read the RAW stored object, because they are statements about
+    // what was SAVED.  The pre-freelook one used to test `!s.mouseY` on the
+    // merged object, where mouseY is always 'off' from the defaults -- so it
+    // was dead from the day mouseY gained a default, and a legacy 1993-style
+    // preference silently became 'off'.
+    if (stored.mouseMove === true && stored.mouseY === undefined) s.mouseY = 'move';
+    // task 17.2b: opl3:true with no musicBackend promotes to the 3-way picker.
+    if (stored.opl3 === true && stored.musicBackend === undefined) s.musicBackend = 'opl3';
+    return s;
 }
 
 export function saveSettings(s) {
@@ -107,6 +164,7 @@ export function createInput(doom, canvas, settings) {
     const tapKey = dk => { post(EV_KEYDOWN, dk); post(EV_KEYUP, dk); };
 
     let capture = null;             // action id being rebound, or null
+    let captureTimer = 0;           // capture cannot wait forever with no way out
     let mouseAccX = 0, mouseAccY = 0, mouseButtons = 0, mouseDirty = false;
     let pitch = 0, sentPitch = 0;   // freelook shear, screen pixels
     const heldKeys = new Set();     // game keys currently down (for release-all)
@@ -139,10 +197,18 @@ export function createInput(doom, canvas, settings) {
     const onKey = down => e => {
         if (capture) {
             if (down) {
+                // Escape is how a person says "no".  It used to BECOME the
+                // binding, and then the action could only be reached by the
+                // key that also opens the engine menu.
+                if (e.code === 'Escape') { endCapture(); e.preventDefault(); return; }
+                // A key already bound elsewhere SWAPS rather than duplicating:
+                // two actions on one key is unreachable for one of them, and
+                // silently unbinding the other leaves a button no one can read.
+                const taken = ACTIONS.find(a => a.id !== capture && settings.binds[a.id] === e.code);
+                if (taken) settings.binds[taken.id] = settings.binds[capture];
                 settings.binds[capture] = e.code;
                 saveSettings(settings);
-                capture = null;
-                onCapture?.(null);
+                endCapture();
             }
             e.preventDefault();
             return;
@@ -307,11 +373,28 @@ export function createInput(doom, canvas, settings) {
     }
 
     let onCapture = null;
+    // One exit from capture, so no path can leave the timer armed or the
+    // button stuck on "press a key…".
+    const endCapture = () => {
+        clearTimeout(captureTimer);
+        captureTimer = 0;
+        capture = null;
+        onCapture?.(null);
+        onCapture = null;
+    };
     return {
         frame,
         settings,
-        startCapture(actionId, cb) { capture = actionId; onCapture = cb; },
-        cancelCapture() { capture = null; },
+        startCapture(actionId, cb) {
+            clearTimeout(captureTimer);
+            capture = actionId;
+            onCapture = cb;
+            // Without this the panel waits forever, showing "press a key…" on a
+            // button whose real binding can no longer be read, and every key
+            // the player presses is swallowed by the capture.
+            captureTimer = setTimeout(() => { if (capture) endCapture(); }, CAPTURE_TIMEOUT_MS);
+        },
+        cancelCapture() { endCapture(); },
         destroy() { for (const off of _teardown) off(); _teardown.length = 0; },
     };
 }
