@@ -56,3 +56,37 @@ its own is not evidence that anything ran.
 - **Measurements must be symmetric.** A before/after comparison with different
   flags, demos, or build settings on each side manufactures its own result.
   State the build flags, the demo, and the host on both sides.
+
+## Three ways a gate you just wrote can lie to you
+
+All three were found by writing gates in round 5, not by theory. Each cost a
+run that read green or read the wrong colour entirely.
+
+- **Grade vacuity on the quantity that only rises.** The teardown leg's new GL
+  counter first refused any run where the net count "never moved" — but after a
+  clean quit the net is *supposed* to be zero, so that guard would have failed
+  precisely the runs where the fix works. Net is the pass condition; it cannot
+  also be the did-not-run condition. Count gross creations for vacuity, net for
+  the leak. Alarming on correct behaviour is a defect too.
+- **An `uncaughtException` handler lets a test exit 0 after giving up.** With
+  one registered — which you need if you are *observing* throws — an uncaught
+  error no longer kills the process: module evaluation aborts where it threw,
+  the event loop drains, and node exits **0**. `hostile-lobby-test.mjs` printed
+  14 FAIL lines, died before its own summary, and exited zero. Make the summary
+  the only sanctioned exit: set a flag when it prints, and fail from
+  `process.on('exit')` if it did not.
+- **One case can disarm the next.** That same test reused a single socket and
+  read 24 PASS / 1 FAIL against the broken client, which looked like "only the
+  first frame is a problem". It was not: the first malformed frame throws out of
+  `ws.onmessage`, after which that socket delivers nothing, so every later
+  assertion passed by observing *nothing*. Give each hostile case its own
+  connection, process or tree — and assert afterwards that the subject is still
+  alive, not merely quiet.
+
+And one about the thing being gated rather than the gate: **a fix can ship into
+a branch that cannot run it.** Task 23.7b's GL `dispose()` sat in
+`createRenderer2D`, whose scope has no `gl`, so the WebGL2 path — the one every
+browser takes — had no `dispose` at all, and `h?.dispose?.()` skipped it in
+silence. Optional-call and a swallowing `catch` will hide that indefinitely. If
+a fix is worth a comment saying what it reclaims, it is worth a gate that counts
+the thing reclaimed.
