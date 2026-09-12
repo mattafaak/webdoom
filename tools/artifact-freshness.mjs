@@ -70,6 +70,44 @@ export const ARTIFACTS = {
         files:   ['tools/freestanding/Makefile'],
         rebuild: 'make -C tools/freestanding',
     },
+    // ── the compile-time variants ────────────────────────────────────────────
+    //
+    // These were not registered, and the registry IS the contract -- so nothing
+    // checked them.  The gap had teeth because the suite pairs them
+    // asymmetrically: `build-fakeflat` needs emsdk, `render-fakeflat` needs only
+    // `wad`.  On a host without emsdk the five build legs SKIP and the seven
+    // legs that LOAD those trees run anyway, against whatever bytes are on disk,
+    // and print e.g. "PASS — all [fakeflat] render goldens pixel-identical
+    // (13 demos)" from a tree built before the change under test.
+    //
+    // Same sources as `build` -- the variants differ only by a -D on the command
+    // line -- so the same dirs and Makefile decide staleness.
+    //
+    // `optional` means ABSENT is not a failure for --all: a host that has never
+    // built a variant is not stale, it is uninvolved, and the consuming legs
+    // have their own prerequisite. Absent ones are named and counted, never
+    // passed over in silence. Present-and-stale is always a failure.
+    ...Object.fromEntries([
+        ['build-invariants', 'WEBDOOM_INVARIANTS', 'demo-visible invariant asserts'],
+        ['build-fakeflat',   'WEBDOOM_FAKEFLAT',   'FastDoom fake-flat toggle'],
+        ['build-potato',     'WEBDOOM_POTATO',     'FastDoom potato/half-width columns'],
+        ['build-sbskip',     'WEBDOOM_SBSKIP',     'FastDoom status-bar redraw skip'],
+        ['build-diffblit',   'WEBDOOM_DIFFBLIT',   'FastDoom differential blit'],
+        ['build-perf',       'WEB_PERF_*_STATS',   'instrumented build for verify-all --full runtime-stat claims'],
+    ].map(([dir, define, desc]) => [dir, {
+        desc:     `${desc} (-D${define})`,
+        path:     `${dir}/doom.wasm`,
+        also:     [`${dir}/doom.js`],
+        dirs:     [['engine/core', true], ['engine/web', false]],
+        files:    ['engine/Makefile'],
+        optional: true,
+        rebuild:  dir === 'build-perf'
+            ? 'source tools/emsdk-env.sh && make -C engine EXTRA_CFLAGS="-DWEB_PERF_COL_STATS '
+              + '-DWEB_PERF_PLANE_STATS -DWEB_PERF_SPECHIT_STATS -DWEB_PERF_TELEPORT_STATS '
+              + '-DWEB_PERF_DRAWSEG_STATS -DWEB_PERF_OPENINGS_STATS" '
+              + 'BUILD=../build-perf OUT=../build-perf/doom.js'
+            : `bash tools/build-toggle.sh ${define} ${dir}`,
+    }])),
 };
 
 function sourcesOf(spec) {
@@ -156,8 +194,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     for (const n of names) {
         if (!ARTIFACTS[n]) { console.error(`FAIL unknown artifact '${n}' — see --list`); process.exit(2); }
     }
-    let bad = 0;
+    let bad = 0, checked = 0;
+    const absentOptional = [];
     for (const n of names) {
+        // An optional variant that was never built on this host is uninvolved,
+        // not stale.  Named and counted, never silent -- and only when the user
+        // asked for everything: `artifact-freshness build-potato` is someone
+        // asking about that tree specifically, and "absent" is the answer.
+        const explicit = !(args.includes('--all') || args.length === 0);
+        if (ARTIFACTS[n].optional && !explicit && !inspect(n).exists) {
+            absentOptional.push(n);
+            continue;
+        }
+        checked++;
         try {
             const r = assertFresh(n);
             console.log(`PASS ${n}: ${r.path} built ${r.builtAtISO}, newer than all ${r.sourceCount} sources`);
@@ -166,9 +215,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             bad++;
         }
     }
+    if (absentOptional.length)
+        console.log(`  not built on this host (optional, so not graded): ${absentOptional.join(', ')}`);
     // A run that checked nothing is not a pass (failure mode #3).
-    if (!names.length) { console.log('FAIL artifact-freshness: checked 0 artifacts — vacuous run'); process.exit(1); }
-    console.log(bad ? `artifact-freshness: ${bad} of ${names.length} artifact(s) stale or absent`
-                    : `PASS — all ${names.length} artifact(s) current with their sources`);
+    if (!checked) { console.log('FAIL artifact-freshness: checked 0 artifacts — vacuous run'); process.exit(1); }
+    console.log(bad ? `artifact-freshness: ${bad} of ${checked} artifact(s) stale or absent`
+                    : `PASS — all ${checked} artifact(s) current with their sources`
+                      + (absentOptional.length ? ` (${absentOptional.length} optional not built)` : ''));
     process.exit(bad ? 1 : 0);
 }

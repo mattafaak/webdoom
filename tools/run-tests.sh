@@ -89,6 +89,13 @@ have_baseline(){ [ -f "tools/golden/browser-pipeline-$(hostname).json" ]; }
 # was hiding.
 SHARED_UP=0
 have_shared()  { [ "$SHARED_UP" = "1" ]; }
+# PRESENT is not the same as CURRENT, and for the compile-time variants the
+# difference was load-bearing: `build-fakeflat` needs emsdk while
+# `render-fakeflat` needed only `wad`, so on a host without emsdk the build leg
+# SKIPped and the render leg ran against whatever was on disk -- printing a
+# full-count PASS from a tree built before the change under test.  The freshness
+# registry already knows what current means; ask it.
+have_fresh()   { node tools/artifact-freshness.mjs "$1" >/dev/null 2>&1; }
 
 need_reason() {   # need_reason <tag> -> prints why it is unmet
     case "$1" in
@@ -106,6 +113,7 @@ need_reason() {   # need_reason <tag> -> prints why it is unmet
         emsdk)    echo "emsdk not found (run: tools/setup-emsdk.sh)" ;;
         baseline) echo "no browser-pipeline baseline for host $(hostname)" ;;
         shared)   echo "shared browser server on 8668 not started" ;;
+        fresh-*)  echo "build-${1#fresh-} absent or stale (node tools/artifact-freshness.mjs build-${1#fresh-})" ;;
         *)        echo "unmet prerequisite '$1'" ;;
     esac
 }
@@ -116,6 +124,7 @@ need_met() {
         n64) have_n64 ;;
         browser) have_browser ;; firefox) have_firefox ;; emsdk) have_emsdk ;;
         baseline) have_baseline ;; shared) have_shared ;;
+        fresh-*) have_fresh "build-${1#fresh-}" ;;
         *) return 1 ;;
     esac
 }
@@ -337,7 +346,7 @@ leg gm-frames       build,wad  "GM/GUS pump chain + DMXGUS mapping"    -- node t
 # ── the sim-safety gate: an assert names the broken invariant at its call site,
 #    which a golden diff cannot do.  It runs BEFORE the goldens for that reason.
 leg build-invariants emsdk     "compile -DWEBDOOM_INVARIANTS"          -- bash tools/build-toggle.sh WEBDOOM_INVARIANTS build-invariants
-leg sim-invariants   wad       "13 demos under armed invariant asserts" -- node tools/demo-test.mjs --build-dir build-invariants
+leg sim-invariants   wad,fresh-invariants       "13 demos under armed invariant asserts" -- node tools/demo-test.mjs --build-dir build-invariants
 
 # ── differential + goldens ───────────────────────────────────────────────────
 leg fuzz-diff       native,wad "20 mutated demos: wasm == native"      -- node tools/fuzz/run-fuzz.mjs --seeds 20 --parallel 8 --require-native
@@ -348,9 +357,9 @@ leg render-wide     build,wad  "854-px Hor+ render goldens (18.2c)"    -- node t
 leg sim-wide        build,wad  "wide ENABLED must match sim goldens"   -- node tools/demo-test.mjs --sim-wide
 
 leg build-fakeflat   emsdk     "compile -DWEBDOOM_FAKEFLAT"            -- bash tools/build-toggle.sh WEBDOOM_FAKEFLAT build-fakeflat
-leg render-fakeflat  wad       "fakeflat render goldens (20.3a)"       -- node tools/demo-test.mjs --render-fakeflat
+leg render-fakeflat  wad,fresh-fakeflat       "fakeflat render goldens (20.3a)"       -- node tools/demo-test.mjs --render-fakeflat
 leg build-potato     emsdk     "compile -DWEBDOOM_POTATO"              -- bash tools/build-toggle.sh WEBDOOM_POTATO build-potato
-leg render-potato    wad       "potato render goldens (20.3c)"         -- node tools/demo-test.mjs --render-potato
+leg render-potato    wad,fresh-potato       "potato render goldens (20.3c)"         -- node tools/demo-test.mjs --render-potato
 
 # ── 20.3b and 20.3d shipped with no regression gate at all (task 21.12) ───────
 # run-tests.sh built and gated only fakeflat and potato.  Both of these are
@@ -359,11 +368,11 @@ leg render-potato    wad       "potato render goldens (20.3c)"         -- node t
 # the toggle build, which is exactly the proof the ledger records.  Their only
 # surviving evidence until now was an md5 typed into a document.
 leg build-sbskip     emsdk     "compile -DWEBDOOM_SBSKIP"              -- bash tools/build-toggle.sh WEBDOOM_SBSKIP build-sbskip
-leg render-sbskip    wad       "sbskip pixel-identical to vanilla (20.3b)" -- node tools/demo-test.mjs --render --build-dir build-sbskip
-leg sim-sbskip       wad       "sbskip leaves the playsim untouched"   -- node tools/demo-test.mjs --build-dir build-sbskip
+leg render-sbskip    wad,fresh-sbskip       "sbskip pixel-identical to vanilla (20.3b)" -- node tools/demo-test.mjs --render --build-dir build-sbskip
+leg sim-sbskip       wad,fresh-sbskip       "sbskip leaves the playsim untouched"   -- node tools/demo-test.mjs --build-dir build-sbskip
 leg build-diffblit   emsdk     "compile -DWEBDOOM_DIFFBLIT"            -- bash tools/build-toggle.sh WEBDOOM_DIFFBLIT build-diffblit
-leg render-diffblit  wad       "diffblit pixel-identical to vanilla (20.3d)" -- node tools/demo-test.mjs --render --build-dir build-diffblit
-leg sim-diffblit     wad       "diffblit leaves the playsim untouched" -- node tools/demo-test.mjs --build-dir build-diffblit
+leg render-diffblit  wad,fresh-diffblit       "diffblit pixel-identical to vanilla (20.3d)" -- node tools/demo-test.mjs --render --build-dir build-diffblit
+leg sim-diffblit     wad,fresh-diffblit       "diffblit leaves the playsim untouched" -- node tools/demo-test.mjs --build-dir build-diffblit
 
 # Every md5 the ledger states about a built artifact, checked against the
 # artifact — including the toggle-off byte-identity claim that all four 20.3
