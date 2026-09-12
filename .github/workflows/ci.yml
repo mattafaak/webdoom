@@ -33,11 +33,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 20 is the floor README states; 24 is current.  The dev box runs 26.8.1,
-        # so the matrix brackets it rather than matching it — a suite that only
-        # ever runs on one Node version cannot tell a code bug from a runtime
-        # change, which is what task 22.3 was about.
-        node: ['20', '24']
+        # 20 is the floor README and server/package.json's `engines` state; 26 is
+        # what the dev box runs (v26.8.1), where the full local tier is green; 24
+        # sits between them.  A suite that only ever runs on one Node version
+        # cannot tell a code bug from a runtime change, which is what task 22.3
+        # was about — so the matrix must reach BOTH ends of the supported range.
+        # It previously read ['20', '24'] under a comment claiming it "brackets"
+        # the dev box: 24 < 26.8.1, so the version actually being developed on
+        # was the one version CI never ran.
+        node: ['20', '24', '26']
 
     steps:
       - uses: actions/checkout@v4
