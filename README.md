@@ -49,7 +49,7 @@ the game/map/skill/mode; anyone hits START; 3-2-1, everyone's in.
 | `client/`      | vanilla-JS shell: lobby, WebGL2 renderer, input, audio, service worker |
 | `server/`      | Node ≥ 20, single process, single port; only dep `ws` |
 | `tools/`       | emsdk pin, WAD fetch/identify, test suites, bench harness, native sanitizer target |
-| `docs/`        | reference docs: [netcode](docs/netcode.md), [renderer](docs/renderer.md), [playsim](docs/playsim.md), [formats](docs/formats.md), [bare-metal](docs/bare-metal.md), [perf](docs/perf.md), [state-machine](docs/state-machine.md), [engine-archaeology](docs/engine-archaeology.md) |
+| `docs/`        | 26 reference documents — **[the index](docs/README.md)** lists every one. The ones most people want: [netcode](docs/netcode.md), [renderer](docs/renderer.md), [playsim](docs/playsim.md), [formats](docs/formats.md), [bare-metal](docs/bare-metal.md), [perf](docs/perf.md), [state-machine](docs/state-machine.md), [engine-archaeology](docs/engine-archaeology.md) |
 
 ## Tests
 
