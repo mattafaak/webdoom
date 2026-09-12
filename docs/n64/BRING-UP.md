@@ -1,12 +1,27 @@
 # N64 libdragon bring-up notes — task 20.4b
 
-## Status (2026-07-23)
+## Status (corrected 2026-09-12, task 24.4)
 
-ROM builds and links cleanly.  Emulator boot is blocked by a SIGSEGV in the
-ares binary during GUI/window initialization — see `tools/n64/ares-boot.log`.
-The ares binary itself is healthy (`--version` / `--help` return rc=0); the
-crash is limited to the SDL3/GTK3 window creation path.  xvfb-run (not
-installed; root required to install) is the recommended remedy.
+**This file's original status block was superseded by five later commits and is
+kept below only as the record of what was believed at the time.  Read
+`docs/n64/DEMO-GATE-STATUS.md` for where 20.4c actually stands.**
+
+What is true now: the ROM builds, **boots, reads its WAD and ticks the attract
+demos** under ares over the GDB stub (`44e69f3`, `1e37451`).  The remaining
+blocker for the 13/13 gate is that `-timedemo` does not engage on this target,
+so `gametic` never aligns with the golden base — root-caused, not mysterious.
+
+### Superseded status (2026-07-23), and why it was wrong
+
+> ROM builds and links cleanly.  Emulator boot is blocked by a SIGSEGV in the
+> ares binary during GUI/window initialization — see `tools/n64/ares-boot.log`.
+> The ares binary itself is healthy (`--version` / `--help` return rc=0); the
+> crash is limited to the SDL3/GTK3 window creation path.  xvfb-run (not
+> installed; root required to install) is the recommended remedy.
+
+Commit `be33537` settled it: **the SIGSEGV was a missing X display, not a
+crash.**  ares was healthy all along; the real blocker at that moment was the
+NULL WAD, fixed in `8e4f40f` / `39b3b0f`.
 
 ## Memory analysis
 
@@ -170,7 +185,7 @@ while giving the N64 shim the correct inline semantics from libdragon.
 - Linker script: `$(LIBDRAGON)/n64.ld` (provides `_start`, KSEG0 @ 0x80000000)
 - ROM tool: `n64tool` compiled from `$(LIBDRAGON)/tools/n64tool.c`
 
-## FINDING-1: ares emulator crashes during GUI initialization
+## N64-FINDING-1: ares emulator crashes during GUI initialization
 
 **Symptom**: SIGSEGV (signal 11) every time ares opens a game window.
 `--version` and `--help` return rc=0 (binary is healthy); only the

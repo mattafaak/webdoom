@@ -1144,7 +1144,15 @@ Two invariants hold across all of them, and both are gated:
 Measured effect, kill rules and the icount arithmetic stay in
 `docs/optimization-ledger.md` §20.3a–d — this table is the map, not the ledger.
 
-## 13. Open questions for task 1.4
+## 13. Open questions for task 1.4 — ANSWERED (24.4)
+
+> **These were answered in `engine-archaeology.md` and this heading was never
+> updated**, so a reader arrived at a round-1 question list that had been closed
+> for months.  The DISTMAP/LIGHTZSHIFT rationale is
+> `engine-archaeology.md` §"closes the open question about why the specific
+> constants were chosen"; checkcoord's correctness is closed in the same file
+> ("closes the open question about checkcoord's correctness").  Kept below as
+> the record of what was open at the time.
 
 1. **`DISTMAP = 2` and `LIGHTZSHIFT = 20` rationale**: the exact parameter
    choices for the zlight/scalelight recipes (§2.3) are clear in structure but

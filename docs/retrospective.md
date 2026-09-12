@@ -1,5 +1,11 @@
 # webdoom refinement-pass retrospective
 
+> **ARCHIVE — written 2026-07-16, not maintained (banner added 24.4).** Its
+> "What remains open" section is a snapshot of that date: Q0 (the browser
+> pipeline profile) landed in phase 12, and the T07 flake was fixed in 9ed9671.
+> ZONESIZE is still open. For current state read `Plans.md` and
+> `docs/2026-09-11-suite-baseline.md`.
+
 *Covers tasks 1.x–5.x from the spec.md refinement tenets.*
 *Written at commit HEAD of the 5.1 pass, 2026-07-16.*
 

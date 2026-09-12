@@ -31,8 +31,13 @@ shown. Code claims are cited as `file:line`.
 > 13/13 golden demos bit-identical to vanilla. Every claim in §1–§7 was measured
 > against this bring-up; gaps and validated predictions are recorded in §8.
 > **Scope caveat**: this is hosted-freestanding (Linux, glibc, -m32 ABI). The
-> QEMU/OS-less rung (11.1b) is deferred — no cross-compiler toolchain on this
-> build host. Do not read this as bare-metal-on-hardware validation.
+> **Superseded (24.4).** This banner said the QEMU/OS-less rung (11.1b) was
+> deferred for want of a cross-compiler.  It is not: §7 of this same document
+> records PPC/MIPS/ARM QEMU trials, 13.4b landed a full OS-less D_DoomMain on
+> ARM, and as of 2026-09-11 alder cross-builds the freestanding core for
+> 32-bit ARM with zig and replays all 13 golden demos bit-identically under
+> qemu-arm-static (`tools/freestanding/arm-check.sh`, suite leg `arm-cross`).
+> The banner outlived the blocker by two phases.
 
 ---
 

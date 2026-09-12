@@ -42,7 +42,7 @@ These items appear as individual killed rows in the ledger below.
 
 | stage | instr/tic p50 | share | notes |
 |-------|--------------|-------|-------|
-| bsp+segs | 494,338 | 40.1% | R_DrawColumn + BSP traversal + wall projection |
+| bsp+segs | 503,704 | 40.1% | R_DrawColumn + BSP traversal + wall projection. **Corrected 24.4**: this cell read 494,338, a figure the RESOLVED(14.4) note ~20 lines below already identified as a transcription error — the table and its own correction disagreed. 503,704 is the 14.4 regenerated doom.wad baseline. |
 | planes | 402,167 | 32.7% | R_DrawSpan + R_FindPlane overhead |
 | masked | 138,866 | 11.3% | sprite R_DrawColumn variants |
 | sim | 58,355 | 4.7% | playsim (P_Ticker and friends) |
