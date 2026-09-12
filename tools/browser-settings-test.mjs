@@ -16,7 +16,7 @@
 import { spawn } from 'node:child_process';
 import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
 
-const CDP = 9247;
+const CDP = 9248;
 const chrome = spawn(chromeBin(), [
     '--headless=new', `--remote-debugging-port=${CDP}`, chromeProfileArg(), '--no-first-run', '--no-sandbox',
     '--use-angle=swiftshader', '--autoplay-policy=no-user-gesture-required', 'about:blank',

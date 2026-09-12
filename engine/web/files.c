@@ -57,16 +57,26 @@ static const char* web_basename (const char* path)
     return s ? s + 1 : path;
 }
 
-EMSCRIPTEN_KEEPALIVE void web_register_file (const char* name, byte* data,
-                                             int len)
+// Returns 1 if the file was registered, 0 if the registry is full.  It used to
+// return void and no-op silently at the cap, which W_WebFile below could not
+// see -- so every later lookup of that name missed, malloc'd the file again,
+// failed to register it again, and leaked.  A bounded registry that refuses
+// loudly is the contract; a silent one is a leak with a limit written on it.
+EMSCRIPTEN_KEEPALIVE int web_register_file (const char* name, byte* data,
+                                            int len)
 {
     if (numwebfiles >= MAXWEBFILES)
-        return;
+    {
+        printf ("webdoom: file registry full (%d) — refusing \"%s\"\n",
+                MAXWEBFILES, web_basename (name));
+        return 0;
+    }
     snprintf (webfiles[numwebfiles].name, sizeof webfiles[0].name, "%s",
               web_basename (name));
     webfiles[numwebfiles].data = data;
     webfiles[numwebfiles].len = len;
     numwebfiles++;
+    return 1;
 }
 
 // Look a file up; on miss, pull it from the JS Map into the heap and
@@ -93,7 +103,13 @@ byte* W_WebFile (const char* path, int* len)
     if (!buf)
         return NULL;
     js_file_copy (name, buf);
-    web_register_file (name, buf, n);
+    if (!web_register_file (name, buf, n))
+    {
+        // Nothing will ever find this buffer again, and the next lookup of the
+        // same name would malloc another one.  Refuse cleanly instead.
+        free (buf);
+        return NULL;
+    }
     *len = n;
     return buf;
 }

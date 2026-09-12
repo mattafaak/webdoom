@@ -55,6 +55,7 @@
 /* Internal demo buffer pointers defined in g_game.c */
 extern byte* demobuffer;
 extern byte* demo_p;
+extern byte* demoend; /* g_game.c: demobuffer + maxsize */
 
 /* Title-screen demo advance flag defined in d_main.c */
 extern boolean advancedemo;
@@ -107,6 +108,23 @@ EMSCRIPTEN_KEEPALIVE int web_demo_stop (void)
 {
     if (!demorecording)
         return 0;
+    // G_WriteDemoTiccmd stops at demoend - 16, so in the shipping engine there
+    // is always room -- this is the bound stated rather than inherited from a
+    // constant in another file, which is exactly what web.h's memory-safety
+    // section asks of every export here.
+    //
+    // The real end of a long recording is NOT this function: at 0x20000 bytes
+    // (G_RecordDemo's maxsize, 4 bytes/tic = 32,768 tics = 15.6 minutes)
+    // G_WriteDemoTiccmd calls G_CheckDemoStatus, which writes the marker, frees
+    // the buffer and calls I_Error("Demo %s recorded") -- an engine abort that
+    // the web build surfaces as onDoomError.  Fail-soft, and documented in
+    // docs/formats.md 4.2 rather than silently discovered by whoever records for a
+    // quarter of an hour.
+    if (demo_p >= demoend)
+    {
+        demorecording = false;
+        return (int) (demo_p - demobuffer);
+    }
     *demo_p++ = WEBDEMO_MARKER;
     demorecording = false;
     return (int) (demo_p - demobuffer);

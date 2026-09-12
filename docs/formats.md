@@ -582,6 +582,18 @@ not a webdoom change.
 signals the end of tic data. The terminator is detected in `G_ReadDemoTiccmd`
 before any tic bytes are consumed (g_game.c:1513).
 
+**Recording has a hard ceiling, and reaching it ends the session.**
+`G_RecordDemo` allocates `maxsize = 0x20000` (131,072 bytes) and sets
+`demoend = demobuffer + maxsize`; `G_WriteDemoTiccmd` stops at
+`demoend - 16`. At 4 bytes per tic that is **32,768 tics ≈ 15.6 minutes**
+of recording, after which `G_CheckDemoStatus` writes the marker, writes
+the file, frees the buffer and calls `I_Error("Demo %s recorded")` — an
+engine abort, which the web build surfaces through `onDoomError` as a
+returned-to-launcher error rather than a saved demo. Vanilla behaviour,
+not a webdoom change; webdoom's own `web_demo_stop` checks `demoend`
+before writing its `WEBDEMO_MARKER` so the stop path states the bound
+rather than inheriting it from another file.
+
 ### 4.3 On-disk ticcmd vs. in-memory `ticcmd_t`
 
 The **demo 4-byte format** is a lossy compressed subset of the full

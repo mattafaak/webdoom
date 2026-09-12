@@ -65,8 +65,11 @@ void web_demo_state (int* out);
 void web_music_render (float* out, int nframes);
 
 // data must remain valid for the lifetime of the registration — the registry
-// stores the pointer, it does not copy.
-void web_register_file (const char* name, byte* data, int len);
+// stores the pointer, it does not copy.  The registry holds MAXWEBFILES (40)
+// entries; past that this RETURNS 0 and registers nothing, and the caller owns
+// what it passed.  It used to return void and no-op silently, which is how
+// W_WebFile came to re-malloc the same file on every lookup.
+int web_register_file (const char* name, byte* data, int len);
 
 // heapPtr is a wasm heap offset; len is its size and is MANDATORY.  A call
 // without it is rejected rather than overscanned (task 23.4).
@@ -86,6 +89,9 @@ void web_set_console (int player);
 void web_set_player_name (int player, const char* name);
 
 // In-heap file registry + JS small-file bridge (files.c)
+// W_WebFile returns NULL both for "no such file" and for "the registry is full"
+// — the second is announced on stdout, because a bounded registry that refuses
+// silently is indistinguishable from a missing file.
 byte* W_WebFile (const char* path, int* len);
 boolean W_WebFileExists (const char* path);
 int Web_FileLen (const char* path);

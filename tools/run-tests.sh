@@ -374,6 +374,9 @@ leg promises-index  -    "the promises index has not gone stale"      -- node to
 # web.h is the core<->platform contract spec.md tenet 5 points a bare-metal port
 # at.  It declared 5 of 73 exports and got one arity wrong (task 25.2).
 leg web-contract    -    "web.h matches the exports it declares"      -- node tools/web-contract-check.mjs
+# The registry's bound, and MAXWEBFILES, which is written on both sides of the
+# wire (files.c and lobby.js) and was asserted by nothing.
+leg web-registry    build "file-registry cap + the MAXWEBFILES mirror"  -- node tools/web-registry-test.mjs
 leg gate-census     -    "every gate is wired or registered with a reason" -- node tools/gate-census.mjs
 # A document may not contradict the project's own record of what is done.  The
 # claims machinery checks NUMBERS against code and nothing checked STATUS prose:
