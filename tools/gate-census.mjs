@@ -47,7 +47,22 @@ const refsIn = file => {
     // Several of these embed raw fuzz bytes; read as latin1 so a non-UTF-8 byte
     // cannot truncate the scan (the same reason headline() uses `grep -a`).
     try { text = readFileSync(abs, 'latin1'); } catch { return []; }
-    return [...text.matchAll(/tools\/[A-Za-z0-9_./-]+\.(?:mjs|sh)/g)].map(m => m[0]);
+    const out = [...text.matchAll(/tools\/[A-Za-z0-9_./-]+\.(?:mjs|sh)/g)].map(m => m[0]);
+
+    // A sibling invoked through the caller's own directory is still a
+    // reference, and the `tools/…` pattern above cannot see one.
+    //
+    // tools/freestanding/arm-check.sh ends with
+    //     exec bash "$SCRIPT_DIR/be-check.sh" "$@"
+    // and the green `arm-cross` leg runs arm-check.sh -- so be-check.sh IS
+    // reachable from the suite. The census could not tell, so it stayed in
+    // gates-not-in-suite.json under a reason ("wiring it would make the suite
+    // permanently red") that the registry's own registeredButReachable
+    // assertion exists to catch and could not.
+    const dir = dirname(file);
+    for (const m of text.matchAll(/\$\{?SCRIPT_DIR\}?\/([A-Za-z0-9_.-]+\.(?:mjs|sh))/g))
+        out.push(join(dir, m[1]).replaceAll('\\', '/'));
+    return out;
 };
 const reachable = new Set();
 const queue = [...ROOTS];

@@ -16,10 +16,6 @@
     "tools/coverage/run-coverage.sh": {
       "reason": "Produces a coverage REPORT, not a verdict: there is no committed floor to regress against, so wiring it would add runtime and assert nothing. Give it a floor and it becomes a leg.",
       "owner": null
-    },
-    "tools/freestanding/be-check.sh": {
-      "reason": "KNOWN-DIVERGING BY DESIGN: big-endian PPC under qemu-ppc-static, hashes diverge and the script is deliberately written to exit non-zero (13.3a WIP, BE-NOTES.md). Wiring it would make the suite permanently red on a documented open question.",
-      "owner": "13.3a"
     }
   }
 }
