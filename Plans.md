@@ -316,6 +316,20 @@ already built and red-proofed.
 | C4 | Six legs whose summary row said nothing or the wrong thing — `browser-demo`'s green row was a Chrome deprecation warning; `lint`'s was its own nested sub-check | every one quotes what it observed; `browser-qol`/`browser-wide` hold their stages to a list; `browser-demo` gains a floor | cc:完了 |
 | C5 | 21 legs launched Chrome and disagreed: `CHROME_BIN` honoured by 6, profile isolation by 6, cleanup by 7, and SEVEN duplicated ports | `chrome-harness.mjs` (bin, profile, group-reaping); all ports distinct; `check-cdp-ports.mjs` in lint. **That check's first version passed by not looking** — its name pattern required a character before "PORT" | cc:完了 |
 
+## Phase B: the trust boundaries
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| B1 | `manifest()` was a bare `readFileSync` in the request handler and `/api/ui-assets` parsed it unguarded, with no `uncaughtException` anywhere in `server/` — so a missing or malformed `wads/manifest.json` ENDED THE PROCESS | measured: 3 of 4 states kill the shipped server (`process exited=true`). Cached against mtime, both parses guarded, stream `'error'` handler, `send()` refuses a second write, last-resort handlers that still exit before `listen`. http-fuzz grows a hostile-data-directory section against a temp tree; red-proof 3 failures | cc:完了 |
+| B2 | `server/game.js` parses client frames in a `try`; `client/js/net.js` did a bare `JSON.parse` on server frames. And `ping()` had no timeout, so lobby.js's 12-ping loop before `bootDoom` could hang FOREVER under a "GO" countdown | measured: 14 assertions fail against the shipped client — 2 unhandled throws, 6 hostile slots accepted into `api.slot`, a non-string colour, the ping wedge at 5,025 ms and counting, send-after-close. `tools/hostile-lobby-test.mjs`, one connection per case | cc:完了 |
+| B3 | No CSP, no `X-Content-Type-Options`, no `Referrer-Policy`; one inline `onclick` that a CSP would silently break | headers on both response paths, asserted in http-fuzz (27 cases); the inline handler moved into `lobby.js`; `<noscript>`, description and theme-color added. **All 20 browser legs green under the policy** | cc:完了 |
+
+## Phase E: the launcher
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| E1 | `hacx.wad` in `GAME_ORDER`, absent from the manifest and refused by the importer — a menu row with no destination, and README advertised it as shipped. `promises-index` flagged rme-008 as a coverage gap; it was a truth gap | removed; README and rme-008 corrected; `tools/check-menu-reachable.mjs` gates `GAME_ORDER ⊆ manifest ∪ importable`, in two parts because only one is answerable on a clone | cc:完了 |
+
 ## Phase D: documents that contradict the record
 
 | Task | 内容 | DoD | Status |
@@ -325,16 +339,10 @@ already built and red-proofed.
 | D3 | Counts typed rather than computed, inside the two documents whose job is inventory. `promises-index-check` matched rows by `cells.length === 6` and silently dropped all ten Part C rows | every count computed; the checker sees all four Parts (A=10 B=8 C=10 D=16); `claims-summary.mjs` made importable so there is one definition of the tier split | cc:完了 |
 | D5 | 26 documents, README linked 8 | `docs/README.md`; `docs-index-check.mjs` gates both directions | cc:完了 |
 
-## Phase E/F: what this round did NOT do
+## What this round did NOT do
 
 Named so the next pass does not have to rediscover the scope:
 
-- **B1–B3 (server and client trust boundaries)** — `manifest()` is a bare
-  `readFileSync` in the request handler with no `uncaughtException` anywhere in
-  `server/`, so a corrupt `wads/manifest.json` exits the process; `net.js` does
-  a bare `JSON.parse` on lobby traffic while the server hardened exactly that
-  direction; `ping()` has no timeout and its `.catch` can never fire; no
-  security headers, and one inline `onclick` that a CSP would break.
 - **E2/E3 (settings robustness, accessibility)** — localStorage is unvalidated
   user input; a newly-added keybind renders as "undefined"; "Reset defaults"
   desynchronises the live overlays; rebinding has no cancel and `Escape` is
