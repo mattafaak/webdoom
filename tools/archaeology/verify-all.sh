@@ -214,7 +214,15 @@ else
     # claims — including ea-018, the universal-recipe figure quoted in the
     # public writeup — while the coverage line below still said 107 (task 21.8).
     FAMILIES_SKIPPED=$((FAMILIES_SKIPPED + 3))
-    SKIPPED_NAMES="colormap-crack, colormap-invuln-crack, colormap-cross-palette"
+    # The `${SKIPPED_NAMES:+…, }` prefix is not decoration -- the other three
+    # sites use it because this variable ACCUMULATES.  Written as a bare
+    # assignment, this line OVERWROTE whatever came before it, and what comes
+    # before it is line 137's `wad-data`.  Both skips key on the same file
+    # (wads/lib/doom.wad), so in a WAD-less run -- which is exactly CI -- the
+    # honesty line printed "4 verifier famil(ies) skipped" and then named three,
+    # silently dropping wad-data and its 23 claims from the count it was written
+    # to make visible.
+    SKIPPED_NAMES="${SKIPPED_NAMES:+$SKIPPED_NAMES, }colormap-crack, colormap-invuln-crack, colormap-cross-palette"
 fi
 
 # ── Full families (--full only) ────────────────────────────────────────────────
@@ -269,6 +277,14 @@ echo ""
 echo "── doc drift (three-way: doc == manifest == script) ────────────────────"
 DOC_ARGS="--script-values $SCRIPT_VALUES_FILE"
 if [ "$FULL" = "1" ]; then DOC_ARGS="$DOC_ARGS --full"; fi
+# This file is the only place that knows whether a verifier family was skipped,
+# and therefore the only place that can tell the two reasons a claim has no
+# script value apart:
+#   family skipped  -> legitimately two-way (no WAD, no instrumented build)
+#   family ran      -> its verifier did not emit CLAIMS_JSON for that id, which
+#                      is a defect the three-way check was silently absorbing
+# So arm the assertion exactly when nothing was skipped.
+if [ "$FAMILIES_SKIPPED" -eq 0 ]; then DOC_ARGS="$DOC_ARGS --require-script-values"; fi
 if ! node tools/archaeology/doc-drift.mjs $DOC_ARGS; then
     FAMILIES_FAILED=$((FAMILIES_FAILED + 1))
 fi

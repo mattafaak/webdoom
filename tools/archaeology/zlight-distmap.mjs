@@ -87,3 +87,19 @@ printFloorDist(3);
 console.log('\n=== Canon DISTMAP=2 summary ===');
 console.log('LIGHTZSHIFT=20 encodes: j=0 → 16 world units, j=127 → 2048 world units.');
 console.log('DISTMAP=2: moderate falloff slope.  DISTMAP=1 is 2× steeper; DISTMAP=3 is 1.5× gentler.');
+
+// CLAIMS_JSON footer — ea-028, the distance range the zlight table spans.
+//
+// This script computed both ends all along and printed them in prose, but
+// emitted no CLAIMS_JSON, so ea-028 was the one claim in the manifest that
+// passed on doc-vs-manifest alone even when its family ran. doc-drift's
+// three-way check returns PASS when the script value is absent, and nothing
+// distinguished "no script value because the family skipped" from "no script
+// value because the verifier never produced one". `--require-script-values`
+// caught it on its first armed run.
+//
+// Derived from the same arithmetic the table above prints — distance in map
+// units is (j + 1) * 16 — rather than typed beside it.
+const zNear = (0 + 1) * 16;
+const zFar  = ((MAXLIGHTZ - 1) + 1) * 16;
+console.log(`CLAIMS_JSON ${JSON.stringify({ 'ea-028': `${zNear} to ${zFar}` })}`);

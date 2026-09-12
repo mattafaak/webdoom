@@ -28,11 +28,18 @@ const docsDir = join(root, 'docs');
 // ── Parse CLI args ────────────────────────────────────────────────────────────
 let scriptValuesPath = null;
 let fullMode = false;
+let noScript = 0;
+const noScriptIds = [];
+let twoWayFail = false;
 let jsonOnly = false;
+// See the two-way note at the summary. verify-all passes this when it knows
+// every family ran, which is the only time a missing script value is a defect.
+let requireScriptValues = false;
 for (let i = 2; i < process.argv.length; i++) {
     if (process.argv[i] === '--script-values') { scriptValuesPath = process.argv[++i]; }
     else if (process.argv[i] === '--full') { fullMode = true; }
     else if (process.argv[i] === '--json-only') { jsonOnly = true; }
+    else if (process.argv[i] === '--require-script-values') { requireScriptValues = true; }
 }
 
 // ── Load manifest ─────────────────────────────────────────────────────────────
@@ -607,6 +614,15 @@ const DOC_HINTS = {
     'size-001': { soft: true, pinned: true, reason: 'pinned at the 14.2f base; size-ledger emits live' },
     'size-002': { soft: true, pinned: true, reason: 'pinned at the 14.2f base; size-ledger emits live' },
     'size-003': { soft: true, pinned: true, reason: 'pinned at the 14.2f base; size-ledger emits live' },
+    // size-004 is the README's KB figure -- the SAME FACT as readme-001, which
+    // claims-index-check already asserts the two agree on. It had no hint at
+    // all, so once K2 brought the size-ledger family into scope it failed
+    // DOC_NOT_FOUND. Excluding it would have been the easy answer and the wrong
+    // one: give it the locator and it becomes a real three-way check against
+    // the published README, which is where the number is actually read.
+    'size-004': { doc_file: '../README.md',
+                  needle: 'KB of wasm',
+                  extract_re: /(\d+)\s*KB of wasm/ },
 
     'perf-011': { doc_file: 'perf.md',
                   needle: 'plutonia.wad',
@@ -869,7 +885,13 @@ function threeWayCheck(claimId, manifestExpected, docResult, scriptActual) {
 
 // ── Main check loop ───────────────────────────────────────────────────────────
 const fastFamilies = new Set(['source-constant', 'wad-data', 'recipe-crack', 'derived-check']);
-const fullFamilies = new Set([...fastFamilies, 'runtime-stat', 'measurement-stamp']);
+// size-ledger belongs here: claims-summary.mjs counts its 4 claims in the FULL
+// tier (15 runtime-stat + 11 measurement-stamp + 4 size-ledger = 30), and
+// verify-all prints "Coverage: 137 claims checked" on that basis. Omitting it
+// meant size-001..004 never entered the loop below, so --full reported 132
+// checked against verify-all's 137 -- and the soft/pinned declarations written
+// for size-001..003 were unreachable code.
+const fullFamilies = new Set([...fastFamilies, 'runtime-stat', 'measurement-stamp', 'size-ledger']);
 const activeFamilies = fullMode ? fullFamilies : fastFamilies;
 
 // Published-promise guard claims run unconditionally (outside family filter).
@@ -909,6 +931,20 @@ for (const [id, entry] of Object.entries(manifest.claims)) {
 
     if (result.verdict === 'PASS') {
         pass++;
+        // THE THREE-WAY CHECK QUIETLY BECOMES A TWO-WAY ONE.
+        //
+        // threeWayCheck returns PASS when `dn === mn && (sn === null || sn ===
+        // mn)` -- so a claim whose verifier family never ran, and which
+        // therefore has no script value at all, passes on doc-vs-manifest
+        // alone. That is a real and legitimate state (wad-data cannot run
+        // without a WAD), but nothing distinguished it from a claim that was
+        // actually checked three ways: in a WAD-less run 31 of the fast claims
+        // take this path and were counted inside the same `pass` figure.
+        //
+        // verify-all.sh's own header calls this file's contract "doc figure ==
+        // manifest.expected == script output". For these it was two of the
+        // three, silently.
+        if (scriptActual === undefined) { noScript++; noScriptIds.push(id); }
         if (!jsonOnly) console.log(`PASS  ${id}`);
     } else if (result.verdict === 'SOFT') {
         soft++;
@@ -986,6 +1022,17 @@ for (const [id, entry] of Object.entries(manifest.claims)) {
 
 const total = pass + fail + soft;
 console.log(`\ndoc-drift: ${pass} pass, ${fail} fail, ${soft} soft (of ${total} checked)`);
+if (noScript > 0) {
+    console.log(`  of those passes, ${noScript} were checked TWO ways only (doc == manifest); ` +
+                'their verifier family produced no script value');
+    console.log(`  ${noScriptIds.slice(0, 12).join(', ')}` +
+                (noScriptIds.length > 12 ? `, … and ${noScriptIds.length - 12} more` : ''));
+    if (requireScriptValues) {
+        console.log('  --require-script-values: every family ran, so a claim with no script value ' +
+                    'means its verifier did not emit one — that is a defect, not a skip');
+        twoWayFail = true;
+    }
+}
 if (failDetails.length > 0) {
     console.log('\nFailed claims:');
     for (const f of failDetails) {
@@ -1026,4 +1073,4 @@ if (specFailDetails.length > 0) {
     }
 }
 
-if (fail > 0 || publicFail > 0 || readmeFail > 0 || specFail > 0) process.exit(1);
+if (fail > 0 || publicFail > 0 || readmeFail > 0 || specFail > 0 || twoWayFail) process.exit(1);
