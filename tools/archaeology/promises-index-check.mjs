@@ -137,6 +137,38 @@ else {
     }
 }
 
+// 7. spec.md's "What ships" table names a gate for every shipped surface, and
+//    a table of gate names is only worth having if the names are real.  Each
+//    backticked token in the gate column must be a registered leg or a file
+//    that exists — the same rule as 3, applied to the contract rather than to
+//    this index.
+const spec = readFileSync(join(root, 'spec.md'), 'utf8');
+const shipsSection = /## What ships[\s\S]*?(?=\n## )/.exec(spec);
+let shipRows = 0, shipGates = 0;
+if (!shipsSection) {
+    fail('promises-index: spec.md has no "## What ships" section',
+         '    It was added in round 6 so the contract states what the product IS; '
+       + 'if it was removed, remove this rule deliberately rather than by deletion.');
+} else {
+    for (const row of shipsSection[0].split('\n')) {
+        const cells = row.split('|').map(c => c.trim());
+        // | what | gate |  -> 4 cells with the leading/trailing empties
+        if (cells.length !== 4 || !cells[2] || /^-+$/.test(cells[1]) || cells[1] === 'what') continue;
+        shipRows++;
+        for (const m of cells[2].matchAll(/`([^`]+)`/g)) {
+            const tok = m[1];
+            shipGates++;
+            if (legs.has(tok)) continue;
+            if (existsSync(join(root, tok))) continue;
+            fail(`promises-index: spec.md "What ships" names \`${tok}\`, which is neither a suite leg nor a file`,
+                 '    Every gate in that table has to be one or the other.');
+        }
+    }
+    if (shipRows < 10)
+        fail(`promises-index: only ${shipRows} row(s) parsed from spec.md's "What ships" table `
+           + '— the table shape changed and rule 7 is checking nothing');
+}
+
 if (bad) { console.log(`\npromises-index-check: ${bad} problem(s)`); process.exit(1); }
 const by = {};
 for (const r of rows) by[VOCAB.find(v => r.disp.startsWith(`**${v}`))] = (by[VOCAB.find(v => r.disp.startsWith(`**${v}`))] ?? 0) + 1;
@@ -146,4 +178,5 @@ console.log(`PASS promises-index-check: ${rows.length} promises — ` +
             Object.entries(by).sort().map(([k, v]) => `${v} ${k.toLowerCase()}`).join(', ') +
             `; parts ` + Object.entries(byPart).sort().map(([k, v]) => `${k}=${v}`).join(' ') +
             `; every named leg and tool exists, README figure agrees, `
-          + `${legRows.length} legs (${browserLegs.length} browser) agree with README.md and ci.yml`);
+          + `${legRows.length} legs (${browserLegs.length} browser) agree with README.md and ci.yml, `
+          + `${shipGates} gate(s) across ${shipRows} "What ships" rows all resolve`);

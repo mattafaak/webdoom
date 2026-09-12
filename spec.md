@@ -12,6 +12,41 @@ closest practical thing to a bare-metal DOOM: minimal platform surface,
 no filesystem, tightest routines, "runs on everything" — and runs
 *well* on everything.
 
+## What ships (added 2026-09-12, round 6)
+
+This contract described the engine, the tenets and the gates, and never said
+what the PRODUCT is. Everything below ships today and has a suite leg;
+until round 6 this file mentioned none of it, so a reader could finish it
+without learning that webdoom has multiplayer spectators or a demo scrubber.
+Tenet 6 says a published claim maps to a gate — the converse was the gap: a
+shipped, gated feature that the contract never claimed at all.
+
+| what | gate |
+|------|------|
+| Single player from a browser, no install | `browser-sp`, `smoke-doom`, `smoke-doom2` |
+| Zero-config LAN co-op and deathmatch, 2–4 players | `net-2p`, `net-4p`, `browser-net` |
+| Drop-in: join a game already running, re-simulated to the frontier | `join-coop`, `join-dm`, `churn`, `edge`, `browser-join` |
+| **Spectators**: receive-only observers, structurally unable to inject | `spectate`, `spectate-inject` |
+| **Demo recording, share permalinks, and replay** | `browser-demo`, `demo-verify`, `demo-store-fuzz` |
+| **A demo scrubber** — seek within a replay, re-simulated from tic 0 | `demo-seek` |
+| **A demo-verify CLI** for checking a demo against an engine | `demo-verify-cli` |
+| **User WAD import** from the local disk into an IndexedDB library | `browser-wadimport`, `browser-mp-gating` |
+| **Persistence**: savegames and config across reloads, per IWAD | `persist` |
+| Offline single player once a WAD is cached | `browser-offline`, `sw-precache` |
+| Rebindable keys, gamepad, and a settings dialog | `browser-settings`, `browser-qol` |
+| Widescreen (Hor+), freelook, and interpolation — all render-side | `render-wide`, `sim-wide`, `browser-wide`, `mixed-width-net` |
+| Music: in-engine OPL2/OPL3, or a GM SoundFont backend | `opl-mode`, `gm-frames`, `gm-config`, `browser-sf2`, `browser-music-fallback` |
+| **Five compile-time render variants**, each pixel-identical or explained | `render-fakeflat`, `render-potato`, `render-sbskip`, `render-diffblit`, `toggle-identity` |
+| **A freestanding core** with no OS, and an N64 correctness leg | `freestanding-sim`, `ro-wad`, `arm-cross`, `n64-demos` |
+| **The gate machinery itself**: claims, promises, doc drift, status drift, the census | `doc-drift`, `claims-index`, `promises-index`, `status-drift`, `docs-index`, `gate-census`, `web-contract` |
+| **Teardown**: play → quit → play accumulates nothing | `browser-teardown` |
+| **CI** on Node 20/24/26 | `.github/workflows/ci.yml` (quick tier) |
+
+The suite is the list: `tools/run-tests.sh --list`. If a row here has no leg,
+or a leg exists for something this table does not name, one of the two is
+wrong — and `promises-index-check` rule 3 already fails on a named leg that
+does not exist.
+
 ## Core tenets (in priority order)
 
 1. **Accuracy is non-negotiable.** The simulation is vanilla-exact:
@@ -176,11 +211,21 @@ The primary player environment is plain-HTTP on a LAN/tailnet address
   degrades **loudly** (user-visible status line, never a swallowed
   `console.warn`). Music and WAD caching must work there via
   secure-context-free paths (IndexedDB, non-worklet audio sink).
-- CI gains a dedicated insecure-origin leg (headless Chrome with
-  `--host-resolver-rules="MAP insecure.test 127.0.0.1"`), because every
-  existing browser gate runs on `127.0.0.1` — a secure context — and is
-  structurally blind to this failure class (root cause of the 2026-07-21
-  field reports: silent music, WAD redownloads).
+- A dedicated insecure-origin leg exists — `browser-insecure`, headless
+  Chrome with `--host-resolver-rules="MAP insecure.test 127.0.0.1"` —
+  because every other browser gate runs on `127.0.0.1`, a secure context,
+  and is structurally blind to this failure class (root cause of the
+  2026-07-21 field reports: silent music, WAD redownloads). It asserts an
+  IDB WAD cache hit and the BufferSink music fallback on a genuinely
+  insecure origin.
+  **Amended 2026-09-12 (round 6): this clause said "CI gains" and CI does
+  not run it.** It cannot: game data is not distributable, so the public
+  `ubuntu-latest` runner has no IWADs, and without IWADs NO browser leg
+  runs there — `ci.yml` says so itself and runs the `--quick` tier. The
+  leg runs in the full suite on a host with the WAD library, a built
+  engine and Chrome. Reading "CI" as "the public runner" made this a
+  promise nothing could keep; reading it as "the suite" makes it one that
+  is kept on every full run.
 
 ## Music contract (decision record, 2026-07-21)
 
@@ -258,8 +303,30 @@ Limits of the smoke leg (honest):
   timing is therefore n=0 in any headless run (either browser). See
   §C residual note in `docs/perf.md`.
 
+### Edge — verdict, 2026-09-12 (round 6)
+
+`rme-002` has carried "Edge remains ungated and untested" since 15.2.
+This settles it rather than re-flagging it.
+
+Edge is Chromium. It shares Blink, V8, the WebGL2 implementation, the
+WASM engine and the service-worker implementation with the Chrome the
+21 browser legs drive; what differs is chrome-the-UI, the update
+channel, and a handful of enterprise policies — none of which this
+project touches. A dedicated Edge leg would re-run the same engine
+through a second binary and report the same result, which is why it has
+never been worth a task.
+
+**Decision: the promise stands, and it is a CHROMIUM promise.** README
+and this file say "stock Chrome / Edge / Firefox" because that is what a
+player reads on the box; the evidence is Chromium (gated, 21 legs) plus
+Firefox (smoke-gated, limits stated above). Edge specifically is
+**untested by policy, not by oversight** — the same standing Safari/iOS
+gets below, with the opposite conclusion about whether it will work.
+If Edge ever diverges from Chromium in a way that reaches this code, it
+becomes a bug report with a reproducer, not a missing leg.
+
 Decision: README claim "stock Chrome / Edge / Firefox" is kept.
-Gate: `run-tests.sh` firefox smoke leg.
+Gate: `run-tests.sh` firefox smoke leg, plus the 21 Chromium legs.
 
 ### Safari / iOS — explicit non-goal
 
