@@ -445,15 +445,18 @@ export function createAudio(doom) {
             if (spessaSynthUrl) gmSpessaSynthUrl = String(spessaSynthUrl);
         },
 
-        // Route raw MIDI bytes to SpessaSynth (live or queued pre-init).
-        // cmd dispatch is shared with gmDispatchMidi for consistency.
-        sendMidi(bytes) {
-            if (gmSynth) {
-                gmDispatchMidi(bytes);
-            } else if (gmEnabled) {
-                gmMidiQueue.push(bytes instanceof Uint8Array ? bytes.slice() : Uint8Array.from(bytes));
-            }
-        },
+        // NAMED SEAM -- do not delete as unused.  Nothing in the product calls
+        // setDmxgus() or musToMidi(): docs/decision-17.3-gus-flavor.md parks
+        // the engine-side DMXGUS wiring (the lump is 175 lines of TEXT, so
+        // W_CheckNumForName -> parse -> setDmxgus must include the parse) and
+        // calls this seam "test-injection-only until then".  spec.md's music
+        // contract was amended in round 6 to say the same.  The mapping these
+        // two feed IS gated: tools/gm-frames-test.mjs gate 4.
+        //
+        // A sendMidi(bytes) wrapper sat here too, routing raw MIDI to
+        // SpessaSynth.  It had no caller in the product OR the tests and no
+        // decision record naming it, so round 6 deleted it; gmDispatchMidi is
+        // the live path and is called from the queue drain and from here.
 
         // Set the GUS-flavor instrument map: a PRE-PARSED Uint8Array[175]
         // (index = MUS instrument, value = remapped GM program). The raw DMXGUS

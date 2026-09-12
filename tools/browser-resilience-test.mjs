@@ -38,6 +38,7 @@ async function openTab() {
     let msgId = 0;
     const pending = new Map();
     const errors = [];
+    const warnings = [];
     const evHandlers = new Map();
 
     ws.onmessage = ev => {
@@ -54,6 +55,8 @@ async function openTab() {
             );
         if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error')
             errors.push(msg.params.args.map(a => a.value ?? a.description).join(' '));
+        if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'warning')
+            warnings.push(msg.params.args.map(a => a.value ?? a.description).join(' '));
         const h = evHandlers.get(msg.method);
         if (h) h(msg.params);
     };
@@ -71,7 +74,7 @@ async function openTab() {
     await cdp('Runtime.enable');
     await cdp('Page.enable');
 
-    return { cdp, ev, errors, on(m, h) { evHandlers.set(m, h); }, close() { ws.close(); } };
+    return { cdp, ev, errors, warnings, on(m, h) { evHandlers.set(m, h); }, close() { ws.close(); } };
 }
 
 // Wait for lobby menu to be rendered
@@ -574,6 +577,66 @@ await runTest('8-empty-menu-screen', async () => {
         assert(r.selected === 1,
             `${r.selected} of ${r.rows} rows selected after an empty screen — the cursor is NaN`);
     } finally { tab.close(); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 9. THE DECODER MUST NOT CALL THE SHIPPED IWAD MALFORMED.
+//    doomfont's column walk demanded TWO readable bytes before reading the
+//    one-byte 0xff terminator, so a column whose terminator is the last byte
+//    of the lump was flagged truncated -- 24 of doom.wad's 63 STCFN glyphs,
+//    measured.  No pixels were lost, and nothing read the flag, so it was
+//    wrong on every boot for the life of the project; round 6's "degrade
+//    loudly" change surfaced it on the first run.
+//    Both arms, because "no warning" is also what a decoder that stopped
+//    checking produces.
+// ═══════════════════════════════════════════════════════════════════════════
+await runTest('9-ui-lumps-decode-clean', async () => {
+    const tab = await openTab();
+    try {
+        if (!await waitForMenu(tab)) throw new Error('menu did not appear');
+        const bad = tab.warnings.filter(w => /truncated/i.test(w));
+        assert(bad.length === 0,
+            `${bad.length} truncation warning(s) decoding the server's own IWAD: ${bad[0] ?? ''}`);
+    } finally { tab.close(); }
+
+    // ARM B: a genuinely truncated lump must still be reported.  The payload is
+    // the REAL one with a single lump chopped, so the only difference between
+    // the arms is the data.
+    const real = await (await fetch(new URL('/api/ui-assets', url))).json();
+    // It has to be a lump the launcher CERTAINLY decodes.  STCFN glyphs are
+    // decoded lazily through a per-character cache, so chopping '!' produced
+    // no warning and the arm read as a failure of the decoder rather than of
+    // the choice of victim.  M_DOOM is the logo: createMenu decodes it at
+    // construction, every boot.
+    const victim = ['M_DOOM', 'M_SKULL1', 'M_SKULL2']
+        .find(k => typeof real.lumps[k] === 'string');
+    assert(victim, '/api/ui-assets carried none of the always-decoded lumps — arm B measured nothing');
+    const raw = Buffer.from(real.lumps[victim], 'base64');
+    real.lumps[victim] = raw.subarray(0, Math.max(9, raw.length >> 1)).toString('base64');
+    const body = Buffer.from(JSON.stringify(real)).toString('base64');
+
+    const tab2 = await openTab();
+    try {
+        tab2.on('Fetch.requestPaused', p => {
+            tab2.cdp('Fetch.fulfillRequest', {
+                requestId: p.requestId,
+                responseCode: 200,
+                responseHeaders: [{ name: 'content-type', value: 'application/json' }],
+                body,
+            });
+        });
+        await tab2.cdp('Fetch.enable', { patterns: [{ urlPattern: '*/api/ui-assets*' }] });
+        await tab2.cdp('Network.enable', {});
+        await tab2.cdp('Network.setBypassServiceWorker', { bypass: true });
+        await tab2.cdp('Page.reload');
+        let fired = false;
+        for (let i = 0; i < 40 && !fired; i++) {
+            await sleep(500);
+            fired = tab2.warnings.some(w => /truncated/i.test(w));
+        }
+        assert(fired, `CONTROL: a chopped ${victim} produced no truncation warning — `
+                    + 'the check above is observing silence, not correctness');
+    } finally { tab2.close(); }
 });
 
 // ── Results ───────────────────────────────────────────────────────────────────

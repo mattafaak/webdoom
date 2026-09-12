@@ -80,19 +80,3 @@ export async function libraryGetBytes(sha256) {
     }
 }
 
-// Returns the count of entries in the local library (0 on error).
-export async function libraryCount() {
-    try {
-        const db = await _openLibDB();
-        const n = await new Promise((resolve, reject) => {
-            const t   = db.transaction(MANIFEST_STORE, 'readonly');
-            const req = t.objectStore(MANIFEST_STORE).count();
-            t.oncomplete = () => resolve(req.result ?? 0);
-            t.onerror    = () => reject(t.error);
-        });
-        db.close();
-        return n;
-    } catch (err) {
-        return 0;
-    }
-}

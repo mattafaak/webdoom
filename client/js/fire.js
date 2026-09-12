@@ -95,8 +95,6 @@ export function createFire(container) {
     let paused      = false;
     let tickInterval = null;
     let lastTickMs  = 0;   // most recent measured sim+draw cost (ms)
-    let avgTickMs   = 0;   // exponential moving average (α = 0.1)
-    let tickCount   = 0;   // total ticks elapsed
 
     // ── prefers-reduced-motion: one static frame, no sim loop ─────────────
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -168,9 +166,6 @@ export function createFire(container) {
         _simulate();
         _draw();
         lastTickMs = performance.now() - t0;
-        tickCount++;
-        avgTickMs = tickCount < 2 ? lastTickMs
-            : avgTickMs * 0.9 + lastTickMs * 0.1;
     }
 
     function _startInterval() {

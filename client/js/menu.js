@@ -134,10 +134,11 @@ export function createMenu(font, host, opts = {}) {
             row.dataset.label = label.toUpperCase();    // tests + accessibility
             row.setAttribute('role', 'menuitem');
             row.setAttribute('aria-label', label);
-            if (item.thumb) {
-                row.classList.add('art');
-                row.appendChild(item.thumb);
-            }
+            // '.art' was added here and never styled or queried; the thumb
+            // itself is the affordance.  ('.sel' below has no CSS rule either
+            // and STAYS -- menu.js queries '.row.sel .skull' and the teardown
+            // gate counts '.row.sel'; it is a hook, not decoration.)
+            if (item.thumb) row.appendChild(item.thumb);
             row.appendChild(font.text(label, { scale: item.thumb ? 3 : scale, color: item.color ?? null }));
             row.onmouseenter = () => { if (!entry && sel !== i) { sel = i; render(); } };
             row.onclick = () => { if (!entry) { sel = i; activate(); } };

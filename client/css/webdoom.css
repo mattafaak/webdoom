@@ -176,6 +176,17 @@ html, body {
     align-items: center;
 }
 
+/* Drag a WAD or .sf2 onto the launcher.  lobby.js has toggled `.drop-hover`
+   on this element since WAD import shipped and there was no rule for it, so
+   drag-and-drop had ZERO visual feedback: the drop worked and nothing on
+   screen ever acknowledged the file was over the window.  An inset ring
+   rather than a border, so nothing reflows while the pointer moves. */
+#landing.drop-hover {
+    outline: 3px dashed #d33;
+    outline-offset: -12px;
+    background: rgba(221, 51, 51, .06);
+}
+
 #dmenu {
     display: flex;
     flex-direction: column;

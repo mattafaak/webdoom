@@ -1,9 +1,10 @@
 // webdoom demo bridge: one-click record → share, and demo permalink replay.
 //
 // Recording (sender):
-//   1. Call armRecording(doom) before starting a new level so the engine
-//      records from level start (G_RecordDemo is called; G_BeginRecording
-//      fires inside D_DoomLoop when the level initialises).
+//   1. bootDoom({ record: true }) passes -record to callMain, so
+//      G_RecordDemo runs inside D_DoomMain and G_BeginRecording fires from
+//      D_DoomLoop.  (An armRecording(doom) export used to offer a second way
+//      in; it had no caller and was removed in round 6.)
 //   2. stopAndShare(doom, wadFile) stops recording, uploads to the server,
 //      and returns a share URL.  Displays the URL in the share panel.
 //
@@ -27,16 +28,6 @@
 export const FRAGMENT_MAX = 6_000;   // raw bytes; mirror of server value
 
 // ── Recording ─────────────────────────────────────────────────────────────────
-
-// Arm the engine for recording.  Must be called BEFORE the user triggers a
-// new level (i.e. before bootDoom's callMain or before the level transition).
-// Returns false if the engine has already been initialised and web_demo_start
-// is not available (older build).
-export function armRecording(doom) {
-    if (typeof doom._web_demo_start !== 'function') return false;
-    doom._web_demo_start();
-    return true;
-}
 
 // Stop recording, collect the .lmp bytes, upload to the server, and return
 // the share URL (or null on network error).
@@ -94,7 +85,7 @@ export async function parseDemoUrl() {
                     console.warn(`demo: fragment is ${bytes.length} bytes, over the ` +
                                  `${FRAGMENT_MAX}-byte limit — ignoring`);
                 } else {
-                    return { bytes, wad, source: 'fragment' };
+                    return { bytes, wad };
                 }
             } catch { /* malformed — fall through to server param */ }
         }
@@ -116,7 +107,7 @@ export async function parseDemoUrl() {
     const buf  = await res.arrayBuffer();
     const bytes = new Uint8Array(buf);
     const demoWad = res.headers.get('x-demo-wad') || wad;
-    return { bytes, wad: demoWad, source: 'server', id };
+    return { bytes, wad: demoWad };
 }
 
 // Start demo playback in an already-booted doom instance.

@@ -210,8 +210,6 @@ export function createScrubberUI(doom, demoBytes, { container = document.body, s
         }
     }
 
-    // Expose the onFrame updater so main.js can call it each rAF.
-    panel._scrubberOnFrame = onFrame;
 
     // ── Destroy ───────────────────────────────────────────────────────────────
     function destroy() {

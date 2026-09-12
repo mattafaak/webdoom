@@ -196,13 +196,23 @@ The primary player environment is plain-HTTP on a LAN/tailnet address
   lazy-loaded, excluded from the SHELL precache unless deliberately
   added, and its size lands as an explicit size-budget line item.
 - **GUS flavor** (decision record: `docs/decision-17.3-gus-flavor.md`,
-  task 17.3, 2026-07-22): **GREEN-LIT** via DMXGUS mapping + existing
-  SF2 stack. The original Gravis patches (proprietary, no redistribution
-  right) and eawpats (redistribution-unclear; Debian dropped from non-free
-  ~2016) are NOT used. DMXGUS lump is WAD-owned data; its 175-byte
-  mapping table drives GM program selection in `musToMidi()`; audio
-  synthesis comes from the operator-fetched SF2 (GeneralUser GS, same
-  as 17.2a). No GUS .pat files are required, fetched, or redistributed.
+  task 17.3, 2026-07-22): **GREEN-LIT AS A DESIGN; NOT WIRED.** The
+  original Gravis patches (proprietary, no redistribution right) and
+  eawpats (redistribution-unclear; Debian dropped from non-free ~2016)
+  are NOT used, and no GUS .pat files are required, fetched, or
+  redistributed — that half of the decision is settled and permanent.
+  What ships is the mapping half: `musToMidi(mus, dmxgusMap)` applies a
+  175-byte table to GM program selection, and `tools/gm-frames-test.mjs`
+  gate 4 proves it does.
+  **What does not ship is the path that would SUPPLY that table.** The
+  DMXGUS lump is 175 lines of TEXT, so the wiring
+  (`W_CheckNumForName` → text parse → `setDmxgus`) must include the
+  parse; feeding it raw lump bytes would be garbage. Until that lands,
+  `audio.setDmxgus()` is a test-injection seam and nothing in the
+  product calls it — which is exactly what decision-17.3 §"Delivery"
+  says, and what this clause said the opposite of until round 6.
+  Amended 2026-09-12: a spec that reads as if a feature ships is a
+  promise without a gate, which tenet 6 calls doc drift.
 - **Never bundled**: Microsoft GS wavetable, Roland ROMs/Nuked-SC55,
   provenance-unclear soundfonts. User-supplied files are fine.
 - Determinism rule (unchanged): engine music state changes only via

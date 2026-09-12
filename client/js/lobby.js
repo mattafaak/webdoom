@@ -15,7 +15,7 @@ import { libraryAdd, libraryList } from './wad-library.js';
 import { validateSf2, Sf2Error, sf2StoreCurrent } from './sf2-library.js';
 import {
     parseDemoUrl, startReplay, ownsWad,
-    armRecording, stopAndShare,
+    stopAndShare,
     showSharePanel, showWadWarning, showReplayNotice,
 } from './demo.js';
 
@@ -153,17 +153,44 @@ async function handleSf2Import(file) {
     }
 }
 
-// Quit Game (→ Y) inside the engine returns here.
-function returnToMenu() {
+// ── one way back to the launcher ─────────────────────────────────────────────
+//
+// This used to be seven partly-overlapping combinations of the same nine
+// statements -- booted, fire.resume, menu.show, menu.reset, lobby.close,
+// lobby=null, roster=null, ipSummary/ipSlot, countdown.reset -- one per exit
+// path, each with its own subset.  Round 5's A2 gave the ENGINE side one owner
+// (main.js endSession); this is the launcher side.
+//
+// Every step is idempotent, so one function can serve a path that never had a
+// lobby (single player) and one that is leaving a live one:
+//   fire.resume()      returns immediately unless paused
+//   menu.show()        a no-op when the menu is already visible
+//   countdown.reset()  cancels a rAF and a timeout that may not exist
+//   lobby              guarded, and NULLED BEFORE close() -- the 'closed'
+//                      handler reads `!lobby` to tell a deliberate leave from
+//                      a dropped connection, and that ordering is load-bearing
+//
+// reason: shown in #status.  Omit it for a clean return (Quit Game, leaving a
+// lobby) -- passing '' would blank a message another path just set.
+function resetToLauncher(reason) {
     booted = false;
-    if (lobby) { lobby.close(); lobby = null; }
+    const l = lobby;
+    lobby = null;
+    try { l?.close(); } catch { /* already gone */ }
     roster = null;
-    ipSummary = null; ipSlot = -1;
-    fire?.resume();   // restart fire now that we are back on the launcher
-    // flare is triggered by menu.reset() → onTransition('reset') below
+    ipSummary = null;
+    ipSlot = -1;
+    countdown?.reset();
+    fire?.resume();
     menu.show();
+    // flare is triggered by menu.reset() -> onTransition('reset')
     menu.reset(rootScreen());
+    if (reason) status(String(reason));
 }
+
+
+// Quit Game (→ Y) inside the engine returns here.
+function returnToMenu() { resetToLauncher(); }
 
 // a single-map PWAD (a Master Level, at its own slot like MAP25) is
 // launched straight into that map — the engine's New Game would start at
@@ -225,16 +252,12 @@ function spGameScreen() {
             .catch(err => {
                 // WAD fetch / engine boot failed: reset so the user can retry
                 // without reloading the page.  main.js has already restored
-                // #landing visibility via restoreOnFailure(); here we re-arm
-                // the booted guard and bring the menu back to the root screen.
+                // #landing visibility via restoreOnFailure().  recIndicator is
+                // local to this boot helper, so it is cleaned up here rather
+                // than inside the shared reset.
                 recIndicator?.remove();
                 recIndicator = null;
-                booted = false;
-                fire?.resume();
-                // flare triggered by menu.reset() → onTransition('reset')
-                menu.show();
-                menu.reset(rootScreen());
-                status(String(err));
+                resetToLauncher(err);
             });
     };
 
@@ -348,17 +371,7 @@ function enterMultiplayer() {
                 lobby.close();
             }).catch(err => {
                 // Guard T16/T20: WAD fetch or engine boot failed in MP / drop-in path.
-                // Reset all state so the user can retry from the root menu.
-                booted = false;
-                countdown.reset();
-                fire?.resume();
-                // flare triggered by menu.reset() → onTransition('reset')
-                menu.show();
-                menu.reset(rootScreen());
-                if (lobby) { lobby.close(); lobby = null; }
-                roster = null;
-                ipSummary = null; ipSlot = -1;
-                status(String(err));
+                resetToLauncher(err);
             });
         })
         .on('closed', () => {
@@ -496,11 +509,7 @@ async function spectateGame() {
         },
         onQuit: returnToMenu,
     }).then(() => { lobby.close(); }).catch(err => {
-        booted = false; fire?.resume();
-        menu.show(); menu.reset(rootScreen());
-        if (lobby) { lobby.close(); lobby = null; }
-        ipSummary = null; ipSlot = -1;
-        status(String(err));
+        resetToLauncher(err);
     });
 }
 
@@ -615,16 +624,9 @@ function lobbyScreen() {
     };
 }
 
-function leaveLobby() {
-    const l = lobby;
-    lobby = null;               // mark deliberate before the close event
-    l?.close();
-    roster = null;
-    ipSummary = null; ipSlot = -1;
-    countdown.reset();          // guard T25: dismiss countdown if user ESCs mid-countdown
-    // flare triggered by menu.reset() → onTransition('reset')
-    menu.reset(rootScreen());
-}
+// guard T25: resetToLauncher dismisses a countdown the user ESC'd out of, and
+// nulls `lobby` before close() so the 'closed' handler reads this as deliberate.
+function leaveLobby() { resetToLauncher(); }
 
 // --- boot ------------------------------------------------------------------------
 (async () => {
@@ -779,11 +781,7 @@ function leaveLobby() {
                 if (!doom) return;
                 const rc = startReplay(doom, bytes);
                 if (rc !== 0) {
-                    booted = false;
-                    fire?.resume();
-                    menu.show();
-                    menu.reset(rootScreen());
-                    status('demo replay failed: version mismatch');
+                    resetToLauncher('demo replay failed: version mismatch');
                     return;
                 }
                 // task 19.3: attach scrubber below the canvas.
@@ -793,13 +791,7 @@ function leaveLobby() {
                     ?? document.body;
                 window.webdoom?.attachScrubber?.(bytes, scrubContainer);
             })
-            .catch(err => {
-                booted = false;
-                fire?.resume();
-                menu.show();
-                menu.reset(rootScreen());
-                status(String(err));
-            });
+            .catch(err => { resetToLauncher(err); });
         return;
     }
 

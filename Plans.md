@@ -5,6 +5,23 @@ Prior initiatives archived: `Plans-refinement-complete.md` (26/26),
 `Plans-floor-initiative-complete.md` (Phases 12–15, 32/32 at 8305c4a),
 `Plans-field-fixes-complete.md` (round 3 Phases 16–19, 22/22 at 1f9f1e5).
 
+## Markers used in the tables below
+
+Both vocabularies are used on every row of this file and neither was
+written down anywhere until round 6.
+
+| marker | meaning |
+|--------|---------|
+| `cc:完了` | complete. A commit hash in `[...]` beside it is the landing commit. `cc:完了(partial)` means the DoD is met in part, with the remainder named in the row. |
+| `cc:分割` | decomposed — this row was split into the lettered sub-tasks below it and is not itself worked. |
+| `cc:決定` | decided rather than implemented; the verdict (PARKED / PURSUABLE / REJECTED / CLOSED) is written under the tables and `tools/archaeology/status-drift-check.mjs` rule 2 asserts the two agree. |
+| `cc:TODO` | open. |
+| `[tdd:skip:<reason>]` | this task lands no test, and the reason is part of the marker — a planning, survey or document task with no code to gate. Every use carries a reason; a bare `tdd:skip` is not valid. |
+
+Historical note: rows citing `[this commit]` instead of a hash were
+resolved to real hashes in round 6 (24.2 `5be60ba`, 25.1 `f549213`,
+25.4b `e03a93b`, 25.5 `7ed98b9`).
+
 
 # Planning round 3 (2026-07-21) — field fixes, music, widescreen, community tooling, the floor campaign
 

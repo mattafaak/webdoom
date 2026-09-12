@@ -100,6 +100,43 @@ for (const m of text.matchAll(/\*\*(\d+) promises[^*]*\*\*/g))
     if (Number(m[1]) !== rows.length)
         fail(`promises-index: the document says "${m[1]} promises" but the table has ${rows.length} rows`);
 
+// 6. The suite's own size, wherever it is published.  README said "81 legs"
+//    and "the 19 browser legs" and ci.yml said 81, against a registry of 88
+//    and 21 -- numbers a reader uses to decide whether a green run means
+//    anything.  Tenet 6 calls a published figure without a gate doc drift, and
+//    this one is derivable from `--list`, so derive it.
+const legRows = [...runTests.matchAll(/^\s*leg\s+([a-z0-9-]+)\s+(\S+)/gm)];
+const browserLegs = legRows.filter(m => m[2].split(',').includes('browser'));
+if (legRows.length < 20)
+    fail(`promises-index: only ${legRows.length} leg rows parsed from tools/run-tests.sh `
+       + '— the registry format changed and rule 6 is checking nothing');
+else {
+    const ci = existsSync(join(root, '.github/workflows/ci.yml'))
+        ? readFileSync(join(root, '.github/workflows/ci.yml'), 'utf8') : '';
+    const readme = readFileSync(join(root, 'README.md'), 'utf8');
+    // Anchored to the exact phrasings that state the WHOLE registry.  A bare
+    // /(\d+) legs/ also matches ci.yml's "this job is 12 legs run and 1
+    // skipped", which is a true statement about the quick tier -- the first
+    // draft of this rule failed on it, which is the difference between a check
+    // and a grep.
+    for (const [label, text2, re, want, what] of [
+        ['README.md', readme, /everything: (\d+) legs/g,     legRows.length,     'suite legs'],
+        ['ci.yml',    ci,     /full suite \((\d+) legs/g,    legRows.length,     'suite legs'],
+        ['README.md', readme, /the (\d+) browser legs/g,     browserLegs.length, 'browser legs'],
+        ['ci.yml',    ci,     /the (\d+) browser legs/g,     browserLegs.length, 'browser legs'],
+    ]) {
+        const hits = [...text2.matchAll(re)];
+        // An anchor that stops matching is a figure that stops being checked.
+        if (!hits.length)
+            fail(`promises-index: ${label} no longer states its ${what} in the expected phrasing`,
+                 `    re-anchor ${re} or restore the sentence`);
+        for (const m of hits)
+            if (Number(m[1]) !== want)
+                fail(`promises-index: ${label} says "${m[0]}"; the registry has ${want} ${what}`,
+                     '    Read it from tools/run-tests.sh --list rather than writing it down.');
+    }
+}
+
 if (bad) { console.log(`\npromises-index-check: ${bad} problem(s)`); process.exit(1); }
 const by = {};
 for (const r of rows) by[VOCAB.find(v => r.disp.startsWith(`**${v}`))] = (by[VOCAB.find(v => r.disp.startsWith(`**${v}`))] ?? 0) + 1;
@@ -108,4 +145,5 @@ for (const r of rows) byPart[r.part] = (byPart[r.part] ?? 0) + 1;
 console.log(`PASS promises-index-check: ${rows.length} promises — ` +
             Object.entries(by).sort().map(([k, v]) => `${v} ${k.toLowerCase()}`).join(', ') +
             `; parts ` + Object.entries(byPart).sort().map(([k, v]) => `${k}=${v}`).join(' ') +
-            '; every named leg and tool exists, README figure agrees');
+            `; every named leg and tool exists, README figure agrees, `
+          + `${legRows.length} legs (${browserLegs.length} browser) agree with README.md and ci.yml`);
