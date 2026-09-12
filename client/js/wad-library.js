@@ -10,25 +10,14 @@
 // Usage: imported WADs are stored here; fetchWad() in main.js consults
 // libraryGetBytes() before the network so local WADs load without a server.
 
+import { openDB } from './idb.js';
+
 const DB_NAME      = 'webdoom-local-library';
 const DB_VERSION   = 1;
 const MANIFEST_STORE = 'manifest';
 const BYTES_STORE    = 'bytes';
 
-function _openLibDB() {
-    return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, DB_VERSION);
-        req.onupgradeneeded = () => {
-            const db = req.result;
-            if (!db.objectStoreNames.contains(MANIFEST_STORE))
-                db.createObjectStore(MANIFEST_STORE);
-            if (!db.objectStoreNames.contains(BYTES_STORE))
-                db.createObjectStore(BYTES_STORE);
-        };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror  = () => reject(req.error);
-    });
-}
+const _openLibDB = () => openDB(DB_NAME, DB_VERSION, [MANIFEST_STORE, BYTES_STORE]);
 
 // Store a manifest entry + its raw bytes atomically (one transaction).
 // entry.sha256 is the key for both stores.

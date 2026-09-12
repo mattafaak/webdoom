@@ -25,6 +25,8 @@
 //   and aborts the replay — the ownership check gates BOTH the server-id and
 //   fragment-embed paths.
 
+import { setStatus } from './ui.js';
+
 export const FRAGMENT_MAX = 6_000;   // raw bytes; mirror of server value
 
 // ── Recording ─────────────────────────────────────────────────────────────────
@@ -187,18 +189,14 @@ export function showSharePanel(shareUrl) {
 
 // Show a WAD ownership warning in the status bar.
 export function showWadWarning(wadFile) {
-    const status = document.getElementById('status');
-    if (status)
-        status.textContent =
-            `DEMO requires ${wadFile || 'unknown WAD'} — ` +
-            'you must own this WAD to replay.  ' +
-            'Add it via the library or import from task 16.6.';
+    setStatus(`DEMO requires ${wadFile || 'unknown WAD'} — `
+            + 'you must own this WAD to replay.  '
+            + 'Add it via the library or import from task 16.6.');
 }
 
 // Show a "replaying demo" notice.
 export function showReplayNotice() {
-    const status = document.getElementById('status');
-    if (status) status.textContent = 'REPLAYING DEMO — watch the recording';
+    setStatus('REPLAYING DEMO — watch the recording');
 }
 
 // ── base64url helpers ─────────────────────────────────────────────────────────

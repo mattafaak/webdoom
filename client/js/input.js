@@ -3,6 +3,8 @@
 // tuning persist in localStorage ('webdoom.input').
 
 // doomdef.h key codes
+import { teardownLedger } from './ui.js';
+
 export const DK = {
     RIGHT: 0xae, LEFT: 0xac, UP: 0xad, DOWN: 0xaf,
     ESCAPE: 27, ENTER: 13, TAB: 9, BACKSPACE: 127, PAUSE: 0xff,
@@ -154,11 +156,7 @@ export function createInput(doom, canvas, settings) {
     // recorded here so quit-to-menu can remove it.  Without this each boot
     // added another live handler on `window`, and after a quit they kept firing
     // into a wasm instance I_Quit had force-exited.
-    const _teardown = [];
-    const on = (target, ev, fn, opts) => {
-        target.addEventListener(ev, fn, opts);
-        _teardown.push(() => target.removeEventListener(ev, fn, opts));
-    };
+    const { on, off: _teardownAll } = teardownLedger();
 
     const post = (t, a = 0, b = 0, c = 0) => doom._web_input_event(t, a, b, c);
     const tapKey = dk => { post(EV_KEYDOWN, dk); post(EV_KEYUP, dk); };
@@ -395,6 +393,6 @@ export function createInput(doom, canvas, settings) {
             captureTimer = setTimeout(() => { if (capture) endCapture(); }, CAPTURE_TIMEOUT_MS);
         },
         cancelCapture() { endCapture(); },
-        destroy() { for (const off of _teardown) off(); _teardown.length = 0; },
+        destroy() { _teardownAll(); },
     };
 }

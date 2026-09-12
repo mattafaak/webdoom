@@ -4,27 +4,16 @@
 // before boot and mirrors changes back — savegames keyed per IWAD,
 // config shared.
 
+import { openDB, tx as idbTx } from './idb.js';
+
 const DB = 'webdoom';
 const STORE = 'files';
 const SAVES = [...Array(6).keys()].map(i => `doomsav${i}.dsg`);
 const CONFIG = '.doomrc';
 const ALL_FILES = [...SAVES, CONFIG];
 
-function db() {
-    return new Promise((res, rej) => {
-        const req = indexedDB.open(DB, 1);
-        req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-        req.onsuccess = () => res(req.result);
-        req.onerror = () => rej(req.error);
-    });
-}
-
-const tx = (d, mode, fn) => new Promise((res, rej) => {
-    const t = d.transaction(STORE, mode);
-    const out = fn(t.objectStore(STORE));
-    t.oncomplete = () => res(out?.result);
-    t.onerror = () => rej(t.error);
-});
+const db = () => openDB(DB, 1, [STORE]);
+const tx = (d, mode, fn) => idbTx(d, STORE, mode, fn);
 
 const keyFor = (iwad, name) => name === CONFIG ? `config:${name}` : `${iwad}:${name}`;
 // pre-registry builds keyed by MEMFS paths

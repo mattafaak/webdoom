@@ -34,6 +34,11 @@
 //   GM mode:  pump() is a no-op (SpessaSynth self-schedules)
 
 import { musToMidi } from './mus2mid.js';
+// setStatus: one implementation for the whole client (client/js/ui.js).  This
+// module had its own, and it was the only one of the six that both looked the
+// element up per call AND null-checked it -- which is why it is the shape the
+// shared one took.
+import { setStatus } from './ui.js';
 
 const TARGET_BACKLOG = 0.25;    // seconds of music buffered ahead
 const PUMP_MS = 100;
@@ -125,13 +130,6 @@ function makeGmMainSink() {
     };
 }
 
-// ── setStatus ─────────────────────────────────────────────────────────────────
-// Writes a user-visible message to #status (same element main.js uses).
-// Called from arm() to report fallback activation or failure.
-const setStatus = msg => {
-    const el = document.getElementById('status');
-    if (el) el.textContent = msg;
-};
 
 export function createAudio(doom) {
     let ctx = null;

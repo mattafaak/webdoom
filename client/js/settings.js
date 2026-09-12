@@ -11,6 +11,7 @@
 import { ACTIONS, saveSettings, defaultSettings } from './input.js';
 import { sf2GetCurrentMeta } from './sf2-library.js';
 import { wideWidth, paniniStrength } from './wide-utils.js';
+import { setStatus, teardownLedger } from './ui.js';
 
 // Panini strength comes from wide-utils.js — one definition (task 25.3).
 const computePaniniStrength = paniniStrength;
@@ -20,11 +21,7 @@ const computePaniniStrength = paniniStrength;
 
 export function createSettingsUI(input, doom, renderer, qol) {
     // Teardown ledger (task 23.7b) — see input.js for why.
-    const _teardown = [];
-    const on = (target, ev, fn, opts) => {
-        target.addEventListener(ev, fn, opts);
-        _teardown.push(() => target.removeEventListener(ev, fn, opts));
-    };
+    const { on, off: _teardownAll } = teardownLedger();
 
     const s = input.settings;
     const panel = document.createElement('div');
@@ -146,8 +143,7 @@ export function createSettingsUI(input, doom, renderer, qol) {
                 // GM: sink cannot be changed live after arm() — save for next session.
                 // window.doomAudio.setGmMode marks intent; takes effect on next boot.
                 window.doomAudio?.setGmMode?.(true, null);
-                document.getElementById('status').textContent =
-                    'music: GM mode saved — takes effect on next game session';
+                setStatus('music: GM mode saved — takes effect on next game session');
             } else {
                 // OPL2/OPL3 can be changed live via _web_set_opl_mode.
                 doom?._web_set_opl_mode(s.opl3 ? 1 : 0);
@@ -224,8 +220,7 @@ export function createSettingsUI(input, doom, renderer, qol) {
     return {
         toggle,
         destroy() {
-            for (const off of _teardown) off();
-            _teardown.length = 0;
+            _teardownAll();
             // The panel is appended per boot; a second one would share the
             // #settings id with the first.
             panel?.remove?.();

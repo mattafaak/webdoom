@@ -14,14 +14,11 @@
 // state.  No writes to sim state — determinism safe.
 
 import { saveSettings } from './input.js';
+import { teardownLedger } from './ui.js';
 
 export function createQolUI(doom, input) {
     // Teardown ledger (task 23.7b) — see input.js for why.
-    const _teardown = [];
-    const on = (target, ev, fn, opts) => {
-        target.addEventListener(ev, fn, opts);
-        _teardown.push(() => target.removeEventListener(ev, fn, opts));
-    };
+    const { on, off: _teardownAll } = teardownLedger();
 
     const s = input.settings;
     const stage = document.getElementById('stage');
@@ -187,8 +184,7 @@ export function createQolUI(doom, input) {
         // — so with "level stats" enabled the loop from boot #1 ran forever,
         // poking a dead wasm instance, its exceptions swallowed by a bare catch.
         destroy() {
-            for (const off of _teardown) off();
-            _teardown.length = 0;
+            _teardownAll();
             if (rafHandle) { cancelAnimationFrame(rafHandle); rafHandle = 0; }
             for (const el of [fsBtn, crosshair, statsEl, demoTimerEl, demoBarEl]) el?.remove?.();
         },

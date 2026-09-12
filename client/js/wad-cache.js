@@ -25,20 +25,13 @@
 //   pre-fix behaviour), so eviction degrades performance but does not
 //   corrupt game state.
 
+import { openDB } from './idb.js';
+
 const DB_NAME = 'webdoom-wads';
 const STORE_NAME = 'wads';
 const DB_VERSION = 1;
 
-function openWadDB() {
-    return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, DB_VERSION);
-        req.onupgradeneeded = () => {
-            req.result.createObjectStore(STORE_NAME);
-        };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-    });
-}
+const openWadDB = () => openDB(DB_NAME, DB_VERSION, [STORE_NAME]);
 
 let _persistRequested = false;
 

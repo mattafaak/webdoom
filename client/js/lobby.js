@@ -7,6 +7,7 @@
 import { bootDoom } from './main.js';
 import { connectLobby, launchArgs, attachSpectate } from './net.js';
 import { loadDoomFont } from './doomfont.js';
+import { setStatus } from './ui.js';
 import { createMenu } from './menu.js';
 import { createCountdown } from './countdown.js';
 import { createFire } from './fire.js';
@@ -20,7 +21,10 @@ import {
 } from './demo.js';
 
 const $ = id => document.getElementById(id);
-const status = msg => { $('status').textContent = msg; };
+// setStatus looks the element up each time and tolerates its absence; the six
+// hand-written copies of this line did not all do either.  Imported under the
+// local name so the twenty call sites below read unchanged.
+const status = setStatus;
 
 const SKILLS = ["I'M TOO YOUNG TO DIE", 'HEY, NOT TOO ROUGH', 'HURT ME PLENTY',
     'ULTRA-VIOLENCE', 'NIGHTMARE!'];

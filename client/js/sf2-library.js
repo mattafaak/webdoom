@@ -14,6 +14,8 @@
 //   sf2GetCurrentBytes() — Uint8Array | null
 //   sf2GetCurrentMeta()  — { name, size } | null
 
+import { openDB } from './idb.js';
+
 const DB_NAME      = 'webdoom-sf2';
 const DB_VERSION   = 1;
 const META_STORE   = 'sf2-meta';
@@ -63,20 +65,7 @@ export function validateSf2(bytes) {
 }
 
 // ── IDB helpers ───────────────────────────────────────────────────────────────
-function _openSf2DB() {
-    return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, DB_VERSION);
-        req.onupgradeneeded = () => {
-            const db = req.result;
-            if (!db.objectStoreNames.contains(META_STORE))
-                db.createObjectStore(META_STORE);
-            if (!db.objectStoreNames.contains(BYTES_STORE))
-                db.createObjectStore(BYTES_STORE);
-        };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror  = () => reject(req.error);
-    });
-}
+const _openSf2DB = () => openDB(DB_NAME, DB_VERSION, [META_STORE, BYTES_STORE]);
 
 // ── sf2StoreCurrent ───────────────────────────────────────────────────────────
 // Persists meta + bytes for the current soundfont.  Replaces any previous entry.

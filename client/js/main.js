@@ -12,8 +12,7 @@ import { wadCacheGet, wadCachePut } from './wad-cache.js';
 import { libraryGetBytes } from './wad-library.js';
 import { createScrubberUI } from './scrubber.js';
 import { wideWidth, paniniStrength } from './wide-utils.js';
-
-const status = msg => { document.getElementById('status').textContent = msg; };
+import { setStatus as status } from './ui.js';
 
 // centred loading panel + progress bar
 const loading = {

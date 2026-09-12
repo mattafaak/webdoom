@@ -13,7 +13,7 @@ const SHELL_FILES = [
     '/js/menu.js', '/js/doomfont.js', '/js/persist.js', '/js/wad-cache.js',
     '/js/fire.js', '/js/countdown.js',
     '/js/wad-import.js', '/js/wad-library.js', '/js/sf2-library.js',
-    '/js/qol.js', '/js/demo.js', '/js/scrubber.js', '/js/wide-utils.js',
+    '/js/qol.js', '/js/demo.js', '/js/scrubber.js', '/js/wide-utils.js', '/js/idb.js', '/js/ui.js',
     '/engine/doom.js', '/engine/doom.wasm',
 ];
 

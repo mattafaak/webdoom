@@ -18,6 +18,8 @@
 //   by renderer.setPaniniStrength(s).  Outside all engine goldens (the shader
 //   operates on JS-side UV, not the engine framebuffer).
 
+import { setStatus } from './ui.js';
+
 const VS = `#version 300 es
 layout(location=0) in vec2 pos;
 out vec2 uv;
@@ -179,8 +181,6 @@ function createRenderer2D(canvas) {
     let currentW = 320, currentH = 200;
     const lut = new Uint32Array(256);
 
-    // Loud degradation: users are aware this path has limited resize support.
-    const _status = typeof document !== 'undefined' && document.getElementById?.('status');
 
     return {
         // Task 23.7b: this path allocates no GL objects -- its per-boot cost is
@@ -202,10 +202,11 @@ function createRenderer2D(canvas) {
             canvas.height = h;
             img  = ctx.createImageData(w, h);
             rgba = new Uint32Array(img.data.buffer);
-            if (_status) {
-                _status.textContent =
-                    `canvas2d: resized to ${w}×${h} — WebGL2 not available; wide mode may look stretched`;
-            }
+            // Loud degradation: users are aware this path has limited resize
+            // support.  setStatus looks the element up now rather than at
+            // module scope, which used to cache a null if video.js loaded
+            // before #status existed.
+            setStatus(`canvas2d: resized to ${w}×${h} — WebGL2 not available; wide mode may look stretched`);
         },
 
         setPaniniStrength(_s) { /* no-op: canvas2d path does not implement shader remap */ },
