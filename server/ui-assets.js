@@ -2,14 +2,40 @@
 // cursor, logo, palette) plus each game's TITLEPIC + palette for the
 // box-art game picker. Served as one JSON payload; the client decodes
 // the patch format.
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 const FONT = [];
 for (let c = 33; c <= 95; c++) FONT.push(`STCFN${String(c).padStart(3, '0')}`);
 const WANTED = new Set(['PLAYPAL', 'M_SKULL1', 'M_SKULL2', 'M_DOOM', ...FONT]);
 
-let cached = null;
+// Cached forever, keyed on nothing.  An operator who drops a WAD into wads/lib
+// -- the documented way to add a game -- got the launcher's old box art until
+// the server was restarted, with no hint that a restart was what was missing.
+// serve.js:44-51 already keys wads/manifest.json on its mtime; this does the
+// same for every file this payload is actually built from.  Both the IWAD
+// candidates and the manifest's own entries are stamped, so a WAD REPLACED in
+// place (same name, new bytes) invalidates too -- a directory mtime alone would
+// not see that.
+let cached = null;          // { key, body }
+
+const SOURCES = ['doom.wad', 'doom2.wad', 'tnt.wad', 'plutonia.wad'];
+
+function cacheKey(wadDir, manifest) {
+    const parts = [];
+    const stamp = p => {
+        try { const st = statSync(p); parts.push(`${p}:${st.mtimeMs}:${st.size}`); }
+        catch { parts.push(`${p}:-`); }     // absent is a state too, and it changes
+    };
+    stamp(wadDir);
+    for (const f of SOURCES) stamp(join(wadDir, f));
+    for (const w of manifest?.wads ?? []) {
+        if (w.patch || w.group) continue;
+        stamp(join(wadDir, w.file));
+        if (w.base) stamp(join(wadDir, w.base));
+    }
+    return parts.join('|');
+}
 
 // The WAD header and directory were read with no validation at all.  This is
 // the OPERATOR's own wads/lib, not network input -- so the realistic cause is a
@@ -47,10 +73,10 @@ function lumpsOf(path, wanted) {
 }
 
 export function uiAssets(wadDir, manifest) {
-    if (cached) return cached;
+    const key = cacheKey(wadDir, manifest);
+    if (cached && cached.key === key) return cached.body;
     // doom.wad first: its M_DOOM is the classic logo (doom2's says "II")
-    const source = ['doom.wad', 'doom2.wad', 'tnt.wad', 'plutonia.wad']
-        .map(f => join(wadDir, f)).find(existsSync);
+    const source = SOURCES.map(f => join(wadDir, f)).find(existsSync);
     if (!source) return null;
 
     // The per-PWAD loop below has always been wrapped; the IWAD call was the
@@ -80,6 +106,6 @@ export function uiAssets(wadDir, manifest) {
         } catch { /* missing wad: no art, text row still works */ }
     }
 
-    cached = JSON.stringify({ lumps, titles });
-    return cached;
+    cached = { key, body: JSON.stringify({ lumps, titles }) };
+    return cached.body;
 }

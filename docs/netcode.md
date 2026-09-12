@@ -105,6 +105,23 @@ it — no parallel log. One entry per sealed tic:
 `6 + 8 × 4 = 38 bytes/tic; 38 × 35 Hz ≈ 1.33 KB/s ≈ 4.8 MB/hr`.
 Released when the session ends (`endSession` sets `session = null`).
 
+**That 4.8 MB/hr is the payload, and the payload is not what is retained.**
+Each entry is its own `Buffer.alloc` — its own ArrayBuffer and object
+header, outside the pool. Measured (Node 26, 63,000 entries of 38 bytes):
+`heapUsed +15.99 MB, rss +31.45 MB` — **266 bytes retained per 38-byte
+bundle, 7× the payload**, so the real rate is ≈ 9.3 KB/s ≈ 34 MB/hr.
+
+**The log is capped** at `WEBDOOM_MAX_HISTORY_TICS` (default `35 × 60 × 30`
+= 63,000 tics = 30 minutes ≈ 17 MB retained). A ring buffer is not an
+option here: catch-up replays from tic 0, so dropping the head would hand
+a joiner a prefix-less stream and desync it with nothing to notice. Past
+the cap the history stops growing and **both features that read it refuse
+by name** — `spectateConnect` and the drop-in branch of `relayConnect`
+each log the reason and terminate. Live play is unaffected and continues
+indefinitely; only *joining* a session already half an hour old is
+refused. Both arms, and a control below the cap for each, are asserted by
+`tools/net-fuzz-test.mjs` surface 8.
+
 Note: spectators bypass the consistancy ring check (`fabMask=0xFF` in
 `attachSpectate.deliver()`), so a spectator-side state divergence — if a
 future bug introduced one — would be silent: no error, no disconnect,

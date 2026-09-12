@@ -28,6 +28,26 @@ const MAX_SPECTATORS = +(process.env.WEBDOOM_MAX_SPECTATORS || 8);
 // Above this many bytes queued on one socket, that peer is not keeping up and
 // is dropped rather than allowed to grow the server's heap without bound.
 const SEND_BACKLOG_CAP = +(process.env.WEBDOOM_SEND_BACKLOG || 4 * 1024 * 1024);
+// session.history is the ONLY unbounded structure left on the server: one sealed
+// bundle per tic, pushed at 35 Hz, kept for the life of the session because
+// drop-in and spectator catch-up replay it FROM TIC 0.
+//
+// docs/netcode.md sized this as "38 bytes/tic ... 4.8 MB/hr", which is the
+// PAYLOAD.  Each entry is its own Buffer.alloc -- its own ArrayBuffer and
+// object header, no pool -- so the payload is not what is retained.  Measured
+// on this Node, 63,000 entries of 38 bytes: heapUsed +15.99 MB, rss +31.45 MB,
+// = 266 bytes retained per 38-byte bundle, 7x the figure the doc quotes.  That
+// is 9.3 KB/s, ~34 MB/hour, forever, on a server whose whole job is to sit on
+// a LAN all evening.
+//
+// A ring buffer is NOT the fix: catch-up needs the history from tic 0, so
+// dropping the head would hand a joiner a prefix-less stream and desync it
+// silently -- much worse than the leak.  So the history stops GROWING at the
+// cap, and the two features that read it refuse, by name, past that point.
+// 35 Hz * 60 * 30 = 63,000 tics = 30 minutes of play = ~17 MB retained.  Live
+// play is unaffected and continues indefinitely; only JOINING a session that
+// has already run half an hour is refused.
+const MAX_HISTORY_TICS = +(process.env.WEBDOOM_MAX_HISTORY_TICS || 35 * 60 * 30);
 // 4 players × 35 Hz = 140 msg/s aggregate; per-conn cap at 300 gives a single client
 // 2× the full-table aggregate — plenty for legit play, kills flood attacks.
 const RATE_CAP_PER_SEC = +(process.env.WEBDOOM_RATE_CAP || 300);
@@ -227,6 +247,7 @@ export function createGame(log = console.log) {
             slots,                      // the tic-0 ingame slots
             names: null,
             history: [],                // every sealed bundle, for drop-in and spectator catch-up
+            historyFull: false,         // cap reached: catch-up can no longer be served
             spectators: new Set(),      // read-only observers; never in session.players
         };
         let n = 3;
@@ -261,6 +282,15 @@ export function createGame(log = console.log) {
     function spectateConnect(ws) {
         safeWs(ws, log, 'spectate');
         if (!session) { try { ws.terminate(); } catch {} return; }
+        // Past the cap the history is a PREFIX of the session, so replaying it
+        // would leave the observer's sim short of the live frontier with no way
+        // to notice.  Refuse instead of desyncing.
+        if (session.historyFull) {
+            log(`spectate: refusing — session is past the ${MAX_HISTORY_TICS}-tic history cap, catch-up cannot be served`);
+            ws.on('error', () => {});
+            try { ws.terminate(); } catch {}
+            return;
+        }
         if (session.spectators.size >= MAX_SPECTATORS) {
             log(`spectate: cap hit (${session.spectators.size}/${MAX_SPECTATORS}) — refusing`);
             ws.on('error', () => {});
@@ -321,6 +351,13 @@ export function createGame(log = console.log) {
         // joiner. Stream the whole sealed history so it can re-simulate to the
         // current frontier; live bundles then follow via sealTic's broadcast.
         if (!p.ingame) {
+            // Same reason as spectate: a truncated history desyncs silently.
+            if (session.historyFull) {
+                log(`game: ${COLORS[slot]} refused — session is past the ${MAX_HISTORY_TICS}-tic history cap, catch-up cannot be served`);
+                ws.on('error', () => {});
+                try { ws.terminate(); } catch {}
+                return;
+            }
             p.joining = true;
             p.reservedAt = p.reservedAt || Date.now();
             for (const b of session.history) {
@@ -445,7 +482,12 @@ export function createGame(log = console.log) {
         });
         buf[4] = mask;
         buf[5] = fab;
-        session.history.push(buf);      // for drop-in and spectator catch-up replay
+        // for drop-in and spectator catch-up replay, up to the cap
+        if (session.history.length < MAX_HISTORY_TICS) session.history.push(buf);
+        else if (!session.historyFull) {
+            session.historyFull = true;
+            log(`game: history cap reached (${MAX_HISTORY_TICS} tics) — drop-in and spectating are closed for this session; play continues`);
+        }
         for (const p of session.players)
             if (p.ws?.readyState === 1) p.ws.send(buf);
         // Broadcast sealed bundle to all spectators (same bundle, same tic).

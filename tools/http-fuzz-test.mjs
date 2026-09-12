@@ -269,6 +269,114 @@ async function checkSecurityHeaders() {
 console.log('\nsecurity headers — on every response path:');
 await checkSecurityHeaders();
 
+// ── the UI-asset cache, and the WAD an operator just added ───────────────────
+//
+// uiAssets() memoised into `let cached = null` and returned it forever.  Adding
+// a WAD to wads/lib -- the documented way to add a game -- changed /api/wads
+// (serve.js keys that one on the manifest's mtime) while the launcher's box art
+// stayed on the old payload until someone restarted the server, with nothing
+// saying so.
+//
+// The CONTROL arm is the point of this section: "the payload changed" is also
+// what you get from a cache that was simply removed, and that would be a
+// regression -- this route base64s every TITLEPIC in the library on each call.
+// So it asserts both halves: unchanged input returns the identical body, and
+// changed input does not.
+function makeWad(lumps) {
+    const { Buffer } = globalThis;
+    const datas = lumps.map(([, b]) => b);
+    const total = datas.reduce((n, b) => n + b.length, 0);
+    const buf = Buffer.alloc(12 + total + 16 * lumps.length);
+    buf.write('IWAD', 0, 'ascii');
+    buf.writeInt32LE(lumps.length, 4);
+    buf.writeInt32LE(12 + total, 8);
+    let o = 12;
+    const offsets = [];
+    for (const b of datas) { offsets.push(o); b.copy(buf, o); o += b.length; }
+    lumps.forEach(([name], i) => {
+        const d = 12 + total + 16 * i;
+        buf.writeInt32LE(offsets[i], d);
+        buf.writeInt32LE(datas[i].length, d + 4);
+        buf.write(name.padEnd(8, '\0'), d + 8, 8, 'ascii');
+    });
+    return buf;
+}
+
+async function checkUiAssetCache() {
+    const { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, copyFileSync, rmSync, readdirSync } =
+        await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { Buffer } = globalThis;
+
+    const wad = (n, tag) => makeWad([
+        ['PLAYPAL',  Buffer.alloc(768, tag)],
+        ['M_DOOM',   Buffer.alloc(n, tag)],
+        ['M_SKULL1', Buffer.alloc(n, tag)],
+        ['M_SKULL2', Buffer.alloc(n, tag)],
+        ['TITLEPIC', Buffer.alloc(n, tag)],
+    ]);
+
+    const tree = mkdtempSync(join(tmpdir(), 'webdoom-uicache-'));
+    let srv = null;
+    try {
+        mkdirSync(join(tree, 'server'));
+        mkdirSync(join(tree, 'wads/lib'), { recursive: true });
+        mkdirSync(join(tree, 'client'));
+        mkdirSync(join(tree, 'build'));
+        for (const f of readdirSync(join(root, 'server')).filter(f => /\.(js|json)$/.test(f)))
+            copyFileSync(join(root, 'server', f), join(tree, 'server', f));
+        symlinkSync(join(root, 'server/node_modules'), join(tree, 'server/node_modules'));
+        writeFileSync(join(tree, 'client/index.html'), '<!doctype html><title>x</title>');
+
+        const setLibrary = files => {
+            writeFileSync(join(tree, 'wads/manifest.json'),
+                JSON.stringify({ wads: files.map(f => ({ file: f, name: f })) }));
+        };
+        writeFileSync(join(tree, 'wads/lib/doom.wad'), wad(32, 0x11));
+        setLibrary(['doom.wad']);
+
+        const port = PORT_BASE++;
+        srv = spawn('node', [join(tree, 'server/serve.js')], {
+            env: { ...process.env, DOOM_PORT: String(port), DOOM_HOST: '127.0.0.1' },
+            stdio: ['ignore', 'ignore', 'ignore'],
+        });
+        for (let i = 0; i < 40; i++) { await sleep(100); if (await healthCheck('127.0.0.1', port)) break; }
+        const get = async () => {
+            const r = await fetch(`http://127.0.0.1:${port}/api/ui-assets`, { signal: AbortSignal.timeout(5000) });
+            return r.ok ? await r.text() : `HTTP ${r.status}`;
+        };
+
+        const a = await get();
+        check('ui-assets: the synthetic library is served at all',
+              a.includes('doom.wad') && a.includes('PLAYPAL'), `${a.length} bytes`);
+
+        const b = await get();
+        check('ui-assets CONTROL: an unchanged library returns the identical body',
+              b === a, b === a ? `${b.length} bytes, byte-identical` : 'body changed with no input change');
+
+        // A WAD ADDED to the library.
+        writeFileSync(join(tree, 'wads/lib/extra.wad'), wad(48, 0x22));
+        setLibrary(['doom.wad', 'extra.wad']);
+        const c = await get();
+        check('ui-assets: a WAD added to wads/lib appears without a restart',
+              c !== a && c.includes('extra.wad'),
+              c === a ? 'identical body — still the startup cache' : `${c.length} bytes, extra.wad present`);
+
+        // A WAD REPLACED IN PLACE: same name, same library, new bytes.  A
+        // directory mtime does not move for this; the per-file stamp does.
+        writeFileSync(join(tree, 'wads/lib/doom.wad'), wad(64, 0x33));
+        const d = await get();
+        check('ui-assets: a WAD replaced in place invalidates too',
+              d !== c, d === c ? 'identical body — keyed too coarsely' : `${d.length} bytes`);
+    } finally {
+        srv?.kill();
+        rmSync(tree, { recursive: true, force: true });
+    }
+}
+
+console.log('\nui-asset cache — an operator adds a WAD, with no restart:');
+await checkUiAssetCache();
+
 const failed = results.filter(r => !r.ok);
 const total = results.length;
 console.log(`\n${failed.length
