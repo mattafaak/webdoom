@@ -387,5 +387,18 @@ try {
     const anyErrors = [...(tabA?.errors ?? []), ...(tabB?.errors ?? []), ...(tabC?.errors ?? [])];
     if (anyErrors.length)
         console.log('  page errors:', anyErrors.slice(0, 5).join('\n  '));
+    // This leg had no top-level PASS line, so run-tests.sh's headline() fell
+    // through to the last non-empty line and the green row in the committed
+    // baseline reads "[Log.warning] Automatic fallback to software WebGL has
+    // been deprecated" -- a Chrome deprecation notice standing in for a
+    // verdict.  And `0 passed, 0 failed` would have exited 0, so the count
+    // needs a floor as well as a voice.
+    const MIN_ASSERTIONS = 12;
+    if (!failures && passes < MIN_ASSERTIONS) {
+        console.log(`FAIL — browser-demo: only ${passes} assertions ran, expected at least ` +
+                    `${MIN_ASSERTIONS}; a short run is not a pass`);
+        cleanup(1);
+    }
+    if (!failures) console.log(`PASS — browser-demo: ${passes} assertions, demo permalink record -> share -> replay`);
     cleanup(failures ? 1 : 0);
 }

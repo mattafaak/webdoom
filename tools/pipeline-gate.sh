@@ -41,9 +41,16 @@ kill "$SRV" 2>/dev/null; wait "$SRV" 2>/dev/null || true
 SRV=""
 
 rc=0
-node tools/browser-pipeline-compare.mjs --baseline "$BASELINE" --current "$CURRENT" || rc=$?
+CMP_OUT="$(node tools/browser-pipeline-compare.mjs --baseline "$BASELINE" --current "$CURRENT")" || rc=$?
+printf '%s\n' "$CMP_OUT"
+COMPARED="$(printf '%s\n' "$CMP_OUT" | grep -oE '[0-9]+ of [0-9]+ checks compared' | tail -1)"
+COMPARED="${COMPARED:-count not reported by the comparator}"
 if [ "$rc" -ne 0 ]; then
     echo "FAIL browser-pipeline: regression against $BASELINE (see comparison above)"
     exit "$rc"
 fi
-echo "PASS browser-pipeline: within tolerance of $BASELINE"
+# The comparator already prints "PASS (N of M checks compared)".  This wrapper
+# line used to be the LAST ^PASS, and run-tests.sh's headline() takes the last
+# one -- so a countless sentence displaced a counted one in the summary table.
+# Carry the count up instead of overwriting it.
+echo "PASS browser-pipeline: within tolerance of $BASELINE ($COMPARED)"

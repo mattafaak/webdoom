@@ -68,4 +68,7 @@ console.log(`music: rms=${rms.toFixed(5)} peak=${peak.toFixed(4)}`);
 if (hashes.size < 10) { console.error('FAIL: framebuffer barely changes — demo not running'); process.exit(1); }
 if (nonzero < 10000)  { console.error('FAIL: framebuffer mostly empty'); process.exit(1); }
 if (rms < 0.0005)      { console.error('FAIL: OPL music silent'); process.exit(1); }
-console.log('PASS');
+// Bare `PASS` was this leg's whole headline in the summary table.  Say what was
+// observed: the three numbers the three assertions above are made of.
+console.log(`PASS — engine smoke: ${hashes.size} distinct framebuffers, ${nonzero} non-black pixels, ` +
+            `OPL rms ${rms.toFixed(5)} (3 assertions)`);

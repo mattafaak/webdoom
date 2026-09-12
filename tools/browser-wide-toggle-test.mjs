@@ -48,6 +48,21 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const cleanup = code => { chrome.kill(); process.exit(code); };
 const fail = msg => { console.error('FAIL:', msg); cleanup(1); };
 
+// The verdict used to be a bare `console.log('PASS')`.  run-tests.sh shows a
+// leg's own headline in the summary table, so this leg's row read exactly
+// "PASS" -- which is not evidence that anything ran, and is the shape
+// CLAUDE.md's "quote the count" rule exists for.  The stages already announce
+// themselves as `[n] ...`; count the distinct ones and hold them to a list, so
+// a stage that silently stops running is a red rather than a shorter row.
+const STAGES = new Set();
+const _log = console.log;
+console.log = (...a) => {
+    const m = /^\[([0-9a-z]+)\]/.exec(String(a[0] ?? ''));
+    if (m) STAGES.add(m[1]);
+    _log(...a);
+};
+const EXPECTED_STAGES = ['1', '2', '2b', '3', '4'];
+
 await sleep(1500);
 
 const t = await (await fetch(
@@ -227,5 +242,10 @@ await ev(`localStorage.setItem('webdoom.input', JSON.stringify({
 const errs = consoleErrors.filter(e => !/debug|warn/i.test(e));
 if (errs.length) console.warn('console errors observed (non-fatal):', errs.slice(0, 5));
 
-console.log('PASS');
+const missing = EXPECTED_STAGES.filter(k => !STAGES.has(k));
+if (missing.length) {
+    console.error(`FAIL: only ${STAGES.size} of ${EXPECTED_STAGES.length} stages reported — missing [${missing.join('] [')}]`);
+    cleanup(1);
+}
+console.log(`PASS — browser-wide: ${STAGES.size} of ${EXPECTED_STAGES.length} stages verified (default 320, wide on, display fill, wide off (red-proof), persist after reload)`);
 cleanup(0);

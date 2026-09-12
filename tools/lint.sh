@@ -41,6 +41,10 @@ fi
 
 ERRORS=0
 C_CHECKED=0   # did the C formatting check actually run?
+# Counts for the verdict line.  A gate that prints only "OK" tells the summary
+# table nothing about what it looked at.
+C_COUNT_NOTE="C checks skipped"
+JS_COUNT_NOTE=""
 
 # ---------------------------------------------------------------------------
 # C formatting via clang-format
@@ -82,6 +86,7 @@ else
                 ERRORS=1
             else
                 echo "lint: clang-format OK (${#C_FILES[@]} files)"
+                C_COUNT_NOTE="clang-format ${#C_FILES[@]} C files"
             fi
             C_CHECKED=1
         fi
@@ -122,6 +127,7 @@ if [ "$NODE_FAIL" = "1" ]; then
     ERRORS=1
 elif [ "$DO_JS" = "1" ]; then
     echo "lint: node --check OK (${#JS_FILES[@]} files)"
+    JS_COUNT_NOTE=", node --check ${#JS_FILES[@]} JS files"
 fi
 
 # ---------------------------------------------------------------------------
@@ -213,4 +219,10 @@ if [ "$ERRORS" = "1" ]; then
     exit 1
 fi
 
+# `lint: OK` is not a ^PASS line, and run-tests.sh's headline() greps for one --
+# so the lint row in the summary table showed the NESTED check-pipe-exit
+# verdict instead, and whether clang-format actually ran (which is what
+# ERRORS_NOTE says) was invisible in the table.  Lead with a PASS line that
+# carries this gate's own counts.
+echo "PASS — lint: ${C_COUNT_NOTE}${JS_COUNT_NOTE}${ERRORS_NOTE}"
 echo "lint: OK${ERRORS_NOTE}"
