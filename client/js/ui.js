@@ -24,6 +24,38 @@ export function setStatus(msg) {
     if (el) el.textContent = msg;
 }
 
+// ── the loading panel ────────────────────────────────────────────────────────
+//
+// It lived in main.js, which meant it existed only once a game was booting.
+// The LAUNCHER's own startup — /api/wads, an IndexedDB read and a base64
+// decode of ~63 font patches before the first menu row appears — showed
+// nothing at all: a black page for however long that takes on a slow host.
+//
+// The bar carries role="progressbar" (index.html), so the percentage has to
+// reach aria-valuenow as well as the fill's width; a bar that only changes
+// width is silent to anything not looking at it.
+export const loading = {
+    _el(id) { return typeof document === 'undefined' ? null : document.getElementById(id); },
+    _set(label, pct) {
+        const l = this._el('loading-label'); if (l) l.textContent = label;
+        const f = this._el('loading-fill');  if (f) f.style.width = `${pct}%`;
+        const b = this._el('loading-bar');
+        if (b) {
+            // ARIA: an INDETERMINATE progressbar omits aria-valuenow.  Saying
+            // "0%" for a transfer whose length is unknown is a false statement,
+            // not a missing one -- and that is what a compressed response
+            // (no content-length) used to produce for its whole duration.
+            if (pct === null) b.removeAttribute('aria-valuenow');
+            else b.setAttribute('aria-valuenow', String(pct));
+        }
+    },
+    show(label) { this._set(label, 0); const e = this._el('loading'); if (e) e.hidden = false; },
+    set(label, frac) { this._set(label, Math.round((frac ?? 0) * 100)); },
+    // Length unknown: the LABEL carries the progress and the bar says so.
+    indeterminate(label) { this._set(label, null); },
+    hide() { const e = this._el('loading'); if (e) e.hidden = true; },
+};
+
 // A ledger of "how to undo this", returned as { on, off }.
 //   on(target, event, fn, opts)  adds the listener and records its removal
 //   off()                        runs every recorded removal, once

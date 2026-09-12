@@ -12,28 +12,7 @@ import { wadCacheGet, wadCachePut } from './wad-cache.js';
 import { libraryGetBytes } from './wad-library.js';
 import { createScrubberUI } from './scrubber.js';
 import { wideWidth, paniniStrength } from './wide-utils.js';
-import { setStatus as status } from './ui.js';
-
-// centred loading panel + progress bar
-//
-// The bar carries role="progressbar" (index.html), so the percentage has to
-// reach aria-valuenow as well as the fill's width -- a bar that only changes
-// width is silent to anything that is not looking at it.
-const loading = {
-    _set(label, pct) {
-        document.getElementById('loading-label').textContent = label;
-        document.getElementById('loading-fill').style.width = `${pct}%`;
-        document.getElementById('loading-bar')?.setAttribute('aria-valuenow', String(pct));
-    },
-    show(label) {
-        this._set(label, 0);
-        document.getElementById('loading').hidden = false;
-    },
-    set(label, frac) {
-        this._set(label, Math.round((frac ?? 0) * 100));
-    },
-    hide() { document.getElementById('loading').hidden = true; },
-};
+import { setStatus as status, loading } from './ui.js';
 
 // The engine identifies games by 1993 filenames. Ultimate Doom must be
 // doomu.wad (retail detection); the standalone TCs get the filename of
@@ -54,7 +33,10 @@ function swActive() {
         !!navigator.serviceWorker.controller;
 }
 
-async function fetchWad(file, sha) {
+// onProgress(gotBytes, totalBytes|0) — the CALLER owns the display, because a
+// WAD stack is fetched in parallel and one shared bar has to show the sum.
+// Reporting per file meant the last chunk to land decided what the bar said.
+async function fetchWad(file, sha, onProgress = () => {}) {
     const sw = swActive();
 
     // Local library tier — user-imported WADs live only in IDB, never on the
@@ -63,7 +45,7 @@ async function fetchWad(file, sha) {
     if (sha) {
         const local = await libraryGetBytes(sha).catch(() => null);
         if (local) {
-            loading.set(`LOADING ${file} (local)…`, 1);
+            onProgress(local.length, local.length);
             return local;
         }
     }
@@ -76,7 +58,7 @@ async function fetchWad(file, sha) {
     if (!sw && sha) {
         const cached = await wadCacheGet(sha);
         if (cached) {
-            loading.set(`LOADING ${file} (cached)…`, 1);
+            onProgress(cached.length, cached.length);
             return cached;
         }
     }
@@ -84,7 +66,6 @@ async function fetchWad(file, sha) {
     const res = await fetch(`/wads/${file}?v=${(sha ?? '').slice(0, 8)}`);
     if (!res.ok) throw new Error(`wad fetch failed: ${file} (${res.status})`);
     const total = +res.headers.get('content-length') || 0;
-    const mb = n => (n / 1048576).toFixed(1);
     const parts = [];
     let got = 0;
     const reader = res.body.getReader();
@@ -93,9 +74,9 @@ async function fetchWad(file, sha) {
         if (done) break;
         parts.push(value);
         got += value.length;
-        loading.set(total ? `FETCHING ${file} — ${mb(got)} / ${mb(total)} MB` : `FETCHING ${file}…`,
-            total ? got / total : 0);
+        onProgress(got, total);
     }
+    onProgress(got, total || got);
     const buf = new Uint8Array(got);
     let o = 0;
     for (const p of parts) { buf.set(p, o); o += p.length; }
@@ -171,8 +152,25 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     let createDoom, bytes, persisted;
     try {
         ({ default: createDoom } = await import('/engine/doom.js'));
-        bytes = [];
-        for (const w of wads) bytes.push(await fetchWad(w.file, w.sha));
+        // In PARALLEL, with ONE aggregate bar.  The stack is an IWAD plus its
+        // PWADs and patches, and they were fetched strictly one after another
+        // -- so a 200 KB patch waited on a 12 MB IWAD for no reason.  The
+        // shared bar sums every file, so it still means something; a
+        // compressed response (no content-length) makes the WHOLE aggregate
+        // indeterminate rather than reporting a false 0%.
+        const got = new Array(wads.length).fill(0);
+        const tot = new Array(wads.length).fill(0);
+        const mb = n => (n / 1048576).toFixed(1);
+        const report = () => {
+            const g = got.reduce((a, b) => a + b, 0);
+            const known = tot.every(t => t > 0);
+            const t = tot.reduce((a, b) => a + b, 0);
+            const what = wads.length > 1 ? `${wads.length} FILES` : wads[0].file;
+            if (known) loading.set(`FETCHING ${what} — ${mb(g)} / ${mb(t)} MB`, t ? g / t : 0);
+            else loading.indeterminate(`FETCHING ${what} — ${mb(g)} MB`);
+        };
+        bytes = await Promise.all(wads.map((w, i) =>
+            fetchWad(w.file, w.sha, (g, t) => { got[i] = g; tot[i] = t; report(); })));
         persisted = await loadPersisted(wads[0].file);
     } catch (err) {
         // Restore landing so the user can read the error and retry.

@@ -7,7 +7,7 @@
 import { bootDoom } from './main.js';
 import { connectLobby, launchArgs, attachSpectate } from './net.js';
 import { loadDoomFont } from './doomfont.js';
-import { setStatus } from './ui.js';
+import { setStatus, loading } from './ui.js';
 import { createMenu } from './menu.js';
 import { createCountdown } from './countdown.js';
 import { createFire } from './fire.js';
@@ -649,6 +649,12 @@ function leaveLobby() { resetToLauncher(); }
         });
     }
     try {
+        // The launcher's OWN startup had no indicator: a /api/wads fetch, an
+        // IndexedDB read and a base64 decode of ~63 font patches happen before
+        // the first menu row exists, and #loading was owned entirely by
+        // main.js and never shown until a game was already booting.  On a slow
+        // host that is a black page for seconds with nothing to read.
+        loading.show('READING THE WAD LIBRARY…');
         manifest = (await (await fetch('/api/wads')).json()).wads;
 
         // Merge local-library entries into the manifest.
@@ -668,6 +674,7 @@ function leaveLobby() { resetToLauncher(); }
             manifest.push(e);
         }
 
+        loading.set('DECODING THE MENU FONT…', 0.66);
         font = await loadDoomFont();
         // onTransition: single hook for every real screen change in the launcher
         // menu. Full-flare (peak 36) on return-to-root; subtle nav flare (peak 28)
@@ -681,7 +688,9 @@ function leaveLobby() { resetToLauncher(); }
             },
         });
         countdown = createCountdown(font, $('countdown'));
+        loading.hide();
     } catch (err) {
+        loading.hide();
         console.error(err);
         // "cannot reach server" was printed for EVERY failure in this block,
         // including the server answering perfectly with no IWAD to offer.  A
