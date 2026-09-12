@@ -44,9 +44,9 @@ jobs:
         node: ['20', '24', '26']
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
 
@@ -91,7 +91,7 @@ jobs:
 
       - name: Keep the leg logs as an artifact
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: suite-logs-node-${{ matrix.node }}
           path: tools/.suite-logs/
@@ -113,6 +113,11 @@ jobs:
             echo '- the freestanding and 32-bit-ARM cross-architecture legs'
             echo '- the 19 browser legs and the browser-pipeline baseline'
             echo '- three colormap verifier families inside doc-drift (it reports this itself)'
+            echo '- the two build-output paths in sw-precache (/engine/doom.js, doom.wasm)'
+            echo
+            echo 'Legs that ran but could not check everything say so in their own'
+            echo 'output, as `(INCOMPLETE)` — a pass here is never a claim of full'
+            echo 'coverage.'
             echo
             echo 'Run the whole thing on a host that has them:'
             echo '```'
