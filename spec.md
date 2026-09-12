@@ -33,7 +33,7 @@ shipped, gated feature that the contract never claimed at all.
 | **User WAD import** from the local disk into an IndexedDB library | `browser-wadimport`, `browser-mp-gating` |
 | **Persistence**: savegames and config across reloads, per IWAD | `persist` |
 | Offline single player once a WAD is cached | `browser-offline`, `sw-precache` |
-| Rebindable keys, gamepad, and a settings dialog | `browser-settings` |
+| Rebindable keys, gamepad, and an OPTIONS screen on the launcher menu | `browser-options` |
 | Freelook and frame interpolation — render-side, opt-in | **ungated** — promises-index spc-011 |
 | Music: in-engine OPL2/OPL3, or a GM SoundFont backend | `opl-mode`, `gm-frames`, `gm-config`, `browser-sf2`, `browser-music-fallback` |
 | **Five compile-time render variants**, each pixel-identical or explained | `render-fakeflat`, `render-potato`, `render-sbskip`, `render-diffblit`, `toggle-identity` |

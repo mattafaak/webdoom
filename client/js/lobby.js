@@ -19,6 +19,10 @@ import {
     stopAndShare,
     showSharePanel, showWadWarning, showReplayNotice,
 } from './demo.js';
+import {
+    ACTIONS, loadSettings, saveSettings, defaultSettings, captureBind,
+} from './input.js';
+import { sf2GetCurrentMeta } from './sf2-library.js';
 
 const $ = id => document.getElementById(id);
 // setStatus looks the element up each time and tolerates its absence; the six
@@ -91,7 +95,158 @@ function rootScreen() {
         items: [
             { label: 'SINGLE PLAYER', action: () => menu.push(spGameScreen()) },
             { label: 'MULTIPLAYER', action: enterMultiplayer },
+            { label: 'OPTIONS', action: () => menu.push(optionsScreen()) },
             { label: 'IMPORT WAD', action: () => document.getElementById('wad-file-input')?.click() },
+        ],
+    };
+}
+
+// --- OPTIONS -------------------------------------------------------------------
+//
+// The web-side settings used to live in an F8 HTML overlay (client/js/settings.js)
+// that belonged to neither this menu nor the engine's, and was the only way to
+// reach any of them.  They are menu screens now, in the same shape as
+// optionsPick() below: a value rendered as text, left/right or Enter to change
+// it, and nothing else on screen.
+//
+// There is no `doom` here -- the launcher runs before any engine exists -- so
+// nothing is applied live.  Everything is persisted through saveSettings() and
+// main.js applies the whole set at boot, which it already did for every one of
+// these.  The cost is that a setting cannot be changed mid-game; DOOM's own
+// menu (Escape) still owns volume, detail and screen size in game.
+let settings = null;
+const S = () => (settings ??= loadSettings());
+
+// GM status is two async lookups (the stored .sf2 and the operator's synth
+// URL).  Fetch once on entry, cache, and refresh the screen when they land, so
+// the MUSIC row can say GM - NO SF2 instead of the game shouting it over the
+// player later.  gmState stays null until both have answered.
+let gmState = null;
+async function loadGmState() {
+    if (gmState) return;
+    const [meta, cfg] = await Promise.all([
+        sf2GetCurrentMeta().catch(() => null),
+        fetch('/api/config').then(r => r.ok ? r.json() : null).catch(() => null),
+    ]);
+    gmState = { sf2: !!meta, url: !!cfg?.spessaSynthUrl };
+    if (menu.current()?.title === 'OPTIONS') menu.refresh(optionsScreen());
+}
+
+// What the MUSIC row reads.  For GM it names the reason it cannot work, at the
+// place the choice is made -- audio.js used to setStatus() that reason over the
+// running game, where #status has no timeout and it stayed for the session.
+function musicValue() {
+    const b = S().musicBackend ?? (S().opl3 ? 'opl3' : 'opl2');
+    if (b !== 'gm') return b.toUpperCase();
+    if (!gmState) return 'GM';
+    if (!gmState.url) return 'GM - NO SYNTH URL';
+    if (!gmState.sf2) return 'GM - NO SF2';
+    return 'GM';
+}
+
+const keyName = code => String(code)
+    .replace(/[^a-zA-Z0-9]/g, '')      // codes are alphanumeric; localStorage is not trusted
+    .replace(/^Key|^Digit/, '')
+    .replace(/^Arrow/, '')
+    .replace(/(?!^)(Left|Right)$/, ' $1')
+    .trim()                            // 'ArrowLeft' -> 'Left' -> ' Left' without this
+    .toUpperCase();
+
+// Step a setting through a fixed ladder, wrapping.  `steps` is the ladder, so
+// a value that is in range but not ON the ladder (hand-edited localStorage,
+// which sanitizeSettings clamps but does not round) lands on the next rung up
+// rather than jumping to the start.
+const stepper = (key, steps) => dir => {
+    const cur = S()[key];
+    let i = steps.indexOf(cur);
+    if (i < 0) i = steps.findIndex(v => v >= cur);
+    if (i < 0) i = 0;
+    S()[key] = steps[(i + dir + steps.length) % steps.length];
+    saveSettings(S());
+    menu.refresh(optionsScreen());
+};
+
+const SENS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const PADTURN = [0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0];
+const DEADZONE = [0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.9];
+const MOUSEY = ['off', 'look', 'move'];
+const BACKENDS = ['opl2', 'opl3', 'gm'];
+
+function optionsScreen() {
+    loadGmState();
+    const onoff = v => (v ? 'ON' : 'OFF');
+    const flip = key => () => {
+        S()[key] = !S()[key];
+        saveSettings(S());
+        menu.refresh(optionsScreen());
+    };
+    const cycleIn = (key, list, after) => dir => {
+        const i = list.indexOf(S()[key]);
+        S()[key] = list[((i < 0 ? 0 : i) + dir + list.length) % list.length];
+        after?.();
+        saveSettings(S());
+        menu.refresh(optionsScreen());
+    };
+    // Left/right cycles and Enter advances by one -- the same function, so the
+    // two cannot drift apart.
+    const both = fn => ({ cycle: fn, action: () => fn(1) });
+    const opl3sync = () => { S().opl3 = S().musicBackend === 'opl3'; };
+    return {
+        title: 'OPTIONS',
+        nowrap: true,
+        // DOOM's own menu is still there and still owns four settings, one of
+        // which (mouse sensitivity) multiplies the same mouse deltas this
+        // screen scales.  Saying so is cheaper than a player finding out.
+        header: [{ text: 'IN GAME, ESC OPENS DOOM\'S OWN MENU' }],
+        items: [
+            { label: 'CONTROLS', action: () => menu.push(controlsScreen()) },
+            { label: 'MOUSE SENSITIVITY: ', value: String(S().mouseSens), maxValue: '12',
+              ...both(stepper('mouseSens', SENS)) },
+            { label: 'MOUSE Y: ', value: S().mouseY.toUpperCase(), maxValue: 'LOOK',
+              ...both(cycleIn('mouseY', MOUSEY)) },
+            { label: 'ALWAYS RUN: ', value: onoff(S().alwaysRun), maxValue: 'OFF',
+              ...both(flip('alwaysRun')) },
+            { label: 'SMOOTH RENDERING: ', value: onoff(S().smooth), maxValue: 'OFF',
+              ...both(flip('smooth')) },
+            // opl3 is a legacy bool kept in sync for back-compat (task 17.2b).
+            { label: 'MUSIC: ', value: musicValue(), maxValue: 'GM - NO SYNTH URL',
+              ...both(cycleIn('musicBackend', BACKENDS, opl3sync)) },
+            { label: 'GAMEPAD TURN: ', value: S().padTurnSpeed.toFixed(1), maxValue: '2.0',
+              ...both(stepper('padTurnSpeed', PADTURN)) },
+            // padDeadzone was in the schema with no control at all: reachable
+            // only by hand-editing localStorage, while the comment above SCHEMA
+            // said the bounds "match the panel's own controls".
+            { label: 'GAMEPAD DEADZONE: ', value: S().padDeadzone.toFixed(2), maxValue: '0.90',
+              ...both(stepper('padDeadzone', DEADZONE)) },
+            { label: 'RESET DEFAULTS', action: () => {
+                Object.assign(S(), defaultSettings());
+                saveSettings(S());
+                menu.refresh(optionsScreen());
+            } },
+        ],
+    };
+}
+
+function controlsScreen() {
+    return {
+        title: 'CONTROLS',
+        nowrap: true,
+        header: [{ text: 'ENTER REBINDS  -  ESC CANCELS' }],
+        items: [
+            ...ACTIONS.map(a => ({
+                label: a.label.toUpperCase() + ': ',
+                value: keyName(S().binds[a.id]),
+                maxValue: 'PRESS A KEY',
+                capture: done => captureBind(S(), a.id, () => {
+                    done();
+                    menu.refresh(controlsScreen());
+                }),
+            })),
+            { label: 'RESET DEFAULTS', action: () => {
+                S().binds = defaultSettings().binds;
+                saveSettings(S());
+                menu.refresh(controlsScreen());
+            } },
         ],
     };
 }

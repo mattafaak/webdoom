@@ -64,12 +64,15 @@ export const defaultSettings = () => ({
 // devtools, shared by every page on the origin, and carried across versions of
 // this app -- and `{ ...defaultSettings(), ...stored }` validated none of it.
 // A stored mouseSens of "abc" reached the input path as a string and every
-// mouse delta became NaN; the settings panel showed "7", because an
+// mouse delta became NaN; the settings panel of the day showed "7", because an
 // <input type=range> with an invalid value renders its midpoint.  The widget
-// is not the value in force.
+// is not the value in force.  (The OPTIONS screen that replaced it renders the
+// value as text, so what you read IS what is in force -- but the validation
+// below is what makes that true, not the rendering.)
 //
-// Bounds match the panel's own controls (settings.js: sens 1-12, pturn
-// 0.4-2), so a hand-edited value cannot reach somewhere the UI cannot.
+// Bounds match the OPTIONS screen's own steps (lobby.js: sens 1-12, pad turn
+// 0.4-2, deadzone 0-0.9), so a hand-edited value cannot reach somewhere the
+// UI cannot.
 const SCHEMA = {
     mouseSens:      { num: [1, 12] },
     padDeadzone:    { num: [0, 0.9] },
@@ -97,8 +100,9 @@ function sanitizeSettings(stored) {
     }
     // binds PER ACTION, never wholesale.  ACTIONS grows between releases, and
     // the spread replaced the whole object -- so an action added after a user's
-    // last save had no key, and settings.js rendered keyName(undefined) as the
-    // literal string "undefined" on a button with no way back to its default.
+    // last save had no key, and the settings panel of the day rendered
+    // keyName(undefined) as the literal string "undefined" on a button with no
+    // way back to its default.
     const b = stored.binds;
     if (b && typeof b === 'object' && !Array.isArray(b))
         for (const a of ACTIONS)
@@ -128,6 +132,59 @@ export function saveSettings(s) {
     } catch { /* quota exceeded or storage disabled — continue in-memory */ }
 }
 
+// Rebind one action, from anywhere.
+//
+// This used to live inside createInput()'s keydown closure, which meant it
+// needed a `doom` instance and a canvas -- neither of which exists on the
+// launcher, where the OPTIONS screen now lives.  Nothing about arming a key
+// capture needs the engine: it needs the settings object and ACTIONS.
+//
+// The listener is on `window` in the CAPTURE phase and stops propagation,
+// because the launcher menu has its own bubble-phase keydown handler
+// (menu.js) -- without that, ArrowDown would still move the skull, Enter
+// would still activate a row and Escape would still pop the screen while the
+// player is trying to bind a key.
+//
+// Returns a cancel function.  Every exit path -- bound, cancelled, timed out,
+// screen left -- runs through endCapture exactly once, so no row can be left
+// reading "PRESS A KEY" with a binding that can no longer be read.
+export function captureBind(settings, actionId, onDone) {
+    let done = false;
+    let timer = 0;
+
+    const endCapture = (bound) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        window.removeEventListener('keydown', onKey, true);
+        onDone?.(bound);
+    };
+
+    function onKey(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        // Escape is how a person says "no".  It used to BECOME the binding,
+        // and then the action could only be reached by the key that also
+        // opens the engine menu.
+        if (e.code === 'Escape') { endCapture(null); return; }
+        // A key already bound elsewhere SWAPS rather than duplicating: two
+        // actions on one key is unreachable for one of them, and silently
+        // unbinding the other leaves a row no one can read.
+        const taken = ACTIONS.find(a => a.id !== actionId && settings.binds[a.id] === e.code);
+        if (taken) settings.binds[taken.id] = settings.binds[actionId];
+        settings.binds[actionId] = e.code;
+        saveSettings(settings);
+        endCapture(e.code);
+    }
+
+    window.addEventListener('keydown', onKey, true);
+    // Without this the row waits forever, showing "PRESS A KEY" on a binding
+    // that can no longer be read, and every key the player presses is
+    // swallowed by the capture.
+    timer = setTimeout(() => endCapture(null), CAPTURE_TIMEOUT_MS);
+    return () => endCapture(null);
+}
+
 // weapon digit groups for cycle buttons (digit key → doom behavior)
 const WEAPON_DIGITS = [
     { digit: 49, weapons: [0, 7] },     // 1: fist / chainsaw
@@ -149,8 +206,6 @@ export function createInput(doom, canvas, settings) {
     const post = (t, a = 0, b = 0, c = 0) => doom._web_input_event(t, a, b, c);
     const tapKey = dk => { post(EV_KEYDOWN, dk); post(EV_KEYUP, dk); };
 
-    let capture = null;             // action id being rebound, or null
-    let captureTimer = 0;           // capture cannot wait forever with no way out
     let mouseAccX = 0, mouseAccY = 0, mouseButtons = 0, mouseDirty = false;
     let pitch = 0, sentPitch = 0;   // freelook shear, screen pixels
     const heldKeys = new Set();     // game keys currently down (for release-all)
@@ -180,35 +235,9 @@ export function createInput(doom, canvas, settings) {
     };
 
     // --- keyboard --------------------------------------------------------
-    // The settings panel is a modal dialog, and its own controls are sliders,
-    // checkboxes and a key-capture button.  Only the POINTERLOCK handler
-    // consulted it, so while the panel was open every keystroke also reached
-    // the engine: arrow keys moved the player behind the panel, and a key
-    // pressed on a slider raced the slider's own handler.
-    const panelOpen = () => document.getElementById('settings')?.hidden === false;
-
+    // Rebinding is not handled here any more: it happens on the launcher's
+    // OPTIONS screen, before an engine exists, through captureBind() above.
     const onKey = down => e => {
-        // capture is checked first: rebinding happens WITH the panel open, and
-        // it is the one thing that must still see the key.
-        if (!capture && panelOpen()) return;
-        if (capture) {
-            if (down) {
-                // Escape is how a person says "no".  It used to BECOME the
-                // binding, and then the action could only be reached by the
-                // key that also opens the engine menu.
-                if (e.code === 'Escape') { endCapture(); e.preventDefault(); return; }
-                // A key already bound elsewhere SWAPS rather than duplicating:
-                // two actions on one key is unreachable for one of them, and
-                // silently unbinding the other leaves a button no one can read.
-                const taken = ACTIONS.find(a => a.id !== capture && settings.binds[a.id] === e.code);
-                if (taken) settings.binds[taken.id] = settings.binds[capture];
-                settings.binds[capture] = e.code;
-                saveSettings(settings);
-                endCapture();
-            }
-            e.preventDefault();
-            return;
-        }
         let dk = codeToDk(e.code, e.key);
         if (dk === null && e.key.length === 1) {
             const c = e.key.toLowerCase().charCodeAt(0);
@@ -236,8 +265,7 @@ export function createInput(doom, canvas, settings) {
             canvas.requestPointerLock();
     });
     on(document, 'pointerlockchange', () => {
-        if (document.pointerLockElement !== canvas && !panelOpen()
-            && !doom._web_ui_mode())
+        if (document.pointerLockElement !== canvas && !doom._web_ui_mode())
             tapKey(DK.ESCAPE);          // engine opens its menu
     });
     on(window, 'mousemove', e => {
@@ -367,34 +395,9 @@ export function createInput(doom, canvas, settings) {
         pollGamepad();
     }
 
-    let onCapture = null;
-    // One exit from capture, so no path can leave the timer armed or the
-    // button stuck on "press a key…".
-    const endCapture = () => {
-        clearTimeout(captureTimer);
-        captureTimer = 0;
-        capture = null;
-        onCapture?.(null);
-        onCapture = null;
-    };
     return {
         frame,
         settings,
-        startCapture(actionId, cb) {
-            clearTimeout(captureTimer);
-            capture = actionId;
-            onCapture = cb;
-            // Without this the panel waits forever, showing "press a key…" on a
-            // button whose real binding can no longer be read, and every key
-            // the player presses is swallowed by the capture.
-            captureTimer = setTimeout(() => { if (capture) endCapture(); }, CAPTURE_TIMEOUT_MS);
-        },
-        cancelCapture() { endCapture(); },
-        // settings.js asks before treating Escape as "close the dialog": while
-        // a capture is armed, Escape means "cancel the capture" and onKey owns
-        // it.  Two handlers on the same key need one of them to be able to
-        // tell whose key it is.
-        capturing: () => capture !== null,
         destroy() { _teardownAll(); },
     };
 }

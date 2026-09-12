@@ -115,7 +115,7 @@ have_browser() {
 have_firefox() { [ -x /usr/bin/firefox ]; }
 have_emsdk()   { [ -x "${EMSDK_DIR:-$HOME/projects/bee-kettle-doom/emsdk}/upstream/emscripten/emcc" ]; }
 have_baseline(){ [ -f "tools/golden/browser-pipeline-$(hostname).json" ]; }
-# The 17 legs below share one server on 8668.  Making that a PREREQUISITE, rather
+# The 16 legs below share one server on 8668.  Making that a PREREQUISITE, rather
 # than an `if` wrapped around the whole block, is what lets each of them report
 # its own named SKIP -- see the browser-suite comment for what the aggregate skip
 # was hiding.
@@ -509,7 +509,7 @@ leg hostile-lobby   -          "hostile server frames vs the lobby client"  -- n
 leg wad-content-fuzz build,wad "hostile GENMIDI/MUS lump payloads (23.2)" -- node tools/wad-content-fuzz-test.mjs
 
 # ── browser suite ────────────────────────────────────────────────────────────
-# One shared server for the 17 legs that only need a page to load.  Started
+# One shared server for the 16 legs that only need a page to load.  Started
 # once, torn down by the single EXIT trap, readiness polled rather than slept.
 #
 # THE AGGREGATE SKIP THIS REPLACED
@@ -528,7 +528,7 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
     U=http://127.0.0.1:8668/
     if have_browser && have_build && have_wad; then
         if serve_start 8668; then SHARED_UP=1; else
-            echo "  note: shared browser server on 8668 did not start — the 17 legs below will each SKIP"
+            echo "  note: shared browser server on 8668 did not start — the 16 legs below will each SKIP"
         fi
     fi
     leg browser-sp            browser,build,wad,shared "title -> menu -> new game -> movement" -- node tools/browser-test.mjs "$U"
@@ -537,7 +537,7 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
     leg persist               browser,build,wad,shared "settings/keybind persistence"          -- node tools/persist-test.mjs "$U"
         # The third direction of tenet 4: localStorage and the rebind UI are
         # USER input, and had no gate at all.  Also closes promises rme-004.
-    leg browser-settings      browser,build,wad,shared "hostile localStorage + rebind UI"        -- node tools/browser-settings-test.mjs "$U"
+    leg browser-options       browser,build,wad,shared "hostile localStorage + the OPTIONS screen" -- node tools/browser-options-test.mjs "$U"
     leg browser-resilience    browser,build,wad,shared "fetch/sw/visibility/gamepad failures" -- node tools/browser-resilience-test.mjs "$U"
     leg browser-lobby         browser,build,wad,shared "lobby state machine, 25 edges"         -- node tools/browser-lobby-test.mjs "$U"
     leg browser-fire          browser,build,wad,shared "PSX fire background + reduced-motion"  -- node tools/browser-fire-test.mjs "$U" /tmp

@@ -5,7 +5,8 @@
 // --------------
 // docs/decision-17.2a Decision 5 says: "The internal routing in audio.js accepts
 // a setGmMode(enabled, soundfontUrl) call (for 17.2b to wire)".  17.2b wired the
-// backend PICKER (settings.js) and the SOUNDFONT BYTES (lobby.js), but never the
+// backend PICKER (settings.js, now the OPTIONS screen) and the SOUNDFONT
+// BYTES (lobby.js), but never the
 // third parameter.  No caller passed a SpessaSynth URL, so gmSpessaSynthUrl was
 // permanently null, arm() always took the SKIP branch, and the GM backend --
 // which spec.md's music contract and two decision records present as delivered

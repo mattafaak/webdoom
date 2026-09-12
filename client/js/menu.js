@@ -1,8 +1,9 @@
 // Drill-down menu in the DOOM idiom: one short list per screen, skull
 // cursor, Enter descends, Escape/Backspace ascends. Arrow keys, mouse
-// hover/click, and inline text entry for names. Screens are plain data:
-//   { title?: string|{patch}, header?: [{text, color}] roster line,
-//     items: [{ label, color?, action?, entry? }], onBack? }
+// hover/click, inline text entry for names, and key capture for rebinds.
+// Screens are plain data:
+//   { title?: string|{patch}, header?: [{text, color}] roster line, nowrap?,
+//     items: [{ label, color?, action?, entry?, capture? }], onBack? }
 // opts.onTransition(type): optional callback fired on every real screen change.
 //   type: 'push' (descending), 'back' (popping/unwinding), 'reset' (full replace).
 //   Called AFTER the stack is mutated, BEFORE render(). Cursor-within-screen
@@ -20,6 +21,7 @@ export function createMenu(font, host, opts = {}) {
     let sel = 0;
     let skullFlip = false;
     let entry = null;               // {item, value} while typing a name
+    let capture = null;             // {item, cancel} while waiting for a key
     let hidden = false;
 
     // Rows are a fixed height (CSS) so the cursor appearing never shifts a
@@ -60,7 +62,11 @@ export function createMenu(font, host, opts = {}) {
         // A long list (Doom II's 32 maps, Master Levels) wraps into
         // columns and gets the full viewport width, centred; a normal
         // menu keeps the fixed 1080 block with items left-anchored.
-        const wrapped = !s.items.some(it => it.thumb) && s.items.length > 8;
+        // `nowrap` opts a screen out: a settings list is read top to bottom
+        // and adjusted in place, so splitting it into columns at the 8-item
+        // mark makes it read as two unrelated lists.  A MAP PICKER wants the
+        // columns; OPTIONS never does, however long it gets.
+        const wrapped = !s.nowrap && !s.items.some(it => it.thumb) && s.items.length > 8;
         root.classList.toggle('wide', wrapped);
 
         // Pick the scale. Cycleable values always reserve their "< >"
@@ -90,11 +96,26 @@ export function createMenu(font, host, opts = {}) {
                 scale--;
             }
         } else {
-            // single column: largest scale that fits the block width
-            while (scale > 3 && SKULL + w1 * scale > availW) scale--;
+            // single column: largest scale that fits the block width AND the
+            // viewport height.  Height used to be unchecked, because every
+            // single-column screen was short; CONTROLS is twelve rows and ran
+            // straight off the bottom behind a scrollbar.  Row height is
+            // skull-driven, so it has to come down with the scale -- the two
+            // custom properties below are what let it.
+            while (scale > 2 && (SKULL + w1 * scale > availW
+                                 || s.items.length * (ROWH / 5 * scale + 6) > availH)) scale--;
         }
+        root.style.setProperty('--rowh', `${Math.round(12 * scale)}px`);
+        root.style.setProperty('--skullw', `${Math.round(13 * scale)}px`);
         const titleScale = Math.min(6, scale + 1);
-        const headerScale = Math.min(4, scale);
+        // The header is one line and was scaled off `scale` alone, so a long
+        // one ran off both edges of the viewport and put a horizontal
+        // scrollbar under the menu.  Fit it to the width like everything else.
+        let headerScale = Math.min(4, scale);
+        if (s.header) {
+            const hw = s.header.reduce((n, p) => n + font.text(p.text, { scale: 1 }).width, 0);
+            while (headerScale > 1 && hw * headerScale > availW) headerScale--;
+        }
 
         if (s.logo !== false && stack.length === 1 && logo)
             root.appendChild(Object.assign(document.createElement('div'), { className: 'logo' })).appendChild(logo);
@@ -131,6 +152,8 @@ export function createMenu(font, host, opts = {}) {
             let label;
             if (entry && entry.item === item)
                 label = `${item.label}${entry.value}_`;
+            else if (capture && capture.item === item)
+                label = `${item.label}< PRESS A KEY >`;
             else {
                 const val = item.value !== undefined ? String(item.value) : '';
                 // cycleable values always show "< value >" — a fixed-width
@@ -151,8 +174,8 @@ export function createMenu(font, host, opts = {}) {
             // gate counts '.row.sel'; it is a hook, not decoration.)
             if (item.thumb) row.appendChild(item.thumb);
             row.appendChild(font.text(label, { scale: item.thumb ? 3 : scale, color: item.color ?? null }));
-            row.onmouseenter = () => { if (!entry && sel !== i) { sel = i; render(); } };
-            row.onclick = () => { if (!entry) { sel = i; activate(); } };
+            row.onmouseenter = () => { if (!entry && !capture && sel !== i) { sel = i; render(); } };
+            row.onclick = () => { if (!entry && !capture) { sel = i; activate(false); } };
             list.appendChild(row);
         });
         root.appendChild(list);
@@ -172,7 +195,7 @@ export function createMenu(font, host, opts = {}) {
         }
     }
 
-    function activate() {
+    function activate(viaKeydown) {
         const item = screen()?.items[sel];
         if (!item) return;
         if (item.entry) {
@@ -180,10 +203,36 @@ export function createMenu(font, host, opts = {}) {
             render();
             return;
         }
+        if (item.capture) { armCapture(item, viaKeydown); return; }
         item.action?.();
     }
 
+    // Rebind capture.  Two things make this more than a call to captureBind():
+    //
+    //   1. Enter is still DOWN.  activate() runs on the Enter *keydown*, so a
+    //      capture armed synchronously sees that same press and binds the
+    //      action to Enter -- the same shape as the old "Escape became the
+    //      binding" bug.  Arm on the following keyup instead.
+    //   2. This menu owns a bubble-phase keydown listener on window.  The
+    //      capture listener is capture-phase and calls stopPropagation, so
+    //      while it is armed the arrow keys do not move the skull and Escape
+    //      does not pop the screen.
+    function armCapture(item, viaKeydown) {
+        if (capture) return;
+        const arm = () => {
+            capture = { item, cancel: item.capture(() => { capture = null; render(); }) };
+            render();
+        };
+        if (viaKeydown) window.addEventListener('keyup', function once() {
+            window.removeEventListener('keyup', once, true);
+            arm();
+        }, true);
+        else arm();
+        render();
+    }
+
     function back() {
+        if (capture) { capture.cancel(); capture = null; render(); return; }
         if (stack.length <= 1) return;
         // a screen with onBack owns its exit (e.g. leaving the lobby
         // resets to root); plain screens just pop one level.
@@ -198,6 +247,7 @@ export function createMenu(font, host, opts = {}) {
 
     function onKey(e) {
         if (hidden || !screen()) return;
+        if (capture) return;        // the capture listener owns the keyboard
         if (entry) {
             e.preventDefault();
             const it = entry.item;
@@ -230,7 +280,7 @@ export function createMenu(font, host, opts = {}) {
             // jumps a column; on a plain single-column item it does nothing
             case 'ArrowLeft':  if (item?.cycle) item.cycle(-1); else if (multiCol) sel = Math.max(0, sel - col); break;
             case 'ArrowRight': if (item?.cycle) item.cycle(1);  else if (multiCol) sel = Math.min(n - 1, sel + col); break;
-            case 'Enter':     activate(); break;
+            case 'Enter':     activate(true); break;
             case 'Escape': case 'Backspace': back(); break;
             default: return;
         }
@@ -241,7 +291,7 @@ export function createMenu(font, host, opts = {}) {
 
     // mouse wheel moves the cursor (and the skull-hover already re-selects)
     root.addEventListener('wheel', e => {
-        if (hidden || entry || !screen()) return;
+        if (hidden || entry || capture || !screen()) return;
         const n = screen().items.length;
         if (n === 0) return;            // same NaN as onKey, one scroll away
         e.preventDefault();

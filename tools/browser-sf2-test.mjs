@@ -344,15 +344,11 @@ if (storedBackend !== 'gm') {
 }
 console.log(`  ok  musicBackend '${storedBackend}' persists across reload`);
 
-// Open settings and verify the GM option is present and selected.
-await tab.ev(`document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]')?.click()`);
-await sleep(300);
-// Trigger F8 to open settings (game must be running for settings to exist;
-// check the option is in the DOM at all via the import, which works pre-boot too).
+// The backend selection survives a reload.  What the UI does with it is
+// browser-options' job (it drives the OPTIONS screen's MUSIC row); this gate
+// owns the .sf2 pipeline, so it asserts the stored value only.
 const gmOptionExists = await tab.ev(`
     (() => {
-        // createSettingsUI is called on boot; verify the 'gm' option is defined in input.js.
-        // We check defaultSettings() via a re-import pattern.
         const stored = JSON.parse(localStorage.getItem('webdoom.input') ?? '{}');
         return stored.musicBackend === 'gm';
     })()
@@ -470,34 +466,21 @@ if (wadCount === 0) {
     }
     console.log(`  ok  sinkKind=${sinkKind}  gmPathBuilt=${pathBuilt} (OPL fallback active, music plays)`);
 
-    // Status must include 'OPL fallback' so user knows why GM is not active.
+    // The status line must NOT carry this.  GM selected with no synth URL is a
+    // configured state, not a failure, and #status has no timeout -- so the old
+    // 'music: OPL fallback (GM soundfont unavailable)' sat over the game for
+    // the session.  The reason lives on the OPTIONS screen's MUSIC row now,
+    // where browser-options asserts it.
+    //
+    // This check used to be the opposite, and it could not fail: a missing
+    // notice took a console.warn escape hatch and the run still passed.  It
+    // fails now, in the direction the contract actually specifies.
     const musicStatus = await tab.ev(`document.getElementById('status')?.textContent ?? ''`);
-    const hasOplFallbackNotice = musicStatus.includes('OPL fallback');
-    console.log(`  ok  status: "${musicStatus}"`);
-    if (!hasOplFallbackNotice) {
-        // Status may be cleared by the game engine after the initial message.
-        // Acceptable: the status was emitted during arm() (visible briefly on boot),
-        // and the user is not silently broken — OPL music is playing.
-        console.warn('  note: status cleared before read (engine cleared it); OPL fallback was logged via console.warn');
-    }
-
-    // DOM select check: open settings (F8), verify #musicBackend.value === 'gm'.
-    await tab.cdp('Input.dispatchKeyEvent', { type: 'keyDown', code: 'F8', key: 'F8', windowsVirtualKeyCode: 119 });
-    await sleep(50);
-    await tab.cdp('Input.dispatchKeyEvent', { type: 'keyUp',   code: 'F8', key: 'F8', windowsVirtualKeyCode: 119 });
-    await sleep(500);  // allow settings panel to render
-
-    const selectValue = await tab.ev(
-        `document.getElementById('musicBackend')?.value ?? null`,
-    );
-    if (selectValue === null) {
-        console.warn('  SKIP DOM select check: #musicBackend not found (settings panel not open in-game)');
-    } else if (selectValue !== 'gm') {
-        console.error(`FAIL [5]: #musicBackend.value = '${selectValue}' (expected 'gm')`);
+    if (musicStatus.includes('OPL fallback')) {
+        console.error(`FAIL [5]: status carries the GM fallback banner over the game: "${musicStatus}"`);
         cleanup(1);
-    } else {
-        console.log(`  ok  #musicBackend.value = '${selectValue}'`);
     }
+    console.log(`  ok  no GM fallback banner on #status (reads "${musicStatus}")`);
 }
 
 // Final exception sweep

@@ -4,7 +4,6 @@ import { createRenderer } from './video.js';
 import { createInput, loadSettings } from './input.js';
 import { createAudio } from './audio.js';
 import { sf2GetCurrentBytes } from './sf2-library.js';
-import { createSettingsUI } from './settings.js';
 import { attachRelay, attachSpectate } from './net.js';
 import { loadPersisted, startSync } from './persist.js';
 import { wadCacheGet, wadCachePut } from './wad-cache.js';
@@ -313,7 +312,6 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     status('');
     canvas.focus();
     const input = createInput(doom, canvas, loadSettings());
-    const settingsUI = createSettingsUI(input, doom);
     doom._web_set_smooth(input.settings.smooth ? 1 : 0);
 
     // DOOM's framebuffer is 320x200 and does not change size.  Task 18.3 made
@@ -350,12 +348,11 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
         // nobody else could take that colour.  Starting a second game made a
         // SECOND live relay beside the first (task 23.7).
         try { relay?.quit?.(); } catch { /* already closed */ }
-        // Task 23.7b: input and settings each attached listeners and the
-        // renderer allocated GL objects PER BOOT, with nothing removing them.
-        // play -> quit -> play left two of every keydown handler, a second
-        // #settings panel sharing the first one's id, an orphaned rAF loop, and
-        // a fresh program/VBO/2 textures on the same GL context.
-        for (const h of [input, settingsUI, renderer]) {
+        // Task 23.7b: input attached listeners and the renderer allocated GL
+        // objects PER BOOT, with nothing removing them.  play -> quit -> play
+        // left two of every keydown handler, an orphaned rAF loop, and a fresh
+        // program/VBO/2 textures on the same GL context.
+        for (const h of [input, renderer]) {
             try { h?.destroy?.(); h?.dispose?.(); } catch { /* dead instance */ }
         }
         document.exitPointerLock?.();

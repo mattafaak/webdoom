@@ -17,11 +17,21 @@
 //     new Synthetizer(relayGain, sf2ArrayBuffer)
 //   SpessaSynth manages its own scheduling; audio.js pump() is a no-op for GM.
 //
-// GM fallback contract (field-fix):
+// GM fallback contract (field-fix; the first case amended 2026-09-12):
 //   When SpessaSynth is absent (gmSpessaSynthUrl null OR sf2 not loaded):
 //     → gm-main sink is NOT constructed.  sink stays null → OPL path activates.
-//     → status = 'music: OPL fallback (GM soundfont unavailable)'.
+//     → console.warn, and the launcher's OPTIONS screen renders the reason on
+//       its MUSIC row ("GM - NO SF2" / "GM - NO SYNTH URL").
 //     → gmPathBuilt = false.
+//   This case is a CONFIGURED STATE, not a failure: GM is selected and its
+//   prerequisites are absent, which is true on every boot until the operator
+//   sets WEBDOOM_SPESSASYNTH_URL and the player drops in an .sf2.  It used to
+//   call setStatus(), and #status has no timeout (client/js/ui.js) -- so a
+//   permanent "music: OPL fallback (GM soundfont unavailable)" sat over the
+//   game for the whole session, every session.  spec.md's insecure-origin
+//   clause asks for LOUD degradation, and the OPTIONS row is louder in the
+//   only sense that matters: it is at the control that caused it, where it
+//   can be acted on.
 //   When SpessaSynth URL + sf2 are present but the async import() fails:
 //     → gm-main sink is destroyed (gmPathBuilt = false, sink = null).
 //     → OPL fallback path is rebuilt so music plays.
@@ -235,9 +245,15 @@ export function createAudio(doom) {
             }
         }
 
-        // Track whether the GM sync-SKIP path set an 'OPL fallback' status so
-        // buildOplSink can avoid overwriting it with 'compatibility mode'.
-        let gmSyncSkip = false;
+        // The GM sync-SKIP path used to set an 'OPL fallback' status, and this
+        // flag stopped buildOplSink overwriting it with 'compatibility mode'.
+        // That status is gone (the OPTIONS row carries the reason now), so
+        // there is nothing to protect -- and leaving the flag set would have
+        // SUPPRESSED the compatibility-mode notice on an insecure origin,
+        // which is the one message spec.md's insecure-origin clause is about.
+        // Kept as a named constant rather than deleted at the call site so the
+        // reason is visible where the argument is passed.
+        const gmSyncSkip = false;
 
         if (gmEnabled) {
             // Ask the server once for the operator's SpessaSynth URL.  Nothing
@@ -316,8 +332,8 @@ export function createAudio(doom) {
                     ? 'no spessaSynthUrl configured (set WEBDOOM_SPESSASYNTH_URL on the server)'
                     : 'no sf2 loaded';
                 console.warn('[audio] SpessaSynth SKIP:', reason, '→ OPL fallback');
-                setStatus('music: OPL fallback (GM soundfont unavailable)');
-                gmSyncSkip = true;
+                // No setStatus() here: see the GM fallback contract above.
+                // The OPTIONS screen's MUSIC row carries this reason.
                 // sink stays null → falls through to !sink block below
             }
         }

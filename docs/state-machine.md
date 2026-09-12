@@ -38,6 +38,8 @@ module-scope values in `lobby.js` plus two UI objects:
 | 9 | **IN-GAME-MP** | true | live | null | null | hidden | hidden |
 | 10 | **DROP-IN-OFFER** | false | live | null | set | id='inprogress' | hidden |
 | 11 | **DROP-IN-LOADING** | true* | live | null | set | hidden | hidden |
+| 12 | **OPTIONS** | false | null | null | null | options (depth 2) | hidden |
+| 13 | **OPTIONS-KEYS** | false | null | null | null | controls (depth 3) | hidden |
 
 \* `booted` is set to `true` in the `launch` event handler before `bootDoom()` is called.
 
@@ -62,6 +64,10 @@ module-scope values in `lobby.js` plus two UI objects:
 | T13 | MP-LOBBY | MP-COUNTDOWN | click START GAME → server sends `countdown` 3/2/1 |
 | T17 | IN-GAME-MP | LANDING | Quit Game → Y → `onQuit` → `returnToMenu()` |
 | T18 | DROP-IN-OFFER | DROP-IN-LOADING | click DROP IN → `lobby.send({t:'join'…})` → server welcome+launch |
+| T26 | LANDING | OPTIONS | click OPTIONS |
+| T27 | OPTIONS | LANDING | ESC / back (stack pop) |
+| T28 | OPTIONS | OPTIONS-KEYS | click CONTROLS |
+| T29 | OPTIONS-KEYS | OPTIONS | ESC / back — and ESC during a rebind capture cancels the capture INSTEAD, without popping |
 
 ### Server-event transitions
 
@@ -116,6 +122,11 @@ stateDiagram-v2
     SP_LOADING --> IN_GAME_SP  : bootDoom resolves (T04)
     SP_LOADING --> LANDING     : WAD / boot failure (T05)
     IN_GAME_SP --> LANDING     : Quit Game (T06)
+
+    LANDING --> OPTIONS        : click OPTIONS (T26)
+    OPTIONS --> LANDING        : ESC / back (T27)
+    OPTIONS --> OPTIONS_KEYS   : click CONTROLS (T28)
+    OPTIONS_KEYS --> OPTIONS   : ESC / back (T29)
 
     LANDING --> MP_LOBBY       : click MULTIPLAYER + roster (T07)
     LANDING --> DROP_IN_OFFER  : click MULTIPLAYER + inprogress (T08)
@@ -175,8 +186,12 @@ stateDiagram-v2
 | T23 | MP-COUNTDOWN → LANDING (ws close) | `mp-countdown-ws-close` | browser-lobby-test.mjs |
 | T24 | MP-PARAMS → LANDING (ws close) | `mp-lobby-ws-close` | browser-lobby-test.mjs |
 | T25 | MP-COUNTDOWN → LANDING (ESC) | `mp-countdown-esc` | browser-lobby-test.mjs |
+| T26 | LANDING → OPTIONS | `options-open` | browser-options-test.mjs |
+| T27 | OPTIONS → LANDING | `options-back` | browser-options-test.mjs |
+| T28 | OPTIONS → OPTIONS-KEYS | `controls-open` | browser-options-test.mjs |
+| T29 | OPTIONS-KEYS → OPTIONS | `controls-back` | browser-options-test.mjs |
 
-Coverage: **25 / 25 edges** covered.
+Coverage: **29 / 29 edges** covered.
 
 ---
 

@@ -4,15 +4,17 @@
 // cases the copies had drifted in ways that mattered:
 //
 //   #status was written SIX different ways across main.js, lobby.js, demo.js
-//   (twice), audio.js, settings.js and video.js.  Three of them dereferenced
+//   (twice), audio.js, settings.js and video.js (the last two are gone; the
+//   settings panel became a menu screen).  Three of them dereferenced
 //   the element without a null check, so a module loaded before the element
 //   exists — or in a test harness with no DOM at all — threw where it meant to
 //   report.  video.js already knew that and captured the element defensively
 //   at module scope, which is a different bug: it caches a null forever if it
 //   loads first.
 //
-//   The teardown ledger stood verbatim in input.js, settings.js and qol.js
-//   (qol.js is gone; the ledger it needed is why ui.js owns one copy).
+//   The teardown ledger stood verbatim in input.js, settings.js and qol.js.
+//   Two of those three are gone now; input.js still uses the shared copy, and
+//   the duplication is what this file exists to have removed.
 //   Round 5 added it to stop each boot leaving another live handler on window;
 //   a fourth module needing it would have had to copy it correctly.
 

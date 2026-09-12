@@ -6,7 +6,7 @@ source. 348 KB of wasm, zero client install, zero-config multiplayer.
 
 - Runs in stock Chrome / Edge / Firefox (WASM + WebGL2 + WebAudio)
 - Uncapped framerate with 35 Hz-exact game logic (Crispy-style
-  interpolation; "vanilla mode" toggle in settings, F8)
+  interpolation; "vanilla mode" toggle under OPTIONS on the launcher menu)
 - Modern controls: pointer-lock mouse, WASD, rebindable keys, analog
   twin-stick gamepad — Doom 1+2 re-release defaults
 - Authentic audio: DMX PCM sfx via WebAudio, music through an emulated

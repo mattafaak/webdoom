@@ -30,7 +30,7 @@ Each of these was a real defect with a reproducer before it was a gate.
 | Adversarial maps under ASan/UBSan | `adversarial-map`, `native-asan` |
 | Mutated demos, wasm vs native | `fuzz-diff` |
 | Demo-store caps, quotas and ids | `demo-store-fuzz` |
-| localStorage and the rebind UI as user input | `browser-settings` |
+| localStorage and the rebind UI as user input | `browser-options` |
 | Resource caps: connections, spectators, send backlog, tic history | `net-fuzz` |
 
 ## What is deliberately NOT defended
