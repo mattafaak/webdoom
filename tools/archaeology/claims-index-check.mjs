@@ -1,0 +1,109 @@
+#!/usr/bin/env node
+// tools/archaeology/claims-index-check.mjs — the index must not overclaim.
+//
+// WHY THIS EXISTS
+// ---------------
+// docs/claims-index.md is BOTH the human inventory of every quantitative claim
+// AND the locator table doc-drift.mjs builds its checks from.  Nothing checked
+// the inventory itself, and it had drifted badly (task 24.2):
+//
+//   * 50 of its rows said `verified` while being absent from claims.json, so
+//     nothing anywhere checked them.  "verified" meant "a human read a JSON
+//     file once" for a quarter of the table.
+//   * 11 manifest ids had no row at all, including every published-promise
+//     claim (readme-001, spec-001..003, md-tic-001) — the ones tenet 6 exists
+//     for were the ones missing from the tenet-6 inventory.
+//   * 8 rows pointed at tools/bench-baseline.json, which does not exist.
+//   * size-004 and readme-001 are THE SAME FACT (the README KB figure) and had
+//     drifted to 348 vs 349 with nothing comparing them.
+//   * three different totals were stated in one document: 193, 172 and 188.
+//
+// The status vocabulary now means something, and this asserts it:
+//   verified            in claims.json; verify-all checks it
+//   dated-measurement   a measurement taken once, on a stated host/date
+//   derived-from-gated  arithmetic over gated inputs, stated in the row
+//   unverifiable        declared so in claims.json, with a reason
+//
+// usage: node tools/archaeology/claims-index-check.mjs
+// Copyright (C) 2026, GPL-2.0-or-later.
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
+const INDEX = join(root, 'docs/claims-index.md');
+const claims = JSON.parse(readFileSync(join(root, 'tools/archaeology/claims.json'), 'utf8')).claims;
+
+// Ids carry more than one hyphen (md-tic-001), which a narrower pattern silently
+// drops — that is how the first version of this check "found" a missing row that
+// was there all along.
+const ROW = /^\|\s*([a-z][a-z0-9-]*-\d+[a-z]?)\s*\|/;
+const cells = l => l.split(/(?<!\\)\|/).map(c => c.trim());
+
+const rows = [];
+for (const line of readFileSync(INDEX, 'utf8').split('\n')) {
+    const m = ROW.exec(line);
+    if (!m) continue;
+    const c = cells(line);
+    if (c.length !== 9) continue;          // escaped-pipe rows are handled by the split
+    rows.push({ id: c[1], docline: c[2], claim: c[3], value: c[4], type: c[5], repro: c[6], status: c[7] });
+}
+
+let bad = 0;
+const fail = (what, detail) => { console.log(`FAIL ${what}`); if (detail) console.log(detail); bad++; };
+
+// A parse that found almost nothing is broken, not clean.
+if (rows.length < 150) {
+    console.log(`FAIL claims-index: parsed only ${rows.length} rows; the table is far larger. The parser or the table changed.`);
+    process.exit(1);
+}
+
+// 1. No row may say `verified` unless the manifest actually gates it.
+const over = rows.filter(r => r.status === 'verified' && !(r.id in claims));
+if (over.length) fail(`claims-index: ${over.length} row(s) say "verified" but are not in claims.json`,
+    '    ' + over.slice(0, 8).map(r => r.id).join(', ') + (over.length > 8 ? ' …' : ''));
+
+// 2. Every gated claim must appear in the inventory.
+const ids = new Set(rows.map(r => r.id));
+const unlisted = Object.keys(claims).filter(i => !ids.has(i));
+if (unlisted.length) fail(`claims-index: ${unlisted.length} manifest id(s) have no row`, '    ' + unlisted.join(', '));
+
+// 3. `unverifiable` in the manifest must read `unverifiable` in the index.
+const mismatched = rows.filter(r => claims[r.id]?.status === 'unverifiable' && r.status !== 'unverifiable');
+if (mismatched.length) fail(`claims-index: ${mismatched.length} row(s) contradict the manifest's unverifiable status`,
+    '    ' + mismatched.map(r => `${r.id} (index: ${r.status})`).join(', '));
+
+// 4. Reproducer paths must resolve.  Prose in parentheses is not a path.
+const ROOTS = ['', 'tools/', 'tools/archaeology/', 'tools/golden/', 'tools/freestanding/', 'tools/fuzz/'];
+const unresolved = new Map();
+for (const r of rows) {
+    const prose = r.repro.replace(/\([^)]*\)/g, ' ');
+    for (const m of prose.matchAll(/[\w./-]+\.(?:mjs|json|sh|c|md)\b/g)) {
+        if (!ROOTS.some(p => existsSync(join(root, p + m[0])))) {
+            (unresolved.get(m[0]) ?? unresolved.set(m[0], []).get(m[0])).push(r.id);
+        }
+    }
+}
+if (unresolved.size) fail(`claims-index: ${unresolved.size} reproducer path(s) do not exist`,
+    [...unresolved].map(([f, who]) => `    ${f}  (${who.length} row(s): ${who.slice(0, 4).join(', ')})`).join('\n'));
+
+// 5. readme-001 and size-004 are the same fact; they must not drift apart.
+if (claims['readme-001'] && claims['size-004'] &&
+    claims['readme-001'].expected !== claims['size-004'].expected) {
+    fail('claims-index: readme-001 and size-004 state the same fact and disagree',
+         `    readme-001 = ${claims['readme-001'].expected}, size-004 = ${claims['size-004'].expected}`);
+}
+
+// 6. The document's own total must be the number of rows.
+const stated = /\*\*Total claims:\s*(\d+)\*\*/.exec(readFileSync(INDEX, 'utf8'));
+if (!stated) fail('claims-index: no "**Total claims: N**" line to check against');
+else if (Number(stated[1]) !== rows.length)
+    fail(`claims-index: the document says "Total claims: ${stated[1]}" but the table has ${rows.length} rows`);
+
+if (bad) { console.log(`\nclaims-index-check: ${bad} problem(s)`); process.exit(1); }
+
+const by = {};
+for (const r of rows) by[r.status] = (by[r.status] ?? 0) + 1;
+console.log(`PASS claims-index-check: ${rows.length} rows — ` +
+            Object.entries(by).sort().map(([k, v]) => `${v} ${k}`).join(', ') +
+            `; all ${Object.keys(claims).length} manifest ids listed, all reproducer paths resolve`);

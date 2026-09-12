@@ -600,6 +600,14 @@ const DOC_HINTS = {
     'perf-004': { soft: true, pinned: true, reason: 'commit-pinned size (6de6256), drift is expected' },
     'perf-005': { soft: true, pinned: true, reason: 'commit-pinned size (6de6256), drift is expected' },
 
+    // Same shape, found by task 24.2: size-ledger emits these LIVE, so the
+    // manifest figures are dated snapshots of the 14.2f base and drift with
+    // every build.  They had no hints at all, which read as authoritative
+    // expectations that nothing compared.
+    'size-001': { soft: true, pinned: true, reason: 'pinned at the 14.2f base; size-ledger emits live' },
+    'size-002': { soft: true, pinned: true, reason: 'pinned at the 14.2f base; size-ledger emits live' },
+    'size-003': { soft: true, pinned: true, reason: 'pinned at the 14.2f base; size-ledger emits live' },
+
     'perf-011': { doc_file: 'perf.md',
                   needle: 'plutonia.wad',
                   extract_re: /plutonia\.wad[^\d]+([\d,]+)\s+bytes/ },

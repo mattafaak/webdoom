@@ -273,6 +273,10 @@ leg http-fuzz       -    "static HTTP path attacks (ws-005)"        -- node tool
 leg demo-store-fuzz -    "demo-store cap enforcement (19.2)"        -- node tools/demo-store-fuzz-test.mjs
 leg net-fuzz        -    "malformed/hostile WebSocket clients"      -- node tools/net-fuzz-test.mjs
 leg gm-config       -    "the GM backend's operator config path (25.1)" -- node tools/gm-config-test.mjs
+# The claims index is both the human inventory and doc-drift's locator table,
+# and nothing checked the inventory itself: 50 rows said "verified" while
+# nothing anywhere checked them (task 24.2).
+leg claims-index    -    "the claims index does not overclaim"        -- node tools/archaeology/claims-index-check.mjs
 leg gate-census     -    "every gate is wired or registered with a reason" -- node tools/gate-census.mjs
 
 if [ "$TIER" = "quick" ]; then

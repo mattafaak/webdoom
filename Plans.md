@@ -202,7 +202,7 @@ Suite: **74 legs, 74 passed, 0 skipped** (the 74th is `arm-cross`, see the pi5 m
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
 | 24.1 | `promises-index.md` truth-up (six stale entries, self-contradicting counts) | every entry re-derived; counts computed | 22.1 | cc:TODO |
-| 24.2 | Reconcile `claims-index.md` with `claims.json` (50 rows gated by nothing; 8 cite a path that does not exist) | each gated, demoted with a reason, or removed | 21.9 | cc:TODO |
+| 24.2 | Reconcile `claims-index.md` with `claims.json` | 50 overclaiming rows re-statused; 11 unlisted manifest ids added; the bad reproducer path fixed; a manifest self-contradiction (size-004 vs readme-001) found and closed; totals computed; `claims-index-check.mjs` gates all six invariants, red-proofed | 21.9 | cc:完了 [this commit] |
 | 24.3 | Make CI real, or stop claiming it | `.github/workflows/ci.yml` runs `--quick` on node 20/24 and states what it did not cover; README/engine-archaeology corrected; `lint` split so a runner without the pinned clang-format reports a counted SKIP; the WAD-less clone case fixed (it was RED) | 21.1, 21.8 | cc:完了 [642e2c0] |
 | 24.4 | Stale-doc sweep (n64 BRING-UP, renderer §13, bare-metal banner, ledger bsp figure) | each corrected or banner-dated | 22.1 | cc:TODO |
 | 24.5 | Document the four shipped render toggles in renderer.md / perf.md | each documented with its golden family and gate | 21.12 | cc:TODO |
@@ -217,4 +217,4 @@ Suite: **74 legs, 74 passed, 0 skipped** (the 74th is `arm-cross`, see the pi5 m
 | 25.4 | Fix Phase 20's dependency defect (20.5a gated on hardware) and close 20.4c (`-timedemo` does not engage on N64) | 20.5a re-pointed; one demo trace bit-identical, then 13/13 | 22.1 | cc:TODO |
 | 25.5 | Decide 20.6b and 20.7b explicitly | written verdict; no task sits TODO without a stated blocker | 22.1 | cc:TODO |
 
-Suite: **76 legs, 76 passed, 0 skipped**.
+Suite: **77 legs, 77 passed, 0 skipped**.
