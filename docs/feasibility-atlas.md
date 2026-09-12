@@ -9,8 +9,12 @@
 > against 270,336 B available — 4.00× over**, ~1,565 KB over with a real zone,
 > and a WHD gzip WAD of 5,536 KB against 1,761 KB of flash. 20.7b (the measured
 > floor clock) is therefore parked on arithmetic, not on hardware: buying a board
-> does not unblock a build that does not fit. Unblocking needs the C4–C6 BSS
-> diets, a WHD-class asset pipeline, and probably external PSRAM.
+> does not unblock a build that does not fit. **This banner named the C4–C6 BSS
+> diets as the first step until the status-drift gate caught it**: all three
+> landed 2026-07-18/19, before the 20.7a measurement above, and the RP2040 build
+> already pins `-DMAXSCREENWIDTH=320` — so that figure is post-diet and the
+> saving had already been taken. What remains is a WHD-class asset pipeline,
+> external PSRAM, and an unscoped footprint reduction against a 4.00× deficit.
 
 Commit date: 2026-07-18 (13.5); 2026-07-21 (20.1). All inputs are pre-existing measured artifacts;
 this document does arithmetic, not new measurements.

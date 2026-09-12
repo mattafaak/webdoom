@@ -3,7 +3,12 @@
 > **ARCHIVE — written 2026-07-16, not maintained (banner added 24.4).** Its
 > "What remains open" section is a snapshot of that date: Q0 (the browser
 > pipeline profile) landed in phase 12, and the T07 flake was fixed in 9ed9671.
-> ZONESIZE is still open. For current state read `Plans.md` and
+> **ZONESIZE is CLOSED**, and this banner said "still open" until the status-drift
+> gate caught it: the reduction landed as ledger candidate C3 in task 14.2c,
+> and `engine/web/web.h` has `#define ZONESIZE (4 * 1024 * 1024)` in force.
+> The sentence below — "requires render-path texture cache peak measurement" —
+> describes the blocker as it stood on 2026-07-16; the measurement was taken and
+> the change shipped. For current state read `Plans.md` and
 > `docs/2026-09-11-suite-baseline.md`.
 
 *Covers tasks 1.x–5.x from the spec.md refinement tenets.*

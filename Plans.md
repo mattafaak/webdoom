@@ -40,10 +40,10 @@ silent regold. Every new client module updates the SHELL precache
 | 20.5b | N64 RDP hardware speedup measurement: run sub-phase A ROM and sub-phase B ROM on real N64 via SummerCart64; measure fps for both; commit comparison | committed fps comparison (tools/n64/rdp-speedup.md): sub-phase A fps vs sub-phase B fps on hardware (≥1 map/area); speedup % stated; FINDING filed if RDP is slower or within noise; no record claim — the numbers are the deliverable | 20.5a | cc:TODO |
 | 20.6 | **DECOMPOSED** 386 test bed: 86Box bench harness (cycle-configurable 386DX-40 profile) + icount-scoreboard reduction campaign toward the 1,142,857 cycles/tic budget; candidates flow from 20.2/20.3 | (superseded — see 20.6a–20.6b) | 20.1b | cc:分割 |
 | 20.6a | 86Box harness: configure 86Box with cycle-configurable 386DX-40 profile; automated boot to DOS + DOOM launch + icount capture via 86Box debug port; red-provable | tools/386/run-386box.sh committed; exits 0 on successful DOOM icount run (cycles/tic received + printed); exits non-zero on boot/launch failure; drift-proved: corrupt boot image → FAIL, restore → PASS; 386DX-40 baseline cycles/tic committed | 20.1b | cc:完了 [bed8573] |
-| 20.6b | 386 icount scoreboard baseline: run harness over demo1 (and 13 demos if runtime permits); decompose icount per subsystem (bsp/segs/render/playsim/transfer) using 86Box profiling; update atlas row | docs/perf/386-icount-scoreboard.md committed with per-subsystem icount breakdown; atlas row for 386DX-40 updated with measured cycles/tic and headroom to 1,142,857 target; scoreboard is regenerable from tools/386/; verify-all green | 20.6a | cc:TODO |
+| 20.6b | 386 icount scoreboard baseline: run harness over demo1 (and 13 demos if runtime permits); decompose icount per subsystem (bsp/segs/render/playsim/transfer) using 86Box profiling; update atlas row | docs/perf/386-icount-scoreboard.md committed with per-subsystem icount breakdown; atlas row for 386DX-40 updated with measured cycles/tic and headroom to 1,142,857 target; scoreboard is regenerable from tools/386/; verify-all green | 20.6a | cc:決定 [25.5 PURSUABLE] |
 | 20.7 | **DECOMPOSED** Sub-100 MHz floor measurement: arithmetic row first (20.1), then bounded attempt on underclocked RP2040-class silicon with WHD-style asset work; deliverable is a NUMBER — the measured minimum clock at which 13/13 demos stay tic-exact — not a promised record | (superseded — see 20.7a–20.7b) | 20.1b | cc:分割 |
 | 20.7a | RP2040 bring-up + WHD asset pipeline: bring engine/core up on RP2040 using the freestanding shim pattern (11.1a precedent); prepare reduced-size WAD pipeline (WHD-format headless extract); document underclocking method (pico-sdk frequency define or overclock register) | RP2040 ROM boots to D_DoomMain (rp2040-doom toolchain or pico-sdk); WHD asset pipeline script committed (tools/rp2040/prep-whd.sh or equivalent); underclocking method documented with ≥2 tested clock steps; partial filed as partial (no fabrication) | 20.1b | cc:完了 [1f2efb2] |
-| 20.7b | RP2040 floor clock measurement: sweep RP2040 clock downward from 100 MHz in steps; at each step run 13/13 demos tic-exact check (sim hash match); find minimum clock where all 13 pass; update atlas row with measured floor + variance | measured floor clock committed (tools/rp2040/clock-sweep-log.txt); atlas row updated: minimum MHz for 13/13 tic-exact, method, variance (≥3 retests at floor clock); FINDING filed if floor > 100 MHz; no "record" claim — the number is the deliverable | 20.7a | cc:TODO |
+| 20.7b | RP2040 floor clock measurement: sweep RP2040 clock downward from 100 MHz in steps; at each step run 13/13 demos tic-exact check (sim hash match); find minimum clock where all 13 pass; update atlas row with measured floor + variance | measured floor clock committed (tools/rp2040/clock-sweep-log.txt); atlas row updated: minimum MHz for 13/13 tic-exact, method, variance (≥3 retests at floor clock); FINDING filed if floor > 100 MHz; no "record" claim — the number is the deliverable | 20.7a | cc:決定 [25.5 PARKED] |
 
 ## Priority matrix (round 3)
 
@@ -143,7 +143,7 @@ and `run-tests.sh` never built `build/`, the artifact almost every leg loads.
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
 | 22.1 | Full suite run committed as dated evidence, reds filed as findings | summary table committed; every red has a disposition | 21.x | cc:完了 [b80d729] |
-| 22.2 | Triage: F1 flake, F2 perf-009, F3 wbox baseline, F4 four-host perf gate | each red fixed, promoted to a task, or recorded with an expiry | 22.1 | cc:完了(partial) [6296f2d] — F1 fixed, F3 addressed; F2 and F4 recorded, F4 needs a decision |
+| 22.2 | Triage: F1 flake, F2 perf-009, F3 wbox baseline, F4 four-host perf gate | each red fixed, promoted to a task, or recorded with an expiry | 22.1 | cc:完了 [6296f2d, 3bf5c6b] — F1 fixed, F2 closed, F4 closed by the spec fleet amendment; F3 open (no wbox pipeline baseline) |
 | 22.3 | Node 26.8.1 compatibility capture | full tier green on v26.8.1 (80/80, 0 skipped); no drift to record; CI matrix 20/24/26 and `engines: >=20` declared | 22.1 | cc:完了 [f8c9add] |
 
 ## What round 4 bought, measured
@@ -182,7 +182,13 @@ and `run-tests.sh` never built `build/`, the artifact almost every leg loads.
   claims, 0 skipped.**
 - **F3** wbox has no gating baseline until one is recorded ON wbox (no repo,
   build or WADs there today).
-- **F4** the four-host perf gate is unrunnable as `spec.md` writes it: pi5 down.
+- **F4** CLOSED. It was unrunnable as `spec.md` then wrote it (pi5 down), and
+  the decision it asked for was taken the same day: `spec.md`'s 2026-09-11 fleet
+  amendment retires pi5 and the tenet now says "the three live reference hosts"
+  (commit 3bf5c6b, "closes F4"). This line said OPEN for a day after that, in
+  two documents, which is what `tools/archaeology/status-drift.mjs` now exists
+  to catch. The narrower thing that IS open — the perf gate has no suite leg,
+  and `browser-pipeline` has a baseline only for alder — is F3.
 
 ## Phase 23: memory safety and hostile input
 
@@ -248,10 +254,19 @@ misses by a factor of four:
 down: the blocker is a footprint, not an absence. `rp2040js` is installed and
 equally blocked (ELF at 0x8000 rather than XIP, plus the same overflow).
 
-What would unblock it, in order: the BSS diets already sitting in
-`docs/optimization-ledger.md` as C4–C6 (MAXVISPLANES, MAXDRAWSEGS, MAXOPENINGS),
-a WHD-class asset pipeline, and probably external PSRAM. That is a phase, not a
-task.
+**What would NOT unblock it, and was listed here until the status-drift gate
+caught it**: "the BSS diets already sitting in `docs/optimization-ledger.md` as
+C4–C6 (MAXVISPLANES, MAXDRAWSEGS, MAXOPENINGS)". All three landed on
+2026-07-18/19 as tasks 14.2d/e/f — *before* the 20.7a footprint measurement
+above — and `tools/rp2040/Makefile` already pins `-DMAXSCREENWIDTH=320`. So the
+1,082,104 B is post-diet and post-narrow, and the first item of the stated path
+was a saving that had already been taken. Anyone who went and did it would have
+got nothing, which is the whole cost of this class of error.
+
+The arithmetic is unaffected and the park stands. What remains, honestly, is a
+WHD-class asset pipeline, external PSRAM, and a footprint reduction nobody has
+scoped — the measured deficit is 4.00× with the easy levers already pulled.
+That is a phase, not a task, and it does not have a plan yet.
 
 ### 20.6b (386 icount scoreboard): **PURSUABLE** — not blocked on anything scarce
 

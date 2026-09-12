@@ -160,12 +160,27 @@ compared, and the file moved to `tools/golden/archive/` so wbox SKIPs loudly.
 build and WADs on wbox, none of which are there (node v24.19.0 and
 google-chrome-stable are). That is a provisioning task.
 
-### F4 — the four-host perf gate cannot be run as specified (OPEN)
+### F4 — the four-host perf gate cannot be run as specified (CLOSED)
 
-`spec.md` requires before/after numbers on wbox, tank, pi5 and alder, and says
+`spec.md` required before/after numbers on wbox, tank, pi5 and alder, and said
 a regression on any host blocks. **pi5 is down** (`tailscale ping` times out;
-recorded as acked in the mesh notes). So the gate as written is unrunnable.
-Needs a decision: three-host gate, pi5 restored, or the promise amended.
+recorded as acked in the mesh notes). So the gate as written was unrunnable.
+Needed a decision: three-host gate, pi5 restored, or the promise amended.
+
+> **CLOSED — the decision was taken the same day and this entry did not move.**
+> `spec.md` §"Fleet amendment, 2026-09-11" retires pi5 from the gate and the
+> tenet now reads "the three live reference hosts"; commit 3bf5c6b is titled
+> "migrate pi5's role to alder — ARM correctness under emulation (closes F4)".
+> The amendment also records why the swap is not a loss: `fleet-bench.sh` ssh'd
+> to pi5 to run `node tools/bench.mjs` against the **wasm** build, and wasm is
+> architecture-independent by construction, so that row was a performance sample
+> and never tested ARM codegen, ABI or alignment. The `arm-cross` leg asserts
+> something strictly stronger, on a host that answers.
+>
+> What IS still open is narrower and is tracked as F3: the perf gate has no
+> suite leg at all — neither `bench.mjs` nor `fleet-bench.sh` appears in
+> `run-tests.sh` — and `browser-pipeline` gates one host, alder, of which
+> spec.md's own table says "fast here proves nothing".
 
 ## The table
 
