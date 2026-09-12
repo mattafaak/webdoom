@@ -416,6 +416,10 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
             # down from one trap, so the shared secure-context server is fine and
             # the test itself only patches audioWorklet client-side.
             leg browser-music-fallback browser,build,wad "BufferSink fallback, audioWorklet=undefined" -- node tools/browser-music-fallback-test.mjs "$U"
+            # play -> quit -> play must accumulate nothing (task 23.7b).  Measured
+            # across three cycles: growth that repeats per cycle is a leak, a one-off
+            # difference is not.
+            leg browser-teardown  browser,build,wad "play->quit->play x3 leaks nothing"      -- node tools/browser-teardown-test.mjs "$U"
             serve_stop_all
         else
             echo "SKIP browser suite: could not start a server on 8668"

@@ -278,7 +278,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     const input = createInput(doom, canvas, loadSettings());
     // task 19.1: create QoL overlays before settings so settings.js gets the qol handle.
     const qol = createQolUI(doom, input);
-    createSettingsUI(input, doom, renderer, qol);
+    const settingsUI = createSettingsUI(input, doom, renderer, qol);
     doom._web_set_smooth(input.settings.smooth ? 1 : 0);
 
     // task 18.3 / wide-fix: aspect-bucket selection — apply persisted wide mode on boot.
@@ -333,6 +333,14 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
         // nobody else could take that colour.  Starting a second game made a
         // SECOND live relay beside the first (task 23.7).
         try { relay?.quit?.(); } catch { /* already closed */ }
+        // Task 23.7b: input/qol/settings each attached listeners and the
+        // renderer allocated GL objects PER BOOT, with nothing removing them.
+        // play -> quit -> play left two of every keydown handler, a second
+        // #settings panel sharing the first one's id, an orphaned rAF loop, and
+        // a fresh program/VBO/2 textures on the same GL context.
+        for (const h of [input, qol, settingsUI, renderer]) {
+            try { h?.destroy?.(); h?.dispose?.(); } catch { /* dead instance */ }
+        }
         document.exitPointerLock?.();
         canvas.hidden = true;
         document.getElementById('landing').hidden = false;

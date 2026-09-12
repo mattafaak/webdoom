@@ -67,8 +67,10 @@ export function createRenderer(canvas) {
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
     // Create a texture bound to the given unit with nearest-neighbour params.
+    const _textures = [];   // for dispose() (task 23.7b)
     const mkTex = unit => {
         const t = gl.createTexture();
+        _textures.push(t);
         gl.activeTexture(gl.TEXTURE0 + unit);
         gl.bindTexture(gl.TEXTURE_2D, t);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -156,6 +158,17 @@ function createRenderer2D(canvas) {
     const _status = typeof document !== 'undefined' && document.getElementById?.('status');
 
     return {
+        // Task 23.7b: createRenderer runs per boot and getContext returns the
+        // SAME context for the same canvas, so each boot leaked a program, two
+        // shaders, a VBO and two textures with nothing ever deleting them.
+        dispose() {
+            try {
+                gl.deleteProgram(prog);
+                gl.deleteBuffer(quad);
+                for (const t of _textures) gl.deleteTexture(t);
+            } catch { /* context already lost */ }
+        },
+
         kind: 'canvas2d',
 
         resize(w, h) {

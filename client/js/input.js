@@ -93,6 +93,16 @@ const WEAPON_DIGITS = [
 ];
 
 export function createInput(doom, canvas, settings) {
+    // Teardown ledger (task 23.7b).  Every listener this module attaches is
+    // recorded here so quit-to-menu can remove it.  Without this each boot
+    // added another live handler on `window`, and after a quit they kept firing
+    // into a wasm instance I_Quit had force-exited.
+    const _teardown = [];
+    const on = (target, ev, fn, opts) => {
+        target.addEventListener(ev, fn, opts);
+        _teardown.push(() => target.removeEventListener(ev, fn, opts));
+    };
+
     const post = (t, a = 0, b = 0, c = 0) => doom._web_input_event(t, a, b, c);
     const tapKey = dk => { post(EV_KEYDOWN, dk); post(EV_KEYUP, dk); };
 
@@ -148,28 +158,28 @@ export function createInput(doom, canvas, settings) {
         if (down) heldKeys.add(dk); else heldKeys.delete(dk);
         post(down ? EV_KEYDOWN : EV_KEYUP, dk);
     };
-    window.addEventListener('keydown', onKey(true));
-    window.addEventListener('keyup', onKey(false));
+    on(window, 'keydown', onKey(true));
+    on(window, 'keyup', onKey(false));
     // Focus loss (alt-tab, OS menu) drops keyups — release everything so no
     // key latches down while we're not listening.
-    window.addEventListener('blur', releaseAll);
+    on(window, 'blur', releaseAll);
 
     // --- mouse (pointer lock) ---------------------------------------------
     // Esc always exits pointer lock at the browser level and the keydown
     // never reaches the page — so treat lock-loss as "open the menu", and
     // re-lock when the engine menu closes. Esc then feels like one key:
     // menu open + mouse free, menu closed + mouse captured.
-    canvas.addEventListener('click', () => {
+    on(canvas, 'click', () => {
         if (document.pointerLockElement !== canvas)
             canvas.requestPointerLock();
     });
-    document.addEventListener('pointerlockchange', () => {
+    on(document, 'pointerlockchange', () => {
         const settingsOpen = !document.getElementById('settings')?.hidden;
         if (document.pointerLockElement !== canvas && !settingsOpen
             && !doom._web_ui_mode())
             tapKey(DK.ESCAPE);          // engine opens its menu
     });
-    window.addEventListener('mousemove', e => {
+    on(window, 'mousemove', e => {
         if (document.pointerLockElement !== canvas) return;
         mouseAccX += e.movementX;
         mouseAccY += e.movementY;
@@ -183,12 +193,12 @@ export function createInput(doom, canvas, settings) {
         mouseButtons = down ? (mouseButtons | bit) : (mouseButtons & ~bit);
         mouseDirty = true;
     };
-    window.addEventListener('mousedown', mouseBtn(true));
-    window.addEventListener('mouseup', mouseBtn(false));
-    window.addEventListener('contextmenu', e => {
+    on(window, 'mousedown', mouseBtn(true));
+    on(window, 'mouseup', mouseBtn(false));
+    on(window, 'contextmenu', e => {
         if (document.pointerLockElement === canvas) e.preventDefault();
     });
-    window.addEventListener('wheel', e => {
+    on(window, 'wheel', e => {
         if (document.pointerLockElement !== canvas) return;
         cycleWeapon(e.deltaY > 0 ? 1 : -1);
     }, { passive: true });
@@ -209,7 +219,7 @@ export function createInput(doom, canvas, settings) {
     let padPrev = 0;
     // Reset edge-detection state when the gamepad is disconnected so that
     // held buttons re-trigger correctly on reconnect.
-    window.addEventListener('gamepaddisconnected', () => { padPrev = 0; });
+    on(window, 'gamepaddisconnected', () => { padPrev = 0; });
     const curve = v => {
         const dz = settings.padDeadzone;
         const m = Math.abs(v);
@@ -302,5 +312,6 @@ export function createInput(doom, canvas, settings) {
         settings,
         startCapture(actionId, cb) { capture = actionId; onCapture = cb; },
         cancelCapture() { capture = null; },
+        destroy() { for (const off of _teardown) off(); _teardown.length = 0; },
     };
 }

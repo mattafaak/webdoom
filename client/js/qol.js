@@ -16,6 +16,13 @@
 import { saveSettings } from './input.js';
 
 export function createQolUI(doom, input) {
+    // Teardown ledger (task 23.7b) — see input.js for why.
+    const _teardown = [];
+    const on = (target, ev, fn, opts) => {
+        target.addEventListener(ev, fn, opts);
+        _teardown.push(() => target.removeEventListener(ev, fn, opts));
+    };
+
     const s = input.settings;
     const stage = document.getElementById('stage');
 
@@ -72,9 +79,9 @@ export function createQolUI(doom, input) {
         fsHideTimer = setTimeout(() => fsBtn.classList.remove('visible'), 2000);
     }
 
-    stage.addEventListener('mousemove', showFsBtn);
+    on(stage, 'mousemove', showFsBtn);
 
-    fsBtn.addEventListener('click', () => {
+    on(fsBtn, 'click', () => {
         if (!document.fullscreenElement) {
             stage.requestFullscreen().catch(() => {});
         } else {
@@ -82,7 +89,7 @@ export function createQolUI(doom, input) {
         }
         updateFsBtnIcon();
     });
-    document.addEventListener('fullscreenchange', updateFsBtnIcon);
+    on(document, 'fullscreenchange', updateFsBtnIcon);
 
     fsBtn.hidden = !s.showFullscreen;
 
@@ -175,6 +182,16 @@ export function createQolUI(doom, input) {
 
     // ── Public update API (called by settings.js checkboxes) ─────────────────
     return {
+        // Task 23.7b.  Each boot appended five nodes to #stage and started a rAF
+        // loop that stopTickIfIdle() only stops when BOTH live features are off
+        // — so with "level stats" enabled the loop from boot #1 ran forever,
+        // poking a dead wasm instance, its exceptions swallowed by a bare catch.
+        destroy() {
+            for (const off of _teardown) off();
+            _teardown.length = 0;
+            if (rafHandle) { cancelAnimationFrame(rafHandle); rafHandle = 0; }
+            for (const el of [fsBtn, crosshair, statsEl, demoTimerEl, demoBarEl]) el?.remove?.();
+        },
         setShowFullscreen(v) {
             s.showFullscreen = v;
             saveSettings(s);

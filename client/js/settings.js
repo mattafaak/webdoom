@@ -19,6 +19,13 @@ const computePaniniStrength = paniniStrength;
 // for the aspect→width mapping (shared with main.js boot path).
 
 export function createSettingsUI(input, doom, renderer, qol) {
+    // Teardown ledger (task 23.7b) — see input.js for why.
+    const _teardown = [];
+    const on = (target, ev, fn, opts) => {
+        target.addEventListener(ev, fn, opts);
+        _teardown.push(() => target.removeEventListener(ev, fn, opts));
+    };
+
     const s = input.settings;
     const panel = document.createElement('div');
     panel.id = 'settings';
@@ -181,9 +188,18 @@ export function createSettingsUI(input, doom, renderer, qol) {
         }
     }
 
-    window.addEventListener('keydown', e => {
+    on(window, 'keydown', e => {
         if (e.code === 'F8') { e.preventDefault(); toggle(); }
     }, true);
 
-    return { toggle };
+    return {
+        toggle,
+        destroy() {
+            for (const off of _teardown) off();
+            _teardown.length = 0;
+            // The panel is appended per boot; a second one would share the
+            // #settings id with the first.
+            panel?.remove?.();
+        },
+    };
 }
