@@ -49,8 +49,10 @@ export function createRenderer(canvas) {
     if (!gl) return createRenderer2D(canvas);
 
     const prog = gl.createProgram();
+    const _shaders = [];    // for dispose() (task 23.7b); deleteProgram only DETACHES
     for (const [type, src] of [[gl.VERTEX_SHADER, VS], [gl.FRAGMENT_SHADER, FS]]) {
         const sh = gl.createShader(type);
+        _shaders.push(sh);
         gl.shaderSource(sh, src);
         gl.compileShader(sh);
         if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS))
@@ -108,6 +110,29 @@ export function createRenderer(canvas) {
     return {
         kind: 'webgl2',
 
+        // Task 23.7b: createRenderer runs per boot and getContext returns the
+        // SAME context for the same canvas, so each boot leaked a program, two
+        // shaders, a VBO and two textures with nothing ever deleting them.
+        //
+        // This body lived in createRenderer2D until this commit, where every
+        // name in it -- gl, prog, quad, _textures -- was a local of THIS
+        // function.  So the WebGL2 path, which is the one every real browser
+        // takes, had no dispose at all: main.js's `h?.dispose?.()` found no
+        // method and silently did nothing, while the canvas2d path threw
+        // ReferenceError into its own catch.  The fix shipped and never ran,
+        // and browser-teardown-test.mjs named these objects in its header while
+        // measuring only DOM nodes.  It counts them now.
+        dispose() {
+            try {
+                gl.deleteProgram(prog);
+                for (const sh of _shaders) gl.deleteShader(sh);
+                gl.deleteBuffer(quad);
+                for (const t of _textures) gl.deleteTexture(t);
+            } catch { /* context already lost */ }
+            _shaders.length = 0;
+            _textures.length = 0;
+        },
+
         // Resize the framebuffer texture (and canvas attributes) to w×h.
         // No-op if dimensions are unchanged.  Called by main.js when
         // doom._web_screenwidth() changes after a deferred web_set_wide() call.
@@ -158,15 +183,14 @@ function createRenderer2D(canvas) {
     const _status = typeof document !== 'undefined' && document.getElementById?.('status');
 
     return {
-        // Task 23.7b: createRenderer runs per boot and getContext returns the
-        // SAME context for the same canvas, so each boot leaked a program, two
-        // shaders, a VBO and two textures with nothing ever deleting them.
+        // Task 23.7b: this path allocates no GL objects -- its per-boot cost is
+        // the ImageData and the palette LUT, both plain JS, collected once this
+        // object is dropped.  Kept as an explicit no-op so both renderers have
+        // the same shape and an ABSENT dispose can never again read to
+        // main.js's `h?.dispose?.()` as "nothing needed freeing".
         dispose() {
-            try {
-                gl.deleteProgram(prog);
-                gl.deleteBuffer(quad);
-                for (const t of _textures) gl.deleteTexture(t);
-            } catch { /* context already lost */ }
+            img  = null;
+            rgba = null;
         },
 
         kind: 'canvas2d',
