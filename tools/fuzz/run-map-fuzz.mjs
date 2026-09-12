@@ -436,6 +436,12 @@ console.log();
 
 const findings = [];
 
+// What actually RAN, as opposed to what was requested. Every verdict below
+// reads these, so a seed that never produced a result cannot be counted as one
+// that passed.
+let benignRan = 0;
+let adversarialRan = 0;
+
 // ── benign run ────────────────────────────────────────────────────────────────
 if (seedsBenign > 0) {
     const benignSeeds = Array.from({ length: seedsBenign }, (_, i) => i);
@@ -447,8 +453,9 @@ if (seedsBenign > 0) {
         if (!r.ok && r.finding) findings.push(r.finding);
     }
 
+    benignRan = benignResults.length;
     const benignFails = benignResults.filter(r => !r.ok).length;
-    console.log(`benign summary: ${seedsBenign - benignFails}/${seedsBenign} OK, ${benignFails} finding(s)`);
+    console.log(`benign summary: ${benignRan - benignFails}/${benignRan} OK, ${benignFails} finding(s)`);
     console.log();
 }
 
@@ -464,8 +471,9 @@ if (seedsAdversarial > 0) {
         if (!r.ok && r.finding) findings.push(r.finding);
     }
 
+    adversarialRan = advResults.length;
     const advFails = advResults.filter(r => !r.ok).length;
-    console.log(`adversarial summary: ${seedsAdversarial - advFails}/${seedsAdversarial} OK, ${advFails} finding(s)`);
+    console.log(`adversarial summary: ${adversarialRan - advFails}/${adversarialRan} OK, ${advFails} finding(s)`);
     console.log();
 }
 
@@ -503,7 +511,18 @@ if (adversarialGate) {
             console.log(`  (${ierrFindings.length} I_Error result(s) are pass — fail-soft as expected)`);
         process.exit(1);
     } else {
-        const clean = seedsAdversarial - findings.length;
+        // `clean` was seedsAdversarial - findings.length, and seedsAdversarial is
+        // the --seeds-adversarial ARGUMENT. So `--seeds-adversarial 0` printed
+        // "GATE PASS: adversarial corpus = 0 clean + 0 I_Error, 0 sanitizer
+        // reports" and exited 0 -- a green adversarial gate that ran no
+        // adversarial seeds. A gate whose corpus can be empty is not a gate.
+        if (adversarialRan === 0) {
+            console.log(`\nGATE FAIL: adversarial corpus was EMPTY — ` +
+                        `${seedsAdversarial} seed(s) requested, ${adversarialRan} ran. ` +
+                        'A gate over nothing is not a pass.');
+            process.exit(1);
+        }
+        const clean = adversarialRan - findings.length;
         const ierr = ierrFindings.length;
         console.log(`\nGATE PASS: adversarial corpus = ${clean} clean + ${ierr} I_Error, 0 sanitizer reports`);
         console.log(`  Command: node tools/fuzz/run-map-fuzz.mjs --adversarial-gate [--build-dir DIR]`);
@@ -513,8 +532,14 @@ if (adversarialGate) {
 }
 
 if (findings.length === 0) {
-    console.log(`\nPASS: map-load behavior matches vanilla under ${totalSeeds} mutations`);
-    console.log(`  (${seedsBenign} benign + ${seedsAdversarial} adversarial seeds, tier ${tierLabel})`);
+    // Same rule for the non-gate path: report what ran, not what was asked for.
+    const ran = benignRan + adversarialRan;
+    if (ran === 0) {
+        console.log(`\nFAIL: 0 of ${totalSeeds} requested mutations ran — nothing was fuzzed`);
+        process.exit(1);
+    }
+    console.log(`\nPASS: map-load behavior matches vanilla under ${ran} mutations`);
+    console.log(`  (${benignRan} benign + ${adversarialRan} adversarial seeds ran, tier ${tierLabel})`);
     console.log('  geometry excluded: VERTEXES/SEGS/SSECTORS/NODES/BLOCKMAP (no node rebuild)');
     process.exit(0);
 } else {

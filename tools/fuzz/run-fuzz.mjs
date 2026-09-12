@@ -380,11 +380,29 @@ for (const r of results) {
 }
 console.log('─────────────────────────────────────────────────────────────────');
 
+// A run that fuzzed nothing is not a pass.
+//
+// The verdict below quoted `numSeeds`, which is the --seeds ARGUMENT, not a
+// count of anything observed -- and `results` is pre-sized to it by runPool().
+// So `--seeds 0` printed "PASS: all 0 seeds bit-identical" and exited 0: a
+// green gate over an empty corpus, which is the shape this repo has a named
+// failure mode for. Count what actually came back, and floor it.
+const observed = results.filter((r) => typeof r === 'string' && r.length > 0).length;
+if (observed === 0) {
+    console.log(`\nFAIL: 0 of ${numSeeds} requested seeds produced a result — nothing was fuzzed`);
+    process.exit(1);
+}
+if (observed !== numSeeds) {
+    console.log(`\nFAIL: ${observed} of ${numSeeds} requested seeds produced a result — ` +
+                `${numSeeds - observed} never reported`);
+    process.exit(1);
+}
+
 const divergences = results.filter((r) => r.includes('DIVERGED') || r.includes('ERROR') || r.includes('SELF-INCONSISTENT'));
 if (divergences.length > 0) {
     console.log(`\nFAIL: ${divergences.length} divergence(s) detected`);
     process.exit(1);
 } else {
-    console.log(`\nPASS: all ${numSeeds} seeds ${natAvailable ? 'bit-identical (wasm ≡ native)' : 'self-consistent (native blocked)'}`);
+    console.log(`\nPASS: all ${observed} seeds ${natAvailable ? 'bit-identical (wasm ≡ native)' : 'self-consistent (native blocked)'}`);
     process.exit(0);
 }

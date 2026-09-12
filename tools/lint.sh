@@ -11,7 +11,11 @@
 #
 # Scope:
 #   C:  engine/web/*.{c,h}  tools/archaeology/*.c
-#   JS: client/js/*.js  client/sw.js  client/game.js  server/*.js  tools/*.mjs
+#   JS: client/js/*.js  client/sw.js  server/*.js
+#       tools/*.mjs  tools/fuzz/*.mjs  tools/archaeology/*.mjs
+#
+# The JS line named `client/game.js`, which does not exist, and omitted
+# tools/fuzz — a scope comment that described neither the code nor the globs.
 #
 # engine/core/ is EXEMPT (vendored linuxdoom-1.10 archaeology record).
 set -euo pipefail
@@ -88,6 +92,50 @@ else
                 echo "lint: clang-format OK (${#C_FILES[@]} files)"
                 C_COUNT_NOTE="clang-format ${#C_FILES[@]} C files"
             fi
+
+            # ── what clang-format does NOT cover, said out loud ──────────────
+            #
+            # C_FILES is engine/web + tools/archaeology. Six other trees hold
+            # tracked C and were outside the gate with nothing saying so --
+            # scope that is narrow by accident reads exactly like scope that is
+            # narrow by decision.
+            #
+            # They stay out, deliberately: 49 of their 52 files would need
+            # reformatting, and they are per-target platform shims, several
+            # carrying open bring-up findings (baremetal's data-abort,
+            # rp2040's SRAM overshoot). Churning them would bury that history
+            # in whitespace for no correctness gain.
+            #
+            # But the exemption is RATCHETED: every tracked .c/.h outside
+            # C_FILES must live in a directory named here, so a NEW tree cannot
+            # join the exempt set by existing.
+            C_EXEMPT_DIRS=(
+                engine/core            # vendored linuxdoom-1.10, archaeology record
+                tools/native-sanitize
+                tools/freestanding
+                tools/n64
+                tools/baremetal
+                tools/rp2040
+                tools/wide-experiment
+            )
+            UNDECLARED=()
+            while IFS= read -r f; do
+                case "$f" in engine/web/*|tools/archaeology/*) continue ;; esac
+                declared=0
+                for d in "${C_EXEMPT_DIRS[@]}"; do
+                    case "$f" in "$d"/*) declared=1; break ;; esac
+                done
+                [ "$declared" = "1" ] || UNDECLARED+=("$f")
+            done < <(git ls-files '*.c' '*.h')
+            if [ "${#UNDECLARED[@]}" -gt 0 ]; then
+                echo "lint: FAIL ${#UNDECLARED[@]} C file(s) are neither formatted nor in a declared exempt tree:"
+                printf '  %s\n' "${UNDECLARED[@]}"
+                echo "  Add the directory to C_EXEMPT_DIRS with a reason, or put it in C_FILES."
+                ERRORS=1
+            else
+                EXEMPT_N=$(git ls-files '*.c' '*.h' | grep -cE "^($(IFS='|'; echo "${C_EXEMPT_DIRS[*]}"))/" || true)
+                echo "lint: C scope declared — ${#C_FILES[@]} formatted, ${EXEMPT_N} in ${#C_EXEMPT_DIRS[@]} exempt tree(s)"
+            fi
             C_CHECKED=1
         fi
     fi
@@ -106,6 +154,10 @@ JS_FILES=(
     server/*.js
     tools/*.mjs
     tools/fuzz/*.mjs
+    # 19 verifiers lived outside `node --check` -- including doc-drift.mjs, the
+    # file the whole claims gate runs through. A syntax error in any of them was
+    # a runtime failure in a leg rather than a lint failure here.
+    tools/archaeology/*.mjs
 )
 
 if [ "$FIX" = "1" ]; then
@@ -138,7 +190,9 @@ fi
 # times here; this keeps it from coming back through a committed script.
 # ---------------------------------------------------------------------------
 
-if [ "$DO_JS" = "1" ] && ! node "$REPO_ROOT/tools/check-pipe-exit.mjs"; then
+# NOT gated on DO_JS. This checks shell scripts, and the leg that is *about*
+# shell (`lint-c`, which runs --c-only) was the one skipping it.
+if ! node "$REPO_ROOT/tools/check-pipe-exit.mjs"; then
     ERRORS=1
 fi
 
@@ -152,7 +206,8 @@ fi
 # names exactly that (orphaned Chrome, exhausted /tmp) behind the T07 flake.
 # ---------------------------------------------------------------------------
 
-if [ "$DO_JS" = "1" ] && ! node "$REPO_ROOT/tools/check-cdp-ports.mjs"; then
+# Also repo-wide: it reads every tracked .mjs and .sh, not just the JS half.
+if ! node "$REPO_ROOT/tools/check-cdp-ports.mjs"; then
     ERRORS=1
 fi
 
