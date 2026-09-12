@@ -57,10 +57,28 @@ SpessaSynth is **not** in the service-worker SHELL precache. Rationale:
   is never in the SHELL cache.
 - SpessaSynth itself (~500 KB) is an opt-in feature; forcing it into the mandatory offline
   shell would bloat the required offline payload for all users.
-- The `check-sw-precache.mjs` tool tracks the static import graph. The GM worklet URL
-  (`/js/gm-worklet.js`) is referenced via a **non-literal variable** in `audio.js` (not
-  as a bare string literal in `addModule()`), so the static analysis intentionally excludes
-  it from the graph. This is the correct pattern for opt-in modules.
+- The `check-sw-precache.mjs` tool tracks the static import graph, and nothing GM-side
+  enters it: SpessaSynth is fetched from an operator-supplied URL at arm() time, not
+  imported.
+
+  **CORRECTION (2026-09-11, task 25.3).** This bullet used to read that
+  `/js/gm-worklet.js` "is referenced via a **non-literal variable** in `audio.js`", which
+  is why the precache excluded it. That was not true, and had not been true since 17.2b:
+  `audio.js` contains no reference to that file under any spelling — the only
+  `addModule()` call in the file is the OPL one, `addModule('js/music-worklet.js')`. The
+  17.2b redesign moved SpessaSynth to the main thread (`Synthetizer(targetNode, sf2)`
+  builds its own worklet chain and cannot be nested inside a foreign processor), which
+  orphaned `gm-worklet.js` entirely; this document was never amended, so a dead file kept
+  a live-sounding justification. `tools/gm-frames-test.mjs` asserts
+  `sink.kind === 'gm-main'` and names `'gm-worklet'` as the OLD design in its red-proof
+  notes — the gate had been recording the file as superseded the whole time.
+
+  The file is deleted as of task 25.3. It was a second, verbatim copy of
+  `music-worklet.js`'s ring buffer (same queue, same offset bookkeeping, same
+  `{queued, procMs}` port protocol), so the duplication cleanup had two options —
+  parameterise one worklet for both, or delete the half nothing loads. Deleting is the
+  honest one: parameterising would have preserved unreachable code behind an argument.
+  Recover it from git history if a worklet-based GM sink is ever wanted again.
 
 Consequence: GM music requires an online session for first load. This is acceptable; OPL
 playback is always available offline.
@@ -108,7 +126,8 @@ a test to load. That residual is stated rather than papered over.
 
 This task touches only client-side JavaScript (no engine/wasm changes). The size-ledger
 tracks `doom.wasm` raw bytes; that metric is unchanged. The new JS files (`mus2mid.js`,
-`gm-worklet.js`) are small (~5–10 KB combined) and are not in the wasm binary.
+`mus2mid.js`) are small (~5–10 KB) and are not in the wasm binary.
+(`gm-worklet.js` was named here too; it was deleted in task 25.3 — see the correction above.)
 
 SpessaSynth (~500 KB) and GeneralUser GS (~31 MB uncompressed) are loaded lazily and
 operator-hosted; they do not appear in the size ledger.

@@ -32,6 +32,92 @@ export function connectLobby(baseUrl, WS = WebSocket) {
     return api;
 }
 
+// ── Shared bundle plumbing ───────────────────────────────────────────────────
+// attachRelay and attachSpectate are the same receiver with three differences:
+// the URL, where fabMask comes from, and one extra step when catch-up ends.
+// Everything else -- the malloc'd ingame ring, the length and tic-range checks,
+// the buffer-until-live queue, and the 512-tic chunked replay -- was written
+// out twice, so the 23.1 hostile-tic guard had to be added twice and a future
+// one could reach only one path.  It lives here once.
+//
+//   fabOverride: null  -> read fabMask from the wire (byte 5), as a player does
+//                0xFF  -> mark every slot fabricated, as a spectator must, so
+//                         the engine's consistancy ring check is bypassed (a
+//                         spectator's clean replay legitimately disagrees with
+//                         a live veteran's gametic/maketic ratio; the SIM is
+//                         still bit-identical, verified by _web_state_hash)
+function makeBundlePump(doom, numplayers, fabOverride) {
+    const scratch = doom._web_net_scratch();
+    const ingamePtr = doom._malloc(8);
+    if (!ingamePtr) throw new Error('out of memory for the per-tic ingame ring');
+
+    let live = false;               // once true, bundles just fill netcmds
+    const queue = [];               // bundles awaiting go()/catchUp
+
+    // Push one sealed bundle into the engine (netcmds + per-tic ingame ring).
+    const deliver = data => {
+        const b = new Uint8Array(data);
+        if (b.length !== 6 + CMD_SIZE * numplayers) return;
+        const tic = new DataView(b.buffer, b.byteOffset).getUint32(0, true);
+        // Mirrors the engine guard in web_net_bundle: a u32 >= 2^31 lands in C
+        // as a negative int and indexes before the tic-ring arrays.  The engine
+        // is the load-bearing check (a bare-metal port inherits it); this keeps
+        // a hostile frame from crossing the boundary at all.
+        if (tic >= 0x7FFFFFFF) return;
+        const ingameMask = b[4];
+        const fabMask = fabOverride ?? b[5];
+        for (let i = 0; i < numplayers; i++) {
+            doom.HEAPU8[ingamePtr + i] = (ingameMask >> i) & 1;
+            doom.HEAPU8.set(
+                b.subarray(6 + i * CMD_SIZE, 6 + (i + 1) * CMD_SIZE),
+                scratch + i * CMD_SIZE,
+            );
+        }
+        doom._web_net_bundle(tic, scratch, ingamePtr, fabMask);
+    };
+
+    const drain = () => { live = true; for (const d of queue.splice(0)) deliver(d); };
+
+    return {
+        onmessage: ev => {
+            if (live) deliver(ev.data);
+            else queue.push(ev.data);   // buffered until go()/catchUp drains it
+        },
+
+        // Non-join: start live delivery (bundles fill netcmds; the rAF loop's
+        // TryRunTics paces them). Call once callMain has run.
+        go: drain,
+
+        // Join in progress: replay the streamed history (and any live bundles
+        // that arrive meanwhile) UNPACED — one web_replay_tic per bundle — up
+        // to the frontier, then switch to live. onProgress(done, total) drives
+        // the loading bar. The sim rebuilds the exact world by construction.
+        // onCaughtUp runs after _web_end_catchup and before live delivery.
+        async catchUp(frontier, onProgress, onCaughtUp) {
+            const CHUNK = 512;      // replay this many tics before yielding
+            const yieldToNet = () => new Promise(r => setTimeout(r, 0));
+            for (;;) {
+                let n = 0;
+                while (queue.length) {
+                    deliver(queue.shift());     // netcmds for this tic
+                    doom._web_replay_tic();      // advance the sim one tic
+                    if (++n >= CHUNK) {
+                        onProgress?.(doom._web_gametic(), frontier);
+                        await yieldToNet();      // let more bundles arrive
+                        n = 0;
+                    }
+                }
+                onProgress?.(doom._web_gametic(), frontier);
+                if (doom._web_gametic() >= frontier && !queue.length) break;
+                await yieldToNet();
+            }
+            doom._web_end_catchup();
+            onCaughtUp?.();
+            drain();
+        },
+    };
+}
+
 // Call before doom.callMain(): configures the engine for the session and
 // installs the send/receive hooks. rttMs sizes the input delay. slots =
 // occupied lobby slots (sparse: color choice = slot choice); the bundle
@@ -65,69 +151,13 @@ export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, nam
         if (ws.readyState === 1) ws.send(up);
     };
 
-    const scratch = doom._web_net_scratch();
-    const ingamePtr = doom._malloc(8);
-    if (!ingamePtr) throw new Error('out of memory for the per-tic ingame ring');
-    let live = false;               // once true, bundles just fill netcmds
-    const queue = [];               // bundles awaiting go()/catchUp
-
-    // Push one sealed bundle into the engine (netcmds + per-tic ingame ring).
-    const deliver = data => {
-        const b = new Uint8Array(data);
-        if (b.length !== 6 + CMD_SIZE * numplayers) return;
-        const tic = new DataView(b.buffer, b.byteOffset).getUint32(0, true);
-        // Mirrors the engine guard in web_net_bundle: a u32 >= 2^31 lands in C
-        // as a negative int and indexes before the tic-ring arrays.  The engine
-        // is the load-bearing check (a bare-metal port inherits it); this keeps
-        // a hostile frame from crossing the boundary at all.
-        if (tic >= 0x7FFFFFFF) return;
-        const ingameMask = b[4], fabMask = b[5];
-        for (let i = 0; i < numplayers; i++) {
-            doom.HEAPU8[ingamePtr + i] = (ingameMask >> i) & 1;
-            doom.HEAPU8.set(
-                b.subarray(6 + i * CMD_SIZE, 6 + (i + 1) * CMD_SIZE),
-                scratch + i * CMD_SIZE,
-            );
-        }
-        doom._web_net_bundle(tic, scratch, ingamePtr, fabMask);
-    };
-
-    ws.onmessage = ev => {
-        if (live) deliver(ev.data);
-        else queue.push(ev.data);   // buffered until go()/catchUp drains it
-    };
+    // A player reads fabMask from the wire.
+    const pump = makeBundlePump(doom, numplayers, null);
+    ws.onmessage = pump.onmessage;
 
     return {
-        // Non-join: start live delivery (bundles fill netcmds; the rAF loop's
-        // TryRunTics paces them). Call once callMain has run.
-        go() { live = true; for (const d of queue.splice(0)) deliver(d); },
-
-        // Join in progress: replay the streamed history (and any live bundles
-        // that arrive meanwhile) UNPACED — one web_replay_tic per bundle — up
-        // to the frontier, then switch to live. onProgress(done, total) drives
-        // the loading bar. The sim rebuilds the exact world by construction.
-        async catchUp(frontier, onProgress) {
-            const CHUNK = 512;      // replay this many tics before yielding
-            const yieldToNet = () => new Promise(r => setTimeout(r, 0));
-            for (;;) {
-                let n = 0;
-                while (queue.length) {
-                    deliver(queue.shift());     // netcmds for this tic
-                    doom._web_replay_tic();      // advance the sim one tic
-                    if (++n >= CHUNK) {
-                        onProgress?.(doom._web_gametic(), frontier);
-                        await yieldToNet();      // let more bundles arrive
-                        n = 0;
-                    }
-                }
-                onProgress?.(doom._web_gametic(), frontier);
-                if (doom._web_gametic() >= frontier && !queue.length) break;
-                await yieldToNet();
-            }
-            doom._web_end_catchup();
-            live = true;
-            for (const d of queue.splice(0)) deliver(d);
-        },
+        go: pump.go,
+        catchUp: (frontier, onProgress) => pump.catchUp(frontier, onProgress),
         quit() { ws.close(); },
     };
 }
@@ -162,75 +192,18 @@ export function attachSpectate(doom, baseUrl, { numplayers, slots = null, names 
     // injected by any path.
     doom.netSend = () => {};
 
-    const scratch = doom._web_net_scratch();
-    const ingamePtr = doom._malloc(8);
-    if (!ingamePtr) throw new Error('out of memory for the per-tic ingame ring');
-
-    const deliver = data => {
-        const b = new Uint8Array(data);
-        if (b.length !== 6 + CMD_SIZE * numplayers) return;
-        const tic = new DataView(b.buffer, b.byteOffset).getUint32(0, true);
-        // Mirrors the engine guard in web_net_bundle: a u32 >= 2^31 lands in C
-        // as a negative int and indexes before the tic-ring arrays.  The engine
-        // is the load-bearing check (a bare-metal port inherits it); this keeps
-        // a hostile frame from crossing the boundary at all.
-        if (tic >= 0x7FFFFFFF) return;
-        const ingameMask = b[4];
-        // Spectators pass fabMask=0xFF (all slots "fabricated") so the engine's
-        // per-tic consistancy ring-buffer check is bypassed. The check compares
-        // cmd->consistancy (written by live veterans whose gametic/maketic ratio
-        // may differ from the spectator's clean replay) against the spectator's
-        // locally-computed ring value — they legitimately diverge, but the
-        // simulation itself is bit-identical (verified by _web_state_hash).
-        // Simulation data (netcmds, ingamering) is unaffected by fabMask.
-        const FAB_ALL = 0xFF;
-        for (let i = 0; i < numplayers; i++) {
-            doom.HEAPU8[ingamePtr + i] = (ingameMask >> i) & 1;
-            doom.HEAPU8.set(
-                b.subarray(6 + i * CMD_SIZE, 6 + (i + 1) * CMD_SIZE),
-                scratch + i * CMD_SIZE,
-            );
-        }
-        doom._web_net_bundle(tic, scratch, ingamePtr, FAB_ALL);
-    };
-
-    let live = false;
-    const queue = [];
-    ws.onmessage = ev => {
-        if (live) deliver(ev.data);
-        else queue.push(ev.data);
-    };
+    // Spectators pass fabMask=0xFF (all slots "fabricated"); see makeBundlePump.
+    const FAB_ALL = 0xFF;
+    const pump = makeBundlePump(doom, numplayers, FAB_ALL);
+    ws.onmessage = pump.onmessage;
 
     return {
-        // Replay the streamed history to `frontier`, then switch to live delivery.
-        // Same machinery as attachRelay.catchUp — bundles fill web_replay_tic one
-        // per bundle (unpaced), then web_end_catchup arms the live rAF loop.
-        async catchUp(frontier, onProgress) {
-            const CHUNK = 512;
-            const yieldToNet = () => new Promise(r => setTimeout(r, 0));
-            for (;;) {
-                let n = 0;
-                while (queue.length) {
-                    deliver(queue.shift());
-                    doom._web_replay_tic();
-                    if (++n >= CHUNK) {
-                        onProgress?.(doom._web_gametic(), frontier);
-                        await yieldToNet();
-                        n = 0;
-                    }
-                }
-                onProgress?.(doom._web_gametic(), frontier);
-                if (doom._web_gametic() >= frontier && !queue.length) break;
-                await yieldToNet();
-            }
-            doom._web_end_catchup();
+        catchUp: (frontier, onProgress) => pump.catchUp(frontier, onProgress, () => {
             // Park the view on the first live player so the status bar renders
             // against a valid player slot (phantom slots have no HUD state).
             const anchor = doom._web_first_ingame();
             if (anchor >= 0) doom._web_set_console(anchor);
-            live = true;
-            for (const d of queue.splice(0)) deliver(d);
-        },
+        }),
         quit() { ws.close(); },
     };
 }
