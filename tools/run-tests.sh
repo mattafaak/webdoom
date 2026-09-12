@@ -377,6 +377,10 @@ leg web-contract    -    "web.h matches the exports it declares"      -- node to
 # The registry's bound, and MAXWEBFILES, which is written on both sides of the
 # wire (files.c and lobby.js) and was asserted by nothing.
 leg web-registry    build "file-registry cap + the MAXWEBFILES mirror"  -- node tools/web-registry-test.mjs
+# COLORS, CMD_SIZE, MAXPLAYERS, FRAGMENT_MAX and MAXWEBFILES each exist twice,
+# once on each side of the wire, and two of them say "mirror of" in a comment.
+# Nothing compared them until round 6.
+leg wire-constants  -     "cross-wire constants agree on both sides"    -- node tools/check-wire-constants.mjs
 leg gate-census     -    "every gate is wired or registered with a reason" -- node tools/gate-census.mjs
 # A document may not contradict the project's own record of what is done.  The
 # claims machinery checks NUMBERS against code and nothing checked STATUS prose:

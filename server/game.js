@@ -53,6 +53,10 @@ const MAX_HISTORY_TICS = +(process.env.WEBDOOM_MAX_HISTORY_TICS || 35 * 60 * 30)
 const RATE_CAP_PER_SEC = +(process.env.WEBDOOM_RATE_CAP || 300);
 const RATE_WINDOW_MS = 1000;
 
+// Player names arrive from the network.  Both sites that accept one applied
+// the same three steps in the same order; a third would have had to know them.
+const cleanName = n => String(n ?? '').replace(/[^A-Za-z0-9 _-]/g, '').trim().slice(0, 10);
+
 const defaultParams = () => ({
     wad: 'doom.wad', episode: 1, map: 1, skill: 3, mode: 'coop',
     nomonsters: false, fast: false, respawn: false, timer: 0,
@@ -62,6 +66,39 @@ const defaultParams = () => ({
 // malformed frame) are absorbed rather than propagated as uncaught exceptions.
 // The ws library terminates the socket on its own after emitting 'error';
 // the 'close' event fires next and any normal cleanup runs from there.
+// Refuse one socket, the way every refusal in this file has to work.
+//
+// `try { ws.terminate(); } catch {}` stood FIFTEEN times in this file, and
+// only EIGHT of them carried an `ws.on('error', () => {})` in front of it --
+// the guard whose own comment explains that a frame racing in between the
+// WebSocket handshake completing and terminate() firing otherwise emits an
+// unhandled 'error' and ENDS THE PROCESS.  (At the start of round 6 it was
+// 6 of 13; this round's two new refusal paths were written with the guard,
+// which is the problem: every author has to know.)  One spelling now, with
+// the guard always on, so the next rejection path cannot be written the
+// unsafe way.
+//
+// The one call site left outside this helper is safeWs's own error handler:
+// it is ALREADY inside an 'error' listener, so attaching another would be the
+// thing this helper exists to make unnecessary.
+//
+// The one call site left outside this helper is safeWs's own error handler:
+// it is ALREADY inside an 'error' listener, so attaching another would be the
+// thing this helper exists to make unnecessary.
+// ONCE PER SOCKET.  rateOk() calls this on every message of a flood, and the
+// first version attached a fresh 'error' listener each time: 5,000 messages
+// produced a MaxListenersExceededWarning with a stack trace, which net-fuzz's
+// crash detector correctly read as a crash.  The helper was making the thing
+// it exists to prevent easier to write, which is the only way a helper like
+// this can be worse than the fifteen copies it replaced.
+function refuse(ws, log = null, why = '') {
+    if (ws._refused) return;
+    ws._refused = true;
+    if (why) log(why);
+    ws.on('error', () => {});
+    try { ws.terminate(); } catch { /* already gone */ }
+}
+
 function safeWs(ws, log, tag) {
     ws.on('error', err => {
         log(`ws error [${tag}]: ${err?.message ?? err}`);
@@ -90,7 +127,12 @@ function rateOk(ws) {
     if (ws._rateCount > RATE_CAP_PER_SEC) {
         // Flooding: terminate immediately, don't send a close frame (avoids
         // being stuck in CLOSING while the attacker ignores the handshake).
-        try { ws.terminate(); } catch {}
+        // No log: rateOk() is module-scope and `log` is createGame's local --
+        // passing it here was a ReferenceError on every flooded message, which
+        // round 5's uncaughtException backstop absorbed and net-fuzz reported
+        // as a crash.  A helper that is easy to call wrongly is worth one
+        // default parameter.
+        refuse(ws);
         return false;
     }
     return true;
@@ -155,7 +197,7 @@ export function createGame(log = console.log, servedWads = () => []) {
                     mySlot = p.slot;
                     p.joining = true;
                     p.reservedAt = Date.now();
-                    const nm = String(m.name ?? '').replace(/[^A-Za-z0-9 _-]/g, '').trim().slice(0, 10);
+                    const nm = cleanName(m.name);
                     if (nm) { session.names = session.names ?? [null, null, null, null]; session.names[p.slot] = nm; }
                     ws.send(JSON.stringify({ t: 'welcome', slot: p.slot, color: COLORS[p.slot] }));
                     ws.send(JSON.stringify({ t: 'launch', params: session.params, numplayers: MAXPLAYERS,
@@ -174,9 +216,7 @@ export function createGame(log = console.log, servedWads = () => []) {
         while (lobby.has(slot)) slot++;
         if (slot >= MAXPLAYERS) {
             ws.send(JSON.stringify({ t: 'full', reason: 'lobby full' }));
-            // Use terminate() for the refused connection: avoids leaving the
-            // socket in CLOSING state if the client ignores the close frame.
-            try { ws.terminate(); } catch {}
+            refuse(ws, log);
             return;
         }
         lobby.set(slot, { ws, name: null });
@@ -191,7 +231,7 @@ export function createGame(log = console.log, servedWads = () => []) {
             if (m.t === 'ping') { ws.send(JSON.stringify({ t: 'pong', t0: m.t0 })); return; }
             if (session) return;
             if (m.t === 'name') {
-                const name = String(m.name ?? '').replace(/[^A-Za-z0-9 _-]/g, '').trim().slice(0, 10);
+                const name = cleanName(m.name);
                 lobby.get(slot).name = name || null;
                 cast(roster());
                 return;
@@ -292,6 +332,23 @@ export function createGame(log = console.log, servedWads = () => []) {
         cast(roster());
     }
 
+    // Stream the whole sealed history to a joining socket, dropping it if it
+    // cannot keep up.  Both readers of session.history did this identically:
+    // the backpressure check exists because ws.send() buffers in the Node heap,
+    // so a deliberately-stalled peer would otherwise pull the session's whole
+    // history into memory with no ceiling.
+    // Returns false when the socket was refused, so the caller stops.
+    function burstHistory(ws, who) {
+        for (const b of session.history) {
+            if (ws.bufferedAmount > SEND_BACKLOG_CAP) {
+                refuse(ws, log, `${who} too slow to catch up (${ws.bufferedAmount} B buffered) — dropping`);
+                return false;
+            }
+            ws.send(b);
+        }
+        return true;
+    }
+
     // --- spectator endpoint ---------------------------------------------------
     // A spectator is a receive-only observer: it gets the full sealed-bundle
     // history as a burst on connect, then follows live bundles. The handler has
@@ -299,35 +356,23 @@ export function createGame(log = console.log, servedWads = () => []) {
     // injection is structurally impossible, not just guarded by a flag.
     function spectateConnect(ws) {
         safeWs(ws, log, 'spectate');
-        if (!session) { try { ws.terminate(); } catch {} return; }
+        if (!session) { refuse(ws, log); return; }
         // Past the cap the history is a PREFIX of the session, so replaying it
         // would leave the observer's sim short of the live frontier with no way
         // to notice.  Refuse instead of desyncing.
         if (session.historyFull) {
-            log(`spectate: refusing — session is past the ${MAX_HISTORY_TICS}-tic history cap, catch-up cannot be served`);
-            ws.on('error', () => {});
-            try { ws.terminate(); } catch {}
+            refuse(ws, log, `spectate: refusing — session is past the ${MAX_HISTORY_TICS}-tic history cap, catch-up cannot be served`);
             return;
         }
         if (session.spectators.size >= MAX_SPECTATORS) {
-            log(`spectate: cap hit (${session.spectators.size}/${MAX_SPECTATORS}) — refusing`);
-            ws.on('error', () => {});
-            try { ws.terminate(); } catch {}
+            refuse(ws, log, `spectate: cap hit (${session.spectators.size}/${MAX_SPECTATORS}) — refusing`);
             return;
         }
         // Backpressure: the history burst is sent unconditionally, and ws.send()
         // buffers in the Node heap when the socket cannot keep up.  A slow or
         // deliberately-stalled observer would otherwise pull the whole session
         // history into memory with no ceiling.
-        for (const b of session.history) {
-            if (ws.bufferedAmount > SEND_BACKLOG_CAP) {
-                log(`spectate: observer too slow (${ws.bufferedAmount} B buffered) — dropping`);
-                ws.on('error', () => {});
-                try { ws.terminate(); } catch {}
-                return;
-            }
-            ws.send(b);
-        }
+        if (!burstHistory(ws, `spectate: observer`)) return;
         session.spectators.add(ws);
         log(`spectate: observer connected (history ${session.history.length} tics)`);
         ws.on('close', () => {
@@ -345,19 +390,19 @@ export function createGame(log = console.log, servedWads = () => []) {
         // and makes the rejection visible immediately on the client side.
         let slot;
         try { slot = +new URL(url, 'http://x').searchParams.get('slot'); } catch {
-            try { ws.terminate(); } catch {}
+            refuse(ws, log);
             return;
         }
         if (!Number.isFinite(slot) || slot < 0 || slot >= MAXPLAYERS || !Number.isInteger(slot)) {
-            try { ws.terminate(); } catch {}
+            refuse(ws, log);
             return;
         }
         const p = session?.players.find(p => p.slot === slot);
         if (!p || p.ws) {
-            // Slot occupied or no session: reject immediately with terminate()
-            // so the client sees an error/close without waiting for the close
-            // handshake, and the slot owner is unaffected.
-            try { ws.terminate(); } catch {}
+            // Slot occupied or no session: reject immediately so the client
+            // sees an error/close without waiting for the close handshake, and
+            // the slot owner is unaffected.
+            refuse(ws, log);
             return;
         }
         p.ws = ws;
@@ -371,22 +416,12 @@ export function createGame(log = console.log, servedWads = () => []) {
         if (!p.ingame) {
             // Same reason as spectate: a truncated history desyncs silently.
             if (session.historyFull) {
-                log(`game: ${COLORS[slot]} refused — session is past the ${MAX_HISTORY_TICS}-tic history cap, catch-up cannot be served`);
-                ws.on('error', () => {});
-                try { ws.terminate(); } catch {}
+                refuse(ws, log, `game: ${COLORS[slot]} refused — session is past the ${MAX_HISTORY_TICS}-tic history cap, catch-up cannot be served`);
                 return;
             }
             p.joining = true;
             p.reservedAt = p.reservedAt || Date.now();
-            for (const b of session.history) {
-                if (ws.bufferedAmount > SEND_BACKLOG_CAP) {
-                    log(`game: ${COLORS[slot]} too slow to catch up (${ws.bufferedAmount} B buffered) — dropping`);
-                    ws.on('error', () => {});
-                    try { ws.terminate(); } catch {}
-                    return;
-                }
-                ws.send(b);
-            }
+            if (!burstHistory(ws, `game: ${COLORS[slot]}`)) return;
             log(`game: ${COLORS[slot]} catching up (${session.history.length} tics)`);
         }
 
@@ -535,45 +570,22 @@ export function createGame(log = console.log, servedWads = () => []) {
     // Managed here (at connection event level) so every accepted socket has
     // exactly one increment and one decrement — regardless of what the handler
     // does internally (lobby-full reject, slot-occupied reject, etc.).
-    lobbyWss.on('connection', ws => {
+    // The same eight lines stood three times, differing in one word, and the
+    // third copy had lost the comment explaining why the 'error' listener has
+    // to go on before terminate().  One counter, one place.
+    const capped = (wss, what, connect) => wss.on('connection', (ws, req) => {
         if (connCount >= MAX_CONNS) {
-            log(`conn cap hit (${connCount}/${MAX_CONNS}): rejecting lobby connection`);
-            // Absorb errors before terminate(): a frame racing in between the
-            // WebSocket handshake completing and terminate() firing would
-            // otherwise emit an unhandled 'error' and crash the process.
-            ws.on('error', () => {});
-            try { ws.terminate(); } catch {}
+            refuse(ws, log, `conn cap hit (${connCount}/${MAX_CONNS}): rejecting ${what} connection`);
             return;
         }
         connCount++;
         ws.on('close', () => connCount--);
-        lobbyConnect(ws);
+        connect(ws, req);
     });
 
-    gameWss.on('connection', (ws, req) => {
-        if (connCount >= MAX_CONNS) {
-            log(`conn cap hit (${connCount}/${MAX_CONNS}): rejecting game connection`);
-            // Absorb errors before terminate() — same race as lobby cap above.
-            ws.on('error', () => {});
-            try { ws.terminate(); } catch {}
-            return;
-        }
-        connCount++;
-        ws.on('close', () => connCount--);
-        relayConnect(ws, req.url);
-    });
-
-    spectateWss.on('connection', ws => {
-        if (connCount >= MAX_CONNS) {
-            log(`conn cap hit (${connCount}/${MAX_CONNS}): rejecting spectate connection`);
-            ws.on('error', () => {});
-            try { ws.terminate(); } catch {}
-            return;
-        }
-        connCount++;
-        ws.on('close', () => connCount--);
-        spectateConnect(ws);
-    });
+    capped(lobbyWss,    'lobby',    ws => lobbyConnect(ws));
+    capped(gameWss,     'game',     (ws, req) => relayConnect(ws, req.url));
+    capped(spectateWss, 'spectate', ws => spectateConnect(ws));
 
     return {
         upgrade(req, socket, head) {

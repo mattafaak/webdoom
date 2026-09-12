@@ -54,7 +54,7 @@ the game/map/skill/mode; anyone hits START; 3-2-1, everyone's in.
 ## Tests
 
 ```sh
-tools/run-tests.sh            # everything: 88 legs, ~19 min
+tools/run-tests.sh            # everything: 89 legs, ~19 min
 tools/run-tests.sh --quick    # no WADs, no build, no browser — what CI runs
 tools/run-tests.sh --list     # the leg registry
 ```
