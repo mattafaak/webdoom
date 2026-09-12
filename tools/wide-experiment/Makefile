@@ -28,8 +28,10 @@ CFLAGS  := -m32 -O1 -g \
             -I$(NS)
 
 LDFLAGS := -m32 -fsanitize=address,undefined \
-           -fno-sanitize=alignment,bounds,pointer-overflow,object-size,signed-integer-overflow \
-           -lm
+           -fno-sanitize=alignment,bounds,pointer-overflow,object-size,signed-integer-overflow 
+
+# Libraries after the objects -- see tools/native-sanitize/Makefile.
+LDLIBS := -lm
 
 CORE_DIR := ../../engine/core
 OUT      := nat-doom-wide
@@ -56,7 +58,7 @@ OBJ := $(patsubst $(CORE_DIR)/%.c,obj/core/%.o,$(filter $(CORE_DIR)/%,$(SRC))) \
 all: $(OUT)
 
 $(OUT): $(OBJ)
-	$(CC) $(LDFLAGS) $^ -o $@
+	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
 	@echo "built $@"
 
 obj/core/%.o: $(CORE_DIR)/%.c

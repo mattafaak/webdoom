@@ -82,7 +82,16 @@ compile_and_run() {
     bin="$(mktemp /tmp/verify-c-XXXXXX)"
     echo ""
     echo "── $label ──────────────────────────────────────────────────"
-    if ! gcc -O2 -lm ${gccflags[@]+"${gccflags[@]}"} "$src" -o "$bin" 2>&1; then
+    # -lm MUST come after $src.  A library listed before the object that needs
+    # it is dropped under `ld --as-needed`, which Debian/Ubuntu default to and
+    # Arch does not -- so `gcc -O2 -lm src.c` links here and fails there.  It
+    # bites specifically because gcc at -O2 fuses a sin()/cos() pair on one
+    # argument into a single call to `sincos`, which lives in libm and NOT in
+    # libc (checked: nm -D libc.so.6 has no sincos; libm.so.6 does).  The first
+    # CI run this repo ever had died on exactly this, in aprox-distance-crack
+    # and angle-roundtrip-check -- seven claims (ea-015..017, ea-044..047) that
+    # had never once been verified on a Debian-family machine.
+    if ! gcc -O2 ${gccflags[@]+"${gccflags[@]}"} "$src" -o "$bin" -lm 2>&1; then
         echo "FAIL  compile error: $src"
         FAMILIES_FAILED=$((FAMILIES_FAILED + 1))
         return

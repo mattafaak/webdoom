@@ -42,8 +42,13 @@ CFLAGS  := -m32 -O1 -g \
 #     (e.g. ANG45 * 6 = 3221225472, angle_t arithmetic, fixed_t multiply). These are defined
 #     behavior on every targeted platform even though C99 says they are UB.
 LDFLAGS := -m32 -fsanitize=address,undefined \
-           -fno-sanitize=alignment,bounds,pointer-overflow,object-size,signed-integer-overflow \
-           -lm
+           -fno-sanitize=alignment,bounds,pointer-overflow,object-size,signed-integer-overflow
+
+# Libraries go AFTER the objects, never in LDFLAGS.  The link rule is
+# `$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)`, and a library placed before $^ is
+# dropped by `ld --as-needed` (Debian/Ubuntu default; Arch does not), so this
+# built on alder and would not have built on a contributor's Ubuntu box.
+LDLIBS := -lm
 
 # Paths.
 CORE_DIR := ../../engine/core
@@ -69,7 +74,7 @@ OBJ := $(patsubst $(CORE_DIR)/%.c,obj/core/%.o,$(filter $(CORE_DIR)/%,$(SRC))) \
 all: $(OUT)
 
 $(OUT): $(OBJ)
-	$(CC) $(LDFLAGS) $^ -o $@
+	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
 	@echo "built $@"
 
 obj/core/%.o: $(CORE_DIR)/%.c
@@ -129,13 +134,14 @@ COV_CFLAGS := -m32 -O1 -g \
               -I../../engine/core \
               -I.
 
-COV_LDFLAGS := -m32 --coverage -lm
+COV_LDFLAGS := -m32 --coverage
+COV_LDLIBS  := -lm
 
 COV_OBJ := $(patsubst $(CORE_DIR)/%.c,cov-obj/core/%.o,$(filter $(CORE_DIR)/%,$(SRC))) \
            $(patsubst %.c,cov-obj/plat/%.o,$(PLAT_SRC))
 
 nat-doom-cov: $(COV_OBJ)
-	$(CC) $(COV_LDFLAGS) $^ -o $@
+	$(CC) $(COV_LDFLAGS) $^ -o $@ $(COV_LDLIBS)
 	@echo "built $@"
 
 cov-obj/core/%.o: $(CORE_DIR)/%.c
