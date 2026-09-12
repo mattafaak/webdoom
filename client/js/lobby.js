@@ -629,7 +629,11 @@ function leaveLobby() {
 // --- boot ------------------------------------------------------------------------
 (async () => {
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js').catch(() => {});
+        // The reload button used to be `<button onclick="location.reload()">` in
+    // index.html -- the only inline event handler in the codebase, and the one
+    // thing a script-src CSP would silently break. Wired here instead.
+    document.getElementById('sw-reload')?.addEventListener('click', () => location.reload());
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
         // When a new service worker takes control mid-session, surface a
         // non-intrusive reload prompt rather than silently serving a mixed
         // old/new asset state. The prompt never interrupts an active match.

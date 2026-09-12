@@ -233,6 +233,42 @@ async function fuzzHostileDataDir() {
 console.log('\nhostile data directory — the server must decline, not die:');
 await fuzzHostileDataDir();
 
+// ── security headers ─────────────────────────────────────────────────────────
+//
+// The server set none. For a LAN game the realistic threat is small, but this
+// project treats hostile input as a first-class concern everywhere else -- 23.2
+// fuzzed lump content, 23.8 fuzzed the net path -- and the transport layer was
+// the one place that concern was invisible. Asserted on BOTH response paths,
+// because send() and the static-file branch build their headers separately and
+// only one of them would be obvious to check.
+async function checkSecurityHeaders() {
+    const s = spawnServer();
+    for (let i = 0; i < 40; i++) { await sleep(100); if (await healthCheck(s.host, s.port)) break; }
+    for (const [label, path] of [['an API response', '/api/wads'], ['a static file', '/']]) {
+        const res = await fetch(`http://127.0.0.1:${s.port}${path}`, { signal: AbortSignal.timeout(4000) });
+        const csp = res.headers.get('content-security-policy') ?? '';
+        check(`${label}: X-Content-Type-Options nosniff`,
+              res.headers.get('x-content-type-options') === 'nosniff',
+              res.headers.get('x-content-type-options') ?? '(absent)');
+        check(`${label}: Referrer-Policy set`,
+              res.headers.get('referrer-policy') === 'no-referrer',
+              res.headers.get('referrer-policy') ?? '(absent)');
+        // The CSP must actually constrain scripts, and must still permit the
+        // three things this client genuinely needs.
+        check(`${label}: CSP forbids inline script`,
+              /script-src [^;]*/.test(csp) && !/script-src [^;]*'unsafe-inline'/.test(csp),
+              csp || '(absent)');
+        check(`${label}: CSP permits wasm, blob workers and ws:`,
+              csp.includes("'wasm-unsafe-eval'") && csp.includes('worker-src') &&
+              csp.includes('blob:') && csp.includes('ws:'),
+              csp || '(absent)');
+    }
+    s.kill();
+}
+
+console.log('\nsecurity headers — on every response path:');
+await checkSecurityHeaders();
+
 const failed = results.filter(r => !r.ok);
 const total = results.length;
 console.log(`\n${failed.length

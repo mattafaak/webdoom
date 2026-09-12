@@ -56,6 +56,38 @@ function manifest() {
     }
 }
 
+// Headers on every response.
+//
+// The server set none of these. For a LAN game the realistic threat is small,
+// but this project treats hostile input as a first-class concern everywhere
+// else -- Phase 23 fuzzed the WAD path, the net path and the lump path -- and
+// the transport layer was the one place that concern was invisible.
+//
+// The CSP is written to fit what the client actually does rather than to be
+// maximal, because a policy that breaks the app is a policy someone removes:
+//   'wasm-unsafe-eval'  the engine is WebAssembly
+//   style-src unsafe-inline   five elements are styled by element.style.cssText
+//   worker-src blob:    AudioWorklet
+//   connect-src ws:     the lobby and tic relay, on a plain-HTTP origin
+// script-src has NO 'unsafe-inline': the one inline handler in the codebase
+// (index.html's reload button) moved into lobby.js for exactly this reason.
+const SECURITY_HEADERS = {
+    'x-content-type-options': 'nosniff',
+    'referrer-policy': 'no-referrer',
+    'content-security-policy': [
+        "default-src 'self'",
+        "script-src 'self' 'wasm-unsafe-eval'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob:",
+        "media-src 'self' data: blob:",
+        "connect-src 'self' ws: wss:",
+        "worker-src 'self' blob:",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "frame-ancestors 'none'",
+    ].join('; '),
+};
+
 function send(res, code, body, headers = {}) {
     // Two paths could each call send() for one request: the verify body timer
     // (408) racing req 'error' (400), and the demo POST's 'error' racing its
@@ -63,7 +95,7 @@ function send(res, code, body, headers = {}) {
     // event handler -- is an uncaught exception. The timer path wrapped its own
     // send in try/catch; the error paths did not. One guard for all of them.
     if (res.headersSent || res.writableEnded) return;
-    res.writeHead(code, { 'cache-control': 'no-store', ...headers });
+    res.writeHead(code, { 'cache-control': 'no-store', ...SECURITY_HEADERS, ...headers });
     res.end(body);
 }
 
@@ -316,6 +348,7 @@ const server = createServer((req, res) => {
 
         // WADs are immutable by content; the client caches by manifest hash.
         const headers = {
+            ...SECURITY_HEADERS,
             'content-type': MIME[extname(file)] ?? 'application/octet-stream',
             'content-length': st.size,
             'cache-control': prefix === '/wads/' ? 'public, max-age=31536000, immutable' : 'no-store',

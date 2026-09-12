@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A slim, modern DOOM port for the browser — vanilla-exact simulation, zero install, zero-config LAN multiplayer.">
+<meta name="theme-color" content="#000000">
 <title>webdoom</title>
 <link rel="stylesheet" href="css/webdoom.css">
 </head>
@@ -20,9 +22,14 @@
   <div id="countdown" hidden></div>
   <div id="overlay"><div id="status"></div></div>
   <div id="sw-update" hidden>
-    New version available — <button onclick="location.reload()">reload</button>
+    New version available — <button id="sw-reload">reload</button>
   </div>
 </main>
+<noscript>
+  <p style="color:#c0c0c0;font:14px system-ui;padding:24px">
+    webdoom needs JavaScript, WebAssembly and WebGL2. Nothing on this page works without them.
+  </p>
+</noscript>
 <script type="module" src="js/lobby.js"></script>
 </body>
 </html>
