@@ -66,6 +66,10 @@ have_wad()     { local w; for w in "${IWADS[@]}"; do [ -f "wads/lib/$w" ] || ret
 have_native()  { [ -x tools/native-sanitize/nat-doom ]; }
 have_fs()      { [ -x tools/freestanding/fs-doom ]; }
 have_zig()     { command -v zig >/dev/null 2>&1; }
+# The PINNED major, not merely 'a clang-format': output differs across majors,
+# so a different one would report violations that are not violations.
+have_clangfmt(){ command -v clang-format >/dev/null 2>&1 && \
+                 [ "$(clang-format --version | grep -oE '[0-9]+' | head -1)" = "22" ]; }
 have_qemuarm() { command -v qemu-arm-static >/dev/null 2>&1; }
 have_gcc()     { command -v gcc >/dev/null 2>&1; }
 have_browser() { command -v "${CHROME_BIN:-google-chrome-stable}" >/dev/null 2>&1 || [ -x /opt/google/chrome/chrome ]; }
@@ -80,6 +84,7 @@ need_reason() {   # need_reason <tag> -> prints why it is unmet
         native)   echo "nat-doom absent (run: make -C tools/native-sanitize)" ;;
         fs)       echo "fs-doom absent (run: make -C tools/freestanding)" ;;
         zig)      echo "zig not on PATH (needed to cross-build for ARM)" ;;
+        clangfmt) echo "clang-format 22 not present (have: $(command -v clang-format >/dev/null 2>&1 && clang-format --version | grep -oE '[0-9]+' | head -1 || echo none))" ;;
         qemuarm)  echo "qemu-arm-static not on PATH" ;;
         gcc)      echo "gcc not on PATH" ;;
         browser)  echo "Chrome not found (set CHROME_BIN)" ;;
@@ -92,7 +97,7 @@ need_reason() {   # need_reason <tag> -> prints why it is unmet
 need_met() {
     case "$1" in
         build) have_build ;; wad) have_wad ;; native) have_native ;; gcc) have_gcc ;; fs) have_fs ;;
-        zig) have_zig ;; qemuarm) have_qemuarm ;;
+        zig) have_zig ;; qemuarm) have_qemuarm ;; clangfmt) have_clangfmt ;;
         browser) have_browser ;; firefox) have_firefox ;; emsdk) have_emsdk ;;
         baseline) have_baseline ;;
         *) return 1 ;;
@@ -255,7 +260,12 @@ echo "logs: $LOGDIR"
 # ── tier: quick ──────────────────────────────────────────────────────────────
 # Everything here runs on a bare clone: no WADs, no build, no browser.  This is
 # the tier a public CI can actually run (task 24.3).
-leg lint            -    "clang-format + JS syntax + pipe-exit rule" -- bash tools/lint.sh --require-c
+# Split so a host without the PINNED clang-format still runs the JS half as a
+# real gate, and has the C half reported as a counted SKIP with its reason,
+# rather than both folded into one green "lint: OK".  Public CI is exactly
+# that host (task 24.3).
+leg lint-js         -        "JS syntax + pipe-exit rule + exec bits" -- bash tools/lint.sh --js-only
+leg lint-c          clangfmt "clang-format over the web layer"        -- bash tools/lint.sh --c-only --require-c
 leg doc-drift       gcc  "doc figures == claims.json == script output" -- bash tools/archaeology/verify-all.sh
 leg state-machine   -    "lobby edge<->test coverage (static)"      -- node tools/check-state-machine.mjs
 leg sw-precache     -    "sw.js SHELL list <-> app-shell imports"   -- node tools/check-sw-precache.mjs

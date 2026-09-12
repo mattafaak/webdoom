@@ -54,22 +54,38 @@ the game/map/skill/mode; anyone hits START; 3-2-1, everyone's in.
 ## Tests
 
 ```sh
-tools/run-tests.sh
+tools/run-tests.sh            # everything: 74 legs, ~15 min
+tools/run-tests.sh --quick    # no WADs, no build, no browser — what CI runs
+tools/run-tests.sh --list     # the leg registry
 ```
 
+Each leg is isolated: one red does not hide the rest, and the run ends with a
+table naming every leg, its verdict and the count it reported about itself. A
+leg whose prerequisites are absent is a SKIP **with its reason**, counted in
+that table, and `--require-complete` turns any skip into a failure.
+
+**What CI covers.** Game data is not distributable, so the GitHub runner has no
+IWADs and runs the `--quick` tier — lint, the doc-drift gate, the state-machine
+and precache checks, the gate census, and the three fuzz suites. Everything that
+needs a WAD, a built engine or a browser (the sim and render goldens, netplay,
+the ASan and cross-architecture legs, the 19 browser legs) runs locally and says
+so. The workflow prints the list it did not cover.
+
 - **lint**: clang-format over the web platform layer + `node --check` over
-  all JS files — fails CI on any format drift or syntax error
+  all JS files — fails on any format drift or syntax error. The JS half runs
+  in CI; the clang-format half needs the pinned major and is reported as a
+  named SKIP where that is absent
 - **engine smoke**: boots real IWADs headless in node, plays the attract
   demo, renders OPL music, asserts life in framebuffer and audio
 - **demo compatibility**: all 13 built-in IWAD demos (Doom, Doom II, TNT,
   Plutonia) replayed headless; per-tic gamestate fingerprints pinned
-  against golden traces — a single diverging P_Random call fails CI at
-  the exact tic. The baseline is cross-validated tic-for-tic against an
+  against golden traces — a single diverging P_Random call fails the suite at
+  the exact tic. Needs IWADs, so it runs locally, not in CI. The baseline is cross-validated tic-for-tic against an
   instrumented Chocolate Doom (the vanilla reference):
   `tools/build-choco-reference.sh`, then
   `node tools/demo-test.mjs --cross <binary>` — 44,580 tics identical
 - **render goldens**: per-tic framebuffer hashes for all 13 demos — a
-  second CI gate that catches pixel-level render regressions. Exposed the
+  second gate that catches pixel-level render regressions (local; needs IWADs). Exposed the
   Tutti-Frutti latent out-of-window texture read (fixed, `dc_texheight`);
   render goldens are no longer heap-layout-sensitive after that fix
 - **netplay**: 2 and 4 real wasm clients through the real server; per-tic
@@ -83,8 +99,10 @@ tools/run-tests.sh
   gracefully — no unhandled rejections (`tools/browser-resilience-test.mjs`)
 - **lobby state-machine**: enumerated JS lobby states exercised against
   all specified transitions; impossible states guarded
-  (`tools/browser-lobby-test.mjs`; T07 menu-nav is a pre-existing timing
-  flake on some CI hosts — ~1/3 pass rate independent of this codebase)
+  (`tools/browser-lobby-test.mjs`. T07 menu-nav was a timing flake at ~1/3 pass
+  rate; fixed in 9ed9671 by a 3-attempt retry of the MP-open action with the
+  assertion unweakened, 20/20 on a fresh profile. The original cause was /tmp
+  exhaustion from orphaned Chrome processes, not this codebase.)
 - **native ASan/UBSan**: `tools/native-sanitize/` builds the engine for
   the native host with AddressSanitizer and UndefinedBehaviorSanitizer;
   runs the demo suite to surface OOB reads invisible in wasm

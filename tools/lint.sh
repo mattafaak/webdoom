@@ -21,13 +21,23 @@ cd "$REPO_ROOT"
 
 FIX=0
 REQUIRE_C=0
+DO_C=1
+DO_JS=1
 for a in "$@"; do
     case "$a" in
         --fix)       FIX=1 ;;
         --require-c) REQUIRE_C=1 ;;
-        *) echo "lint: unknown argument '$a' (expected --fix or --require-c)" >&2; exit 2 ;;
+        # Split halves, so a host without the pinned clang-format can still run
+        # the JS half as a real gate and have the C half reported as a counted
+        # SKIP rather than silently folded into one green "lint: OK".
+        --c-only)    DO_JS=0 ;;
+        --js-only)   DO_C=0 ;;
+        *) echo "lint: unknown argument '$a' (expected --fix, --require-c, --c-only or --js-only)" >&2; exit 2 ;;
     esac
 done
+if [ "$DO_C" = "0" ] && [ "$DO_JS" = "0" ]; then
+    echo "lint: --c-only and --js-only together would check nothing" >&2; exit 2
+fi
 
 ERRORS=0
 C_CHECKED=0   # did the C formatting check actually run?
@@ -38,7 +48,9 @@ C_CHECKED=0   # did the C formatting check actually run?
 
 PINNED_MAJOR=22
 
-if ! command -v clang-format >/dev/null 2>&1; then
+if [ "$DO_C" = "0" ]; then
+    C_CHECKED=1   # not this leg's job; the other half owns it
+elif ! command -v clang-format >/dev/null 2>&1; then
     echo "lint: SKIP: clang-format not found — C formatting checks did NOT run"
 else
     CF_VERSION="$(clang-format --version | grep -oP '\d+' | head -1)"
@@ -80,6 +92,9 @@ fi
 # JS syntax check via node --check
 # ---------------------------------------------------------------------------
 
+if [ "$DO_JS" = "0" ]; then
+    JS_FILES=()
+else
 JS_FILES=(
     client/js/*.js
     client/sw.js
@@ -92,8 +107,10 @@ if [ "$FIX" = "1" ]; then
     echo "lint: node --check (no auto-fix for JS syntax errors)"
 fi
 
+fi
+
 NODE_FAIL=0
-for f in "${JS_FILES[@]}"; do
+for f in ${JS_FILES[@]+"${JS_FILES[@]}"}; do
     if ! node --check "$f" 2>/tmp/node-check-err; then
         echo "lint: FAIL node --check $f"
         cat /tmp/node-check-err
@@ -103,7 +120,7 @@ done
 
 if [ "$NODE_FAIL" = "1" ]; then
     ERRORS=1
-else
+elif [ "$DO_JS" = "1" ]; then
     echo "lint: node --check OK (${#JS_FILES[@]} files)"
 fi
 
@@ -115,7 +132,7 @@ fi
 # times here; this keeps it from coming back through a committed script.
 # ---------------------------------------------------------------------------
 
-if ! node "$REPO_ROOT/tools/check-pipe-exit.mjs"; then
+if [ "$DO_JS" = "1" ] && ! node "$REPO_ROOT/tools/check-pipe-exit.mjs"; then
     ERRORS=1
 fi
 
@@ -131,6 +148,7 @@ fi
 # atomic-rewrite helper that did not preserve the mode.
 # ---------------------------------------------------------------------------
 
+if [ "$DO_JS" = "1" ]; then
 BARE=$(grep -oE '(^|[^a-zA-Z/.])tools/[a-z0-9/-]+\.sh' README.md \
        | grep -oE 'tools/[a-z0-9/-]+\.sh' | sort -u)
 BARE_BAD=0
@@ -153,6 +171,7 @@ elif [ "$BARE_N" -eq 0 ]; then
     ERRORS=1
 else
     echo "lint: exec bit OK ($BARE_N bare-invoked script(s) in README)"
+fi
 fi
 
 # ---------------------------------------------------------------------------

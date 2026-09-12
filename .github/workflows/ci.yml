@@ -1,0 +1,87 @@
+# webdoom CI — the tier a clone can actually run.
+#
+# WHY THIS FILE EXISTS AND WHAT IT DOES NOT DO
+# --------------------------------------------
+# README.md said "fails CI" three times and docs/engine-archaeology.md said "CI
+# enforces it on every push".  There was no CI: "CI" meant a human running
+# tools/run-tests.sh on the dev box.  A reader could not tell the difference,
+# which is doc drift by spec.md's own tenet 6 (a promise without a gate).
+#
+# The honest fix is not a workflow that pretends to run everything.  Game data
+# is not distributable, so a public runner has no IWADs — and without IWADs the
+# marquee gates (13 sim goldens, 5 render golden families, netplay, drop-in,
+# the browser suite, the ASan and freestanding legs) cannot run AT ALL.  This
+# runs the --quick tier, which is every leg that needs no WAD, no build and no
+# browser, and the summary step below states plainly what it did not cover.
+#
+# The full 74-leg suite still runs on a host with the WAD library, a built
+# engine and Chrome:  bash tools/run-tests.sh --require-complete
+# To have CI run it too, add a self-hosted runner with those prerequisites and
+# a second job with `runs-on: self-hosted`; nothing else changes.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  quick:
+    name: quick tier (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20 is the floor README states; 24 is current.  The dev box runs 26.8.1,
+        # so the matrix brackets it rather than matching it — a suite that only
+        # ever runs on one Node version cannot tell a code bug from a runtime
+        # change, which is what task 22.3 was about.
+        node: ['20', '24']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install the server dependency
+        run: cd server && npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
+      - name: Show what this runner has
+        run: |
+          echo "node       $(node --version)"
+          echo "gcc        $(gcc --version | head -1)"
+          echo "python3    $(python3 --version)"
+          echo "clang-format $(command -v clang-format >/dev/null && clang-format --version || echo '(absent)')"
+          echo "IWADs      $(ls wads/lib/*.wad 2>/dev/null | wc -l) present"
+
+      - name: Leg registry
+        run: bash tools/run-tests.sh --list
+
+      - name: Quick tier
+        run: bash tools/run-tests.sh --quick
+
+      - name: What this job did NOT run
+        if: always()
+        run: |
+          {
+            echo '## Not covered by this job'
+            echo
+            echo 'Game data is not distributable, so this runner has no IWADs.'
+            echo 'These gates need one and did **not** run here:'
+            echo
+            echo '- 13 sim goldens, and 5 render golden families (65 more comparisons)'
+            echo '- the wide/sim-invariance, fakeflat, potato, sbskip and diffblit toggles'
+            echo '- netplay 2p/4p, drop-in, spectator, churn, mixed-width'
+            echo '- the differential fuzzer and the adversarial ASan map gate'
+            echo '- the freestanding and 32-bit-ARM cross-architecture legs'
+            echo '- the 19 browser legs and the browser-pipeline baseline'
+            echo '- three colormap verifier families inside doc-drift (it reports this itself)'
+            echo
+            echo 'Run the whole thing on a host that has them:'
+            echo '```'
+            echo 'bash tools/run-tests.sh --require-complete'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

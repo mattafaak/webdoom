@@ -112,8 +112,21 @@ catch(e) { console.log(JSON.stringify(a)); }
 capture_run "source-constant (40 claims)" \
     node tools/archaeology/source-constant-verify.mjs
 
-capture_run "wad-data (23 claims)" \
-    node tools/archaeology/wad-verify.mjs
+# wad-data needs an IWAD.  Game data is not distributable, so on a fresh clone
+# its absence is an EXPECTED condition, not a defect -- the one case where a
+# skip-on-missing is legitimate.  It is COUNTED and named like the colormap
+# families below, so "the WADs are not here" can never read as "these 23 claims
+# were checked".  wad-verify.mjs itself stays strict: run directly without a
+# WAD it still errors, which is right on a dev box.
+if [ -f "wads/lib/doom.wad" ]; then
+    capture_run "wad-data (23 claims)" \
+        node tools/archaeology/wad-verify.mjs
+else
+    echo ""
+    echo "SKIP  wad-data: wads/lib/doom.wad not found (23 claims)"
+    FAMILIES_SKIPPED=$((FAMILIES_SKIPPED + 1))
+    SKIPPED_NAMES="${SKIPPED_NAMES:+$SKIPPED_NAMES, }wad-data"
+fi
 
 capture_run "recipe-crack / finesine-stats (3 claims: ea-001..003)" \
     node tools/archaeology/finesine-stats.mjs

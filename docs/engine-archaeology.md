@@ -7,7 +7,8 @@ canon and, where it feeds the simulation, against the demo traces.
 
 Every quantitative figure in this document has a reproducer listed in
 `docs/claims-index.md`. Run `bash tools/archaeology/verify-all.sh` to
-regenerate and cross-check all 105 fast-gate figures; CI enforces it on
+regenerate and cross-check every fast-gate figure (the count is computed by
+tools/archaeology/claims-summary.mjs, not written here); CI enforces it on
 every push.
 
 ## 1. Trigonometry tables — CRACKED, regenerated at boot
