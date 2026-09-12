@@ -377,3 +377,98 @@ Named so the next pass does not have to rediscover the scope:
   `gate-census`'s name heuristic cannot see either. `browser-pipeline` gates one
   host — alder, of which spec.md's own table says "fast here proves nothing".
   This is the largest spec-vs-reality gap in the repo.
+
+# Planning round 6 (2026-09-12) — the other half: the program itself
+
+Round 5 was a gate-integrity round: it worked on `tools/`, CI, the ledger
+counts, and three server fixes. Re-verified against `9f2bfce`, **all 32
+client/server findings from the original audit were still present**. This
+round is the other half, plus the gate and document holes round 5 did not
+reach.
+
+Three scope decisions, taken with the user before any work:
+
+- **The perf gate gets an opt-in tier and an honest SKIP**, not a full-tier
+  leg — it is runnable today, and it is ~26 s, but it needs wbox and tank up.
+- **Restructuring is limited to `lobby.js`'s reset paths**, the one structure
+  that had already caused a real bug. `bootDoom()` and `serve.js`'s request
+  handler got local fixes only.
+- **No campaign work.** 20.4d / 20.5a / 20.6b stay the tail.
+
+Baseline at the end of the round: **89 legs, 88 passed, 0 failed, 1 skipped**
+(`perf-fleet`, by design, with its reason named and counted); 19.4 min of leg
+time with the N64 toolchain sourced. `--perf --only perf-fleet`: **9
+comparisons across 3 hosts, none beyond 20%**.
+
+## Phase K: gate holes round 5 did not reach
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| K1–K5, K9 | A claim whose family never ran returned PASS (31 fast claims took that path in CI); `size-ledger` omitted from `fullFamilies`; a skip line that overwrote its own predecessor; `gzip \| wc -c` under `/bin/sh` returning **0 as a measurement**; two fuzz verdicts quoting their CLI argument; lint scope narrow by accident | `--require-script-values`; 136 families; the pipe removed (byte-identical, 147,308 / 3,762); verdicts quote the result arrays; empty corpus is FAIL; lint sees `tools/archaeology/*.mjs` (93→112 files) and ratchets the C scope | cc:完了 |
+| K6, K7 | `assert_port_owned` returned 0 with a printed "note" nothing counted; two readiness polls proceeded regardless; `$SUMMARY` died with the `mktemp -d` the EXIT trap deletes | notes counted; both polls fail closed; `tools/.suite-logs/last-run.tsv` persists the per-leg table | cc:完了 |
+| K8 | The census could not see `bench.mjs` or `fleet-bench.sh`, so it could never report the spec's perf gate as orphaned; `refsIn()` missed the `$SCRIPT_DIR/` sibling form | `GATEISH` gains `bench`; sibling form matched; `be-check.sh` removed from the out-of-suite registry | cc:完了 |
+
+## Phase L: the perf gate spec.md has required since it was written
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| L1–L3 | `spec.md:55-59` makes the fleet perf gate mandatory and no leg existed | `--perf` tier + `perf-fleet`; `fleet-bench.sh --check` (does NOT write the baseline); tolerance 20% **on evidence** — guessed 20%, measured ±3.7%, tried 10%, went intermittently red on tank, settled back with the rejection recorded. Proven twice: SKIP with its reason in the default tier, 9 comparisons under `--perf` | cc:完了 |
+
+## Phase G: resource lifetime
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| G1, G2 | `menu.js`'s 250 ms blink ran a `querySelector` through every frame of GAMEPLAY; `countdown.dismiss()`'s 2.5 s background-tab safety net could not be cancelled by `reset()` | blink follows visibility; the timeout is held and cancelled. `browser-teardown` gains **live timers** and **wasm instances**, plus a DURING-PLAY reading — the growth check cannot see a timer created once and never stopped | cc:完了 |
+| G6, G7 | `session.history` had no ceiling — measured **266 bytes retained per 38-byte bundle**, 7× the figure `netcode.md` quotes, ~34 MB/hour; `uiAssets()` cached forever, so an operator adding a WAD needed a restart | capped at `WEBDOOM_MAX_HISTORY_TICS` with drop-in and spectate REFUSING past it (a prefix desyncs silently); ui-assets keyed per file. Both gated with control arms | cc:完了 |
+| G3, G4, G5 | **NOT defects, measured not assumed.** `lobby.js` IS the page; `fire.destroy` has no caller anywhere; the wasm instance IS released — 3 built across 3 boots, 1 reachable after a full GC | recorded in the commit and in the gate's own output | cc:決定 |
+
+## Phase H: inputs that were still not validated
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| H1–H4 | localStorage is user input and `loadSettings` validated none of it; `binds` replaced wholesale rendered "undefined" on a button with no way back; Reset defaults called no appliers; rebinding took Escape as a binding, had no timeout and no conflict handling | a SCHEMA with per-key type/range/enum; per-action bind merge; `applyAll()`; Escape cancels, 8 s timeout, conflicts swap. New leg **`browser-settings`**, red-proofed at 12 failures. Closes the rebind half of `rme-004` | cc:完了 |
+| H5, H6 | `stackFor()` returns `[]` for an unknown WAD and `bootDoom` read `wads[0].file`; the server never checked `params.wad` against its own library and cast it to every client | server refuses a name it does not serve (default refuses ALL changes); client refuses with a stated reason. Red-proof: `nope.wad`, `....etcpasswd`, `.` and `..` reaching every client | cc:完了 |
+| H7–H9 | `/api/ui-assets` 404s with plain text when there is no IWAD and `.json()`'s SyntaxError was reported as "cannot reach server"; `(sel + n - 1) % n` is NaN on an empty screen, reachable through `mapPick()`; `addAll` is all-or-nothing and one 404 disabled offline mode silently | `res.ok` + a named reason; NaN guarded with Escape/Backspace handled first; per-file precache via `allSettled`. Three new `browser-resilience` subtests | cc:完了 |
+| H10 | The file registry no-op'd silently at `MAXWEBFILES`, so `W_WebFile` re-malloc'd the same file on every lookup | returns 1/0, `W_WebFile` frees and returns NULL, `web.h` says so. New leg `web-registry`: capacity, refusal, **and that the refusal is stable across retries** — the leak was a repeat. `web_seek_demo`'s unclamped `targetTic` is an EXISTING documented contract; `web_demo_stop`'s marker write was never reachable past `demoend - 16`. The real ceiling — 15.6 min of recording ends the session — is now in `formats.md` | cc:完了 |
+
+## Phase J: delete, then de-duplicate
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| J1, J2 | Zero-caller exports; `.drop-hover` toggled since WAD import shipped with NO CSS rule, so drag-and-drop had zero visual feedback | six deletions; `setDmxgus`/`musToMidi` KEPT and labelled as the seam `decision-17.3` names, with `spec.md` amended to "GREEN-LIT AS A DESIGN; NOT WIRED". **The deletion found a defect**: the dead `canvas.truncated` flag, made loud, showed the decoder calling 24 of doom.wad's 63 STCFN glyphs malformed — an off-by-one on a one-byte terminator | cc:完了 |
+| J3 | Four IndexedDB open dances, six `#status` idioms, three teardown ledgers | `client/js/idb.js` (adds the `onblocked` rejection none of the four had) and `client/js/ui.js`; both precached | cc:完了 |
+| J4, J5 | `try { ws.terminate(); } catch {}` fifteen times, only eight with the `'error'` listener whose absence ENDS THE PROCESS; five constants written twice across the wire | `refuse()`, `capped()`, `burstHistory()`, `cleanName()`; new leg `wire-constants`. The helper was wrong twice first — not idempotent under a flood, and `log` out of scope at one site — both caught by the existing gate | cc:完了 |
+| J6 | `EXPORTED_FUNCTIONS` named 64 symbols against 72 KEEPALIVE exports | **measured**: full list vs `_main,_malloc,_free` is byte-identical (`b1640770…`/`592ee0ba…`), so 61 were inert. Reduced, with the measurement recorded above LDFLAGS | cc:完了 |
+| J7 | Seven partly-overlapping reset-on-failure paths in `lobby.js` — the one approved refactor | one `resetToLauncher(reason)`; every step idempotent; `lobby` nulled BEFORE close() for all callers, which only `leaveLobby` used to do | cc:完了 |
+
+## Phase I: the launcher was unusable without a mouse
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| I1 | The settings panel was a bare `<div>`: no role, no modality, no label, no focus handling, Escape did not close it — and only the POINTERLOCK handler consulted it, so game keys reached the ENGINE behind it | a real dialog with focus move/restore and a Tab trap; `input.js` blocks game keys while it is open. Gated by counting engine input events: **0 while open, 6 while closed** | cc:完了 |
+| I2 | Seven ARIA lines in the whole client; zero `:focus` rules; `#status:empty { display: none }` took the live region out of the accessibility tree; `#qol-fullscreen` was an invisible tab stop | `role=status`/`aria-live`, `role=progressbar` with a moving `aria-valuenow`, a real `role=menu` with roving tabindex, `:focus-visible`, the scrubber strip marked decorative | cc:完了 |
+| I3 | The launcher's own startup showed nothing; WAD fetch was serial; a compressed response reported 0% for its whole duration | `loading` moved to `ui.js` and shown during launcher boot; parallel fetch behind one aggregate bar; **indeterminate** instead of a false 0% | cc:完了 |
+| I4 | `prefers-reduced-motion` was half-kept and wholly ungated | the stylesheet's first `@media` block; `browser-fire` arm (f) under `--force-prefers-reduced-motion`, asserting the query reads true and the frame is static AND non-blank. **Closes `spc-003`** | cc:完了 |
+
+## Phase M and N: documents, and the front door
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| M2–M4, M6 | `decision-18.1` §9 listed four open handoff items with three long closed; the ledger's Totals line had two of four figures wrong; a closed FINDING-4 residual; `[this commit]` ×4; undefined `cc:`/`tdd:skip:` vocabularies | each verified against the code, not the prose; hashes resolved; a marker legend written | cc:完了 |
+| M5, M7 | Published leg counts (README 81, ci.yml 81, "19 browser legs") were stale against 89 and 21; the ledger totals were typed; a decision record could contradict its own addendum | `promises-index` rule 6 (anchored to the whole-registry phrasings, so ci.yml's true "12 legs run" does not trip it); `status-drift` rules 3 and 4 | cc:完了 |
+| N1, N2 | `spec.md` never said what the product IS — spectators, permalinks, the scrubber, the CLI, WAD import, persistence, five render variants, the N64 leg, CI, the gate machinery and teardown all ship and were unmentioned. Edge and the insecure-origin leg had been re-flagged for months | a "What ships" table, 18 rows, gated by `promises-index` rule 7 (52 gate names resolve); Edge settled as a CHROMIUM promise, untested by policy; the insecure-origin clause corrected — CI *cannot* run it, and says so itself | cc:完了 |
+| N3 | No CONTRIBUTING, no SECURITY, no issue template, an unreferenced screenshot, 486 lines of closed task tables at the repo root | all four written; archives moved to `docs/` and indexed; the merged `round4-gate-integrity` branch deleted; the GitHub description's drifting size figure removed rather than corrected — a number in a repo setting is outside every gate | cc:完了 |
+
+## What this round did NOT do
+
+- **20.4d / 20.5a / 20.6b** — the campaign tail, deliberately untouched.
+- **`bootDoom()` (294 lines) and `serve.js`'s request handler (204 lines)** —
+  local fixes only, by decision. Both are still long.
+- **The analog twin-stick gamepad path** (`rme-004`) — a headless runner has no
+  stick, and a synthetic `Gamepad` would gate the shim rather than the path.
+- **Firefox asserts no rendered frame** (`rme-002`) — unchanged, and stated.
+- **`perf.md`'s claim locators were already ~23 lines stale** before this round
+  shifted them by +17; the ±35-line window absorbs it. Pre-existing, recorded,
+  not fixed.
+- **`tools/lint.sh` cannot see inside `python3 - <<'PY'` heredocs**;
+  `fleet-bench.sh` has a 206-line one.
