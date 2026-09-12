@@ -230,16 +230,31 @@ SERVERS=()
 # Answering on the port is not the same as being OUR server: a stale process from
 # an earlier run answers just as well, and serves a different build.  So the port
 # is checked for OWNERSHIP, not just for a response (task 21.7).
+# Both non-verification paths used to `return 0` after printing a "note", and
+# nothing anywhere counted notes -- so on a container without iproute2 the
+# 12.2b stale-server protection was silently off for the whole browser suite
+# and the run still read as fully verified. The two cases are not the same and
+# no longer get the same treatment:
+#
+#   ss missing          -> genuinely cannot verify. Counted in NOTES and
+#                          reported in the summary, so it is visible.
+#   ss present, no owner -> we started a server and nothing is listening on its
+#                          port. That is a failure, not a note.
+NOTES=0
+NOTE_TEXT=()
+note() { NOTES=$((NOTES + 1)); NOTE_TEXT+=("$1"); echo "  note: $1"; }
+
 assert_port_owned() {   # assert_port_owned <port> <pid>
     if ! command -v ss >/dev/null 2>&1; then
-        echo "  note: ss not available — port ownership NOT verified for $1"
+        note "ss not available — port ownership NOT verified for $1 (install iproute2)"
         return 0
     fi
     local owner
     owner="$(ss -tlnpH "sport = :$1" 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)"
     if [ -z "$owner" ]; then
-        echo "  note: no listener found for port $1 in ss output — ownership NOT verified"
-        return 0
+        echo "  port $1: ss sees no listener, but we just started a server on it"
+        echo "  the server is not up, or it bound a different address — either way this is not verified"
+        return 1
     fi
     [ "$owner" = "$2" ] && return 0
     echo "  port $1 is held by pid $owner, not the server we started (pid $2)"
@@ -565,9 +580,26 @@ while IFS=$'\t' read -r id verdict secs note; do
 done < "$SUMMARY"
 echo "  ────────────────────────────────────────────────────────────────────────────"
 
+# ── persist the per-leg table ────────────────────────────────────────────────
+# $SUMMARY lives in the mktemp dir the EXIT trap deletes, so the SECS column --
+# the only per-leg timing this project produces -- died with every run. The one
+# timing table that exists in the repo is in a doc, because a human pasted it
+# there. Keep the last run's, next to the failing-leg logs.
+mkdir -p "$REPO/tools/.suite-logs"
+{
+    printf '# webdoom suite — %s, tier %s, host %s\n' "$(date -Is)" "$TIER" "$(hostname)"
+    printf '# leg\tverdict\tsecs\theadline\n'
+    cat "$SUMMARY"
+} > "$REPO/tools/.suite-logs/last-run.tsv" 2>/dev/null || true
+
 TOTAL=$((PASSED + FAILED + SKIPPED))
 printf '  %d legs: %d passed, %d failed, %d skipped  (tier: %s)\n' \
        "$TOTAL" "$PASSED" "$FAILED" "$SKIPPED" "$TIER"
+if [ "$NOTES" -gt 0 ]; then
+    printf '  %d note(s) — something could not be verified:\n' "$NOTES"
+    printf '    %s\n' "${NOTE_TEXT[@]}"
+fi
+printf '  per-leg timings: tools/.suite-logs/last-run.tsv\n'
 
 # A run that executed no legs is not a pass — the shape this whole round exists
 # to remove (failure mode #3).

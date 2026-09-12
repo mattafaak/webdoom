@@ -35,6 +35,17 @@ for _ in $(seq 1 40); do
     curl -fsS -o /dev/null "http://127.0.0.1:$PORT/" 2>/dev/null && break
     sleep 0.25
 done
+# A poll that proceeds anyway is a sleep with extra steps.
+#
+# This loop broke on success and then fell straight through on failure, so a
+# server that never came up was measured against regardless -- exactly the
+# 12.2b shape (a stale or absent server served to the collector), in the two
+# files that own their own ports and never took the runner's
+# assert_port_owned. Fail closed, and say which port.
+if ! curl -fsS --max-time 3 -o /dev/null "http://127.0.0.1:${PORT}/" 2>/dev/null; then
+    echo "FAIL browser-pipeline: server on ${PORT} never became ready — nothing was measured" >&2
+    exit 1
+fi
 
 node tools/browser-pipeline.mjs --url "http://127.0.0.1:$PORT/" --json > "$CURRENT"
 kill "$SRV" 2>/dev/null; wait "$SRV" 2>/dev/null || true
