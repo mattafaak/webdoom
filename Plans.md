@@ -472,3 +472,88 @@ comparisons across 3 hosts, none beyond 20%**.
   not fixed.
 - **`tools/lint.sh` cannot see inside `python3 - <<'PY'` heredocs**;
   `fleet-bench.sh` has a 206-line one.
+
+# Planning round 7 (2026-09-12) — strip it to single player, deathmatch and WADs
+
+The owner's brief: cut the features that are not core DOOM, and get rid of the
+F8 settings overlay by folding its settings into the main menu. Three menu
+systems met the player — the launcher's DOOM-idiom menu, the engine's own `M_*`
+menu, and an F8 HTML dialog belonging to neither and the only way to reach any
+web-side setting. Widescreen and the Panini remap were opt-in render modes the
+owner did not use and did not like the look of.
+
+Five scope decisions, taken with the owner before any work:
+
+- **The settings go on the LAUNCHER menu**, not into `m_menu.c`. Mid-game
+  changes are given up deliberately; Escape still reaches DOOM's own menu for
+  volume, detail and screen size.
+- **Widescreen comes out of the C engine too**, not just the UI.
+- **The four QoL DOM overlays go.** The GM SoundFont backend, OPL3, the
+  launcher fire, the countdown, spectators, drop-in, WAD import, the demo
+  record/share/scrubber, the retro side-quest dirs and the four compile-time
+  render variants all **stay**.
+- **The GM fallback banner moves to the OPTIONS row** rather than the backend
+  being deleted.
+- **The demo attestation endpoint goes** — a CLI workflow wired into the live
+  multiplayer server with no product caller.
+
+Baseline at the end of the round: **83 legs** (was 89), **19 browser** (was 21).
+
+## Phase P: the OPTIONS screen
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| P1 | The F8 overlay (`client/js/settings.js`, 265 lines) was the only way to reach any web-side setting, and it belonged to neither menu | deleted; OPTIONS + CONTROLS screens on the launcher, built from `optionsPick()`'s existing shape. `padDeadzone` gains a control — it was in the schema with none, reachable only by hand-editing localStorage while the comment above `SCHEMA` claimed the bounds "match the panel's own controls" | cc:完了 |
+| P2 | Rebinding lived inside `createInput()`'s keydown closure, which needs a `doom` and a canvas — neither exists on the launcher | `captureBind(settings, actionId, onDone)` extracted; `createInput` LOSES `capture`, `captureTimer`, `startCapture`, `cancelCapture`, `capturing()` and the `panelOpen()` check. The in-game input path got smaller | cc:完了 |
+| P3 | `menu.js` had no key-capture affordance, and two defects were waiting in adding one | `capture` item type. **Armed on keyup**: a HELD Enter binds Enter otherwise — measured, `AUTOMAP: ENTER`. A single tap cannot show it (a listener added during dispatch does not receive that event), so the gate presses and holds. **Capture-phase + `stopPropagation`**: otherwise the menu's own bubble listener still moves the cursor. Both red-proofed | cc:完了 |
+| P5 | 9 rows tripped `menu.js`'s multi-column wrap (meant for Doom II's 32 maps), CONTROLS' 12 rows then ran off the bottom behind a scrollbar, and the OPTIONS header ran off both edges | `nowrap` screen flag; row height follows the chosen scale through `--rowh`/`--skullw` instead of a hard 60 px; the header is fitted to width like everything else. Found by looking at the screen, which is the only instrument for this | cc:完了 |
+| P4 | `browser-settings` (28 assertions) drove a dialog that no longer exists | `browser-options`, **34 assertions**, every old one mapped or replaced. The one that could not port — "0 engine key events while the dialog is open" — became structural (no wasm instance exists on the launcher) plus its real successor: the key bound on OPTIONS is pressed in a running level and the engine must receive `DK.UP`. That assertion first read 0 because `web_ui_mode()` passes printable keys through as characters at the title screen — it drives into a level now | cc:完了 |
+
+## Phase Q: widescreen and Panini, engine included
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| Q1 | Panini: a fragment-shader remap, off by default, outside every golden | deleted from `video.js`, `main.js`, `input.js`; `wide-utils.js` deleted | cc:完了 |
+| Q2 | Widescreen was projection surgery across eight core files: `centerxfrac_nonwide`, `anchor_offset`, `ST_FillFlatFlanks`, `WIDESCREENDELTA` on every HUD widget, a runtime `screenwidth`, and `MAXSCREENWIDTH` 854 sizing every per-column static array | reverted in four layers, goldens checked at each. **All six families byte- or pixel-identical, 13 demos, no regold**: `sim-goldens`, `render-goldens`, `render-low`, `render-fakeflat`, `render-potato`, `render-sbskip`, `render-diffblit`. `renderer.resize()` lost its last caller and went too | cc:完了 |
+| Q3 | The revert needed a reference that was not self-consistency | `claims.json` `perf-009` had recorded **4,722,016 B** as the measured `__heap_base` for a rebuild at 320. The revert landed **4,722,048** — 32 B — so what came out was widescreen and nothing else. `doom.wasm` 357,060 → 355,893 B, README 349 → 348 KB | cc:完了 |
+| Q4 | `sprite-witness` pinned the vanilla cull `abs(tx) > (tz<<2)` and its own header said only the 854 arm could see a tightened cull | **tested before deleting**: with the cull at `tz<<1`, **10 of 13 render goldens fail at 320**, first divergence plutonia-demo3 tic 169. The pin was redundant, not load-bearing. Leg, tool and both witness goldens deleted, with the experiment recorded | cc:完了 |
+| Q5 | Six legs, 14 goldens and five typed counts to retire | `render-wide`, `sim-wide`, `browser-wide`, `mixed-width-net`, `sprite-witness`, `browser-qol` gone; `--render-wide`/`--sim-wide` removed from `demo-test.mjs`'s **allowed-flag list** as well as its mode table, so a stale invocation fails (rc=2) instead of silently running the sim suite; `bench.mjs --wide`, `tools/wide-experiment/`, and the `-DMAXSCREENWIDTH=320` flags the n64 and rp2040 Makefiles were already passing | cc:完了 |
+
+## Phase R: deletions
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| R1 | The four QoL DOM overlays (`qol.js`, 215 lines) — crosshair, level stats, demo timer, hover fullscreen button, all off by default | deleted with their CSS, their leg, their four settings keys and the orphaned `web_level_state` export. The `prefers-reduced-motion` block kept `#loading-fill` rather than being emptied, which would have dropped the CSS half of `spc-003` | cc:完了 |
+| R2 | `web-contract` could not catch R1: `if (!def) continue` skips a declaration it cannot pair, so deleting a function and leaving its `web.h` declaration passes silently | rule 3 — every declaration must resolve to a definition under `engine/`. Red-proofed in one line. 12 of the 21 declarations are ordinary C functions, which is why the skip existed | cc:完了 |
+| R3 | `POST/GET /api/demos/:id/verify` and the attestation store (~190 lines) had no caller in `client/` at all | deleted from `serve.js` and `demo-store.js` (220 → 120 lines). `demo-store-fuzz` 43 → 27 checks; the old test reds at rc=1 against the stripped server. Its eviction/TTL half was KEPT — nothing else in the suite drives either, and deleting the section wholesale because its headline feature went would have taken that with it | cc:完了 |
+
+## Phase S: the reports, and two defects found on the way
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| S1 | The GM fallback banner: `audio.js` called `setStatus('music: OPL fallback (GM soundfont unavailable)')` for an ordinary configured state, and `#status` has no timeout — so it sat over the game for the whole session, every session | the reason renders on the OPTIONS MUSIC row (`GM - NO SF2` / `GM - NO SYNTH URL`); the banner is kept only for the genuine failure, SpessaSynth fetched and thrown. `browser-sf2` gate 5 asserted the banner was PRESENT behind a `console.warn` escape hatch that could not fail; it asserts its ABSENCE now, red-proofed | cc:完了 |
+| S2 | **Found while re-shooting the README image**: every first-time visitor was told "New version available — reload". `sw.js` calls `skipWaiting()` + `clients.claim()`, so a brand-new worker claims the already-loaded page and fires `controllerchange` — which the banner read as an update. It has no old version | the banner tests whether a controller existed BEFORE registration. Proven by effect: same harness, same fresh profile, banner present before and absent after | cc:完了 |
+| S2b | `browser-teardown` counted `#settings` panels — a selector that can no longer match, so it read "ok  #settings panels: 0" while measuring nothing | the counter removed rather than left green; headline re-derived, 6 dimensions → 5 | cc:完了 |
+| S3 | Bookkeeping: six gates fail without it | leg counts in README ×2 and ci.yml ×2; `spec.md` "What ships" rows; the widescreen decision record rewritten as a reversal; `decision-18.1` archived (its §5 arithmetic is what Q3 was checked against, and `status-drift` rule 4's only handoff claim lives in it); `rdr-004` 54,656 → 20,480 in five places; `perf-009`/`perf-059`/`readme-001`/`size-004` restamped; five ledger md5s; `docs/state-machine.md` 25 → 29 edges; `sw.js` SHELL v13 → v14 | cc:完了 |
+| S4 | `spec.md`'s "render-side, opt-in" row was about to become an unbacked promise: `sim-wide` was the only leg proving a render option cannot reach the playsim, and freelook and interpolation are the survivors of that class | FLAGGED as `spc-011` with what would close it, rather than left reading as gated. `demo-test.mjs` pins `_web_set_smooth(0)` before every run, so the golden families are blind to both | cc:決定 |
+
+## What this round did NOT do
+
+- **A `sim-smooth` leg.** Recommended by the architecture pass and not taken:
+  it is new gate work, not a deletion, and it was outside the approved scope.
+  `spc-011` records the gap and the shape of the fix.
+- **The mouse-sensitivity compounding.** `settings.mouseSens` scales mouse
+  deltas and vanilla `mouseSensitivity` (`g_game.c:579-580`) scales the same
+  events again, neutral at its default of 5, and both stay user-reachable. The
+  OPTIONS screen carries a header line naming DOOM's own menu; `g_game.c` was
+  NOT touched — it is vanilla and on the ticcmd path.
+- **`perf-009` has no default-tier gate, and had silently drifted 48 B**
+  (5,042,416 stamped against 5,042,464 measured) before this round moved it on
+  purpose. `wasm-stamp` is `--full` only and no suite leg runs `--full`. Found,
+  restamped, not closed.
+- **`docs/perf.md`'s PWAD combo table had three rows already reading 4.50 MB**
+  while `__heap_base` was 4.81 — stale, and the revert made them correct by
+  accident. Only the first row is gated (`perf-059`), which is why only the
+  first row was caught.
+- The campaign tail (**20.4d / 20.5a / 20.6b**), the analog twin-stick path
+  (`rme-004`) and Firefox's no-rendered-frame limit (`rme-002`) are unchanged.
