@@ -456,6 +456,12 @@ leg adversarial-map native,wad "30 adversarial maps, 0 ASan/UBSan reports" -- no
 # at the server; this points a hostile SERVER at the engine, which is the
 # direction that produced the 23.1 out-of-bounds write and had no coverage.
 leg hostile-server  build,wad  "hostile server frames vs the engine (23.8)" -- node tools/hostile-server-test.mjs
+# The same direction, one layer up.  23.8 fuzzes a hostile server into the
+# ENGINE; nothing fuzzed one into the LOBBY JSON path, where the client did a
+# bare JSON.parse on every frame while the server hardened exactly that
+# direction on its own side (round 5, B2).  Needs no WAD and no build: it drives
+# client/js/net.js directly against a fake server.
+leg hostile-lobby   -          "hostile server frames vs the lobby client"  -- node tools/hostile-lobby-test.mjs
 # Hostile lump CONTENT.  wad-import.js validates a WAD's directory well;
 # nothing validated what is inside a lump, and a PWAD lump overrides the
 # IWAD's, so an imported WAD can hand the engine any bytes under a known name.

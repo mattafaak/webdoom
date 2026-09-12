@@ -3,31 +3,83 @@
 // harness) — pass in a WebSocket constructor and the base URL.
 
 const CMD_SIZE = 8;
+// Mirrors server/game.js's MAXPLAYERS. Used to bound a slot index that arrives
+// off the wire before it reaches an array subscript.
+const MAXPLAYERS = 4;
+
+// How long a ping may go unanswered before it resolves with a fallback.
+// See PING_TIMEOUT_MS at the call site in lobby.js for why this exists at all.
+const PING_TIMEOUT_MS = 3000;
 
 export function connectLobby(baseUrl, WS = WebSocket) {
     const ws = new WS(`${baseUrl}/ws/lobby`);
     const handlers = new Map();
+    let closed = false;
     const api = {
         slot: -1, color: null,
         on(t, fn) { handlers.set(t, fn); return api; },
-        send(msg) { ws.send(JSON.stringify(msg)); },
+        // ws.send throws InvalidStateError before OPEN and after CLOSE. The
+        // relay half of this same file already checks readyState before every
+        // send; the lobby half did not, so the two disagreed inside one file.
+        send(msg) {
+            if (ws.readyState !== 1) return false;
+            try { ws.send(JSON.stringify(msg)); return true; }
+            catch { return false; }
+        },
         setParams(params) { api.send({ t: 'params', params }); },
         start() { api.send({ t: 'start' }); },
+        // A ping that can never reject, awaited in a loop, is a hang.
+        //
+        // lobby.js does `for (let i = 0; i < 12; i++) rtts.push(await
+        // lobby.ping().catch(() => 50))` between `launch` and bootDoom. This
+        // promise had no timeout and no reject path, so that `.catch` could
+        // never fire: if the server stopped answering 'pong' -- or the socket
+        // closed, which fires 'closed' and does nothing to a pending ping --
+        // the await hung FOREVER, the game never booted, and the player sat
+        // under a "GO" countdown that never resolved. There is no user-visible
+        // timeout anywhere on that path.
+        //
+        // Resolving (rather than rejecting) with the caller's own fallback
+        // keeps the jitter estimate honest about what it measured: an
+        // unanswered ping is not a zero-latency ping.
         ping() {
             return new Promise(res => {
                 const t0 = performance.now();
-                handlers.set('pong', () => res(performance.now() - t0));
-                api.send({ t: 'ping', t0 });
+                let done = false;
+                const finish = v => { if (!done) { done = true; clearTimeout(timer); res(v); } };
+                const timer = setTimeout(() => finish(null), PING_TIMEOUT_MS);
+                handlers.set('pong', () => finish(performance.now() - t0));
+                if (!api.send({ t: 'ping', t0 })) finish(null);
             });
         },
-        close() { ws.close(); },
+        close() { closed = true; ws.close(); },
     };
     ws.onmessage = ev => {
-        const m = JSON.parse(ev.data);
-        if (m.t === 'welcome') { api.slot = m.slot; api.color = m.color; }
+        // THE ASYMMETRY THIS CLOSES
+        //
+        // server/game.js does `let m; try { m = JSON.parse(raw); } catch
+        // { return; }` on both its receive paths: the server treats the client
+        // as hostile. This did a bare JSON.parse on whatever arrived, inside a
+        // WebSocket event handler -- so one malformed frame threw unhandled,
+        // and neither 'error' nor 'closed' fires for a throw, which means
+        // lobby.js never learned the connection was unusable. It just stopped.
+        //
+        // spec.md's own threat model is a plain-HTTP LAN (§"Deployment reality:
+        // insecure origins"), where anything on the network can answer
+        // ws://host:8666/ws/lobby. The server hardened its side in task 23.6.
+        // This is the same guard, pointing the other way.
+        let m;
+        try { m = JSON.parse(ev.data); }
+        catch { return; }                       // not JSON: not a message
+        if (!m || typeof m !== 'object' || typeof m.t !== 'string') return;
+        if (m.t === 'welcome') {
+            // slot indexes COLORS[] and the player arrays in lobby.js.
+            if (Number.isInteger(m.slot) && m.slot >= 0 && m.slot < MAXPLAYERS) api.slot = m.slot;
+            if (typeof m.color === 'string') api.color = m.color;
+        }
         handlers.get(m.t)?.(m);
     };
-    ws.onclose = () => handlers.get('closed')?.();
+    ws.onclose = () => { closed = true; handlers.get('closed')?.(); };
     ws.onerror = e => handlers.get('error')?.(e);
     return api;
 }

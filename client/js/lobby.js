@@ -314,8 +314,25 @@ function enterMultiplayer() {
             // high-jitter relay link the max would balloon the buffer into
             // pure lag; the sim's safety drain absorbs the rare straggler a
             // tighter buffer lets through.
+            //
+            // `.catch(() => 50)` used to be the whole story here, and it could
+            // never fire: ping() returned a promise with no timeout and no
+            // reject path, so if the server stopped answering 'pong' -- or the
+            // socket closed, which does nothing to a pending ping -- this loop
+            // hung FOREVER. bootDoom was never reached and the player sat under
+            // a "GO" countdown that never resolved, with no user-visible
+            // timeout anywhere on the path. ping() resolves null on timeout now
+            // (net.js PING_TIMEOUT_MS); an unanswered ping is not a
+            // zero-latency ping, so it takes the same 50 ms fallback the dead
+            // catch was written to supply.
             const rtts = [];
-            for (let i = 0; i < 12; i++) rtts.push(await lobby.ping().catch(() => 50));
+            let unanswered = 0;
+            for (let i = 0; i < 12; i++) {
+                const rtt = await lobby.ping();
+                if (rtt === null) unanswered++;
+                rtts.push(rtt ?? 50);
+            }
+            if (unanswered) console.warn(`webdoom: ${unanswered}/12 pings unanswered — jitter estimate is a guess`);
             rtts.sort((a, b) => a - b);
             const jitterMs = rtts[Math.floor(rtts.length * 0.75)] - rtts[0];
             const e = entry(m.params.wad);
