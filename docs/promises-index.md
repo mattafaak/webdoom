@@ -18,7 +18,7 @@ magic-data.md figures (new PUBLIC_HINTS entries). Run the drift checker to
 verify all machine-checkable figures; the qualitative promises below are indexed
 here with dispositions.
 
-**28 promises: 5 gated, 8 evidenced, 15 flagged**
+**34 promises. Counts are asserted against the table by `tools/archaeology/promises-index-check.mjs`, not typed here — the header and the summary used to disagree (5/8/15 against 5/10/13).**
 
 ---
 
@@ -37,16 +37,16 @@ here with dispositions.
 
 | id | source | promise | disposition |
 |----|--------|---------|-------------|
-| rme-001 | README:5 | "351 KB of wasm" | **GATED** — `readme-001` in claims.json; `doc-drift.mjs` README_HINTS fails if README diverges from committed expected value. Update command: `node tools/archaeology/stamp-check.mjs` → read actual wasm bytes → divide by 1024, round → update `readme-001` expected + README.md. **Derivation rule**: always use the CURRENT shipping artifact via stamp-check; do NOT derive from perf.md §1 (perf-001 is commit-pinned to 6de6256 and legitimately drifts across builds). |
-| rme-002 | README:7 | "Runs in stock Chrome / Edge / Firefox" | **FLAGGED(CI is Chrome-only via CDP; Edge/Firefox untested in CI — 15.2 will decide Firefox status; Edge TBD)** |
-| rme-003 | README:8–9 | "Uncapped framerate with 35 Hz-exact game logic (Crispy-style interpolation; vanilla mode toggle in settings, F8)" | **FLAGGED(no test flips F8; interpolation is render-only and untested; vanilla toggle covered by manual smoke only — 12.3 may add F8 toggle test)** |
-| rme-004 | README:10–11 | "rebindable keys, analog twin-stick gamepad" | **FLAGGED(browser-resilience-test covers gamepad REMOVAL only; rebind UI and twin-stick analog path have no automated test — 12.3)** |
-| rme-005 | README:24–25 | "second load is instant, single player works offline" | **FLAGGED(sw-cache sub-check asserts WAD cached but never goes offline and boots; KNOWN LATENT BUG: sw.js SHELL precache omits fire.js and countdown.js — both imported by lobby.js — offline works only via runtime-cache accident. Fix scope: 12.4b/15.1)** |
+| rme-001 | README:5 | "349 KB of wasm" | **GATED** — `readme-001` + `size-004` in claims.json; `doc-drift.mjs` README_HINTS and `size-ledger.mjs` size-004a/b both fail if README diverges. The two ids state the same fact and `claims-index-check.mjs` asserts they agree (they had drifted, 348 vs 349, task 24.2). |
+| rme-002 | README:7 | "Runs in stock Chrome / Edge / Firefox" | **PARTIAL** — Chrome gated by 19 CDP legs. Firefox gated since 15.2 by the `firefox-smoke` leg (UA + JS execution + /api/wads); it does NOT assert a rendered frame, which spec.md §browser-matrix records. **Edge remains ungated and untested** — that third of the promise has no evidence. |
+| rme-003 | README:8–9 | "Uncapped framerate with 35 Hz-exact game logic (Crispy-style interpolation; vanilla mode toggle in settings, F8)" | **PARTIAL** — `browser-qol-test` presses F8 and asserts the settings panel opens and closes, so the F8 half is gated (24.1 re-checked: the old "no test flips F8" was stale). The uncapped-framerate interpolation and the vanilla-mode toggle's *effect* are still unasserted — opening the panel is not the same as proving the toggle changes rendering. |
+| rme-004 | README:10–11 | "rebindable keys, analog twin-stick gamepad" | **FLAGGED** — `browser-resilience-test` covers gamepad hotplug (connect + disconnect events) only. Rebind UI and the analog twin-stick path still have no automated test. Re-checked 24.1: still true. |
+| rme-005 | README:24–25 | "second load is instant, single player works offline" | **PARTIAL** — "single player works offline" is gated: `browser-offline-test` boots SP from the SW cache with the network down ("offline SP boot from SW cache proven"), and `check-sw-precache` gates the SHELL list both ways. The precache bug this row used to flag (fire.js / countdown.js missing) was fixed — `client/sw.js:13` lists both. **"second load is instant" is a performance claim and has no gate.** |
 | rme-006 | README:17–18 | "measured < 1 ms/tick on the weakest network host" (fire) | **EVIDENCED** — perf.md §fire: wbox 0.0722 ms/tick (best-of-10 × 2000, 2026-07-16); ~14× under budget. Node microbench (not browser). Committed in perf.md; not CI-automated (requires JS bench). |
 | rme-007 | README:67–70 | "cross-validated tic-for-tic against an instrumented Chocolate Doom... 44,580 tics identical" | **EVIDENCED** — re-verified 2026-07-17 (task 12.5): SDL2 packages present on CachyOS host; `bash tools/build-choco-reference.sh` RC=0; `node tools/demo-test.mjs --cross` 13/13 demos PASS, 44,580 tics identical. Expected value in claims.json md-tic-001=44580 unchanged. Not gateable in CI (requires external binary + WADs); run on demand via the two commands above. |
 | rme-008 | README:22–24 | "Server carries the WAD library (Ultimate Doom, Doom II, Final Doom, SIGIL, Master Levels, NRFTL, Chex Quest, HACX)" | **FLAGGED(demo gates cover only 4 demo-bearing IWADs; SIGIL, Master Levels, NRFTL, Chex, HACX have no automated smoke test — 15.3)** |
 | rme-009 | README:41 | "`webdoom.service` is a ready systemd unit" | **FLAGGED(untested in CI; no boot or service-file validation gate — 15.1)** |
-| rme-010 | README:86–87 | "T07 menu-nav is a pre-existing timing flake on some CI hosts — ~1/3 pass rate" | **EVIDENCED** — documented explicitly in README.md; docs/state-machine.md claims "25/25 edges covered" but T07-routed edges are ~1/3 enforced. FLAGGED(15.4 will fix the T07 flake and restore edge enforcement). |
+| rme-010 | README:86–87 | "T07 menu-nav is a pre-existing timing flake on some CI hosts — ~1/3 pass rate" | **RESOLVED** — the promise this tracked is gone. T07 was fixed in 9ed9671 (3-attempt retry of the MP-open action, assertion unweakened, 20/20 on a fresh profile); the original cause was /tmp exhaustion from orphaned Chrome, not this codebase. README no longer claims a ~1/3 pass rate (24.3). Note `check-state-machine` verifies edge COVERAGE by token grep, not that each assertion runs. |
 
 ---
 
@@ -56,7 +56,7 @@ here with dispositions.
 |----|--------|---------|-------------|
 | spc-001 | spec.md:98 | "alder 0.008 ms, pi5 0.022 ms, **wbox 0.072 ms**" (fire CPU cost per tick) | **GATED** — `spec-001/002/003` in claims.json; `doc-drift.mjs` SPEC_HINTS fails if spec.md diverges from committed expected values. Source: perf.md §fire (0.0078/0.0222/0.0722 ms, rounded). Not CI-reproduced (node bench, not browser). |
 | spc-002 | spec.md:76 | "transport remains a single WebSocket port; head-of-line blocking remains unmeasurably small" | **EVIDENCED** — task 15.5 (2026-07-19): measured inter-bundle gap distribution. Localhost: p50=30.6 ms, p99=33.5 ms, max=40.3 ms. wbox→alder via Tailscale: p50=33.8 ms, p99=83.9 ms, max=142.7 ms (n=440/424 gaps). Stall at grace boundary (graceful-close path, n=5): mean 26 ms, max 33 ms; hard-drop grace bound = 300 ms from `GRACE_MS=250`+`sealSweep=50`. Catch-up on wbox (weakest host, tailnet, n=3): 125–149 ms for 436–505 tics. HOL verdict: no-WebRTC safe; observed variance bounded by sealSweep (50 ms), not TCP retransmit. spec.md:76 updated with measured numbers. Full data: docs/netcode-numbers.md. |
-| spc-003 | spec.md:91 | "`prefers-reduced-motion` gets a static frame" | **FLAGGED(browser-fire-test.mjs does not check prefers-reduced-motion media query; no automated gate — 12.3 or 15.2)** |
+| spc-003 | spec.md:91 | "`prefers-reduced-motion` gets a static frame" | **FLAGGED** — re-checked 24.1 and still ungated, contrary to a 2026-09-11 audit note that called it covered. `browser-fire-test.mjs:124` reads the media query only to EXCUSE a non-animating fire; on a runner where reduced-motion is false the static-frame path is never exercised and never asserted. A real gate would launch Chrome with the preference forced. |
 | spc-004 | spec.md:99 | "browser-composited and negligible" (putImageData blit cost) | **EVIDENCED** — task 12.2b (2026-07-18, commit 5a71e12): per-frame profile via `?perfmarks=1` shows (b) FB upload p99=0.2 ms (alder) / p99=6.5 ms (wbox Bobcat spike) vs 35 Hz budget 28.6 ms. WebGL2 path: `texSubImage2D` 320×200 + `drawArrays`; Canvas2D: 64K pixel-expand + `putImageData`. Both sub-ms at p50; "browser-composited and negligible" confirmed. Reproduce: `node tools/browser-pipeline.mjs --url http://127.0.0.1:8666/ --json`. Golden: `tools/golden/browser-pipeline-alder.json`. |
 | spc-005 | spec.md:27 | "web platform layer, client, and server stay small enough to read in a sitting" | **FLAGGED(no LOC budget or gate; purely subjective — 12.3 may add a LOC ceiling check as a soft gate)** |
 | spc-006 | spec.md:48–49 | "The browser-pipeline baseline (per-frame JS/GPU/audio cost, input latency) joins this gate once Phase 12 lands" | **EVIDENCED** — task 12.2b (2026-07-18, commit 5a71e12): `tools/browser-pipeline.mjs` collects per-stage `?perfmarks=1` distributions. Input latency: alder p50=8–9 ms (half-frame quantization at 60 fps); upload p99=0.2 ms; rAF callback p50=0.2 ms p99=0.9 ms. AudioWorklet unmeasured in headless Chrome (headless limitation — not a gap in the instrument). Goldens: `tools/golden/browser-pipeline-{alder,wbox}.json`. Gate: `node tools/browser-pipeline.mjs` exits 0 if collector runs without error; numeric baselines are golden-filed. |
@@ -130,7 +130,22 @@ family). Two figures remain ungateable.
 > (README + spec + perf); Part D adds 16 magic-data figures for a full inventory
 > of 44 entries.
 
-**28 promises (Parts A–C): 5 gated, 10 evidenced, 13 flagged.**
+**34 promises in the table.** Counts are asserted against it by
+`tools/archaeology/promises-index-check.mjs` rather than typed — the header and this
+line used to disagree (5/8/15 against 5/10/13), which is how six stale dispositions
+survived to task 24.1.
+
+- Part A: 10 — 2 evidenced, 3 flagged, 1 gated, 3 partial, 1 resolved
+- Part B: 8 — 4 evidenced, 2 flagged, 2 gated
+- Part D: 16 — 1 evidenced, 1 flagged, 14 gated
+
+Whole table: 7 evidenced, 6 flagged, 17 gated, 3 partial, 1 resolved.
+
+`PARTIAL` is new in 24.1 and earns its place: three promises are compound, and calling
+them GATED or FLAGGED was wrong in both directions. "stock Chrome / Edge / Firefox" has
+two thirds gated and Edge untested; "vanilla mode toggle, F8" gates the keypress but not
+the toggle's effect; "second load is instant, single player works offline" gates the
+offline boot but not the word "instant".
 (spc-004 and spc-006 moved from FLAGGED to EVIDENCED by task 12.2b; spc-002 moved by task 15.5.)
 
 ### Flagged promises by future task

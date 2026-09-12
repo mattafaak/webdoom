@@ -277,6 +277,7 @@ leg gm-config       -    "the GM backend's operator config path (25.1)" -- node 
 # and nothing checked the inventory itself: 50 rows said "verified" while
 # nothing anywhere checked them (task 24.2).
 leg claims-index    -    "the claims index does not overclaim"        -- node tools/archaeology/claims-index-check.mjs
+leg promises-index  -    "the promises index has not gone stale"      -- node tools/archaeology/promises-index-check.mjs
 leg gate-census     -    "every gate is wired or registered with a reason" -- node tools/gate-census.mjs
 
 if [ "$TIER" = "quick" ]; then
