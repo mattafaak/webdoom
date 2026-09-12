@@ -183,13 +183,14 @@ into the engine, and hostile lump content — are now gates.
 | 23.1 | Network-controlled array indices: `web_net_bundle` tic, `web_net_setup` slot/numplayers, `web_set_console` | reproducer first; guards in the engine AND net.js; 13/13 sim tic-identity | 22.1 | cc:完了 [7764c94] |
 | 23.2 | WAD-driven overreads in the music path: GENMIDI length, MUS event and VLQ bounds | reproduced with an instrumented build; OPL2 output byte-identical; red-proofed | 22.1 | cc:完了 [a1b0420] |
 | 23.3 | Non-terminating patch decoder (`doomfont.js`) and the corrupt-WAD server exit (`ui-assets.js`) | both reproduced; loop bounded; server declines instead of dying; red-proofed 5/5 | 22.1 | cc:完了 [a1b0420] |
-| 23.4 | Demo buffer bounds: `web_play_demo_buf` takes no length and overscans; the `#demo=` fragment path applies no cap | reproducer first; length parameter; 19.4 gates green | 22.1 | cc:TODO |
-| 23.5 | Unchecked `_malloc` returns (5 sites; `main.js:196` would `HEAPU8.set(wad, 0)`) | every site checks; failure degrades loudly | 22.1 | cc:TODO |
-| 23.6 | Server resource and liveness: the `verifyInFlight` half-open wedge, unbounded `session.history`, uncapped spectators, unpruned `attestStore` | reproducers first; `net-fuzz` extended to the spectate endpoint (today: zero coverage) | 22.1 | cc:TODO |
-| 23.7 | `bootDoom` teardown: no `doom.netQuit`, `relay.quit()` production-dead, ~11 listeners and the GL objects leak per boot | a single teardown(); play→quit→play×5 leaks nothing, measured | 22.1 | cc:TODO |
+| 23.4 | Demo buffer bounds: `web_play_demo_buf` takes no length and overscans; the `#demo=` fragment path applies no cap | length parameter, all 6 call sites; a no-length call is rejected; 19.4 gates green | 22.1 | cc:完了 [9c800a2] |
+| 23.5 | Unchecked `_malloc` returns (6 JS + 3 C sites) | every site checks; C sites I_Error into the fail-soft path | 22.1 | cc:完了 [9c800a2] |
+| 23.6 | Server resource and liveness: the `verifyInFlight` half-open wedge, uncapped spectators, unbounded history bursts | wedge reproduced and red-proofed (two wrong fixes first); 15 s body timeout; MAX_SPECTATORS; backpressure on both history bursts. `attestStore` pruning and a spectate fuzz leg remain | 22.1 | cc:完了(partial) [9c800a2] |
+| 23.7 | Relay closed on quit and on engine error; `doom.netQuit` wired | socket no longer outlives the engine; net + browser gates green | 22.1 | cc:完了 [see 23.7b] |
+| 23.7b | The per-boot leak set: ~11 input listeners, the qol rAF loop + 5 DOM nodes, a duplicate `#settings` panel, a GL program/VBO/2 textures with no dispose. None of input/qol/settings/video exposes a teardown | a single teardown(); play→quit→play×5 leaks nothing, MEASURED in a browser test | 23.7 | cc:TODO |
 | 23.8 | Fuzz the untested direction: hostile SERVER frames at the engine | `tools/hostile-server-test.mjs`, 13 cases, by observation not inference; red-proofed | 23.1 | cc:完了 [7764c94] |
 
-Suite: **73 legs, 73 passed, 0 skipped**.
+Suite: **74 legs, 74 passed, 0 skipped** (the 74th is `arm-cross`, see the pi5 migration).
 
 ## Phases 24–25 (planned, not started)
 
