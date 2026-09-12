@@ -50,6 +50,15 @@ DEMOS=(
 
 FAILURES=0
 PASSES=0
+SKIPS=0
+SKIPPED_WADS=""
+# The matrix declares how many demos there ARE.  The verdict below used to read
+# "PASS: $PASSES/$PASSES demos bit-identical" -- the denominator WAS the
+# numerator, so a run that found three WADs printed "PASS: 9/9" and a run that
+# found none printed "PASS: 0/0", both exit 0, both indistinguishable from a
+# complete pass.  ro-wad-check.sh execs this script, so both legs emitted the
+# identical headline (docs/2026-09-11-suite-baseline.md:196-197).
+EXPECTED=${#DEMOS[@]}
 TMPROOT="$(mktemp -d)"
 trap 'rm -rf "$TMPROOT"' EXIT
 
@@ -59,6 +68,8 @@ for entry in "${DEMOS[@]}"; do
 
     if [[ ! -f "$src_path" ]]; then
         echo "skip $out_prefix ($src_path not found)"
+        SKIPS=$(( SKIPS + 1 ))
+        case "$SKIPPED_WADS" in *"$src_file"*) ;; *) SKIPPED_WADS="$SKIPPED_WADS $src_file" ;; esac
         continue
     fi
 
@@ -115,4 +126,19 @@ if [[ $FAILURES -ne 0 ]]; then
     echo "FAIL: $FAILURES demo(s) diverged from golden ($PASSES matched)"
     exit 1
 fi
-echo "PASS: $PASSES/$PASSES demos bit-identical — the freestanding core matches vanilla"
+if [[ $PASSES -ne $EXPECTED ]]; then
+    echo "INCOMPLETE: $PASSES/$EXPECTED demos bit-identical, $SKIPS skipped —" \
+         "this run cannot speak for the freestanding core"
+    echo "  missing WADs:${SKIPPED_WADS:- (none — the matrix and the loop disagree)}"
+    echo "  run tools/fetch-wads.sh"
+    exit 2
+fi
+# ro-wad-check.sh EXECs this script with WD_RO_WAD=1, so both legs end here.
+# They emitted the byte-identical headline, and run-tests.sh's summary shows a
+# leg's headline -- so the table printed the same sentence twice for two legs
+# that prove different things (baseline 2026-09-11, rows 196-197). Say which.
+if [[ "${WD_RO_WAD:-0}" == "1" ]]; then
+    echo "PASS: $PASSES/$EXPECTED demos bit-identical with the WAD blob mprotect(PROT_READ)'d — no write to the blob (XIP-viable)"
+else
+    echo "PASS: $PASSES/$EXPECTED demos bit-identical — the freestanding core matches vanilla"
+fi
