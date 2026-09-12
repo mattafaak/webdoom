@@ -115,7 +115,13 @@ export function createScrubberUI(doom, demoBytes, { container = document.body, s
     const strip = document.createElement('canvas');
     strip.height = 16;
     strip.style.cssText = 'width:100%;height:16px;display:block;image-rendering:pixelated;cursor:pointer;';
-    strip.setAttribute('aria-label', 'Input timeline strip');
+    // The strip is a CANVAS with an aria-label and no keyboard path: it
+    // announces itself as something you can interact with and then cannot be
+    // reached or operated by a keyboard.  The <input type="range"> beside it
+    // IS natively seekable and covers the same tics, so the honest fix is to
+    // mark this decorative rather than bolt a second, worse control onto it.
+    strip.setAttribute('role', 'presentation');
+    strip.setAttribute('aria-hidden', 'true');
 
     function renderStrip() {
         strip.width = totalTics;  // 1 px per tic before CSS scaling

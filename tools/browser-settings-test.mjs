@@ -240,8 +240,104 @@ const val = sel => ev(`document.querySelector('#settings ${sel}')?.value ?? null
         `automap=${JSON.stringify(binds?.automap)} forward=${JSON.stringify(binds?.forward)} (forward should be the old automap key ${JSON.stringify(before)})`);
 }
 
+// ── 5. the panel is a dialog, and the game is not listening behind it ────────
+//
+// It was a bare <div> with a heading: no role, no aria-modal, no label, no
+// focus move in or restore out, and Escape did not close it.  Worse, only the
+// POINTERLOCK handler consulted it, so every keystroke also reached the
+// engine — arrow keys moved the player behind the panel and a key pressed on
+// a slider raced the slider's own handler.
+{
+    if (!await bootWith({})) hardFail('boot timeout for the dialog case');
+    if (!await openPanel()) hardFail('settings panel would not open (dialog case)');
+
+    const attrs = await ev(`(() => { const p = document.getElementById('settings');
+        return { role: p.getAttribute('role'), modal: p.getAttribute('aria-modal'),
+                 labelledby: p.getAttribute('aria-labelledby'),
+                 labelExists: !!document.getElementById(p.getAttribute('aria-labelledby') || '') }; })()`);
+    check('the settings panel is a labelled modal dialog',
+        attrs?.role === 'dialog' && attrs.modal === 'true' && attrs.labelledby && attrs.labelExists,
+        JSON.stringify(attrs));
+
+    const focusIn = await ev(`document.getElementById('settings').contains(document.activeElement)`);
+    check('opening the dialog moves focus into it', focusIn === true, `activeElement inside = ${focusIn}`);
+
+    // THE ONE THAT WAS A REAL DEFECT: count what the engine receives.
+    await ev(`(() => {
+        const d = window.webdoom?.doom;
+        if (!d || d.__inputWrapped) return 'skip';
+        const orig = d._web_input_event;
+        window.__engineKeys = 0;
+        d._web_input_event = function (...a) { window.__engineKeys++; return orig.apply(this, a); };
+        d.__inputWrapped = true;
+        return 'wrapped';
+    })()`);
+    for (const [k, vk] of [['w', 87], ['s', 83], ['ArrowLeft', 37]]) await key(k, vk);
+    const leakedWhileOpen = await ev(`window.__engineKeys`);
+    check('game keys do NOT reach the engine while the dialog is open',
+        leakedWhileOpen === 0, `engine saw ${leakedWhileOpen} input event(s)`);
+
+    // Escape closes it — and that is also the control for the count above.
+    await key('Escape', 27);
+    await sleep(200);
+    const closed = await ev(`document.getElementById('settings')?.hidden === true`);
+    check('Escape closes the dialog', closed === true, `hidden = ${closed}`);
+
+    await ev(`window.__engineKeys = 0`);
+    for (const [k, vk] of [['w', 87], ['s', 83], ['ArrowLeft', 37]]) await key(k, vk);
+    const reachedWhenClosed = await ev(`window.__engineKeys`);
+    check('CONTROL: the same keys DO reach the engine once it is closed',
+        reachedWhenClosed > 0, `engine saw ${reachedWhenClosed} input event(s)`);
+}
+
+// ── 6. the rest of the accessibility surface ────────────────────────────────
+//
+// The complete ARIA/focus inventory across client/ was SEVEN lines before this
+// round: one orphaned role="menuitem", four aria-labels, one tabindex, one
+// canvas.focus().  These assert the parts a gate can see.
+{
+    // Back to the LAUNCHER first.  The four assertions below are about the
+    // launcher menu, and by this point the test is in a game — the first run
+    // of them read "role=undefined, 0 rows", which is a test looking in the
+    // wrong place, not a missing role.
+    await cdp('Page.reload');
+    let onMenu = false;
+    for (let i = 0; i < 40 && !onMenu; i++) {
+        await sleep(500);
+        onMenu = await ev(`!!document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]')`);
+    }
+    if (!onMenu) hardFail('launcher menu never came back — the a11y assertions measured nothing');
+
+    const a11y = await ev(`(() => {
+        const st = document.getElementById('status');
+        const bar = document.getElementById('loading-bar');
+        const menu = document.querySelector('#dmenu .items');
+        const rows = menu ? [...menu.querySelectorAll('.row')] : [];
+        return {
+            statusRole: st?.getAttribute('role'),
+            statusLive: st?.getAttribute('aria-live'),
+            barRole: bar?.getAttribute('role'),
+            menuRole: menu?.getAttribute('role'),
+            rows: rows.length,
+            tabbable: rows.filter(r => r.tabIndex === 0).length,
+            orphanItems: [...document.querySelectorAll('[role=menuitem]')]
+                .filter(r => !r.closest('[role=menu]')).length,
+        };
+    })()`);
+    check('#status is a polite live region',
+        a11y?.statusRole === 'status' && a11y.statusLive === 'polite',
+        `role=${a11y?.statusRole} aria-live=${a11y?.statusLive}`);
+    check('#loading-bar is a progressbar', a11y?.barRole === 'progressbar', `role=${a11y?.barRole}`);
+    check('the launcher menu is a menu with rows in it',
+        a11y?.menuRole === 'menu' && a11y.rows > 1, `role=${a11y?.menuRole}, ${a11y?.rows} rows`);
+    check('exactly one menu row is in the tab order (roving tabindex)',
+        a11y?.tabbable === 1, `${a11y?.tabbable} of ${a11y?.rows} rows have tabindex 0`);
+    check('no role="menuitem" is orphaned outside a role="menu"',
+        a11y?.orphanItems === 0, `${a11y?.orphanItems} orphaned`);
+}
+
 // A run that asserted nothing must not pass.
-if (results.length < 18) hardFail(`only ${results.length} assertions ran — the suite did not complete`);
+if (results.length < 28) hardFail(`only ${results.length} assertions ran — the suite did not complete`);
 const uncaught = excs.filter(e => !/ResizeObserver/.test(e));
 check('no uncaught exception while abusing the settings surface',
     uncaught.length === 0, uncaught.slice(0, 3).join(' | ') || 'none');

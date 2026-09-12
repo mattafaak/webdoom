@@ -14,13 +14,20 @@
 
   <section id="landing"></section>
 
+  <!-- The loading panel is a progress bar and says so: main.js sets
+       aria-valuenow as the fill moves, and the label is its accessible name.
+       Without the role it was two anonymous divs changing width. -->
   <div id="loading" hidden>
     <div id="loading-label"></div>
-    <div id="loading-bar"><div id="loading-fill"></div></div>
+    <div id="loading-bar" role="progressbar" aria-labelledby="loading-label"
+         aria-valuemin="0" aria-valuemax="100"><div id="loading-fill"></div></div>
   </div>
 
   <div id="countdown" hidden></div>
-  <div id="overlay"><div id="status"></div></div>
+  <!-- EVERY error this app can produce is written here, and nothing announced
+       it.  polite, not assertive: these are status messages, and an assertive
+       region interrupts whatever a screen reader is in the middle of. -->
+  <div id="overlay"><div id="status" role="status" aria-live="polite" aria-atomic="true"></div></div>
   <div id="sw-update" hidden>
     New version available — <button id="sw-reload">reload</button>
   </div>

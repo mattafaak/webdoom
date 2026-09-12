@@ -223,5 +223,81 @@ const shotPath = join(outdir, 'fire-bg-landing.png');
 writeFileSync(shotPath, Buffer.from(result.data, 'base64'));
 console.log(`screenshot (steady state): ${shotPath}`);
 
-console.log('PASS — all fire background assertions passed');
+// ── (f) prefers-reduced-motion, actually exercised ───────────────────────────
+//
+// spec.md promises "prefers-reduced-motion gets a static frame", and
+// promises-index spc-003 has carried it as FLAGGED since 24.1 because the only
+// place this suite reads the query is assertion (b), where it EXCUSES a
+// non-animating fire.  On a normal runner the preference is false, the
+// static-frame path is never taken, and the excuse never fires — so the
+// promise was gated by a branch that cannot run.
+//
+// A second Chrome, launched with --force-prefers-reduced-motion, is the arm
+// that runs it.  Its own control is the FIRST browser above: the same page,
+// the same sampler, animating.  One arm alone would not distinguish "static
+// because the preference was honoured" from "static because the fire is
+// broken".
+{
+    const RM_PORT = CDP_PORT + 1;
+    const rmChrome = spawn(chromeBin(), [
+        '--headless=new', `--remote-debugging-port=${RM_PORT}`, chromeProfileArg(),
+        '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
+        '--use-angle=swiftshader', '--window-size=1280,960',
+        '--force-prefers-reduced-motion',
+        '--autoplay-policy=no-user-gesture-required', 'about:blank',
+    ], { stdio: 'ignore', detached: true });
+    reapOnExit(rmChrome);
+    const rmFail = msg => { try { rmChrome.kill(); } catch {} fail(msg); };
+    await sleep(1500);
+
+    const t2 = await (await fetch(
+        `http://127.0.0.1:${RM_PORT}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' })).json();
+    const ws2 = new WebSocket(t2.webSocketDebuggerUrl);
+    await new Promise((res, rej) => { ws2.onopen = res; ws2.onerror = rej; });
+    let id2 = 0; const pend2 = new Map();
+    ws2.onmessage = e => { const m = JSON.parse(e.data); if (m.id && pend2.has(m.id)) { pend2.get(m.id)(m); pend2.delete(m.id); } };
+    const cdp2 = (m, p = {}) => new Promise(res => { const i = ++id2; pend2.set(i, res); ws2.send(JSON.stringify({ id: i, method: m, params: p })); });
+    const ev2 = async e => (await cdp2('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true })).result?.result?.value;
+    await cdp2('Runtime.enable'); await cdp2('Page.enable');
+
+    // Wait for the launcher, the same way the first arm does.
+    let up = false;
+    for (let i = 0; i < 40 && !up; i++) {
+        await sleep(500);
+        up = await ev2(`!!document.getElementById('fire-bg')`);
+    }
+    if (!up) rmFail('(f) reduced-motion arm: #fire-bg never appeared — nothing was measured');
+
+    // The flag has to actually be in force, or everything below is the first
+    // arm again with extra steps.
+    const rm = await ev2(`window.matchMedia('(prefers-reduced-motion: reduce)').matches`);
+    if (rm !== true) rmFail('(f) --force-prefers-reduced-motion did not take: the query still reads false');
+
+    const sample2 = () => ev2(`(() => {
+        const c = document.getElementById('fire-bg');
+        const g = c?.getContext('2d');
+        if (!g) return -1;
+        const d = g.getImageData(Math.floor(c.width / 2) - 8, Math.floor(c.height / 2), 16, 1).data;
+        let sum = 0;
+        for (let i = 0; i < d.length; i++) sum += d[i];
+        return sum;
+    })()`);
+
+    const r1 = await sample2();
+    await sleep(600);
+    const r2 = await sample2();
+    if (r1 === -1) rmFail('(f) reduced-motion arm: no 2d context on #fire-bg');
+    if (r1 !== r2)
+        rmFail(`(f) prefers-reduced-motion is set and the fire is STILL animating (${r1} → ${r2})`);
+    // And it must be a FRAME, not a blank canvas: "static" is also what an
+    // empty canvas looks like.
+    if (r1 === 0)
+        rmFail('(f) reduced-motion frame is entirely black — that is not a static frame, it is no frame');
+    console.log(`(f) PASS — prefers-reduced-motion: static frame held across 600 ms (sum ${r1}, non-blank)`);
+    try { ws2.close(); } catch {}
+    rmChrome.kill();
+}
+
+console.log('PASS — all fire background assertions passed, including the '
+          + 'prefers-reduced-motion arm under --force-prefers-reduced-motion (closes spc-003)');
 cleanup(0);

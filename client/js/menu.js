@@ -111,7 +111,13 @@ export function createMenu(font, host, opts = {}) {
             root.appendChild(h);
         }
 
+        // role="menuitem" was set on every row and there was no role="menu" to
+        // contain them, which is an orphaned role: a menuitem outside a menu
+        // means nothing.  The list is the menu, and it is labelled by the
+        // screen's own title where there is one.
         const list = Object.assign(document.createElement('div'), { className: 'items' });
+        list.setAttribute('role', 'menu');
+        if (s.title) list.setAttribute('aria-label', String(s.title));
         if (s.items.some(it => it.thumb)) list.classList.add('noWrap');   // art rows: one column
         // centre the items under the title/logo, EXCEPT when a value can be
         // cycled — those left-anchor so a changing value never shifts rows
@@ -134,6 +140,11 @@ export function createMenu(font, host, opts = {}) {
             row.dataset.label = label.toUpperCase();    // tests + accessibility
             row.setAttribute('role', 'menuitem');
             row.setAttribute('aria-label', label);
+            // Roving tabindex: the menu is one tab stop, and the arrow keys
+            // move within it (the pattern for role=menu).  Without a tabindex
+            // anywhere the whole launcher was unreachable by Tab.
+            row.tabIndex = i === sel ? 0 : -1;
+            if (i === sel) row.setAttribute('aria-current', 'true');
             // '.art' was added here and never styled or queried; the thumb
             // itself is the affordance.  ('.sel' below has no CSS rule either
             // and STAYS -- menu.js queries '.row.sel .skull' and the teardown

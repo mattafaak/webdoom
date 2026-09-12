@@ -15,15 +15,22 @@ import { wideWidth, paniniStrength } from './wide-utils.js';
 import { setStatus as status } from './ui.js';
 
 // centred loading panel + progress bar
+//
+// The bar carries role="progressbar" (index.html), so the percentage has to
+// reach aria-valuenow as well as the fill's width -- a bar that only changes
+// width is silent to anything that is not looking at it.
 const loading = {
-    show(label) {
+    _set(label, pct) {
         document.getElementById('loading-label').textContent = label;
-        document.getElementById('loading-fill').style.width = '0%';
+        document.getElementById('loading-fill').style.width = `${pct}%`;
+        document.getElementById('loading-bar')?.setAttribute('aria-valuenow', String(pct));
+    },
+    show(label) {
+        this._set(label, 0);
         document.getElementById('loading').hidden = false;
     },
     set(label, frac) {
-        document.getElementById('loading-label').textContent = label;
-        document.getElementById('loading-fill').style.width = `${Math.round((frac ?? 0) * 100)}%`;
+        this._set(label, Math.round((frac ?? 0) * 100));
     },
     hide() { document.getElementById('loading').hidden = true; },
 };

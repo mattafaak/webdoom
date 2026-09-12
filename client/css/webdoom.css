@@ -53,7 +53,11 @@ html, body {
     font-family: ui-monospace, monospace;
 }
 
-#status:empty { display: none; }
+/* An EMPTY status must still exist for a screen reader to attach to.  This was
+   `display: none`, which takes the element out of the accessibility tree
+   entirely — so the live region announced nothing until its first message, and
+   on some engines not even then.  Invisible, not absent. */
+#status:empty { padding: 0; background: none; }
 
 /* bottom-anchored loading panel with a Heretic/Hexen-style vertebrae bar:
    a bony spine of discrete segments that light up as it fills, kept low
@@ -169,6 +173,18 @@ html, body {
     opacity: 0.45;
 }
 
+/* Keyboard focus was invisible everywhere.  There were ZERO :focus rules in
+   this stylesheet, so a keyboard user tabbing through the launcher, the
+   settings dialog or the scrubber had no idea where they were.  :focus-visible
+   rather than :focus, so a mouse click does not leave a ring behind.
+   #screen is deliberately excluded: it is the game canvas, it takes pointer
+   lock, and a ring around the game is noise. */
+:focus-visible {
+    outline: 2px solid #d33;
+    outline-offset: 2px;
+}
+#screen:focus-visible { outline: none; }
+
 /* landing: hosts the DOOM-style drill-down menu */
 #landing {
     display: flex;
@@ -271,6 +287,12 @@ html, body {
 }
 #qol-fullscreen.visible { opacity: 1; }
 #qol-fullscreen:hover   { opacity: 1; border-color: #d33; }
+/* It is a <button> at opacity 0 when hidden, so it stayed in the tab order as
+   an invisible stop that does something when pressed.  visibility removes it
+   from the tab order AND the accessibility tree; the transition still runs
+   because visibility is animatable in steps. */
+#qol-fullscreen:not(.visible):not(:hover):not(:focus-visible) { visibility: hidden; }
+#qol-fullscreen:focus-visible { opacity: 1; visibility: visible; }
 
 /* Crosshair: centred pixel-perfect '+' sign overlay. */
 #qol-crosshair {
@@ -335,6 +357,23 @@ html, body {
     width: 0;
     background: #e6b34d;
     transition: width .1s linear;
+}
+
+/* ── prefers-reduced-motion ───────────────────────────────────────────────
+   spec.md promises "prefers-reduced-motion gets a static frame" and this
+   stylesheet had NO @media block of any kind.  The promise was half-kept:
+   fire.js checks the query in JS, so the background stops animating, while
+   every CSS transition kept running.  The JS half is now gated too --
+   tools/browser-fire-test.mjs runs a second arm under Chrome's
+   --force-prefers-reduced-motion, which closes promises-index spc-003.
+   Not `animation: none`: a transition cut to 0.01ms still FIRES, so state
+   changes that rely on transitionend still complete. */
+@media (prefers-reduced-motion: reduce) {
+    #loading-fill,
+    #qol-fullscreen,
+    #qol-demo-bar .fill {
+        transition-duration: 0.01ms !important;
+    }
 }
 
 #countdown {

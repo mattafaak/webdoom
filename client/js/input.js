@@ -192,7 +192,17 @@ export function createInput(doom, canvas, settings) {
     };
 
     // --- keyboard --------------------------------------------------------
+    // The settings panel is a modal dialog, and its own controls are sliders,
+    // checkboxes and a key-capture button.  Only the POINTERLOCK handler
+    // consulted it, so while the panel was open every keystroke also reached
+    // the engine: arrow keys moved the player behind the panel, and a key
+    // pressed on a slider raced the slider's own handler.
+    const panelOpen = () => document.getElementById('settings')?.hidden === false;
+
     const onKey = down => e => {
+        // capture is checked first: rebinding happens WITH the panel open, and
+        // it is the one thing that must still see the key.
+        if (!capture && panelOpen()) return;
         if (capture) {
             if (down) {
                 // Escape is how a person says "no".  It used to BECOME the
@@ -238,8 +248,7 @@ export function createInput(doom, canvas, settings) {
             canvas.requestPointerLock();
     });
     on(document, 'pointerlockchange', () => {
-        const settingsOpen = !document.getElementById('settings')?.hidden;
-        if (document.pointerLockElement !== canvas && !settingsOpen
+        if (document.pointerLockElement !== canvas && !panelOpen()
             && !doom._web_ui_mode())
             tapKey(DK.ESCAPE);          // engine opens its menu
     });
@@ -393,6 +402,11 @@ export function createInput(doom, canvas, settings) {
             captureTimer = setTimeout(() => { if (capture) endCapture(); }, CAPTURE_TIMEOUT_MS);
         },
         cancelCapture() { endCapture(); },
+        // settings.js asks before treating Escape as "close the dialog": while
+        // a capture is armed, Escape means "cancel the capture" and onKey owns
+        // it.  Two handlers on the same key need one of them to be able to
+        // tell whose key it is.
+        capturing: () => capture !== null,
         destroy() { _teardownAll(); },
     };
 }

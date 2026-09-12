@@ -27,7 +27,19 @@ export function createSettingsUI(input, doom, renderer, qol) {
     const panel = document.createElement('div');
     panel.id = 'settings';
     panel.hidden = true;
+    // A bare <div> with a heading in it is not a dialog to anything but a
+    // sighted mouse user: no role, no modality, no label, no focus handling,
+    // and Escape did not close it.  The <h2> the template already renders is
+    // the label; render() gives it the id this points at.
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-labelledby', 'settings-title');
     document.getElementById('stage').appendChild(panel);
+
+    // Where focus came from, so closing can put it back.  Losing focus to
+    // <body> after closing a dialog strands a keyboard user at the top of the
+    // document with no way back to what they were doing.
+    let returnFocus = null;
 
     // Escape HTML special characters before injecting into innerHTML.
     // Applied to every user-derived or localStorage-derived value in the template.
@@ -48,7 +60,7 @@ export function createSettingsUI(input, doom, renderer, qol) {
         // Determine current backend; fall back gracefully from legacy opl3 bool.
         const backend = s.musicBackend ?? (s.opl3 ? 'opl3' : 'opl2');
         panel.innerHTML = `
-        <h2>webdoom settings</h2>
+        <h2 id="settings-title">webdoom settings</h2>
         <table>
           ${ACTIONS.map(a => `
             <tr><td>${esc(a.label)}</td>
@@ -206,15 +218,39 @@ export function createSettingsUI(input, doom, renderer, qol) {
     function toggle() {
         panel.hidden = !panel.hidden;
         if (!panel.hidden) {
+            returnFocus = document.activeElement;
             document.exitPointerLock?.();
             render();
+            // Into the dialog, not merely visible on top of it.
+            panel.querySelector('button, input, select')?.focus();
         } else {
             input.cancelCapture();
+            try { returnFocus?.focus?.(); } catch { /* element is gone */ }
+            returnFocus = null;
         }
     }
 
     on(window, 'keydown', e => {
         if (e.code === 'F8') { e.preventDefault(); toggle(); }
+        // Escape closes it, which is what every dialog does and what a player
+        // who has just opened one by accident will press.  Not while a rebind
+        // capture is armed: there Escape means "cancel the capture", and
+        // input.js handles it.
+        if (e.code === 'Escape' && !panel.hidden && !input.capturing?.()) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggle();
+        }
+        // Keep focus inside the dialog.  Without this, Tab walks out of a
+        // modal into the page behind it -- which here is a game canvas.
+        if (e.code === 'Tab' && !panel.hidden) {
+            const f = [...panel.querySelectorAll('button, input, select')]
+                .filter(el => !el.disabled && el.offsetParent !== null);
+            if (!f.length) return;
+            const first = f[0], last = f[f.length - 1];
+            if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+            else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        }
     }, true);
 
     return {
