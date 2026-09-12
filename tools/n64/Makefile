@@ -103,12 +103,43 @@ COMMON_FLAGS := -mabi=o64 -march=vr4300 -mtune=vr4300 \
                 -I$(N64_INST)/mips64-elf/include \
                 -I.
 
+# Timedemo gate (20.4c): bake demo name at compile time for GDB-based trace.
+# Usage: make N64_TIMEDEMO=demo1   (or demo2, demo3, demo4)
+# Omit N64_TIMEDEMO for the default banner-only / attract-loop build.
+#
+# THIS BLOCK MUST STAY ABOVE THE TWO `:=` LINES BELOW.  It used to sit at the
+# bottom of the file, ~50 lines after CORE_CFLAGS and PLAT_CFLAGS had already
+# snapshotted COMMON_FLAGS with `:=` (immediate expansion) -- so appending here
+# changed a variable nothing read again, and `make N64_TIMEDEMO=demo1` compiled
+# n64_main.c with N64_TIMEDEMO UNDEFINED.  n64_argv then took its 1-element
+# form, `-timedemo` never reached myargv at all, and the ROM ran the ordinary
+# attract loop while the operator believed it was running a timed demo.  That
+# is what DEMO-GATE-STATUS.md diagnosed as "-timedemo does not engage on N64":
+# the flag was never passed.  The assertion below is what makes the difference
+# visible instead of silent.
+ifdef N64_TIMEDEMO
+COMMON_FLAGS += -DN64_TIMEDEMO=\"$(N64_TIMEDEMO)\"
+endif
+
 # engine/core: C89 (DOOM source uses implicit-int, pre-C99 declarations).
 CORE_CFLAGS := $(COMMON_FLAGS) -std=gnu89
 
 # N64 shim: C11 (needed for libdragon headers; their 'inline' semantics
 # require C99+ to avoid multiple-definition of non-static inline functions).
 PLAT_CFLAGS := $(COMMON_FLAGS) -std=gnu11
+
+# Assert the flag reached the variable the RECIPE uses, not the one the request
+# was written into.  A request that does not become the value in force is this
+# project's second-most-repeated defect shape, and the `:=` ordering above is
+# exactly how it happened here.  Red-proof: move the ifdef block back below
+# these two lines and `make N64_TIMEDEMO=demo1` must stop with this error.
+ifdef N64_TIMEDEMO
+  ifeq (,$(findstring -DN64_TIMEDEMO,$(PLAT_CFLAGS)))
+    $(error N64_TIMEDEMO=$(N64_TIMEDEMO) was requested but -DN64_TIMEDEMO is \
+absent from PLAT_CFLAGS -- the ROM would silently build in attract-loop mode. \
+The ifdef block must precede the `:=` assignments of CORE_CFLAGS/PLAT_CFLAGS.)
+  endif
+endif
 
 # Linker: use libdragon's n64.ld (provides _start + memory map).
 # -ldragon: libdragon runtime (debug, timer, interrupts, etc.)
@@ -154,13 +185,6 @@ CORE_EXCLUDE := $(CORE_DIR)/i_main.c \
                 $(CORE_DIR)/d_net.c
 
 CORE_SRC := $(filter-out $(CORE_EXCLUDE),$(wildcard $(CORE_DIR)/*.c))
-
-# Timedemo gate (20.4c): bake demo name at compile time for GDB-based trace.
-# Usage: make N64_TIMEDEMO=demo1   (or demo2, demo3, demo4)
-# Omit N64_TIMEDEMO for the default banner-only / attract-loop build.
-ifdef N64_TIMEDEMO
-COMMON_FLAGS += -DN64_TIMEDEMO=\"$(N64_TIMEDEMO)\"
-endif
 
 # N64 shim files (this directory).
 PLAT_SRC := n64_main.c \

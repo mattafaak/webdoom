@@ -6,10 +6,19 @@
 kept below only as the record of what was believed at the time.  Read
 `docs/n64/DEMO-GATE-STATUS.md` for where 20.4c actually stands.**
 
-What is true now: the ROM builds, **boots, reads its WAD and ticks the attract
-demos** under ares over the GDB stub (`44e69f3`, `1e37451`).  The remaining
-blocker for the 13/13 gate is that `-timedemo` does not engage on this target,
-so `gametic` never aligns with the golden base — root-caused, not mysterious.
+What is true now (updated 2026-09-11, task 25.4b): the ROM builds, boots, reads
+its WAD, and **reproduces all 13 golden demos bit-for-bit — 44,580 tics, every
+per-tic simulation hash identical to the wasm build.**  20.4c is CLOSED and the
+gate is suite leg `n64-demos`.
+
+The blocker this file used to name — "`-timedemo` does not engage on this
+target" — was never real: the Makefile appended `-DN64_TIMEDEMO` to a variable
+that `CORE_CFLAGS`/`PLAT_CFLAGS` had already snapshotted with `:=`, so the flag
+never reached the compiler and every "timedemo ROM" was an attract-loop ROM.
+See `docs/n64/DEMO-GATE-STATUS.md`.
+
+Still open: 20.4d (real hardware) and 20.5 (the RDP renderer — `i_video_n64.c`
+is still a headless stub, so the simulation is proven but nothing is displayed).
 
 ### Superseded status (2026-07-23), and why it was wrong
 
@@ -222,8 +231,11 @@ make boot-log      # attempt ares UART capture (requires xvfb or working display
 make clean
 ```
 
-## Next steps (task 20.4c / 20.5)
+## Next steps (task 20.5 / 20.4d)
 
-- Unblock ares boot: install xvfb (`sudo pacman -S xorg-server-xvfb`) then `make boot-log`.
 - 20.5: implement RDP hardware rasterizer (replace `i_video_n64.c` headless stub).
-- 20.4c: controller input via libdragon `joypad.h`.
+- 20.4d: real hardware evidence via SummerCart64.
+- Controller input via libdragon `joypad.h`.
+
+(The "unblock ares boot: install xvfb" item is done — xvfb is present and
+`run-n64-demos.sh` runs ares headless under it on every demo.)

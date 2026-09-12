@@ -34,3 +34,6 @@ assets/
 tools/.suite-logs/
 # qemu-user core dumps (cross-arch experiments; see tools/freestanding/arm-check.sh)
 qemu_*.core
+
+# N64 gate scratch: per-demo ROMs (14 MB each) and ares logs, rebuilt every run.
+tools/n64/n64_trace_work/

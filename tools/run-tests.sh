@@ -71,6 +71,13 @@ have_zig()     { command -v zig >/dev/null 2>&1; }
 have_clangfmt(){ command -v clang-format >/dev/null 2>&1 && \
                  [ "$(clang-format --version | grep -oE '[0-9]+' | head -1)" = "22" ]; }
 have_qemuarm() { command -v qemu-arm-static >/dev/null 2>&1; }
+# The N64 gate needs three separate things and none of them are common: the
+# mips64-elf cross compiler, the ares emulator, and an X server to run it
+# headless under.  Checked together because a partial toolchain would fail the
+# leg for a reason that has nothing to do with the engine.
+have_n64()     { [ -x "${N64_INST:-$HOME/toolchains/n64}/bin/mips64-elf-gcc" ] && \
+                 command -v ares >/dev/null 2>&1 && \
+                 command -v xvfb-run >/dev/null 2>&1; }
 have_gcc()     { command -v gcc >/dev/null 2>&1; }
 have_browser() { command -v "${CHROME_BIN:-google-chrome-stable}" >/dev/null 2>&1 || [ -x /opt/google/chrome/chrome ]; }
 have_firefox() { [ -x /usr/bin/firefox ]; }
@@ -86,6 +93,7 @@ need_reason() {   # need_reason <tag> -> prints why it is unmet
         zig)      echo "zig not on PATH (needed to cross-build for ARM)" ;;
         clangfmt) echo "clang-format 22 not present (have: $(command -v clang-format >/dev/null 2>&1 && clang-format --version | grep -oE '[0-9]+' | head -1 || echo none))" ;;
         qemuarm)  echo "qemu-arm-static not on PATH" ;;
+        n64)      echo "N64 toolchain incomplete (need mips64-elf-gcc under \$N64_INST, ares and xvfb-run; run: source ~/toolchains/env.sh)" ;;
         gcc)      echo "gcc not on PATH" ;;
         browser)  echo "Chrome not found (set CHROME_BIN)" ;;
         firefox)  echo "/usr/bin/firefox not found" ;;
@@ -98,6 +106,7 @@ need_met() {
     case "$1" in
         build) have_build ;; wad) have_wad ;; native) have_native ;; gcc) have_gcc ;; fs) have_fs ;;
         zig) have_zig ;; qemuarm) have_qemuarm ;; clangfmt) have_clangfmt ;;
+        n64) have_n64 ;;
         browser) have_browser ;; firefox) have_firefox ;; emsdk) have_emsdk ;;
         baseline) have_baseline ;;
         *) return 1 ;;
@@ -358,6 +367,12 @@ leg ro-wad          fs,wad     "WAD blob stays read-only over 13 demos (XIP)" --
 # half that was missing.  zig cross-builds the freestanding core for 32-bit ARM
 # and qemu-arm-static replays all 13 golden demos.
 leg arm-cross       zig,qemuarm,wad "freestanding core 13/13 on 32-bit ARM" -- bash tools/freestanding/arm-check.sh
+# The N64 rung of the same argument, and the strongest one: a 93.75 MHz
+# big-endian MIPS console, a 12.4 MB WAD read in place out of cartridge space,
+# and the whole 44,580-tic golden set reproduced bit-for-bit.  ~13 min -- the
+# longest leg in the suite by a wide margin, and it is here rather than in the
+# out-of-suite registry because it is now green and a gate nobody runs rots.
+leg n64-demos       n64,wad    "13/13 demo sim-hashes on emulated N64 (~13 min)" -- bash tools/n64/run-n64-demos.sh
 leg demo-verify-cli build,wad  "the shipped 19.4 CLI itself, --all mode"     -- node tools/demo-verify.mjs --all
 
 # ── netcode determinism ──────────────────────────────────────────────────────

@@ -67,5 +67,8 @@ extern int n64_trace[];
 extern int n64_trace_len;
 void n64_record_hash(void);
 void n64_demo_complete_halt(void);
+// n64_dump_trace(): print the whole trace over the debug log channel, so the
+// harness can read it out of ares's captured stdout without a debugger.
+void n64_dump_trace(void);
 
 #endif /* __N64_PLATFORM_H__ */

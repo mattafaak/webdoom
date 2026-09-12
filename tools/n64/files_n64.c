@@ -15,6 +15,9 @@
 // Engine/core: 0-diff.  Only tools/n64/ is new.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <string.h>
+
+#include <debug.h>    /* debugf */
+
 #include "doomtype.h"
 #include "web.h"
 #include "n64_platform.h"
@@ -45,6 +48,18 @@ void n64_register_wad(const byte* data, int len)
 #endif
     strncpy(n64_wad_name, N64_WAD_NAME, sizeof(n64_wad_name) - 1);
     n64_wad_name[sizeof(n64_wad_name) - 1] = '\0';
+
+    /* Announce the name COMPILED INTO THIS OBJECT, not the one the build was
+       asked for.  They came apart once and it was invisible: the 20.4c gate
+       force-rebuilt n64_main.o and n64_hash.o between IWADs, but N64_WAD_NAME is
+       baked in HERE, and n64_hash.c does not use it at all -- so the doom2 ROM
+       registered doom2.wad's bytes under the previous build's "doomu.wad".
+       IdentifyVersion() matched doomu, set gamemode retail, and the run died on
+       "W_GetNumForName: E1M9 not found!".  A stale object with a plausible
+       constant is not a build error; the only way to see it is to have the
+       running program say which value it holds.  run-n64-demos.sh asserts this
+       line against the IWAD it meant to build. */
+    debugf("N64 webdoom: registry name '%s'\n", n64_wad_name);
 }
 
 byte* W_WebFile(const char* path, int* len)

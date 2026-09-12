@@ -32,15 +32,24 @@
 
 /* Argv for D_DoomMain.
  * Without N64_TIMEDEMO: banner-only mode (attract-loop default).
- * With N64_TIMEDEMO="demo1" (etc.): timedemo gate mode (20.4c). */
+ * With N64_TIMEDEMO="demo1" (etc.): timedemo gate mode (20.4c).
+ *
+ * -nodraw is NOT optional and NOT an optimisation.  The golden this trace is
+ * compared against is recorded by tools/demo-test.mjs as
+ *     doom.callMain(['-timedemo', demo, '-nodraw'])
+ * and a differential is only a differential if both sides run the same argv.
+ * (It is also what makes the run finish under ares in minutes rather than
+ * hours: D_Display returns immediately at d_main.c:234, so the software
+ * rasteriser never runs.  That is a side benefit, not the reason.) */
 #ifdef N64_TIMEDEMO
 static const char* n64_argv[] = {
     "n64-doom",
     "-timedemo",
     N64_TIMEDEMO,   /* string literal, e.g. "demo1" */
+    "-nodraw",
     NULL
 };
-static const int n64_argc = 3;
+static const int n64_argc = 4;
 #else
 static const char* n64_argv[] = {
     "n64-doom",
@@ -151,8 +160,12 @@ int main(void)
         // Demo completed via longjmp from I_Error — normal exit path.
         debugf("N64 webdoom: demo completed normally, trace len=%d\n",
                n64_trace_len);
-        // Halt in the named GDB breakpoint target so run-n64-demos.sh can
-        // dump n64_trace[0..n64_trace_len-1] via "dump binary memory".
+        // Print the trace over the debug log channel; run-n64-demos.sh reads it
+        // out of ares's captured stdout.  See n64_dump_trace() for why this is
+        // the extraction path rather than a GDB memory dump.
+        n64_dump_trace();
+        // Then spin in the named breakpoint target, so a debugger still has
+        // somewhere to attach for a post-mortem.
         n64_demo_complete_halt();
         /* unreachable — n64_demo_complete_halt spins forever */
     }

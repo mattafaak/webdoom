@@ -21,6 +21,9 @@
 // Engine/core: 0-diff.  All new code is in tools/n64/ only.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 
+#include <debug.h>     /* debugf */
+#include <stdio.h>     /* sprintf */
+
 #include "doomdef.h"   /* MAXPLAYERS, boolean */
 #include "doomstat.h"  /* gametic, playeringame, players */
 #include "r_state.h"   /* numsectors, sectors */
@@ -95,8 +98,50 @@ n64_record_hash (void)
         n64_trace[n64_trace_len++] = n64_state_hash ();
 }
 
-/* GDB breakpoint target: run-n64-demos.sh breaks here to know the trace is
-   complete, then reads n64_trace_len and dumps n64_trace[0..len-1].
+/* Print the whole trace over libdragon's debug log channel (debugf -> stderr ->
+   ares's emulator log -> the harness's captured stdout).
+
+   This is how the trace LEAVES the machine.  It used to leave only through the
+   ares GDB stub, which meant the gate needed gdb, a TCP port, a stub that keeps
+   the CPU running while memory is read, and a poll loop guessing when the trace
+   had stopped growing.  Three of those four went wrong in one sitting: the port
+   probe used an `nc` that is not installed, so a healthy stub read as absent;
+   and once gdb did attach, ares halted the CPU at the IPL and nothing resumed
+   it, so the trace stayed at 0 for the full 600 s timeout while the ROM -- which
+   completes in about a minute -- had never been allowed to run.
+
+   A printed trace has none of that: ares runs untouched, the evidence is plain
+   text in a log file that a human can read, and the harness's only job is to
+   wait for the END marker.  The GDB stub remains available for post-mortem
+   debugging (that is what it is good at) and n64_demo_complete_halt below is
+   still a valid breakpoint target.
+
+   Eight hashes per line keeps the line count to ~214 for doom-demo1 and ~926
+   for plutonia-demo1, and the line is assembled in a buffer so one debugf emits
+   one whole line -- a partial-line debugf would interleave with anything else
+   the engine prints. */
+void
+n64_dump_trace (void)
+{
+    char line[8 * 9 + 2];
+    int  i;
+
+    debugf ("N64_TRACE_BEGIN %d\n", n64_trace_len);
+    for (i = 0; i < n64_trace_len; i += 8)
+    {
+        int n = n64_trace_len - i;
+        int j, o = 0;
+        if (n > 8)
+            n = 8;
+        for (j = 0; j < n; j++)
+            o += sprintf (line + o, "%08x ", (unsigned) n64_trace[i + j]);
+        line[o] = '\0';
+        debugf ("%s\n", line);
+    }
+    debugf ("N64_TRACE_END %d\n", n64_trace_len);
+}
+
+/* GDB breakpoint target: a debugger can still break here for a post-mortem.
    noinline ensures the symbol survives --gc-sections; used ensures it is
    not optimised away even though no C code calls it via the ABI. */
 __attribute__ ((noinline, used)) void

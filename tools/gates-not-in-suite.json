@@ -1,5 +1,5 @@
 {
-  "_comment": "Gate-shaped tools deliberately NOT run by tools/run-tests.sh. Enforced by tools/gate-census.mjs: a gate that is neither reachable from the suite nor listed here fails the census, and an entry naming a file that no longer exists fails it too. A reason must say why the tool CANNOT be green in the suite — 'nobody got round to it' is not one; wire it instead.",
+  "_comment": "Gate-shaped tools deliberately NOT run by tools/run-tests.sh. Enforced by tools/gate-census.mjs: a gate that is neither reachable from the suite nor listed here fails the census, and an entry naming a file that no longer exists fails it too. A reason must say why the tool CANNOT be green in the suite \u2014 'nobody got round to it' is not one; wire it instead.",
   "_schema": {
     "reason": "why this cannot be a suite leg",
     "owner": "the task that would change that, if any"
@@ -20,10 +20,6 @@
     "tools/freestanding/be-check.sh": {
       "reason": "KNOWN-DIVERGING BY DESIGN: big-endian PPC under qemu-ppc-static, hashes diverge and the script is deliberately written to exit non-zero (13.3a WIP, BE-NOTES.md). Wiring it would make the suite permanently red on a documented open question.",
       "owner": "13.3a"
-    },
-    "tools/n64/run-n64-demos.sh": {
-      "reason": "KNOWN-RED: -timedemo does not engage on N64 so gametic never aligns with the golden base (docs/n64/DEMO-GATE-STATUS.md, which says in as many words: do not wire it into the main suite as green).",
-      "owner": "20.4c"
     }
   }
 }
