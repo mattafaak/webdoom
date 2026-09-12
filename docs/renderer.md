@@ -1104,6 +1104,46 @@ column/span inner loops (§7); task 2.3 targets visplane management (§5.2).
 
 ---
 
+## 12b. Compile-time render toggles (20.3a–d, 14.2b)
+
+Five presentation-side variants ship behind compile-time flags. Each is built
+into its OWN artifact directory so the shipping `build/` is untouched, and each
+has a suite leg. They lived only in `docs/optimization-ledger.md` until task
+24.5; this section exists because a reader looking for "what render paths are
+there" looks here, not in the ledger.
+
+| flag | build dir | what changes | golden family | suite leg |
+|------|-----------|--------------|---------------|-----------|
+| *(none)* | `build/` | the vanilla path | `*-render.json` (13) | `render-goldens` |
+| `WEBDOOM_LOWDETAIL` via `--low-detail` | `build/` | low-detail column path (`web_set_detail`) | `*-render-low.json` (13) | `render-low` |
+| `WEBDOOM_FAKEFLAT` | `build-fakeflat/` | flats filled with one colour, no texture read (20.3a) | `*-render-fakeflat.json` (13) | `render-fakeflat` |
+| `WEBDOOM_POTATO` | `build-potato/` | columns drawn at half width, doubled (20.3c) | `*-render-potato.json` (13) | `render-potato` |
+| `WEBDOOM_SBSKIP` | `build-sbskip/` | status bar not redrawn when its widget state is unchanged (20.3b) | **none — see below** | `render-sbskip`, `sim-sbskip` |
+| `WEBDOOM_DIFFBLIT` | `build-diffblit/` | only changed columns transposed into the transfer buffer (20.3d) | **none — see below** | `render-diffblit`, `sim-diffblit` |
+
+Two of them deliberately have no golden family. `WEBDOOM_SBSKIP` and
+`WEBDOOM_DIFFBLIT` are **pixel-identical when on** — that is the whole claim —
+so their gate is the VANILLA goldens replayed against the toggle build
+(`demo-test.mjs --render --build-dir build-sbskip`). Identity is the proof; a
+separate golden set would only be able to disagree with itself. They shipped
+`完了` with no gate at all until task 21.12.
+
+Two invariants hold across all of them, and both are gated:
+
+- **Toggle-off byte-identity.** With the flag undefined the wasm must be
+  byte-identical to a build without the toggle's source at all. `#line`
+  directives after each `#endif` restore the compiler's line counter so the
+  binary does not shift. The md5s live in `docs/optimization-ledger.md` and
+  `tools/toggle-identity-check.mjs` compares all eight to the artifacts on every
+  suite run — those figures are the SHIPPING artifacts, so an engine change moves
+  them and the rows are updated in the same commit.
+- **Sim invariance.** Every toggle is render-side; 13/13 sim goldens stay
+  bit-identical with each one on. `r_things.c`'s sprite path and the status-bar
+  snapshot both write only to `screens[]`.
+
+Measured effect, kill rules and the icount arithmetic stay in
+`docs/optimization-ledger.md` §20.3a–d — this table is the map, not the ledger.
+
 ## 13. Open questions for task 1.4
 
 1. **`DISTMAP = 2` and `LIGHTZSHIFT = 20` rationale**: the exact parameter

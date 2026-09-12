@@ -216,6 +216,13 @@ wasm code size (task 2.6).
 
 ### A. Per-stage ranked costs per host
 
+> **Compile-time render variants.** Five toggles change what the renderer does
+> (fake-flat, potato, low-detail, status-bar skip, differential blit). Their map
+> — build dirs, golden families and suite legs — is `renderer.md` §12b; their
+> measured effect and kill rules are `optimization-ledger.md` §20.3a–d. Every
+> figure in THIS file is the vanilla path unless it says otherwise.
+
+
 Values are averages across doom.wad demo1/demo2/demo3 from
 `tools/golden/bench-baseline.json` (schemaVersion 2, all four hosts
 coherent at commit 16c3354). The stage order within each host is the
