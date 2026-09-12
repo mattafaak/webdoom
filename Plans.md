@@ -144,7 +144,7 @@ and `run-tests.sh` never built `build/`, the artifact almost every leg loads.
 |------|------|-----|---------|--------|
 | 22.1 | Full suite run committed as dated evidence, reds filed as findings | summary table committed; every red has a disposition | 21.x | cc:完了 [b80d729] |
 | 22.2 | Triage: F1 flake, F2 perf-009, F3 wbox baseline, F4 four-host perf gate | each red fixed, promoted to a task, or recorded with an expiry | 22.1 | cc:完了(partial) [6296f2d] — F1 fixed, F3 addressed; F2 and F4 recorded, F4 needs a decision |
-| 22.3 | Node 26.8.1 compatibility capture | drift recorded with the version boundary named | 22.1 | cc:TODO |
+| 22.3 | Node 26.8.1 compatibility capture | full tier green on v26.8.1 (80/80, 0 skipped); no drift to record; CI matrix 20/24/26 and `engines: >=20` declared | 22.1 | cc:完了 [f8c9add] |
 
 ## What round 4 bought, measured
 
@@ -192,7 +192,7 @@ into the engine, and hostile lump content — are now gates.
 | 23.5 | Unchecked `_malloc` returns (6 JS + 3 C sites) | every site checks; C sites I_Error into the fail-soft path | 22.1 | cc:完了 [9c800a2] |
 | 23.6 | Server resource and liveness: the `verifyInFlight` half-open wedge, uncapped spectators, unbounded history bursts | wedge reproduced and red-proofed (two wrong fixes first); 15 s body timeout; MAX_SPECTATORS; backpressure on both history bursts. `attestStore` pruning and a spectate fuzz leg remain | 22.1 | cc:完了(partial) [9c800a2] |
 | 23.7 | Relay closed on quit and on engine error; `doom.netQuit` wired | socket no longer outlives the engine; net + browser gates green | 22.1 | cc:完了 [see 23.7b] |
-| 23.7b | The per-boot leak set: ~11 input listeners, the qol rAF loop + 5 DOM nodes, a duplicate `#settings` panel, a GL program/VBO/2 textures with no dispose. None of input/qol/settings/video exposes a teardown | a single teardown(); play→quit→play×5 leaks nothing, MEASURED in a browser test | 23.7 | cc:TODO |
+| 23.7b | The per-boot leak set: ~11 input listeners, the qol rAF loop + 5 DOM nodes, a duplicate `#settings` panel, a GL program/VBO/2 textures with no dispose. None of input/qol/settings/video exposes a teardown | a single teardown(); play→quit→play×3 leaks nothing, MEASURED not asserted: without it listeners 23→38→53 (+15/cycle), `#settings` 1→2→3 (duplicate ids), `#stage` children 13→19→25; with it 7/0/7 flat. `browser-teardown` leg | 23.7 | cc:完了 [90a7f93] |
 | 23.8 | Fuzz the untested direction: hostile SERVER frames at the engine | `tools/hostile-server-test.mjs`, 13 cases, by observation not inference; red-proofed | 23.1 | cc:完了 [7764c94] |
 
 Suite: **74 legs, 74 passed, 0 skipped** (the 74th is `arm-cross`, see the pi5 migration).
@@ -201,19 +201,19 @@ Suite: **74 legs, 74 passed, 0 skipped** (the 74th is `arm-cross`, see the pi5 m
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 24.1 | `promises-index.md` truth-up (six stale entries, self-contradicting counts) | every entry re-derived; counts computed | 22.1 | cc:TODO |
+| 24.1 | `promises-index.md` truth-up (six stale entries, self-contradicting counts) | every entry re-derived; counts computed; `promises-index-check.mjs` gates it | 22.1 | cc:完了 [9140776] |
 | 24.2 | Reconcile `claims-index.md` with `claims.json` | 50 overclaiming rows re-statused; 11 unlisted manifest ids added; the bad reproducer path fixed; a manifest self-contradiction (size-004 vs readme-001) found and closed; totals computed; `claims-index-check.mjs` gates all six invariants, red-proofed | 21.9 | cc:完了 [this commit] |
 | 24.3 | Make CI real, or stop claiming it | `.github/workflows/ci.yml` runs `--quick` on node 20/24 and states what it did not cover; README/engine-archaeology corrected; `lint` split so a runner without the pinned clang-format reports a counted SKIP; the WAD-less clone case fixed (it was RED) | 21.1, 21.8 | cc:完了 [642e2c0] |
-| 24.4 | Stale-doc sweep (n64 BRING-UP, renderer §13, bare-metal banner, ledger bsp figure) | each corrected or banner-dated | 22.1 | cc:TODO |
-| 24.5 | Document the four shipped render toggles in renderer.md / perf.md | each documented with its golden family and gate | 21.12 | cc:TODO |
+| 24.4 | Stale-doc sweep (n64 BRING-UP, renderer §13, bare-metal banner, ledger bsp figure) | five documents corrected or banner-dated | 22.1 | cc:完了 [af663bd] |
+| 24.5 | Document the shipped render toggles in renderer.md / perf.md | five variants documented, each with its golden family and gate | 21.12 | cc:完了 [2b10f3e] |
 
 ## Phase 25: dead code, the contract, and Phase 20
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
 | 25.1 | The GM SoundFont backend could not activate under any configuration | operator path wired (`WEBDOOM_SPESSASYNTH_URL` → `/api/config` → `arm()`), gated by `tools/gm-config-test.mjs`, decision-17.2a amended | 22.1 | cc:完了 [this commit] |
-| 25.2 | `web.h` becomes the contract it is designated to be (5 of ~45 exports, wrong arity, 4 forked copies) | one header, correct arity, bounds contracts stated | 23.x | cc:TODO |
-| 25.3 | Duplication cleanup (`paniniStrength`, the two ring-buffer worklets, attachRelay/attachSpectate) | one definition each; gates green | 25.1 | cc:TODO |
+| 25.2 | `web.h` becomes the contract it is designated to be (5 of ~45 exports, wrong arity, 4 forked copies) | arity fixed, memory-safety surface declared with bounds contracts, `web-contract-check.mjs` gates definition-vs-declaration (73 exports, all 6 pointer-taking ones in the contract) | 23.x | cc:完了 [be0c271] |
+| 25.3 | Duplication cleanup (`paniniStrength`, the two ring-buffer worklets, attachRelay/attachSpectate) | `paniniStrength` → `wide-utils.js`; `makeBundlePump` shared by relay+spectate (net.js 250→223); dead `gm-worklet.js` deleted and its decision record corrected | 25.1 | cc:完了 [850976d, f2f88db] |
 | 25.4 | Fix Phase 20's dependency defect (20.5a gated on hardware) and close 20.4c (`-timedemo` does not engage on N64) | 20.5a re-pointed; one demo trace bit-identical, then 13/13 | 22.1 | cc:TODO |
 | 25.5 | Decide 20.6b and 20.7b explicitly | verdicts written below: 20.7b PARKED on arithmetic, 20.6b PURSUABLE with a named plan | 22.1 | cc:完了 [this commit] |
 
