@@ -78,6 +78,15 @@ Read the banner first — all three carry a dated status.
 | document | what it is |
 |---|---|
 | [retrospective.md](retrospective.md) | the 2026-07-16 refinement-pass retrospective. Self-declared archive: its body describes that date, not this one |
+| [Plans-refinement-complete.md](Plans-refinement-complete.md) | the refinement initiative's task table, 26/26. Holds the regold lesson `tools/golden-provenance.mjs` cites by line |
+| [Plans-understanding-complete.md](Plans-understanding-complete.md) | phases 6–11, understanding-on-trial |
+| [Plans-floor-initiative-complete.md](Plans-floor-initiative-complete.md) | phases 12–15, 32/32 at `8305c4a` |
+| [Plans-field-fixes-complete.md](Plans-field-fixes-complete.md) | round 3, phases 16–19, 22/22 at `1f9f1e5`. The tasks `Plans.md`'s round-3 planning sections rank and sequence |
+
+These four moved here from the repo root in round 6: 486 lines of closed
+task tables that made the front door look like a planning directory. They
+are the record of how each initiative actually went, and `Plans.md` links
+them from its first paragraph.
 
 ## Not webdoom's
 

@@ -24,6 +24,16 @@ source. 349 KB of wasm, zero client install, zero-config multiplayer.
   content hash via a service worker — second load is instant, single
   player works offline
 
+![webdoom in widescreen — Hor+ 854×200, E1M1](docs/wide-screenshots/18.2b-hor-plus-854x200-tic200.png)
+
+*Ultimate Doom E1M1 at tic 200, rendered 854×200 Hor+ (task 18.2b). The
+extra columns are extra FOV, not a stretch: vertical FOV and world scale
+are vanilla, and `sim-wide` proves the simulation is unchanged by it.*
+
+Contributing: [CONTRIBUTING.md](CONTRIBUTING.md) — the tic-identity rule
+is the one that will bite. Security model, and what is deliberately not
+defended: [SECURITY.md](SECURITY.md).
+
 ## Quick start
 
 ```sh

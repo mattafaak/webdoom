@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security report
+    url: https://github.com/mattafaak/webdoom/blob/master/SECURITY.md
+    about: What is hardened, what is deliberately not, and how to report it.
+  - name: Contributing
+    url: https://github.com/mattafaak/webdoom/blob/master/CONTRIBUTING.md
+    about: Read this before a pull request — especially the tic-identity rule.

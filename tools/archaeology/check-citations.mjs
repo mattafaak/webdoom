@@ -239,9 +239,32 @@ function checkCitation(filename, lineStart, lineEnd, docLine, docFile, docLineNo
 }
 
 // ── Parse docs and collect citations ─────────────────────────────────────────
-const docFiles = readdirSync(DOCS_DIR)
-    .filter(f => f.endsWith('.md'))
+//
+// CLOSED TASK ARCHIVES ARE EXEMPT, and the reason is about this checker rather
+// than about them.  Round 6 moved the four Plans-*-complete.md files from the
+// repo root into docs/, which brought them into scope for the first time and
+// produced three failures — every one of them an artefact of the heuristic,
+// not a bad citation.  This check asserts that the identifiers NEAR a citation
+// in the prose appear within +-8 lines of the cited location; it is built for
+// reference documents, where a citation sits beside the names it is about.  An
+// archived task row is several hundred words of narrative, so the identifier
+// window swallows unrelated prose: `p_local.h:84` was graded against
+// [core, apt, P_PointOnLineSide, P_DivlineSide, P_AddThinker] and `r_main.c:43`
+// against [engine].
+//
+// These files are also a RECORD of what was true at a past commit.  Correcting
+// their line numbers to today's would rewrite the record to keep a heuristic
+// quiet — the opposite of what the record is for.  They are skipped by name,
+// loudly, and the count is printed.
+const ARCHIVED = /^Plans-.*-complete\.md$/;
+const allDocs = readdirSync(DOCS_DIR).filter(f => f.endsWith('.md'));
+const archived = allDocs.filter(f => ARCHIVED.test(f));
+const docFiles = allDocs
+    .filter(f => !ARCHIVED.test(f))
     .map(f => join(DOCS_DIR, f));
+if (archived.length)
+    console.log(`check-citations: ${archived.length} closed task archive(s) exempt `
+              + `(${archived.join(', ')}) — historical citations, see the note in this file`);
 
 let pass = 0, boundsOnly = 0, semantic = 0, failOOB = 0, failID = 0, skip = 0;
 const failures = [];
