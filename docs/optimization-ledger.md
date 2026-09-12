@@ -440,7 +440,14 @@ sanctioned by policy).**
 | NC4 | R_DrawColumn 8-wide unroll (extend existing 4-wide) | cycle-floor | predicted −5K…−10K instr/tic (1–2% of bsp); UNMEASURED | SURVIVES → task 20.2b |
 | NC5 | R_DrawSpan 4-wide loop unroll | cycle-floor | MEASURED: −47,707 instr/tic p50 doom.wad demo3 (−4.2% whole, −11.9% planes); scalar xfrac/yfrac, no packing | LANDED (20.2b) |
 
-**Totals: 21 candidates, 12 survivors (8 landed, 4 surviving), 10 killed.**
+**Totals: 21 candidates, 11 survivors (8 landed, 3 surviving), 10 killed.**
+
+<!-- Counted from the verdict column of the table above, not written by hand:
+     LANDED C1-C7 + NC5 = 8; KILLED K1-K9 + NC1 = 10; SURVIVES NC2, NC3, NC4 = 3.
+     The line used to read "12 survivors ... 4 surviving", which is two of the
+     four figures wrong: there are three surviving candidates, not four.
+     tools/archaeology/status-drift-check.mjs rule 3 recomputes these from the
+     rows on every run, so the sentence cannot drift from the table again. -->
 
 ---
 

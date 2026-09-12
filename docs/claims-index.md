@@ -328,7 +328,15 @@ and `claims.json` records `expected: "91"`, but `docs/magic-data.md` still read
 `doc-drift.mjs` builds its doc index from `claims-index.md`, whose locators all
 point at `engine-archaeology.md` — **`magic-data.md` is not in the drift-check's
 scope at all**, so the one document that is actually published is the one document
-the gate cannot see. Corrected to 91. The scope gap itself remains open.
+the gate cannot see. Corrected to 91.
+
+**The scope gap was closed by task 6.5** and this row said otherwise until round
+6: `doc-drift.mjs` carries a `PUBLIC_HINTS` map keyed by claim id, re-checks the
+same manifest value against `magic-data.md`'s own prose, and treats a mismatch
+as a HARD failure. The residual is narrower and worth stating exactly: that map
+holds **14 claim ids**, so only those figures are cross-checked in the published
+doc. A number appearing in `magic-data.md` without an entry there is still
+unseen — the hole is one of coverage now, not of scope.
 
 **FINDING-1 (ea-023): invuln COLORMAP match count — doc says 242/256, script says 241/256.**
 `tools/archaeology/colormap-invuln-crack.c` reports `15/256 mismatches`;

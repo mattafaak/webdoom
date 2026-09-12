@@ -153,6 +153,42 @@ for (const v of verdicts) {
              '    A decided task with an undecided status cell is two answers to one question.');
 }
 
+// ── rule 3: the ledger's Totals line must equal its own table ───────────────
+//
+// "Totals: 21 candidates, 12 survivors (8 landed, 4 surviving), 10 killed" sat
+// under a table whose rows say 8 landed, 10 killed and THREE surviving. Two of
+// the four figures were wrong, in the over-reporting direction, and the file
+// that states the project's optimisation record was the one stating them. The
+// rule is D3 again: compute it from the rows rather than trust the sentence.
+const ROW = /^\|\s*((?:C|K|NC)\d+)\s*\|.*\|\s*(LANDED|KILLED|SURVIVES)\b/gm;
+const rows = [...ledger.matchAll(ROW)];
+const tally = { LANDED: 0, KILLED: 0, SURVIVES: 0 };
+for (const r of rows) tally[r[2]]++;
+const totalsLine = /\*\*Totals:\s*(\d+)\s*candidates,\s*(\d+)\s*survivors\s*\((\d+)\s*landed,\s*(\d+)\s*surviving\),\s*(\d+)\s*killed\.?\*\*/.exec(ledger);
+
+if (rows.length < 10)
+    fail(`status-drift: only ${rows.length} candidate rows parsed from the ledger table `
+       + '— the row format changed and rule 3 is counting nothing');
+else if (!totalsLine)
+    fail('status-drift: the ledger has candidate rows but no **Totals:** line in the expected shape'
+       + ' — either it was removed or its wording drifted past this check');
+else {
+    const [, cand, surv, landedN, survivingN, killedN] = totalsLine.map(Number);
+    const want = {
+        cand: rows.length,
+        landed: tally.LANDED,
+        killed: tally.KILLED,
+        surviving: tally.SURVIVES,
+        surv: tally.LANDED + tally.SURVIVES,
+    };
+    const got = { cand, landed: landedN, killed: killedN, surviving: survivingN, surv };
+    for (const k of Object.keys(want))
+        if (want[k] !== got[k])
+            fail(`docs/optimization-ledger.md Totals: says ${k}=${got[k]}, the rows say ${k}=${want[k]}`,
+                 `    LANDED ${tally.LANDED}, KILLED ${tally.KILLED}, SURVIVES ${tally.SURVIVES} `
+               + `over ${rows.length} rows (${rows.map(r => r[1]).join(', ')})`);
+}
+
 // ── the check must be able to find its own inputs ────────────────────────────
 if (landed.length < 3)
     fail(`status-drift: found only ${landed.length} LANDED ledger candidate(s) with an identifier-shaped `
@@ -166,6 +202,8 @@ if (bad) {
     console.log(`\nstatus-drift: ${bad} contradiction(s)`);
     process.exit(1);
 }
+console.log(`PASS status-drift: ledger totals recomputed from ${rows.length} candidate rows `
+          + `(${tally.LANDED} landed, ${tally.KILLED} killed, ${tally.SURVIVES} surviving) and they match the Totals line; `);
 console.log(`PASS status-drift: ${landed.length} landed ledger candidates (${landed.map(c => c.id).join(', ')}) `
           + `checked against ${scanned} open-state sentence(s) across ${docs.length - archives.length} documents `
           + `(${archives.length} self-declared archive(s) exempt: ${archives.join(', ') || 'none'}); `

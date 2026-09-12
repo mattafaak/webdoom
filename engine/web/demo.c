@@ -118,8 +118,8 @@ EMSCRIPTEN_KEEPALIVE int web_demo_stop (void)
     // G_WriteDemoTiccmd calls G_CheckDemoStatus, which writes the marker, frees
     // the buffer and calls I_Error("Demo %s recorded") -- an engine abort that
     // the web build surfaces as onDoomError.  Fail-soft, and documented in
-    // docs/formats.md 4.2 rather than silently discovered by whoever records for a
-    // quarter of an hour.
+    // docs/formats.md 4.2 rather than silently discovered by whoever records
+    // for a quarter of an hour.
     if (demo_p >= demoend)
     {
         demorecording = false;

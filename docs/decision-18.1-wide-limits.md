@@ -229,27 +229,36 @@ at `r_plane.c:437` applies. Current verdict: retained.
 
 ## 9. 18.2a handoff notes (review round, 2026-07-22)
 
-Four deferred items from the 18.2a review — owners are the 18.2b/c workers:
+**Status as of round 6 (2026-09-12): three of the four are closed, and the
+addendum below is closed too. Only item 4 is open.** This list read as four
+outstanding items for seven weeks after three of them landed — the addendum
+under it said so for two, and said nothing about the third. Each item now
+carries its own state, so the list and the addendum cannot disagree again;
+`tools/archaeology/status-drift-check.mjs` rule 3 gates the shape.
 
-1. **am_map.c:222** `finit_width = MAXSCREENWIDTH` is a bucket misclassification
-   (display width, should be runtime `screenwidth`). Equal at 320; wrong once
-   width changes. Fix in 18.2b when the automap is exercised at non-320 width.
-2. **r_main.c:762,763 (pspritescale/pspriteiscale; scalelight sites nearby)** `pspritescale`/`pspriteiscale` and the
-   scalelight tables use MAXSCREENWIDTH as the 320 design-reference constant.
-   These are exactly the sites 18.2b's Crispy Hor+ (`centerxfrac_nonwide`)
-   scheme must update.
-3. **web/i_video.c:23** `web_rowmajor_buf[MAXSCREENWIDTH*SCREENHEIGHT]` is
-   indexed `y*screenwidth+x`; overflows for screenwidth > 320. 18.2c must
-   resize (dynamic alloc or raise MAXSCREENWIDTH to the 854 cap) before
-   `web_set_wide()` activates.
-4. **v_video.c:362** V_DrawPatchDirect RANGECHECK uses MAXSCREENWIDTH
-   (dead VGA-planar code in wasm builds; asymmetric with other V_Draw*).
+1. ~~**am_map.c:222** `finit_width = MAXSCREENWIDTH`~~ — **RESOLVED in 18.2b.**
+   `am_map.c:544` is `finit_width = screenwidth;`.
+2. ~~**r_main.c:762,763** `pspritescale`/`pspriteiscale` and the scalelight
+   tables using MAXSCREENWIDTH as the 320 design-reference~~ — **RESOLVED in
+   18.2b** via DOOM_ORIGHALF/centerxfrac_nonwide.
+3. ~~**web/i_video.c:23** `web_rowmajor_buf[MAXSCREENWIDTH*SCREENHEIGHT]`
+   overflows for screenwidth > 320~~ — **RESOLVED.** `doomdef.h:115` defines
+   MAXSCREENWIDTH as **854**, the wide cap, so the buffer is sized for the
+   widest width `web_set_wide()` can select. Nothing resizes at runtime and
+   nothing needs to.
+4. **OPEN — v_video.c:365** `V_DrawPatchDirect` RANGECHECK uses MAXSCREENWIDTH
+   (dead VGA-planar code in wasm builds; asymmetric with the other `V_Draw*`).
+   Harmless where it sits: the function is unreachable in this port. It is
+   listed because a bare-metal port that revives the planar path inherits the
+   asymmetry.
 
-### 18.2b review addendum (2026-07-22)
+### 18.2b review addendum (2026-07-22, closed 2026-09-12)
 
 - Items 1 and 2 above were fixed in 18.2b (finit_width → screenwidth;
   zlight/scalelight/pspritescale via DOOM_ORIGHALF/centerxfrac_nonwide).
-- New deferral for 18.2c: **ST_Lib widget x-coordinates** are not
+- Deferral for 18.2c: **ST_Lib widget x-coordinates** are not
   WIDESCREENDELTA-offset — health/ammo numerals render in the left flank at
-  wide widths (sbar background patch IS centered). Remap widget x in 18.2c.
-- Item 3 (web_rowmajor_buf resize) remains open for 18.2c.
+  wide widths (sbar background patch IS centered). — **RESOLVED:**
+  `st_stuff.c:501-524` adds WIDESCREENDELTA to every widget that falls outside
+  the 320-px STBAR zone, and no-ops at W=320.
+- Item 3 (web_rowmajor_buf resize) — **RESOLVED**, see item 3 above.
