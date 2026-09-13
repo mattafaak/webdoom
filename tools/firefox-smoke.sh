@@ -4,9 +4,11 @@
 # Asserts, from the server's own request log:
 #   (1) a Firefox UA fetched something (the page HTML parsed)
 #   (2) /api/wads was requested (lobby.js ran — JS executed)
-# It does NOT assert that a frame rendered; there is no CDP equivalent for
-# Firefox in this repo and geckodriver is not present.  spec.md records that
-# limit deliberately, and README's "stock Chrome / Edge / Firefox" rests on it.
+# It does NOT assert that a frame rendered.  That is now the `firefox-frame`
+# leg's job (round 8): Firefox 155 serves WebDriver BiDi rather than CDP, which
+# is enough to drive it without geckodriver.  This leg stays because it is the
+# cheap one -- no Xvfb, no WebGL, ~12 s -- and it still covers the case where
+# the page loads but nothing renders.
 #
 # Extracted from run-tests.sh in task 21.1.  The inline version counted matches
 # with `$(grep -c X f || echo 0)`: grep -c prints 0 AND exits 1 when nothing

@@ -308,11 +308,21 @@ Verified on alder (Firefox 152.0.6, headless):
 - Leg wired in `tools/run-tests.sh` (SKIP loudly when `/usr/bin/firefox`
   absent, so CI without Firefox is valid).
 
-Limits of the smoke leg (honest):
-- Does not assert game-boots-to-lobby in Firefox (no CDP equivalent for
-  Firefox in this repo's tooling; geckodriver not present).
+Limits of the SMOKE leg (honest) — both closed by `firefox-frame` in round 8:
+- Does not assert game-boots-to-lobby in Firefox. The stated reason ("no
+  CDP equivalent for Firefox in this repo's tooling; geckodriver not
+  present") was half wrong and got wronger: geckodriver is still absent,
+  but Firefox 155 does not speak CDP AT ALL — `--remote-debugging-port`
+  serves WebDriver BiDi and `/json/list` 404s. `firefox-frame` drives
+  BiDi directly, so no third-party driver is needed.
 - Does not assert WebGL2 renders a frame; only proves JS executed and
-  the WASM module was requested.
+  the WASM module was requested. `firefox-frame` asserts the frame, and
+  asserts the PATH: headless Firefox has no WebGL at all on this host
+  (`webgl2:false`, `webgl1:false`), so the client falls back to
+  `createRenderer2D` and renders perfectly well — measured, 252 colours —
+  which is exactly how a frame gate could pass while proving a path no
+  user takes. It runs under Xvfb and requires
+  `window.webdoom._renderer.kind === 'webgl2'`.
 - AudioWorklet: Firefox headless does NOT arm AudioContext without a
   real user gesture — same headless limitation as Chrome. AudioWorklet
   timing is therefore n=0 in any headless run (either browser). See
@@ -325,7 +335,7 @@ This settles it rather than re-flagging it.
 
 Edge is Chromium. It shares Blink, V8, the WebGL2 implementation, the
 WASM engine and the service-worker implementation with the Chrome the
-21 browser legs drive; what differs is chrome-the-UI, the update
+19 browser legs drive; what differs is chrome-the-UI, the update
 channel, and a handful of enterprise policies — none of which this
 project touches. A dedicated Edge leg would re-run the same engine
 through a second binary and report the same result, which is why it has

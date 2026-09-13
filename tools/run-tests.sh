@@ -121,6 +121,7 @@ have_baseline(){ [ -f "tools/golden/browser-pipeline-$(hostname).json" ]; }
 # was hiding.
 SHARED_UP=0
 have_shared()  { [ "$SHARED_UP" = "1" ]; }
+have_xvfb()    { command -v xvfb-run >/dev/null 2>&1; }
 have_systemd() { command -v systemd-analyze >/dev/null 2>&1; }
 have_perf()    { [ "$PERF" = "1" ]; }
 have_notslow() { [ "$NO_SLOW" = "0" ]; }
@@ -144,6 +145,7 @@ need_reason() {   # need_reason <tag> -> prints why it is unmet
         n64)      echo "N64 toolchain incomplete (need mips64-elf-gcc under \$N64_INST, ares and xvfb-run; run: source ~/toolchains/env.sh)" ;;
         gcc)      echo "gcc not on PATH" ;;
         systemd)  echo "systemd-analyze not on PATH (the unit file cannot be validated here)" ;;
+        xvfb)     echo "xvfb-run not on PATH (headless Firefox has NO WebGL here, so the frame gate needs a real X display)" ;;
         browser)  echo "Chrome not found (set CHROME_BIN)" ;;
         firefox)  echo "/usr/bin/firefox not found" ;;
         emsdk)    echo "emsdk not found (run: tools/setup-emsdk.sh)" ;;
@@ -159,6 +161,7 @@ need_met() {
     case "$1" in
         build) have_build ;; wad) have_wad ;; native) have_native ;; gcc) have_gcc ;; fs) have_fs ;;
         systemd) have_systemd ;;
+        xvfb) have_xvfb ;;
         zig) have_zig ;; qemuarm) have_qemuarm ;; clangfmt) have_clangfmt ;;
         n64) have_n64 ;;
         browser) have_browser ;; firefox) have_firefox ;; emsdk) have_emsdk ;;
@@ -512,6 +515,12 @@ leg join-coop       build,wad  "drop-in determinism, co-op"            -- node t
 leg join-dm         build,wad  "drop-in determinism, deathmatch"       -- node tools/join-test.mjs dm
 leg spectate        build,wad  "spectator catch-up determinism (19.5)" -- node tools/spectate-test.mjs
 leg spectate-inject build,wad  "spectator injection is a no-op"        -- node tools/spectate-inject-test.mjs
+# 23.6's open half. `spectate` proves an observer re-simulates the identical
+# world and `spectate-inject` proves it cannot write ticcmds; nothing drove the
+# spectate path with malformed or abusive clients, so every resource cap on it
+# -- MAX_SPECTATORS, maxPayload, the history-cap refusal, the close-handler
+# bookkeeping -- was unasserted.
+leg spectate-fuzz   build,wad  "hostile clients against /ws/spectate (23.6)" -- node tools/spectate-fuzz-test.mjs
 leg edge            build,wad  "drop-in edge cases"                    -- node tools/edge-test.mjs
 leg churn           build,wad  "connect/disconnect churn"              -- node tools/churn-test.mjs
 
@@ -599,6 +608,13 @@ fi
 leg browser-insecure browser "real insecure origin: IDB WAD cache + music fallback" -- node tools/browser-insecure-test.mjs
 leg browser-pipeline browser,baseline "per-frame JS/GPU cost vs this host's baseline" -- bash tools/pipeline-gate.sh
 leg firefox-smoke    firefox "Firefox UA executes JS and fetches /api/wads" -- bash tools/firefox-smoke.sh
+# rme-002: firefox-smoke proves the HTML parsed and JS ran; it asserts NO frame.
+# Firefox 155 does not speak CDP at all (--remote-debugging-port serves WebDriver
+# BiDi, /json/list 404s), so this drives BiDi. It runs under Xvfb, NOT --headless:
+# measured here, headless Firefox reports webgl2:false AND webgl1:false, the client
+# falls back to createRenderer2D, and the gate would prove a path no user takes.
+# The kind==='webgl2' assertion is what stops that drift passing silently.
+leg firefox-frame   firefox,xvfb,build,wad "Firefox renders a real frame via WebGL2 (rme-002)" -- node tools/firefox-frame-test.mjs
 
 # ── the perf gate (spec.md §Correctness gates) ───────────────────────────────
 #

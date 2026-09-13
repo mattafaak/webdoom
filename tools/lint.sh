@@ -212,6 +212,21 @@ if ! node "$REPO_ROOT/tools/check-cdp-ports.mjs"; then
 fi
 
 # ---------------------------------------------------------------------------
+# The code inside heredocs, which nothing else in this file can see
+#
+# `node --check` covers .mjs/.js and clang-format covers C, but a tracked shell
+# script may carry hundreds of lines of ANOTHER language inside a heredoc that
+# no gate has ever parsed.  This repo has three python blocks totalling 252
+# lines, the largest being 232 lines in tools/fleet-bench.sh -- inside the perf
+# gate.  py_compile is the floor, not the ceiling: it catches a syntax error but
+# not a name that is never imported, because the module compiles and the name
+# resolves at run time or not at all.
+# ---------------------------------------------------------------------------
+if ! node "$REPO_ROOT/tools/check-heredoc-lang.mjs"; then
+    ERRORS=1
+fi
+
+# ---------------------------------------------------------------------------
 # Executable bit on scripts README tells a user to run BARE
 #
 # README.md's quick start says `tools/run-tests.sh`, with no interpreter.  If
