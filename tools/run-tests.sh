@@ -406,6 +406,13 @@ if [ "$QUICK_ONLY" = "0" ]; then
 # ── artifacts under test are current with their sources (21.4/21.5) ──────────
 leg freshness       build      "build/ + native refs not older than sources" -- node tools/artifact-freshness.mjs --all
 leg size-ledger     build      "doom.wasm budget + README KB three-way"      -- node tools/archaeology/size-ledger.mjs
+# perf-009 (__heap_base) is a HARD check that no suite leg had ever run: the
+# measurement-stamp family is --full only, and the doc-drift leg calls
+# verify-all.sh with no arguments.  It drifted 48 B unnoticed before round 7
+# moved it on purpose.  --require-complete is what stops this leg printing green
+# for a run that skipped the families it exists to execute.  fresh-perf is not
+# decoration either: `build` means the artifact is PRESENT, not CURRENT.
+leg stamp-full      build,fresh-perf  "verify-all --full: +30 measurement-stamp and runtime-stat claims" -- bash tools/archaeology/verify-all.sh --full --require-complete
 
 # ── engine boots and makes sound ─────────────────────────────────────────────
 leg smoke-doom      build,wad  "boots doom.wad headless, 700 frames"   -- node tools/smoke-test.mjs doom.wad 700

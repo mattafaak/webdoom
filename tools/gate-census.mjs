@@ -38,7 +38,16 @@ const ROOTS = ['tools/run-tests.sh'];
 // the census -- whose whole job is finding gates nothing runs -- could never
 // have reported the spec's own required gate as orphaned. It was invisible to
 // the instrument built to notice exactly that.
-const GATEISH = /(^|[/-])(test|check|verify|fuzz|gate|witness|precache|smoke|census|bench)[-.]|[-](test|check|gate|bench)\.(mjs|sh)$|(^|\/)run-[a-z0-9-]+\.(mjs|sh)$/;   // a tools/run-*.sh IS a runner
+//
+// Round 8 added stamp|ledger|drift|summary|index for the same reason: the whole
+// claims-machinery class -- wasm-stamp, size-ledger, doc-drift, ledger-count,
+// claims-summary -- was invisible to the census, and one of them (wasm-stamp)
+// had never been run by any suite leg.  Adding them found zero new orphans, so
+// this change closes NOTHING by itself; the stamp-full leg is the fix.  Note
+// the limit that remains: reachability here is a text grep, so wasm-stamp.mjs
+// counted as "run by the suite" while sitting inside `if [ "$FULL" = "1" ]` in
+// verify-all.sh, which the default tier never takes.  The census cannot see tiers.
+const GATEISH = /(^|[/-])(test|check|verify|fuzz|gate|witness|precache|smoke|census|bench|stamp|ledger|drift|summary|index)[-.]|[-](test|check|gate|bench|stamp|ledger|index)\.(mjs|sh)$|(^|\/)run-[a-z0-9-]+\.(mjs|sh)$/;   // a tools/run-*.sh IS a runner
 
 const tracked = execSync('git ls-files tools', { cwd: root, encoding: 'utf8' })
     .split('\n').filter(Boolean);

@@ -1277,16 +1277,18 @@ the 32 MB linear memory: plutonia.wad + 4 MB zone + 4.50 MB static).
 |-------|-------------|-------------|---------|------------------------------|
 | tnt.wad + tnt31.wad | 18,195,736 | 282,000 | 18,477,736 (17.62 MB) | 4.50 + 4 + 17.62 = **26.13 MB** |
 | doom2.wad + nerve.wad | 14,604,584 | 3,819,855 | 18,424,439 (17.57 MB) | 4.50 + 4 + 17.57 = **26.07 MB** |
-| doom.wad + sigil.wad | 12,408,292 | 4,640,210 | 17,048,502 (16.27 MB) | 4.50 + 4 + 16.27 = **24.77 MB** |
+| doom.wad + sigil.wad | 12,408,292 | 4,640,210 | 17,048,502 (16.27 MB) | 4.50 + 4 + 16.27 = **24.76 MB** |
 | plutonia.wad (no PWAD) | 17,420,824 | — | 17,420,824 (16.61 MB) | **25.12 MB** (§3 baseline) |
 
 Worst real combo: **tnt.wad + tnt31.wad** at 26.13 MB peak — fits the 32 MB
 linear memory with 5.87 MB headroom.
 Reproduce (26.13 MB peak): `node tools/archaeology/stamp-check.mjs`
 
-Note the other three rows already read 4.50 while `__heap_base` was 4.81: they
-were stale, and the widescreen revert made them correct by accident. Only the
-first row is gated (perf-059), which is why only the first row was caught.
+All four rows are gated as of round 8: perf-059 (tnt), perf-059b (doom2+nerve),
+perf-059c (doom+sigil), perf-059d (plutonia). Before that only the first was, and
+the other three read 4.50 while `__heap_base` was 4.81 — stale, and made correct
+by accident by the widescreen revert. The doom.wad + sigil.wad row was still
+wrong when the gate was added: it read 24.77 against 24.76 computed.
 
 Note: `tnt.wad` at 18.20 MB is slightly larger than `plutonia.wad` at
 17.42 MB, making it the worst single IWAD, not plutonia.wad as stated in §3.

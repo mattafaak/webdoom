@@ -11,7 +11,9 @@
 #                   and measurement-stamp (needs build/doom.wasm).
 #                   Target: minutes; run before release or on CI with perf build.
 #
-# Wire-in: run-tests.sh calls the fast (default) tier.
+# Wire-in: run-tests.sh's doc-drift leg calls the fast (default) tier; its
+# stamp-full leg calls --full --require-complete (round 8 U3).  Before that
+# leg existed no suite leg had ever run the measurement-stamp family at all.
 #
 # What the DEFAULT gate does NOT cover (--full or excluded):
 #   - runtime-stat (ps-003, ps-029..032, perf-034..035, perf-037..038, perf-045..050):
@@ -22,13 +24,29 @@
 #     by claims-summary.mjs and printed below — never typed here (task 21.9).
 #
 # Usage:
-#   bash tools/archaeology/verify-all.sh          # fast tier
-#   bash tools/archaeology/verify-all.sh --full   # full tier (slow)
+#   bash tools/archaeology/verify-all.sh                    # fast tier
+#   bash tools/archaeology/verify-all.sh --full             # full tier (slow)
+#   bash tools/archaeology/verify-all.sh --full --require-complete   # as a gate
+#
+# --require-complete turns a skipped verifier family into a FAILURE.  Without it
+# this script exits 0 on "PASS (INCOMPLETE)", so a suite leg wrapping it would
+# print green for a run that checked nothing extra -- "could not run" and "ran
+# and passed" producing the same exit code.
 set -eo pipefail
 cd "$(dirname "$0")/../.."
 
 FULL=0
-if [ "${1:-}" = "--full" ]; then FULL=1; fi
+REQUIRE_COMPLETE=0
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --full)             FULL=1 ;;
+        --require-complete) REQUIRE_COMPLETE=1 ;;
+        *) echo "FAIL verify-all: unrecognised argument '$1'" >&2
+           echo "usage: verify-all.sh [--full] [--require-complete]" >&2
+           exit 2 ;;
+    esac
+    shift
+done
 
 SCRIPT_VALUES_FILE="$(mktemp /tmp/verify-all-values-XXXXXX.json)"
 trap 'rm -f "$SCRIPT_VALUES_FILE"' EXIT
@@ -331,7 +349,19 @@ if [ "${FAMILIES_FAILED}" -gt 0 ]; then
     exit 1
 fi
 if [ "$FAMILIES_SKIPPED" -gt 0 ]; then
+    if [ "$REQUIRE_COMPLETE" = "1" ]; then
+        echo "FAIL  verify-all: ${FAMILIES_SKIPPED} famil(ies) skipped and --require-complete was given"
+        echo "      (${SKIPPED_NAMES})"
+        exit 1
+    fi
     echo "PASS (INCOMPLETE)  verify-all: checks that ran are green, ${FAMILIES_SKIPPED} famil(ies) skipped"
     exit 0
 fi
-echo "ALL PASS  verify-all: all checks green"
+# A fast-tier run has not checked the full-tier families at all.  Saying "all
+# checks green" over that was the same defect one level up from the skip case:
+# the tier a verdict was reached in is part of the verdict.
+if [ "$FULL" = "1" ]; then
+    echo "ALL PASS  verify-all: all checks green (full tier: ${FAST_CLAIMS} fast + ${FULL_CLAIMS} full claims)"
+else
+    echo "ALL PASS  verify-all: fast tier green (${FAST_CLAIMS} claims); ${FULL_CLAIMS} full-tier claims NOT run (--full)"
+fi

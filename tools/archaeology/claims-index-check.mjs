@@ -74,6 +74,17 @@ const mismatched = rows.filter(r => claims[r.id]?.status === 'unverifiable' && r
 if (mismatched.length) fail(`claims-index: ${mismatched.length} row(s) contradict the manifest's unverifiable status`,
     '    ' + mismatched.map(r => `${r.id} (index: ${r.status})`).join(', '));
 
+// 3b. `commit-pinned` in the manifest must read `dated-measurement` in the index.
+// Round 8: perf-002/perf-003 said "verified" while being checkSoft, so nothing
+// they reported could ever fail a gate -- and both had in fact drifted from
+// their 6de6256 pins while wasm-stamp's summary line read "3/3 passed".
+// "Verified" meaning "a script printed INFO about it" is the 24.2 overclaim the
+// status vocabulary exists to stop, so the STATUS moved rather than the check.
+const pinned = rows.filter(r => claims[r.id]?.status === 'commit-pinned' && r.status !== 'dated-measurement');
+if (pinned.length) fail(`claims-index: ${pinned.length} row(s) contradict the manifest's commit-pinned status ` +
+    `(a commit-pinned claim is a dated-measurement in the index, never "verified")`,
+    '    ' + pinned.map(r => `${r.id} (index: ${r.status})`).join(', '));
+
 // 4. Reproducer paths must resolve.  Prose in parentheses is not a path.
 const ROOTS = ['', 'tools/', 'tools/archaeology/', 'tools/golden/', 'tools/freestanding/', 'tools/fuzz/'];
 const unresolved = new Map();

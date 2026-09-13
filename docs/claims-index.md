@@ -164,8 +164,8 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | fmt-033 | formats.md:764 | DMX lead-in / lead-out pad size | 16 bytes each | invariant | tools/archaeology/wad-verify.mjs | verified |
 | fmt-034 | formats.md:804 | MUS percussion channel | 15 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | perf-001 | perf.md:49 | wasm binary total size (commit 6de6256) | 357,978 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | verified |
-| perf-002 | perf.md:46 | wasm CODE section size (commit 6de6256) | 281,277 bytes | measurement | tools/archaeology/wasm-stamp.mjs (commit-pinned; reports current) | verified |
-| perf-003 | perf.md:47 | wasm DATA section size (commit 6de6256) | 75,283 bytes | measurement | tools/archaeology/wasm-stamp.mjs (commit-pinned; reports current) | verified |
+| perf-002 | perf.md:46 | wasm CODE section size (commit 6de6256) | 281,277 bytes | measurement | tools/archaeology/wasm-stamp.mjs (commit-pinned; reports current) | dated-measurement |
+| perf-003 | perf.md:47 | wasm DATA section size (commit 6de6256) | 75,283 bytes | measurement | tools/archaeology/wasm-stamp.mjs (commit-pinned; reports current) | dated-measurement |
 | perf-004 | perf.md:49 | wasm gzip-9 compressed size (commit 6de6256) | 145,990 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | verified |
 | perf-005 | perf.md:56 | doom.js gzip-9 compressed size | 3,514 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | verified |
 | perf-006 | perf.md:57 | wasm compression ratio (raw / gzip) | 2.45× | derived | 357,978 / 145,990 ≈ 2.45 | derived-from-gated |
@@ -222,6 +222,9 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | perf-057 | perf.md:§v1-fps | tank v1 fps (pre-int64) | 105,868 tics/s | measurement | bench-baseline.json (v1.frameThroughput.tank.before) | dated-measurement |
 | perf-058 | perf.md:§v1-fps | pi5 v1 fps (pre-int64) | 79,377 tics/s | measurement | bench-baseline.json (v1.frameThroughput.pi5.before) | dated-measurement |
 | perf-059 | perf.md:983 | worst PWAD combo peak heap (tnt.wad + tnt31.wad) | 54.83 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
+| perf-059b | perf.md:1280 | PWAD combo peak heap (doom2.wad + nerve.wad) | 26.07 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
+| perf-059c | perf.md:1280 | PWAD combo peak heap (doom.wad + sigil.wad) | 24.76 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
+| perf-059d | perf.md:1280 | PWAD combo peak heap (plutonia.wad, no PWAD) | 25.12 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
 | perf-060 | perf.md:995 | headroom vs 64 MB for worst PWAD combo | 9.17 MB | derived | 64 − 54.83 = 9.17 MB | derived-from-gated |
 | perf-061 | perf.md:1325 | doom.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,218,022 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
 | perf-062 | perf.md:1326 | doom2.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,305,794 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
@@ -245,7 +248,7 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 ## Summary
 
 
-**Total claims: 204** — asserted against this table by
+**Total claims: 207** — asserted against this table by
 `tools/archaeology/claims-index-check.mjs`, which also refuses a row that says
 `verified` without a matching entry in `claims.json`, a manifest id with no row,
 and a reproducer path that does not exist.

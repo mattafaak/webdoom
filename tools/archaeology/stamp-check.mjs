@@ -29,8 +29,15 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 let failures = 0;
 const claimActuals = {};
 
+// Counters, so the summary reports what it ACTUALLY checked.  The old line read
+// `${7 - failures}/7` against a hardcoded 7 while the run reported ten claims --
+// the same defect wasm-stamp's summary had, one file over: a tally that cannot
+// notice a check being added or dropped.
+let hardChecked = 0, softChecked = 0, softDrifted = 0;
+
 function check(id, desc, expected, actual, soft = false) {
     const pass = String(actual) === String(expected);
+    if (soft) { softChecked++; if (!pass) softDrifted++; } else hardChecked++;
     if (!pass && !soft) failures++;
     const tag = pass ? 'PASS' : (soft ? 'INFO' : 'FAIL');
     claimActuals[id] = actual === null || actual === undefined ? null : String(actual);
@@ -110,40 +117,51 @@ function gzipSize(path) {
     }
 }
 
-// ── perf-059: worst PWAD combo peak heap (tnt.wad + tnt31.wad) ──────────────
-// Formula: __heap_base + ZONESIZE + tnt.wad_size + tnt31.wad_size
-// __heap_base: read from claims.json (see perf-009); restamped 2026-09-11 for the
-// 18.2a widescreen dimension separation, attribution recorded in the manifest notes.
-// ZONESIZE    = 4,194,304 bytes (4 MiB since 14.2c; see perf-008/perf-010)
-// tnt.wad     = 18,195,736 bytes (measured here)
-// tnt31.wad   = 282,000 bytes (measured here)
-// perf.md Axis 4.  Both this and HEAP_BASE come from claims.json rather than
-// being typed here: perf-059 is DERIVED from perf-009, so the 2026-09-11
-// heap_base restamp moved it too, and a gate carrying its own copy of the
-// number it checks has to be edited in two places or it contradicts itself.
+// ── perf-059/b/c/d: the PWAD combo table, every row ────────────────────────
+// Formula per row: __heap_base + ZONESIZE + iwad_size + pwad_size
+// __heap_base: read from claims.json (see perf-009), never typed here -- perf-059
+// is DERIVED from perf-009, so a heap_base restamp moves it too, and a gate
+// carrying its own copy of the number it checks has to be edited in two places
+// or it contradicts itself.
+// ZONESIZE = 4,194,304 bytes (4 MiB since 14.2c; see perf-008/perf-010)
+//
+// Round 8 (U5): this used to check the FIRST ROW ONLY.  perf.md Axis 4 has four,
+// and the three ungated ones had read 4.50 MB while __heap_base was 4.81 -- stale,
+// then made correct by accident by the widescreen revert.  One was still wrong
+// when the gate arrived: doom.wad + sigil.wad read 24.77 against 24.76 computed.
+// A table where only the gated row is right is the argument for gating the table.
 {
-    const EXPECTED_PWAD_MB = JSON.parse(
-        readFileSync(join(root, 'tools/archaeology/claims.json'), 'utf8')
-    ).claims['perf-059'].expected;
-    const HEAP_BASE  = Number(JSON.parse(
-        readFileSync(join(root, 'tools/archaeology/claims.json'), 'utf8')
-    ).claims['perf-009'].expected);
-    const ZONE_SIZE  = 4194304;
-    const tntPath    = join(root, 'wads/lib/tnt.wad');
-    const tnt31Path  = join(root, 'wads/lib/tnt31.wad');
-    const tntSz   = fileSize(tntPath);
-    const tnt31Sz = fileSize(tnt31Path);
-    if (tntSz === null || tnt31Sz === null) {
+    const MANIFEST = JSON.parse(
+        readFileSync(join(root, 'tools/archaeology/claims.json'), 'utf8')).claims;
+    const HEAP_BASE = Number(MANIFEST['perf-009'].expected);
+    const ZONE_SIZE = 4194304;
+    const COMBOS = [
+        ['perf-059',  'tnt.wad',      'tnt31.wad'],
+        ['perf-059b', 'doom2.wad',    'nerve.wad'],
+        ['perf-059c', 'doom.wad',     'sigil.wad'],
+        ['perf-059d', 'plutonia.wad', null],
+    ];
+    let rowsChecked = 0;
+    for (const [id, iwad, pwad] of COMBOS) {
+        const iSz = fileSize(join(root, 'wads/lib', iwad));
+        const pSz = pwad === null ? 0 : fileSize(join(root, 'wads/lib', pwad));
+        if (iSz === null || pSz === null) {
+            failures++;
+            console.log(`FAIL  ${id}  ${iwad}${pwad ? ` or ${pwad}` : ''} not found`);
+            continue;
+        }
+        const MB = (HEAP_BASE + ZONE_SIZE + iSz + pSz) / (1024 * 1024);
+        check(id,
+              `PWAD combo ${iwad}${pwad ? ` + ${pwad}` : ' (no PWAD)'} = ` +
+              `${iSz}+${pSz}+heap+zone = ${MB.toFixed(2)} MB`,
+              MANIFEST[id].expected, MB.toFixed(2));
+        rowsChecked++;
+    }
+    // A row silently dropped from COMBOS would shrink the gate without failing
+    // it -- the same shape as a table with one gated row.
+    if (rowsChecked !== COMBOS.length && failures === 0) {
         failures++;
-        console.log('FAIL  perf-059  tnt.wad or tnt31.wad not found');
-    } else {
-        const totalBytes = HEAP_BASE + ZONE_SIZE + tntSz + tnt31Sz;
-        const MB = totalBytes / (1024 * 1024);
-        const mbRounded = Math.round(MB * 100) / 100; // 2 decimal places
-        check('perf-059',
-              `worst PWAD heap = ${tntSz}+${tnt31Sz}+heap+zone = ${MB.toFixed(2)} MB ` +
-              `≈ ${EXPECTED_PWAD_MB} MB`,
-              EXPECTED_PWAD_MB, MB.toFixed(2));
+        console.log(`FAIL  perf-059*  checked ${rowsChecked} of ${COMBOS.length} PWAD combo rows`);
     }
 }
 
@@ -196,6 +214,8 @@ function gzipSize(path) {
     }
 }
 
-console.log(`\nstamp-check: ${7 - failures}/7 passed (hard failures: ${failures})`);
+console.log(`\nstamp-check: ${hardChecked - failures}/${hardChecked} hard passed, ` +
+            `${softChecked - softDrifted}/${softChecked} soft pins matched` +
+            (softDrifted ? `, ${softDrifted} DRIFTED` : ''));
 console.log(`CLAIMS_JSON ${JSON.stringify(claimActuals)}`);
 if (failures > 0) process.exit(1);
