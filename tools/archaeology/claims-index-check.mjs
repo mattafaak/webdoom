@@ -85,6 +85,44 @@ if (pinned.length) fail(`claims-index: ${pinned.length} row(s) contradict the ma
     `(a commit-pinned claim is a dated-measurement in the index, never "verified")`,
     '    ' + pinned.map(r => `${r.id} (index: ${r.status})`).join(', '));
 
+// 3c. The VALUE column must agree with the manifest.  Rules 1-3 checked status,
+// presence and the unverifiable vocabulary; NOTHING compared the number a reader
+// actually reads.  Round 8 found eleven disagreements, seven of them stale by a
+// lot: perf-009 said 5,461,072 against 4,722,048, perf-059 54.83 MB against
+// 26.13, rdr-006 1,024 against 128, rdr-008 2,048 against 256, readme-001 and
+// size-004 349 against 348, ea-026 92 against 91.
+//
+// CONTAINS, not equals, after stripping separators and normalising U+2212: the
+// index legitimately writes units and gloss around the figure ("4,194,304 B
+// (32 MB)"), and a checker that parsed units would be a second source of bugs.
+// The four rows that could not normalise were RESTATED to carry their number
+// rather than exempted -- an exemption list is one edit away from exempting the
+// stale ones, which is the whole failure this rule exists to stop.
+//
+// The one skip is defined, not ad hoc: a boolean `expected` ("true") is an
+// assertion, not a figure, so the index carries prose describing it.  Skips are
+// counted and named in the PASS line.
+const vnorm = v => String(v).replace(/[,\s]/g, '').replace(/\u2212/g, '-');
+const valueMismatch = [];
+const valueSkipped = [];
+let valueCompared = 0;
+for (const r of rows) {
+    const exp = claims[r.id]?.expected;
+    if (exp === undefined || exp === null) continue;
+    if (exp === 'true' || exp === 'false') { valueSkipped.push(r.id); continue; }
+    valueCompared++;
+    if (!vnorm(r.value).includes(vnorm(exp)))
+        valueMismatch.push(`${r.id}: index "${r.value}" vs manifest "${exp}"`);
+}
+// A rule that compared almost nothing is broken, not clean -- the same shape as
+// the rows.length guard above.  144 rows carried a manifest value when written.
+if (valueCompared < 130)
+    fail(`claims-index: the value rule compared only ${valueCompared} rows; ` +
+         `it should reach ~144. The parser or the manifest changed.`);
+if (valueMismatch.length)
+    fail(`claims-index: ${valueMismatch.length} row(s) quote a value the manifest contradicts`,
+         '    ' + valueMismatch.join('\n    '));
+
 // 4. Reproducer paths must resolve.  Prose in parentheses is not a path.
 const ROOTS = ['', 'tools/', 'tools/archaeology/', 'tools/golden/', 'tools/freestanding/', 'tools/fuzz/'];
 const unresolved = new Map();
@@ -147,4 +185,6 @@ for (const r of rows) by[r.status] = (by[r.status] ?? 0) + 1;
 console.log(`PASS claims-index-check: ${rows.length} rows — ` +
             Object.entries(by).sort().map(([k, v]) => `${v} ${k}`).join(', ') +
             `; all ${Object.keys(claims).length} manifest ids listed, all reproducer paths resolve, ` +
-            `header counts (${nFast} fast, ${nUnverifiable} unverifiable) computed`);
+            `header counts (${nFast} fast, ${nUnverifiable} unverifiable) computed, ` +
+            `${valueCompared} values agree with the manifest` +
+            (valueSkipped.length ? ` (${valueSkipped.length} boolean: ${valueSkipped.join(', ')})` : ''));

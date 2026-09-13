@@ -55,12 +55,12 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | ea-018 | engine-archaeology.md:127 | COLORMAP matches using Euclidean round-nearest | 0 mismatches / 8,192 | measurement | tools/archaeology/colormap-crack.c | verified |
 | ea-019 | engine-archaeology.md:127 | COLORMAP mismatches with truncation instead of round | 313 | measurement | tools/archaeology/colormap-crack.c | verified |
 | ea-020 | engine-archaeology.md:128 | COLORMAP mismatches with (31−L)/31 scale recipe | 2,373 | measurement | tools/archaeology/colormap-crack.c | verified |
-| ea-021 | engine-archaeology.md:127 | COLORMAP mismatches with Manhattan distance | 1,200+ | measurement | tools/archaeology/colormap-crack.c | verified |
+| ea-021 | engine-archaeology.md:127 | COLORMAP mismatches with Manhattan distance | 1,208 | measurement | tools/archaeology/colormap-crack.c | verified |
 | ea-022 | engine-archaeology.md:130 | COLORMAP map-0 identity entries | 249 / 256 | invariant | tools/archaeology/wad-verify.mjs | verified |
 | ea-023 | engine-archaeology.md:137 | invuln COLORMAP map-32 matching entries (FINDING-1 RESOLVED: doc corrected 242→241) | 241 / 256 | invariant | tools/archaeology/colormap-invuln-crack.c (reports 15/256 mismatches → 241 match) | verified |
 | ea-024 | engine-archaeology.md:137 | invuln COLORMAP tie-break count in gray ramp | 15 | measurement | tools/archaeology/colormap-invuln-crack.c | verified |
 | ea-025 | engine-archaeology.md:139 | invuln luma weight sum (76 + 152 + 34) | 262 | derived | arithmetic: 76+152+34=262 | verified |
-| ea-026 | engine-archaeology.md:139 | invuln entries missed by standard ITU luma weights | 92 | measurement | tools/archaeology/colormap-invuln-crack.c | verified |
+| ea-026 | engine-archaeology.md:139 | invuln entries missed by standard ITU luma weights | 91 | measurement | tools/archaeology/colormap-invuln-crack.c | verified |
 | ea-027 | engine-archaeology.md:222 | checkcoord boundary-clamp test cases | 9 / 9 PASS | invariant | tools/archaeology/checkcoord-verify.mjs | verified |
 | ea-028 | engine-archaeology.md:222 | DISTMAP/MAXLIGHTZ world-unit range covered | 16 to 2,048 | invariant | tools/archaeology/zlight-distmap.mjs | verified |
 | ea-029 | engine-archaeology.md:775 | total ledger rows | 40 | measurement | tools/archaeology/ledger-count.mjs | verified |
@@ -87,9 +87,9 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | rdr-003 | renderer.md:416 | MAXOPENINGS in vanilla (SCREENWIDTH × 64) | 20,480 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | rdr-004 | renderer.md:405 | MAXOPENINGS in webdoom (SCREENWIDTH × 64; the 854 cap went with widescreen) | 20,480 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | rdr-005 | renderer.md:549 | MAXVISPLANES in vanilla DOOM | 128 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
-| rdr-006 | renderer.md:554 | MAXVISPLANES in webdoom | 1,024 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
+| rdr-006 | renderer.md:554 | MAXVISPLANES in webdoom | 128 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | rdr-007 | renderer.md:1003 | MAXDRAWSEGS in vanilla DOOM | 256 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
-| rdr-008 | renderer.md:1003 | MAXDRAWSEGS in webdoom | 2,048 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
+| rdr-008 | renderer.md:1003 | MAXDRAWSEGS in webdoom | 256 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | rdr-009 | renderer.md:1003 | MAXVISSPRITES in vanilla DOOM | 128 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | rdr-010 | renderer.md:1004 | MAXVISSPRITES in webdoom | 1,024 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | rdr-011 | renderer.md:983 | ANGLETOSKYSHIFT | 22 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
@@ -105,7 +105,7 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | ps-009 | playsim.md:1005 | MAX_DEATHMATCH_STARTS | 10 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | ps-010 | playsim.md:692 | MAXHEALTH | 100 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | ps-011 | playsim.md:703 | BONUSADD | 6 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
-| ps-012 | playsim.md:544 | FLOATSPEED | 4 × FRACUNIT | invariant | tools/archaeology/source-constant-verify.mjs | verified |
+| ps-012 | playsim.md:544 | FLOATSPEED | 262,144 (4 × FRACUNIT) | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | ps-013 | playsim.md:756 | forwardmove table | {25, 50} map-units/tic | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | ps-014 | playsim.md:756 | sidemove table | {24, 40} map-units/tic | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | ps-015 | playsim.md:757 | angleturn table | {640, 1280, 320} | invariant | tools/archaeology/source-constant-verify.mjs | verified |
@@ -170,8 +170,8 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | perf-005 | perf.md:56 | doom.js gzip-9 compressed size | 3,514 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | verified |
 | perf-006 | perf.md:57 | wasm compression ratio (raw / gzip) | 2.45× | derived | 357,978 / 145,990 ≈ 2.45 | derived-from-gated |
 | perf-007 | perf.md:100 | peak zone HWM across all 13 golden demos | 1.36 MB (plutonia demo3) | measurement | tools/zone-measure.mjs | dated-measurement |
-| perf-008 | perf.md:69 | ZONESIZE (hardcoded zone pool) | 32 MB | invariant | tools/archaeology/source-constant-verify.mjs | verified |
-| perf-009 | perf.md:131 | __heap_base (static data end, heap start) | 5,461,072 bytes | measurement | tools/archaeology/wasm-stamp.mjs | verified |
+| perf-008 | perf.md:69 | ZONESIZE (hardcoded zone pool) | 4,194,304 B (32 MB) | invariant | tools/archaeology/source-constant-verify.mjs | verified |
+| perf-009 | perf.md:131 | __heap_base (static data end, heap start) | 4,722,048 bytes | measurement | tools/archaeology/wasm-stamp.mjs | verified |
 | perf-010 | perf.md:132 | zone pool malloc size | 4,194,304 bytes | derived | 4 × 1024 × 1024 = 4,194,304 (32 MB pre-14.2c) | derived-from-gated |
 | perf-011 | perf.md:139 | plutonia.wad file size (worst single IWAD) | 17,420,824 bytes | measurement | tools/archaeology/stamp-check.mjs | verified |
 | perf-012 | perf.md:134 | peak heap address worst-case single IWAD | ~25.42 MB | derived | 5,042,416 + 4,194,304 + 17,420,824 = 26,657,544 B ≈ 25.42 MB | derived-from-gated |
@@ -221,7 +221,7 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | perf-056 | perf.md:§v1-fps | alder v1 fps (pre-int64, f92fc05) | 204,937 tics/s | measurement | bench-baseline.json (v1.frameThroughput.alder.before) | dated-measurement |
 | perf-057 | perf.md:§v1-fps | tank v1 fps (pre-int64) | 105,868 tics/s | measurement | bench-baseline.json (v1.frameThroughput.tank.before) | dated-measurement |
 | perf-058 | perf.md:§v1-fps | pi5 v1 fps (pre-int64) | 79,377 tics/s | measurement | bench-baseline.json (v1.frameThroughput.pi5.before) | dated-measurement |
-| perf-059 | perf.md:983 | worst PWAD combo peak heap (tnt.wad + tnt31.wad) | 54.83 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
+| perf-059 | perf.md:983 | worst PWAD combo peak heap (tnt.wad + tnt31.wad) | 26.13 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
 | perf-059b | perf.md:1280 | PWAD combo peak heap (doom2.wad + nerve.wad) | 26.07 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
 | perf-059c | perf.md:1280 | PWAD combo peak heap (doom.wad + sigil.wad) | 24.76 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
 | perf-059d | perf.md:1280 | PWAD combo peak heap (plutonia.wad, no PWAD) | 25.12 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
@@ -235,11 +235,11 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 ---
 | ea-048 | engine-archaeology.md:§6 | HACX COLORMAP mismatches vs the (32-L)/32 euclid recipe | 3,517 / 8,192 | invariant | tools/archaeology/colormap-cross-palette.c | verified |
 | ea-049 | engine-archaeology.md:§6 | doom-family WADs shipping byte-identical PLAYPAL+COLORMAP | 4 | invariant | tools/archaeology/colormap-cross-palette.c | verified |
-| readme-001 | README.md:5 | wasm size quoted in README, KB | 349 | measurement | tools/archaeology/size-ledger.mjs | verified |
+| readme-001 | README.md:5 | wasm size quoted in README, KB | 348 | measurement | tools/archaeology/size-ledger.mjs | verified |
 | size-001 | perf.md:§size | doom.wasm raw bytes at the 14.2f base | 356,216 | measurement | tools/archaeology/size-ledger.mjs | dated-measurement |
 | size-002 | perf.md:§size | doom.wasm gzip-9 bytes at the 14.2f base | 146,358 | measurement | tools/archaeology/size-ledger.mjs | dated-measurement |
 | size-003 | perf.md:§size | fs-doom .text bytes at the 14.2f base | 294,785 | measurement | tools/archaeology/size-ledger.mjs | dated-measurement |
-| size-004 | README.md:5 | README KB figure == round(raw/1024); same fact as readme-001 | 349 | derived | tools/archaeology/size-ledger.mjs | verified |
+| size-004 | README.md:5 | README KB figure == round(raw/1024); same fact as readme-001 | 348 | derived | tools/archaeology/size-ledger.mjs | verified |
 | spec-001 | spec.md:102 | fire.js cost per tick, alder, ms | 0.008 | measurement | (node microbench, 2026-07-16; not re-runnable here) | unverifiable |
 | spec-002 | spec.md:102 | fire.js cost per tick, pi5, ms | 0.022 | measurement | (node microbench, 2026-07-16; pi5 retired 2026-09-11) | unverifiable |
 | spec-003 | spec.md:102 | fire.js cost per tick, wbox, ms | 0.072 | measurement | (node microbench, 2026-07-16; not re-runnable here) | unverifiable |

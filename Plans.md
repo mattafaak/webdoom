@@ -633,3 +633,20 @@ to what was already proven.
 | W2c | Two harness defects this leg walked into. `chex.wad` failed `W_InitFiles: no files found` — the engine identifies games by 1993 filenames and a doom-shaped TC must register as `doomu.wad`; `client/js/main.js:20`'s `ENGINE_NAME` map already said so and the gate had re-derived it wrongly. And the first cut read **1, 2, 3, 4, 5 … tics** down the target list | the tic count was measuring the harness's own position in its run: outside `-timedemo` the engine advances from real elapsed time via `TryRunTics`, so an unpaced loop reports the process's age. Paced at 70 fps like `smoke-test.mjs`; every target now reads a uniform 53 tics | cc:完了 |
 | W3 | `rme-005` — "second load is instant" is a performance claim with no gate | — | cc:TODO |
 | W4 | `rme-002` — `firefox-smoke` asserts UA + JS + `/api/wads` but never a rendered frame | — | cc:TODO |
+
+## Phase Y: the ledgers
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| Y1 | **`docs/claims-index.md`'s VALUE column was compared to nothing.** Rules 1–3 checked status, presence and the unverifiable vocabulary; nothing compared the number a reader actually reads | rule 3c: a row whose id has a manifest `expected` must CONTAIN it after stripping separators and normalising U+2212. *Contains*, not equals, because the index legitimately writes units and gloss around the figure — a checker that parsed units would be a second source of bugs. Vacuity floor: fewer than 130 rows compared is a FAIL. Red-proofed three ways: one manifest byte flipped → 1 row named; an index row reverted to its stale value → `rdr-006: index "1,024" vs manifest "128"`; the rule narrowed → `compared only 86 rows` | cc:完了 |
+| Y1b | Eleven rows disagreed, and **seven were stale by a lot** | `perf-009` 5,461,072 → 4,722,048; `perf-059` 54.83 → 26.13 MB; `rdr-006` 1,024 → 128; `rdr-008` 2,048 → 256; `readme-001`/`size-004` 349 → 348; `ea-026` 92 → 91. The four that could not normalise were **RESTATED to carry their number, not exempted** — `ea-021` "1,200+" → "1,208", `ps-012` → "262,144 (4 × FRACUNIT)", `perf-008` → "4,194,304 B (32 MB)" — because an exemption list is one edit away from exempting the stale ones, which is the failure the rule exists to stop. **One skip, defined and named**: `fmt-033`'s expected is the boolean `true`, an assertion rather than a figure; skips are counted and printed | cc:完了 |
+
+**A trap this round walked into TWICE, and the second time it destroyed
+finished work.** `git checkout -- <path>` used to undo a red-proof's sabotage
+also reverts every other uncommitted change in that file. It took the T2 fractic
+pin out of `r_main.c` (caught by `build-invariants` failing to link on
+`undefined symbol: doom_fractic_override`) and then took rule 3c out of
+`claims-index-check.mjs` (caught only by grepping for it afterwards). A guard
+that asserts the SABOTAGE IS GONE does not assert THE INTENDED CHANGE IS STILL
+THERE. Sabotage/restore now goes through a backup copy verified by `diff`, and
+`git checkout` is reserved for files with no other uncommitted work.
