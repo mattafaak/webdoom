@@ -619,18 +619,18 @@
       "notes": "Requires emcc INITIAL_MEMORY sweep build; historical pass/fail boundary test; no current script"
     },
     "perf-015": {
-      "family": "unverifiable",
-      "command": null,
-      "expected": null,
-      "status": "unverifiable",
-      "notes": "Requires all deliverable assets (JS+CSS+HTML+wasm); no current script"
+      "family": "size-ledger",
+      "command": "node tools/payload-size.mjs",
+      "expected": "236",
+      "status": "verified",
+      "notes": "total wire payload per page load, KB gzip -9. Derived from sw.js SHELL_FILES, so the app shell defines the set. Was \"unverifiable\" until round 8 (prf-002/003); the published figures had gone badly stale -- the surface was 2.6x its documented 35.1 KB."
     },
     "perf-016": {
-      "family": "unverifiable",
-      "command": null,
-      "expected": null,
-      "status": "unverifiable",
-      "notes": "Requires JS+CSS+HTML assets; no current script"
+      "family": "size-ledger",
+      "command": "node tools/payload-size.mjs",
+      "expected": "89.2",
+      "status": "verified",
+      "notes": "JS+CSS+HTML surface only (no wasm, no glue), KB gzip -9. Derived from sw.js SHELL_FILES, so the app shell defines the set. Was \"unverifiable\" until round 8 (prf-002/003); the published figures had gone badly stale -- the surface was 2.6x its documented 35.1 KB."
     },
     "perf-033": {
       "family": "unverifiable",
@@ -1019,8 +1019,8 @@
     "_note": "computed from claims by tools/archaeology (task 6.3) — do not hand-edit; ea-042..047 added by task 7.2; readme-001/spec-001..003/md-tic-001 added by task 12.1 (published-promise gate); size-001..004 added by task 14.3 (size-ledger gate); readme-001 promoted from unverifiable to measurement-stamp/verified; counts recomputed 2026-07-18",
     "total_in_manifest": 157,
     "by_status": {
-      "verified": 138,
-      "unverifiable": 17,
+      "verified": 140,
+      "unverifiable": 15,
       "commit-pinned": 2
     },
     "by_family": {
@@ -1028,10 +1028,10 @@
       "wad-data": 23,
       "source-constant": 40,
       "runtime-stat": 15,
-      "unverifiable": 17,
+      "unverifiable": 15,
       "derived-check": 4,
       "measurement-stamp": 14,
-      "size-ledger": 4
+      "size-ledger": 6
     }
   }
 }

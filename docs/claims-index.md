@@ -11,7 +11,7 @@ auditable claim-by-claim without consulting this index.
 
 **Docs annotated**: `engine-archaeology.md`, `renderer.md`, `playsim.md`,
 `formats.md`, `perf.md` — each carries section-level "Reproduce:" lines
-and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
+and inline `*(not machine-verified)*` markers for the 15 unverifiable claims.
 
 ## Taxonomy
 
@@ -37,12 +37,12 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 |----|----------|---------------|-------|------|------------|--------|
 | ea-001 | engine-archaeology.md:17 | finesine entries differing from round-nearest | 5,377 / 10,240 | invariant | tools/archaeology/finesine-stats.mjs | verified |
 | ea-002 | engine-archaeology.md:20 | finesine entries where 1993 machine's last bit deviated (escapes) | 33 | invariant | tools/archaeology/finesine-stats.mjs | verified |
-| ea-003 | engine-archaeology.md:23 | entries covered by boot FNV checksum | 16,385 | invariant | tools/archaeology/finesine-stats.mjs | verified |
+| ea-003 | engine-archaeology.md:29 | entries covered by boot FNV checksum | 16,385 | invariant | tools/archaeology/finesine-stats.mjs | verified |
 | ea-004 | engine-archaeology.md:§2 | FixedDiv proof: mismatch requires \|a\| ≥ 2^37; INT32_MAX < 2^31 (margin ≥ 64x) | 137438953472 | derived | arithmetic: 2^37=137438953472 > INT32_MAX; verified by fixeddiv-proof.c analytic step | verified |
 | ea-005 | engine-archaeology.md:§2 | FixedDiv proof: guard-edge pairs checked (max-ULP corroboration) | 8,388,608 | measurement | tools/archaeology/fixeddiv-proof.c | verified |
 | ea-006 | engine-archaeology.md:§2 | FixedDiv proof: guard-edge mismatch count | 0 | measurement | tools/archaeology/fixeddiv-proof.c | verified |
-| ea-007 | engine-archaeology.md:68 | rndtable mean value | 128.85 | invariant | tools/archaeology/rndtable-stats.c | verified |
-| ea-008 | engine-archaeology.md:68 | rndtable distinct values | 166 / 256 | invariant | tools/archaeology/rndtable-stats.c | verified |
+| ea-007 | engine-archaeology.md:156 | rndtable mean value | 128.85 | invariant | tools/archaeology/rndtable-stats.c | verified |
+| ea-008 | engine-archaeology.md:156 | rndtable distinct values | 166 / 256 | invariant | tools/archaeology/rndtable-stats.c | verified |
 | ea-009 | engine-archaeology.md:68 | rndtable values that never appear | 90 | invariant | tools/archaeology/rndtable-stats.c | verified |
 | ea-010 | engine-archaeology.md:82 | gamma table level-0 residual mismatches | 5 / 256 | invariant | tools/archaeology/gamma-crack.mjs | verified |
 | ea-011 | engine-archaeology.md:82 | gamma table level-1 residual mismatches | 34 / 256 | invariant | tools/archaeology/gamma-crack.mjs | verified |
@@ -50,19 +50,19 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | ea-013 | engine-archaeology.md:82 | gamma table level-3 residual mismatches | 41 / 256 | invariant | tools/archaeology/gamma-crack.mjs | verified |
 | ea-014 | engine-archaeology.md:82 | gamma table level-4 residual mismatches | 34 / 256 | invariant | tools/archaeology/gamma-crack.mjs (FINDING-3 RESOLVED: doc corrected to 34/256 at γ≈2.011) | verified |
 | ea-015 | engine-archaeology.md:100 | P_AproxDistance max relative error (at 26.6°) | +11.8% | invariant | tools/archaeology/aprox-distance-crack.c | verified |
-| ea-016 | engine-archaeology.md:100 | P_AproxDistance relative error at 45° | +6.1% | invariant | tools/archaeology/aprox-distance-crack.c | verified |
+| ea-016 | engine-archaeology.md:203 | P_AproxDistance relative error at 45° | +6.1% | invariant | tools/archaeology/aprox-distance-crack.c | verified |
 | ea-017 | engine-archaeology.md:100 | P_AproxDistance relative error on cardinal axes | 0% | invariant | tools/archaeology/aprox-distance-crack.c | verified |
 | ea-018 | engine-archaeology.md:127 | COLORMAP matches using Euclidean round-nearest | 0 mismatches / 8,192 | measurement | tools/archaeology/colormap-crack.c | verified |
 | ea-019 | engine-archaeology.md:127 | COLORMAP mismatches with truncation instead of round | 313 | measurement | tools/archaeology/colormap-crack.c | verified |
-| ea-020 | engine-archaeology.md:128 | COLORMAP mismatches with (31−L)/31 scale recipe | 2,373 | measurement | tools/archaeology/colormap-crack.c | verified |
+| ea-020 | engine-archaeology.md:291 | COLORMAP mismatches with (31−L)/31 scale recipe | 2,373 | measurement | tools/archaeology/colormap-crack.c | verified |
 | ea-021 | engine-archaeology.md:127 | COLORMAP mismatches with Manhattan distance | 1,208 | measurement | tools/archaeology/colormap-crack.c | verified |
 | ea-022 | engine-archaeology.md:130 | COLORMAP map-0 identity entries | 249 / 256 | invariant | tools/archaeology/wad-verify.mjs | verified |
-| ea-023 | engine-archaeology.md:137 | invuln COLORMAP map-32 matching entries (FINDING-1 RESOLVED: doc corrected 242→241) | 241 / 256 | invariant | tools/archaeology/colormap-invuln-crack.c (reports 15/256 mismatches → 241 match) | verified |
+| ea-023 | engine-archaeology.md:328 | invuln COLORMAP map-32 matching entries (FINDING-1 RESOLVED: doc corrected 242→241) | 241 / 256 | invariant | tools/archaeology/colormap-invuln-crack.c (reports 15/256 mismatches → 241 match) | verified |
 | ea-024 | engine-archaeology.md:137 | invuln COLORMAP tie-break count in gray ramp | 15 | measurement | tools/archaeology/colormap-invuln-crack.c | verified |
 | ea-025 | engine-archaeology.md:139 | invuln luma weight sum (76 + 152 + 34) | 262 | derived | arithmetic: 76+152+34=262 | verified |
 | ea-026 | engine-archaeology.md:139 | invuln entries missed by standard ITU luma weights | 91 | measurement | tools/archaeology/colormap-invuln-crack.c | verified |
 | ea-027 | engine-archaeology.md:222 | checkcoord boundary-clamp test cases | 9 / 9 PASS | invariant | tools/archaeology/checkcoord-verify.mjs | verified |
-| ea-028 | engine-archaeology.md:222 | DISTMAP/MAXLIGHTZ world-unit range covered | 16 to 2,048 | invariant | tools/archaeology/zlight-distmap.mjs | verified |
+| ea-028 | engine-archaeology.md:422 | DISTMAP/MAXLIGHTZ world-unit range covered | 16 to 2,048 | invariant | tools/archaeology/zlight-distmap.mjs | verified |
 | ea-029 | engine-archaeology.md:775 | total ledger rows | 40 | measurement | tools/archaeology/ledger-count.mjs | verified |
 | ea-030 | engine-archaeology.md:775 | ledger recipe-class rows | 5 | derived | ledger-count.mjs category total | verified |
 | ea-031 | engine-archaeology.md:775 | ledger equivalence-class rows | 4 | derived | ledger-count.mjs category total | verified |
@@ -100,8 +100,8 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | ps-004 | playsim.md:392 | MAXINTERCEPTS | 128 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | ps-005 | playsim.md:421 | peak intercept count across all 13 golden demos | 45 (plutonia-demo3 MAP12) | measurement | instrumented build required (stat removed); no current script | unverifiable |
 | ps-006 | playsim.md:152 | BACKUPTICS | 35 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
-| ps-007 | playsim.md:901 | SAVEGAMESIZE in vanilla (0x2C000) | 180,224 bytes | invariant | tools/archaeology/source-constant-verify.mjs | verified |
-| ps-008 | playsim.md:898 | SAVEGAMESIZE in webdoom (0x80000) | 524,288 bytes | invariant | tools/archaeology/source-constant-verify.mjs | verified |
+| ps-007 | playsim.md:935 | SAVEGAMESIZE in vanilla (0x2C000) | 180,224 bytes | invariant | tools/archaeology/source-constant-verify.mjs | verified |
+| ps-008 | playsim.md:935 | SAVEGAMESIZE in webdoom (0x80000) | 524,288 bytes | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | ps-009 | playsim.md:1005 | MAX_DEATHMATCH_STARTS | 10 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | ps-010 | playsim.md:692 | MAXHEALTH | 100 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | ps-011 | playsim.md:703 | BONUSADD | 6 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
@@ -129,7 +129,7 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | ps-033 | playsim.md:1115 | doom-demo1 total tics (E1M5) | 1,710 | measurement | tools/archaeology/stamp-check.mjs (FINDING-2: tics=1710 per golden; frames=1709 per bench — wipe-skip delta) | verified |
 | ps-034 | playsim.md:1116 | doom-demo4 total tics (E4M2) | 818 | measurement | tools/archaeology/stamp-check.mjs | verified |
 | ps-035 | playsim.md:1117 | total teleport calls across all 13 golden demos | 32 | derived | tools/archaeology/derived-check.mjs (arithmetic: 3+5+23+1=32; constituents verified by runtime-stat-verify.mjs) | verified |
-| fmt-001 | formats.md:1106 | doom.wad numlumps | 2,306 | invariant | tools/archaeology/wad-verify.mjs | verified |
+| fmt-001 | formats.md:1125 | doom.wad numlumps | 2,306 | invariant | tools/archaeology/wad-verify.mjs | verified |
 | fmt-002 | formats.md:340 | E1M1 sector count | 88 | invariant | tools/archaeology/wad-verify.mjs | verified |
 | fmt-003 | formats.md:340 | E1M1 REJECT lump size | 968 bytes | derived | ceil(88×88/8) = 968 | derived-from-gated |
 | fmt-004 | formats.md:375 | E1M1 BLOCKMAP origin X | −776 | invariant | tools/archaeology/wad-verify.mjs | verified |
@@ -141,7 +141,7 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | fmt-010 | formats.md:293 | E1M1 child references using NF_SUBSECTOR | 239 / 476 | measurement | tools/archaeology/wad-verify.mjs | verified |
 | fmt-011 | formats.md:737 | DSPISTOL DMX format_id | 3 | invariant | tools/archaeology/wad-verify.mjs | verified |
 | fmt-012 | formats.md:738 | DSPISTOL sample rate | 11,025 Hz | invariant | tools/archaeology/wad-verify.mjs | verified |
-| fmt-013 | formats.md:1116 | DSPISTOL num_samples field | 5,661 | invariant | tools/archaeology/wad-verify.mjs | verified |
+| fmt-013 | formats.md:1135 | DSPISTOL num_samples field | 5,661 | invariant | tools/archaeology/wad-verify.mjs | verified |
 | fmt-014 | formats.md:1116 | DSPISTOL real sample count (num_samples − 32 pads) | 5,629 | derived | 5,661 − 32 = 5,629 | derived-from-gated |
 | fmt-015 | formats.md:1116 | DSPISTOL lump size (8 header + num_samples) | 5,669 | derived | 8 + 5,661 = 5,669 | derived-from-gated |
 | fmt-016 | formats.md:799 | D_E1M1 MUS scorelen | 17,237 | invariant | tools/archaeology/wad-verify.mjs | verified |
@@ -149,7 +149,7 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | fmt-018 | formats.md:799 | D_E1M1 MUS channel count (primary) | 3 (sec_ch=0) | invariant | tools/archaeology/wad-verify.mjs | verified |
 | fmt-019 | formats.md:799 | D_E1M1 MUS instrument count | 15 | invariant | tools/archaeology/wad-verify.mjs | verified |
 | fmt-020 | formats.md:799 | D_E1M1 MUS total bytes (scorestart + scorelen) | 17,283 | derived | 46 + 17,237 = 17,283 | derived-from-gated |
-| fmt-021 | formats.md:844 | MUS_RATE (engine tic rate for MUS playback) | 140 Hz | invariant | tools/archaeology/source-constant-verify.mjs | verified |
+| fmt-021 | formats.md:863 | MUS_RATE (engine tic rate for MUS playback) | 140 Hz | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | fmt-022 | formats.md:879 | GENMIDI lump size | 11,908 bytes | invariant | tools/archaeology/wad-verify.mjs | verified |
 | fmt-023 | formats.md:863 | GENMIDI instrument count | 175 (128 melodic + 47 perc) | invariant | tools/archaeology/wad-verify.mjs | verified |
 | fmt-024 | formats.md:882 | genmidi_instr_t struct size | 36 bytes | invariant | tools/archaeology/wad-verify.mjs | verified |
@@ -158,15 +158,15 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | fmt-027 | formats.md:523 | ENDOOM size (80 × 25 × 2) | 4,000 bytes | derived | 80×25×2 = 4,000 | derived-from-gated |
 | fmt-028 | formats.md:1126 | PNAMES entry count | 351 | invariant | tools/archaeology/wad-verify.mjs | verified |
 | fmt-029 | formats.md:1126 | PNAMES lump size (4 + 351 × 8) | 2,812 bytes | derived | 4 + 351×8 = 2,812 | derived-from-gated |
-| fmt-030 | formats.md:1127 | TEXTURE1 texture count (doom.wad) | 125 | invariant | tools/archaeology/wad-verify.mjs | verified |
+| fmt-030 | formats.md:1146 | TEXTURE1 texture count (doom.wad) | 125 | invariant | tools/archaeology/wad-verify.mjs | verified |
 | fmt-031 | formats.md:554 | demo header total size | 13 bytes | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | fmt-032 | formats.md:720 | save slot count | 6 (doomsav0–doomsav5) | invariant | tools/archaeology/source-constant-verify.mjs | verified |
-| fmt-033 | formats.md:764 | DMX lead-in / lead-out pad size | 16 bytes each | invariant | tools/archaeology/wad-verify.mjs | verified |
+| fmt-033 | formats.md:1041 | DMX lead-in / lead-out pad size | 16 bytes each | invariant | tools/archaeology/wad-verify.mjs | verified |
 | fmt-034 | formats.md:804 | MUS percussion channel | 15 | invariant | tools/archaeology/source-constant-verify.mjs | verified |
-| perf-001 | perf.md:49 | wasm binary total size (commit 6de6256) | 357,978 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | verified |
-| perf-002 | perf.md:46 | wasm CODE section size (commit 6de6256) | 281,277 bytes | measurement | tools/archaeology/wasm-stamp.mjs (commit-pinned; reports current) | dated-measurement |
+| perf-001 | perf.md:58 | wasm binary total size (commit 6de6256) | 357,978 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | verified |
+| perf-002 | perf.md:55 | wasm CODE section size (commit 6de6256) | 281,277 bytes | measurement | tools/archaeology/wasm-stamp.mjs (commit-pinned; reports current) | dated-measurement |
 | perf-003 | perf.md:47 | wasm DATA section size (commit 6de6256) | 75,283 bytes | measurement | tools/archaeology/wasm-stamp.mjs (commit-pinned; reports current) | dated-measurement |
-| perf-004 | perf.md:49 | wasm gzip-9 compressed size (commit 6de6256) | 145,990 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | verified |
+| perf-004 | perf.md:58 | wasm gzip-9 compressed size (commit 6de6256) | 145,990 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | verified |
 | perf-005 | perf.md:56 | doom.js gzip-9 compressed size | 3,514 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | verified |
 | perf-006 | perf.md:57 | wasm compression ratio (raw / gzip) | 2.45× | derived | 357,978 / 145,990 ≈ 2.45 | derived-from-gated |
 | perf-007 | perf.md:100 | peak zone HWM across all 13 golden demos | 1.36 MB (plutonia demo3) | measurement | tools/zone-measure.mjs | dated-measurement |
@@ -177,8 +177,8 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | perf-012 | perf.md:134 | peak heap address worst-case single IWAD | ~25.42 MB | derived | 5,042,416 + 4,194,304 + 17,420,824 = 26,657,544 B ≈ 25.42 MB | derived-from-gated |
 | perf-013 | perf.md:135 | headroom vs 64 MB (single IWAD) | ~10.18 MB | derived | 64 MB − 53.82 MB ≈ 10.18 MB | derived-from-gated |
 | perf-014 | perf.md:148 | INITIAL_MEMORY floor (tested pass/fail boundary) | 56 MB | measurement | requires emcc INITIAL_MEMORY sweep build; no current script | unverifiable |
-| perf-015 | perf.md:191 | all deliverables total gzip-9 wire size | 177.7 KB | measurement | requires all deliverable assets (JS+CSS+HTML+wasm); no current script | unverifiable |
-| perf-016 | perf.md:193 | JS + CSS + HTML gzip-9 total | 35.1 KB | measurement | requires JS+CSS+HTML assets; no current script | unverifiable |
+| perf-015 | perf.md:212 | all deliverables total gzip-9 wire size | 236 KB | measurement | tools/payload-size.mjs (derived from sw.js SHELL_FILES) | verified |
+| perf-016 | perf.md:213 | JS + CSS + HTML gzip-9 total (no wasm, no glue) | 89.2 KB | measurement | tools/payload-size.mjs (derived from sw.js SHELL_FILES) | verified |
 | perf-017 | perf.md:225 | bsp+segs avg ms/frame — wbox (3-demo avg) | 0.2625 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
 | perf-018 | perf.md:225 | bsp+segs avg ms/frame — tank | 0.0549 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
 | perf-019 | perf.md:225 | bsp+segs avg ms/frame — pi5 | 0.0715 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
@@ -196,21 +196,21 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | perf-031 | perf.md:242 | frame-setup share of wbox render total | 1.4% | derived | 0.0069 / 0.4897 × 100 | derived-from-gated |
 | perf-032 | perf.md:251 | wbox/alder bsp+segs speed ratio | 5.46× | derived | 0.2625 / 0.0481 ≈ 5.46 | derived-from-gated |
 | perf-033 | perf.md:426 | total Chocolate Doom tics cross-validated | 44,580 | measurement | external Chocolate Doom instrumented run; no current script in repo | unverifiable |
-| perf-034 | perf.md:502 | R_DrawColumn calls/frame avg (doom demo1) | 714.8 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
+| perf-034 | perf.md:712 | R_DrawColumn calls/frame avg (doom demo1) | 714.8 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
 | perf-035 | perf.md:502 | R_DrawColumn avg pixels/call | 47.9 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
-| perf-036 | perf.md:674 | R_DrawColumn total pixels/frame | 34,203 | derived | tools/archaeology/derived-check.mjs (±1% tolerance; inputs from unverifiable perf-034/035) | verified |
-| perf-037 | perf.md:503 | R_DrawSpan calls/frame avg | 147.8 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
+| perf-036 | perf.md:712 | R_DrawColumn total pixels/frame | 34,203 | derived | tools/archaeology/derived-check.mjs (±1% tolerance; inputs from unverifiable perf-034/035) | verified |
+| perf-037 | perf.md:713 | R_DrawSpan calls/frame avg | 147.8 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
 | perf-038 | perf.md:503 | R_DrawSpan avg pixels/call | 168.2 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_COL_STATS build, ±2% tol) | verified |
-| perf-039 | perf.md:675 | R_DrawSpan total pixels/frame | 24,854 | derived | tools/archaeology/derived-check.mjs (±1% tolerance; inputs from unverifiable perf-037/038) | verified |
+| perf-039 | perf.md:713 | R_DrawSpan total pixels/frame | 24,854 | derived | tools/archaeology/derived-check.mjs (±1% tolerance; inputs from unverifiable perf-037/038) | verified |
 | perf-040 | perf.md:543 | task-2.2 unroll-4: bsp+segs improvement (wbox) | −3.5% | measurement | historical experiment requiring specific commit comparison; no current script | unverifiable |
 | perf-041 | perf.md:549 | task-2.2 unroll-4: render total improvement (wbox) | −1.5% | measurement | historical experiment requiring specific commit comparison; no current script | unverifiable |
 | perf-042 | perf.md:878 | -Os CODE section size reduction vs -O3 | −33.0% | measurement | requires separate -Os emcc build; no current script | unverifiable |
 | perf-043 | perf.md:880 | -Os gzip-9 wire size reduction | −15.1% | measurement | requires separate -Os emcc build; no current script | unverifiable |
 | perf-044 | perf.md:902 | -Os sim fps regression on wbox | −9.3% | measurement | requires -Os build bench.mjs run; no current script | unverifiable |
-| perf-045 | perf.md:739 | visplane R_FindPlane calls/frame — doom demo1 avg | 33.1 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, ±2% tol) | verified |
+| perf-045 | perf.md:1043 | visplane R_FindPlane calls/frame — doom demo1 avg | 33.1 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, ±2% tol) | verified |
 | perf-046 | perf.md:739 | visplane R_FindPlane iters/frame — doom demo1 avg | 205.2 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, ±2% tol) | verified |
 | perf-047 | perf.md:739 | visplane peak count — doom demo1 | 33 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, exact) | verified |
-| perf-048 | perf.md:742 | visplane R_FindPlane calls/frame — tnt demo2 avg | 56.1 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, ±2% tol) | verified |
+| perf-048 | perf.md:1046 | visplane R_FindPlane calls/frame — tnt demo2 avg | 56.1 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, ±2% tol) | verified |
 | perf-049 | perf.md:742 | visplane R_FindPlane iters/frame — tnt demo2 avg | 451.5 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, ±2% tol) | verified |
 | perf-050 | perf.md:742 | visplane peak count — tnt demo2 (worst recorded) | 68 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, exact) | verified |
 | perf-051 | perf.md:1072 | PSX fire ms/tick — wbox (G-T56N) | 0.072 ms | measurement | fire.js timing requires browser/JS benchmark harness; no current script | unverifiable |
@@ -222,7 +222,7 @@ and inline `*(not machine-verified)*` markers for the 17 unverifiable claims.
 | perf-057 | perf.md:§v1-fps | tank v1 fps (pre-int64) | 105,868 tics/s | measurement | bench-baseline.json (v1.frameThroughput.tank.before) | dated-measurement |
 | perf-058 | perf.md:§v1-fps | pi5 v1 fps (pre-int64) | 79,377 tics/s | measurement | bench-baseline.json (v1.frameThroughput.pi5.before) | dated-measurement |
 | perf-059 | perf.md:983 | worst PWAD combo peak heap (tnt.wad + tnt31.wad) | 26.13 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
-| perf-059b | perf.md:1280 | PWAD combo peak heap (doom2.wad + nerve.wad) | 26.07 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
+| perf-059b | perf.md:1291 | PWAD combo peak heap (doom2.wad + nerve.wad) | 26.07 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
 | perf-059c | perf.md:1280 | PWAD combo peak heap (doom.wad + sigil.wad) | 24.76 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
 | perf-059d | perf.md:1280 | PWAD combo peak heap (plutonia.wad, no PWAD) | 25.12 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
 | perf-060 | perf.md:995 | headroom vs 64 MB for worst PWAD combo | 9.17 MB | derived | 64 − 54.83 = 9.17 MB | derived-from-gated |

@@ -273,12 +273,15 @@ if [ "$FULL" = "1" ]; then
 
         capture_run "size-ledger (4 claims: size-001..004; budget gate + README KB)" \
             node tools/archaeology/size-ledger.mjs
+        capture_run "payload-size (2 claims: perf-015..016; page-load wire cost)" \
+            node tools/payload-size.mjs
     else
         echo ""
-        FAMILIES_SKIPPED=$((FAMILIES_SKIPPED + 2))
-        SKIPPED_NAMES="${SKIPPED_NAMES:+$SKIPPED_NAMES, }wasm-stamp, size-ledger"
+        FAMILIES_SKIPPED=$((FAMILIES_SKIPPED + 3))
+        SKIPPED_NAMES="${SKIPPED_NAMES:+$SKIPPED_NAMES, }wasm-stamp, size-ledger, payload-size"
         echo "SKIP  wasm-stamp: build/doom.wasm not found (run make first)"
         echo "SKIP  size-ledger: build/doom.wasm not found (run make first)"
+        echo "SKIP  payload-size: build/doom.wasm not found (run make first)"
     fi
 fi
 

@@ -420,6 +420,11 @@ if [ "$QUICK_ONLY" = "0" ]; then
 # ── artifacts under test are current with their sources (21.4/21.5) ──────────
 leg freshness       build      "build/ + native refs not older than sources" -- node tools/artifact-freshness.mjs --all
 leg size-ledger     build      "doom.wasm budget + README KB three-way"      -- node tools/archaeology/size-ledger.mjs
+# prf-002/003: perf.md published "177.7 KB gzip" total and "35 KB" for the JS
+# surface, both marked *not machine-verified*, and perf-015/016 sat "unverifiable"
+# in claims.json. Nothing recomputed them for months: the surface measured 2.5x
+# its documented figure, and the per-file table still listed a file round 7 deleted.
+leg payload-size    build      "page-load wire cost vs budget (prf-002/003)"  -- node tools/payload-size.mjs
 # perf-009 (__heap_base) is a HARD check that no suite leg had ever run: the
 # measurement-stamp family is --full only, and the doc-drift leg calls
 # verify-all.sh with no arguments.  It drifted 48 B unnoticed before round 7
