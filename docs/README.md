@@ -1,9 +1,15 @@
 # webdoom documentation index
 
-26 documents, ~13,700 lines. `README.md` links eight of them, which left
-eighteen — including both index documents, the published `magic-data.md`
-writeup, both atlases, the optimization ledger and every hardware bring-up —
-reachable only by knowing they exist.
+**32 documents** (25 top-level `.md` beside this index, 5 hardware bring-ups in
+subdirectories, and id Software's 2 originals), ~15,250 lines. The count names
+its SET on purpose: this line read "26 documents" while `docs-index-check`'s own
+PASS line, in the same breath, said "all 32 documents under docs/" — both true
+about different sets, and the document did not say which. The figure is now the
+one the checker computes, and rule 4 there fails if the two disagree.
+
+`README.md` links eight of them, which left the rest — including both index
+documents, the published `magic-data.md` writeup, both atlases, the optimization
+ledger and every hardware bring-up — reachable only by knowing they exist.
 
 Every file under `docs/` appears here, and `tools/archaeology/docs-index-check.mjs`
 fails if one does not, so a new document cannot be born orphaned.

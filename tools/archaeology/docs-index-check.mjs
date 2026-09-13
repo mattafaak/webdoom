@@ -63,5 +63,22 @@ if (dangling.length) {
     process.exit(1);
 }
 
+// 4. The index's own headline count must equal what this check computed.
+// It said "26 documents" while this PASS line said "all 32 documents under
+// docs/" -- both true about different sets, in the same breath, with the
+// document never saying which set it meant.
+{
+    const m = text.match(/\*\*(\d+) documents\*\*/);
+    if (!m) {
+        console.error(`FAIL docs-index-check: ${INDEX} has no "**N documents**" headline to check`);
+        process.exit(1);
+    }
+    if (Number(m[1]) !== tracked.length) {
+        console.error(`FAIL docs-index-check: ${INDEX} says ${m[1]} documents; ` +
+                      `this check counts ${tracked.length} tracked under docs/`);
+        process.exit(1);
+    }
+}
+
 console.log(`PASS docs-index-check: all ${tracked.length} documents under docs/ are linked from ${INDEX}, ` +
             'and every link resolves');

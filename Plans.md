@@ -679,3 +679,55 @@ THERE. Sabotage/restore now goes through a backup copy verified by `diff`, and
 | Z1 | `prf-002`/`prf-003` — `perf.md` published "177.7 KB gzip" total and "35 KB" for the JS+CSS+HTML surface, both marked *(not machine-verified)*, and `perf-015`/`perf-016` sat `unverifiable` in claims.json. **Nothing recomputed them for months** | `payload-size` leg. Measured: total **236 KB** (published 177.7, 1.3× low) and surface **89.2 KB** (published 35.1, **2.5× low**). The per-file table still listed `client/js/settings.js`, which round 7 DELETED, and omitted `wad-import`, `demo`, `scrubber`, `mus2mid`, `sf2-library`, `idb`, `wad-library`, `ui` and `wad-cache`. The set is DERIVED from `client/sw.js`'s `SHELL_FILES` — the list `check-sw-precache` already gates both ways — so a file added to the shell joins the measurement with no edit here; a typed list is exactly what went stale. Graded as a CEILING with 10% headroom, not a pin, because these move with every commit | cc:完了 |
 | Z1b | The first cut was checked two ways, not three | `--require-script-values` caught it: the verifier emitted no `CLAIMS_JSON` footer, so `perf-015`/`perf-016` were compared doc-vs-manifest only, and verify-all calls a claim with no script value **a defect rather than a skip**. The tool emits the footer now and is a verify-all family of its own | cc:完了 |
 | Y4 | `docs/perf.md`'s claim locators had drifted, and **my own 8-row table regeneration is what pushed two over the edge** — `perf-036`/`perf-039` went `DOC_NOT_FOUND` at a 38-line drift | the mechanism, read rather than assumed: the ±35 window binds **only** for claims carrying an `extract_re`, and the full-document fallback fires only when the NEEDLE is absent from the window. So a needle still inside the window while the FIGURE has moved out is precisely the failure mode — which is what happened. 25 locators with an unambiguous single match re-anchored; **beyond-60%-of-window drift 52 → 37 of 129**. One re-anchor (`perf-008`) moved a locator to a line where its `extract_re` could not work and was reverted, which is why the sweep only moves unambiguous matches | cc:完了 |
+
+## Phase Z: decide and record — no new gates
+
+Each verdict is written WITH its status cell, never beside a `cc:TODO`
+(`status-drift` rule 2).
+
+| item | verdict |
+|------|---------|
+| `rme-004` analog twin-stick | **PARTIAL, permanently, by verdict.** A headless runner has no stick, and a synthetic `Gamepad` object gates the shim rather than the path — so a gate here would assert its own mock. Round 7 reasoned this out in a bullet and left it in "What this round did NOT do", where it was re-discovered twice; it is a decision now. The contradicting `tools/run-tests.sh` comment ("Also closes promises rme-004") was corrected in Y3d |
+| `spc-005` "small enough to read in a sitting" | **UNGATEABLE, by verdict** — a LOC ceiling gates a PROXY, not the promise. A 400-line file of dense cleverness fails the promise while passing the proxy. The numbers are PUBLISHED instead of graded (`payload-size` reports the shipped surface; `docs-index` the documentation set) and the sentence stays as prose that says what it is |
+| `prf-001` INITIAL_MEMORY 56 MB | **FLAGGED, parked by verdict.** The disposition stays "no gate" because that is what is true; what changed is the decision not to build one. An emcc sweep is a session for one promise whose figure has no consumer — `perf-059`..`perf-059d` already gate the worst real PWAD combo against the 64 MB that ships, with 9.17 MB headroom |
+| round-4 **F3**, `browser-pipeline` on wbox | **alder-only by policy.** `have_baseline()` makes a host without a golden SKIP by name, which is the correct behaviour and not a gap; `load-budget` (round 8) uses the same pattern deliberately. Committing a wbox baseline would gate a second host against ITS own past, not against alder — useful, not load-bearing, and it needs the repo, a build and WADs on wbox, none of which are there |
+| `bootDoom()` / `serve.js`'s handler | **recorded, not refactored — and both round-6 figures were stale, in opposite directions.** Measured by brace-matching: `bootDoom` is `client/js/main.js:133-437`, **305 lines** (round 6 said 294 — it GREW by 11); the server handler is `server/serve.js:105-263`, **159 lines** (round 6 said 204 — round 7's attestation deletion took 45 off it). A refactor has no gate that fails without it, and `bootDoom` is on the boot path every browser leg depends on. Repeating "294 / 204" for a third round would have been repeating two numbers nobody had re-measured |
+| mouse-sensitivity double-scaling | **by design, recorded.** `settings.mouseSens` scales mouse deltas and vanilla `mouseSensitivity` (`g_game.c:579-580`) scales the same events again, neutral at its default of 5. `g_game.c` is vanilla and on the ticcmd path, so it is deliberately untouched; the OPTIONS screen carries a header naming DOOM's own menu. Not a defect to fix — a consequence of keeping the playsim vanilla |
+| `tools/coverage/run-coverage.sh` | **stays out of suite, reason unchanged.** Its registry entry says "Give it a floor and it becomes a leg", and a floor is exactly what should NOT be invented here: a coverage number committed without an argument for the number is a bar set where the code happens to be, and every later run either meets it trivially or gets it lowered. It produces a report; the report is the deliverable |
+
+## Round 8 close-out
+
+**Baseline at the end of the round: 91 legs** (was 83), 19 quick (was 18),
+20 browser (was 19), 32 documents. Every count in `README.md`, `ci.yml`,
+`CONTRIBUTING.md` and `docs/README.md` is derived from `run-tests.sh --list` or
+from the checker that grades it, never typed — `promises-index` rule 6 caught
+the drift on **four** separate occasions this round, which is the gate doing its
+job rather than a nuisance.
+
+`promises-index` moved **19 gated / 4 partial / 11 flagged → 26 gated /
+2 partial / 5 flagged / 1 ungateable**. `claims.json` went 154 → 157 claims with
+two statuses that had been overclaimed corrected (`commit-pinned`) and two that
+had been `unverifiable` for months now gated (`perf-015`/`perf-016`).
+
+**What this round did NOT do**
+
+- **20.5a, the N64 RDP renderer.** Deliberately not attempted and recorded as a
+  verdict: a second rasterizer with its own golden family and a 0-line
+  `engine/core` diff constraint, on top of a leg already 434 s of the suite. It
+  is a phase, not a task. The honest next step is a 20.1b-style decomposition.
+- **20.4d, SummerCart64 hardware evidence.** The toolchain is complete and
+  `n64-demos` now genuinely runs (434 s, 13/13 bit-identical on emulated N64 —
+  it had been SKIPPING for want of a sourced `~/toolchains/env.sh`, which is why
+  the final run uses `--require-complete`). What is missing is physical:
+  `sc64deployer` is not installed and no USB serial device is present. Blocked
+  on an action at the machine, not on code.
+- **20.6b, the 386 icount scoreboard.** Still `cc:決定 [25.5 PURSUABLE]`. It
+  needs a bootable FreeDOS image built with mtools plus a shareware `DOOM.EXE`,
+  and its own recorded caveat (`Plans.md:311-313`) says it measures **id's DOS
+  binary**, not this codebase — so it can never gate a change here. One atlas
+  row, a day of finicky image work; not taken against the gate backlog.
+- **`docs/perf.md`'s remaining locator drift.** 37 of 129 locators are still
+  beyond 60% of doc-drift's window, down from 52. The ones left are ambiguous
+  (the value appears more than once in the document) and the sweep moves only
+  unambiguous matches on purpose — `perf-008` showed why, by landing on a line
+  where its `extract_re` could not work.
