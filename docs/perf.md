@@ -1430,7 +1430,7 @@ Measured at commit 689dac8 (master after task 12.2b), 2026-07-17, on alder
 (i9-12900K).  All numbers are **user-space retired x86-64 instructions**
 (`PERF_COUNT_HW_INSTRUCTIONS`, `exclude_kernel=1`, `exclude_hv=1`) measured by
 the freestanding `fs-doom` binary with `WD_CYCLES=1` environment variable.
-Cross-ISA conversion factors (arm64, riscv, etc.) are task 13.5's job —
+Cross-ISA conversion factors (arm64, riscv, etc.) have no owner —
 NOT claimed here.
 
 Reproduce:
@@ -1494,7 +1494,7 @@ per-tic state hashes vs the committed goldens (13/13 pass, verified via
 `run-check.sh`).  The instruction-counting path does not perturb the simulation.
 
 **Machine note**: these numbers are on alder (i9-12900K, P-core, 3.6 GHz
-base / 5.2 GHz boost, CachyOS).  Bare-metal ARM counts will differ; task 13.5
+base / 5.2 GHz boost, CachyOS).  Bare-metal ARM counts will differ; no task
 handles cross-ISA conversion.  The x86-64 floor here is the reference baseline
 for any optimisation effort that counts instructions as the currency.
 
@@ -1580,12 +1580,13 @@ For a 32X-class CPU running tic-exact at 35 Hz, the sim budget is:
 | plutonia.wad |             86,515 |           3,028,025 |
 
 These are **x86-64 user-space retired instructions**.  Cross-ISA instruction
-density ratios (x86-64 → SH2 / 68000 / ARM7) are task 13.5's responsibility.
+density ratios (x86-64 → SH2 / 68000 / ARM7) have no owner: 13.5 closed
+without them.
 With typical ISA density factors of 1.5–3×, the SH2 at 23 MHz (32X) would need
 roughly 3–9 million SH2 instructions/s to replicate the sim — well within the
 23 MIPS budget, but heavily dependent on the actual ISA translation and memory
 access patterns.  **The x86-64 p50 floor is the reference; do not cite the
-SH2/68000 budget without task 13.5's cross-ISA calibration.**
+SH2/68000 budget without a cross-ISA calibration nobody owns.**
 
 ### Stage shares of whole-program (p50 basis, doom.wad average)
 
@@ -1623,7 +1624,7 @@ rank from `bench-baseline.json` (§A above).
 
 - **x86-64 ISA only** (`-m32 -O1` freestanding build, not wasm `-O3`).
   Instruction counts reflect x86-64 retired instructions; the wasm build
-  generates a different instruction stream.  Task 13.5 handles cross-ISA.
+  generates a different instruction stream.  Cross-ISA is unowned.
 - **Run-to-run variance**: inherited from 13.1a (1.3–9.9%).  Stage p50 values
   are stable within ~2–4% across the two measurement passes.
 - **`web_perf_now()` overhead**: each stage boundary reads the perf fd

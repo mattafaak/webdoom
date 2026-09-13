@@ -153,6 +153,32 @@ for (const v of verdicts) {
              '    A decided task with an undecided status cell is two answers to one question.');
 }
 
+// ── rule 5: a ledger verdict may not name a task that is already closed ─────
+//
+// Rule 1 catches a LANDED candidate still described as open. This is its mirror
+// and nothing checked it: NC2, NC3 and NC4 all read "SURVIVES -> task 20.2b"
+// while 20.2b is `cc:完了`. A survivor pointed at a finished task reads as live
+// work with an owner and has neither -- the same shape as the promises index's
+// "flagged by future task" table, every entry of which named a closed task.
+//
+// "no live owner" is the accepted alternative, deliberately: a survivor with
+// nobody to do it should SAY so rather than borrow a closed task's name.
+{
+    const closed = new Set(
+        [...plans.matchAll(/^\|\s*(\d+\.\d+[a-z]?)\s*\|.*\bcc:完了/gm)].map(m => m[1]));
+    if (closed.size === 0)
+        fail('status-drift: found no cc:完了 tasks in Plans.md — rule 5 is grading nothing');
+    const ledgerSrc = read('docs/optimization-ledger.md');
+    const pointers = [...ledgerSrc.matchAll(/SURVIVES\s*(?:→|->)\s*(?:task\s*)?([0-9]+\.[0-9]+[a-z]?|no live owner)/g)];
+    if (pointers.length === 0)
+        fail('status-drift: no "SURVIVES -> ..." verdicts found — rule 5 is grading nothing');
+    const stale = pointers.map(m => m[1]).filter(t => closed.has(t));
+    if (stale.length)
+        fail(`status-drift: ${stale.length} ledger verdict(s) point at a CLOSED task: ` +
+             `${[...new Set(stale)].join(', ')}`,
+             '    A survivor owned by a finished task has no owner. Re-point it, or write "no live owner".');
+}
+
 // ── rule 3: the ledger's Totals line must equal its own table ───────────────
 //
 // "Totals: 21 candidates, 12 survivors (8 landed, 4 surviving), 10 killed" sat

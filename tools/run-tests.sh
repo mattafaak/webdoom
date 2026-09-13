@@ -565,7 +565,11 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
     leg browser-join          browser,build,wad,shared "browser drop-in"                       -- node tools/browser-join-test.mjs "$U"
     leg persist               browser,build,wad,shared "settings/keybind persistence"          -- node tools/persist-test.mjs "$U"
         # The third direction of tenet 4: localStorage and the rebind UI are
-        # USER input, and had no gate at all.  Also closes promises rme-004.
+        # USER input, and had no gate at all.  Closes the REBIND half of promises
+        # rme-004; the analog twin-stick half is still PARTIAL (a headless runner
+        # has no stick).  This comment said "closes rme-004" flat, contradicting
+        # the promises index, and nothing scans tools/ comments for claims like
+        # that -- which is why it survived.
     leg browser-options       browser,build,wad,shared "hostile localStorage + the OPTIONS screen" -- node tools/browser-options-test.mjs "$U"
     leg browser-resilience    browser,build,wad,shared "fetch/sw/visibility/gamepad failures" -- node tools/browser-resilience-test.mjs "$U"
     leg browser-lobby         browser,build,wad,shared "lobby state machine, 25 edges"         -- node tools/browser-lobby-test.mjs "$U"

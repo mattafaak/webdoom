@@ -435,15 +435,22 @@ sanctioned by policy).**
 | K8 | Browser-fps-motivated wasm work | cycle-floor | framing invalid (render 1.71% of budget) | KILLED |
 | K9 | Combined flat_color lookup table | cycle-floor | magic-data policy violation (new runtime table) | KILLED |
 | NC1 | R_DrawSpan packed-position single-increment | cycle-floor | KILLED — packed 16-bit y-field carry propagates into x-field on yfrac overflow; all 13 render goldens PIXEL DESYNC at tic 0–1 | KILLED (20.2b) |
-| NC2 | MAXSEGS solidsegs census (64→32 candidate) | RAM / portability | 0 instr/tic; 256 bytes BSS (survey required); UNMEASURED | SURVIVES → task 20.2b |
-| NC3 | R_GetColumn composite fast-path inlining | cycle-floor | predicted −3K…−4K instr/tic (0.6–0.9% of bsp; anchor: perf-034 = 714.8 calls/tic × 5 instr/call = 3,574 instr/tic); UNMEASURED | SURVIVES → task 20.2b |
-| NC4 | R_DrawColumn 8-wide unroll (extend existing 4-wide) | cycle-floor | predicted −5K…−10K instr/tic (1–2% of bsp); UNMEASURED | SURVIVES → task 20.2b |
+| NC2 | MAXSEGS solidsegs census (64→32 candidate) | RAM / portability | 0 instr/tic; 256 bytes BSS (survey required); UNMEASURED | SURVIVES → no live owner |
+| NC3 | R_GetColumn composite fast-path inlining | cycle-floor | predicted −3K…−4K instr/tic (0.6–0.9% of bsp; anchor: perf-034 = 714.8 calls/tic × 5 instr/call = 3,574 instr/tic); UNMEASURED | SURVIVES → no live owner |
+| NC4 | R_DrawColumn 8-wide unroll (extend existing 4-wide) | cycle-floor | predicted −5K…−10K instr/tic (1–2% of bsp); UNMEASURED | SURVIVES → no live owner |
 | NC5 | R_DrawSpan 4-wide loop unroll | cycle-floor | MEASURED: −47,707 instr/tic p50 doom.wad demo3 (−4.2% whole, −11.9% planes); scalar xfrac/yfrac, no packing | LANDED (20.2b) |
 
 **Totals: 21 candidates, 11 survivors (8 landed, 3 surviving), 10 killed.**
 
 <!-- Counted from the verdict column of the table above, not written by hand:
      LANDED C1-C7 + NC5 = 8; KILLED K1-K9 + NC1 = 10; SURVIVES NC2, NC3, NC4 = 3.
+     NC2/NC3/NC4 pointed at task 20.2b until round 8.  20.2b was round
+     3's LANDING TEMPLATE ("instantiate per ledger entry") and it closed at
+     90250e8 with one candidate landed, so those three had been pointed at a
+     finished task: live work with an owner that was not an owner.  They now
+     say "no live owner", which is the true statement, and
+     status-drift-check.mjs rule 5 fails on any ledger verdict naming a task
+     Plans.md records as cc:完了.
      The line used to read "12 survivors ... 4 surviving", which is two of the
      four figures wrong: there are three surviving candidates, not four.
      tools/archaeology/status-drift-check.mjs rule 3 recomputes these from the
@@ -573,7 +580,7 @@ independent of both excluded catalogs and the existing C1–K9 ledger.
 | **kill rule** | `I_Error("R_ClipSolidWallSegment: too many (start)")` fires on any of 13 golden demos = kill. Render golden pixel divergence on any demo (solid-seg overflow causes silent missed walls, not crash, so pixel delta is the correct kill detector). |
 | **non-overlap** | C4 reduced MAXVISPLANES, C5 reduced MAXDRAWSEGS, C6 reduced MAXOPENINGS. NC2 targets MAXSEGS (solidsegs), the one remaining BSS array in r_bsp.c not yet surveyed. Not in FastDoom visual-quality catalog. Not in rp2040-doom catalog. |
 
-**Verdict: SURVIVES → task 20.2b (priority: low; 256 bytes BSS only; requires survey pass first)**
+**Verdict: SURVIVES → no live owner (priority: low; 256 bytes BSS only; requires survey pass first)**
 
 ---
 
@@ -589,7 +596,7 @@ independent of both excluded catalogs and the existing C1–K9 ledger.
 | **kill rule** | Measured icount improvement < 2,000 instr/tic on doom.wad p50 = drop (below the revised honest estimate of 3,574 instr/tic; threshold set at ~56% of estimate to allow measurement variance). Any sim golden mismatch = kill. Any render golden pixel divergence = kill (inlining must be pixel-identical to R_GetColumn's output by construction). |
 | **non-overlap** | FastDoom "potato columns" reduces the number of wall columns drawn (visual quality reduction). NC3 reduces the per-column function call overhead for the same column count — orthogonal. rp2040-doom DMA approach is a bulk-transfer optimization, not function-call inlining. No entry in C1–K9 ledger targets R_GetColumn. |
 
-**Verdict: SURVIVES → task 20.2b (priority: low-medium; 3K–4K instr/tic predicted (anchor: perf-034); bsp stage)**
+**Verdict: SURVIVES → no live owner (priority: low-medium; 3K–4K instr/tic predicted (anchor: perf-034); bsp stage)**
 
 ---
 
@@ -605,7 +612,7 @@ independent of both excluded catalogs and the existing C1–K9 ledger.
 | **kill rule** | Measured icount improvement < 4,000 instr/tic on doom.wad p50 vs the current 4-wide baseline = drop. Any sim golden mismatch = kill. Any render golden pixel divergence = kill (output must be identical to 4-wide baseline). |
 | **non-overlap** | The task 2.2 4-wide R_DrawColumn unroll is documented in perf.md §Q1 line 662+ (not in the C1 ledger entry). NC4 is the next unroll level (8-wide) which is not in the ledger. Note: r_draw.c:232–286 contains a stale 8-wide `#if 0` variant from before task 2.2, but it uses row-major stride (`dest += 4` per group of 4 pixels) — incompatible with the 14.2a column-major framebuffer and not directly re-enableable; NC4 requires writing a new 8-wide block with correct `dest += SCREENHEIGHT` stride. FastDoom's known catalog does not include loop unrolling (it uses visual quality reductions). rp2040-doom's DMA approach is a bulk-transfer technique, not loop unrolling. K1 (killed) packed palette outputs, not the loop structure. |
 
-**Verdict: SURVIVES → task 20.2b (priority: low-medium; 5K–10K instr/tic predicted; bsp stage)**
+**Verdict: SURVIVES → no live owner (priority: low-medium; 5K–10K instr/tic predicted; bsp stage)**
 
 ---
 

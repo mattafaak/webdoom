@@ -163,15 +163,26 @@ the toggle's effect; "second load is instant, single player works offline" gates
 offline boot but not the word "instant".
 (spc-004 and spc-006 moved from FLAGGED to EVIDENCED by task 12.2b; spc-002 moved by task 15.5.)
 
-### Flagged promises by future task
+### Open promises and who owns them
 
-| future task | promises it closes |
-|-------------|-------------------|
-| 12.2b | ~~spc-004~~ EVIDENCED, ~~spc-006~~ EVIDENCED; prf-002/003 (size audit CI) remain open |
-| 12.3 | rme-003 (vanilla-mode toggle), rme-004 (rebind/gamepad), spc-003 (prefers-reduced-motion), spc-005 (LOC ceiling) |
-| 12.4b / 15.1 | rme-005 (offline boot + sw.js precache bug fix), rme-009 (systemd service gate) |
-| 14.3 | prf-007/008/009 (-Os build revisit for bare-metal) |
-| 15.2 | rme-002 (Firefox/Edge CI) |
-| 15.3 | rme-008 (SIGIL/MasterLevels/NRFTL/Chex/HACX smoke) |
-| 15.4 | rme-010 (T07 flake fix + edge enforcement) |
-| 15.5 | ~~spc-002~~ EVIDENCED (HOL blocking measured 2026-07-19) |
+Every entry of the table this replaces named a task — 12.2b, 12.3, 12.4b/15.1,
+14.3, 15.2, 15.3, 15.4, 15.5 — and **all eight were closed and archived**, some
+of them for months. A promise pointed at a finished task reads as scheduled work
+and is not: it had no owner at all. Round 8 closed four of the promises that
+table listed (rme-008 and rme-009 by gate, spc-011 by gate, rme-003's
+toggle-effect half by gate) without any of those tasks existing.
+
+So this table names an owner or says there is none. "No live owner" is a real
+entry, not a gap to be filled with the nearest task number.
+
+| promise | state | owner |
+|---------|-------|-------|
+| rme-002 (Firefox rendered frame) | PARTIAL | no live owner — needs geckodriver or Firefox's Remote Protocol in the harness |
+| rme-003 (uncapped framerate) | PARTIAL | no live owner — the toggle's *effect* is gated (`sim-invariants`); the render RATE is unobservable through a demo-driven leg, which steps one tic per frame |
+| rme-004 (analog twin-stick) | PARTIAL | no live owner — a headless runner has no stick, and a synthetic `Gamepad` would gate the shim rather than the path |
+| rme-005 ("second load is instant") | PARTIAL | no live owner — needs a committed load-time budget, and inherits `browser-pipeline`'s host-drift problem |
+| spc-005 (small enough to read in a sitting) | FLAGGED | no live owner — a LOC ceiling gates a proxy, not the promise |
+| prf-001 (INITIAL_MEMORY 56 MB) | FLAGGED | no live owner — needs an emcc INITIAL_MEMORY sweep |
+| prf-002 / prf-003 (total gzip payload) | FLAGGED | no live owner — a `gzip -9c` budget over the deliverable set, `size-ledger`-shaped, is the cheapest of these |
+| prf-007 / prf-008 / prf-009 (`-Os` figures) | FLAGGED | **none, by verdict** — killed optimization, archived; not worth CI-reproducing |
+| mda-016 (FixedDiv magnitudes) | FLAGGED | **none, by verdict** — approximate scientific notation in prose; no exact claim exists to gate |

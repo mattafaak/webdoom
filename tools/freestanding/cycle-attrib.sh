@@ -231,7 +231,7 @@ out = {
     "generated": "tools/freestanding/cycle-attrib.sh",
     "arch":      "x86-64 (user-space retired instructions; PERF_COUNT_HW_INSTRUCTIONS)",
     "note":      ("Rendering ON (no -nodraw); render stages are meaningful. "
-                  "Cross-ISA conversion factors are task 13.5's job."),
+                  "Cross-ISA conversion factors are NOT claimed here and have no owner: task 13.5 closed having produced the atlas but not them (its FINDING-2 — instruction share is not wall share, so a conversion needs memory-system error bars, not an ISA ratio)."),
     "passes":    2,
     "reconciliation_ok_all": all_recon_ok,
     "max_reconciliation_delta_pct": round(max_recon_delta, 4),

@@ -15,7 +15,9 @@
 #   bash tools/freestanding/cycle-floor.sh [--wad-dir <path>]
 #
 # These are user-space retired x86-64 instructions.  Cross-ISA conversion
-# factors (arm64, riscv, ...) are 13.5's job — NOT claimed here.
+# factors (arm64, riscv, ...) are NOT claimed here and have no owner: task 13.5
+# closed having produced the atlas but not them (FINDING-2 — instruction share is
+# not wall share, so a conversion needs memory-system error bars, not an ISA ratio).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -194,7 +196,7 @@ out = {
     "schema":       "cycle-floor.v1",
     "generated":    "tools/freestanding/cycle-floor.sh",
     "arch":         "x86-64 (user-space retired instructions; PERF_COUNT_HW_INSTRUCTIONS)",
-    "note":         "Cross-ISA conversion factors are task 13.5's job — NOT claimed here.",
+    "note":         "Cross-ISA conversion factors are NOT claimed here and have no owner: task 13.5 closed having produced the atlas but not them (its FINDING-2 — instruction share is not wall share, so a conversion needs memory-system error bars, not an ISA ratio).",
     "passes":       2,
     "max_variance_pct": round(max_var_all, 3),
     "worst_demo":   worst_demo,
