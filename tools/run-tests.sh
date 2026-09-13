@@ -121,6 +121,7 @@ have_baseline(){ [ -f "tools/golden/browser-pipeline-$(hostname).json" ]; }
 # was hiding.
 SHARED_UP=0
 have_shared()  { [ "$SHARED_UP" = "1" ]; }
+have_systemd() { command -v systemd-analyze >/dev/null 2>&1; }
 have_perf()    { [ "$PERF" = "1" ]; }
 have_notslow() { [ "$NO_SLOW" = "0" ]; }
 # PRESENT is not the same as CURRENT, and for the compile-time variants the
@@ -142,6 +143,7 @@ need_reason() {   # need_reason <tag> -> prints why it is unmet
         qemuarm)  echo "qemu-arm-static not on PATH" ;;
         n64)      echo "N64 toolchain incomplete (need mips64-elf-gcc under \$N64_INST, ares and xvfb-run; run: source ~/toolchains/env.sh)" ;;
         gcc)      echo "gcc not on PATH" ;;
+        systemd)  echo "systemd-analyze not on PATH (the unit file cannot be validated here)" ;;
         browser)  echo "Chrome not found (set CHROME_BIN)" ;;
         firefox)  echo "/usr/bin/firefox not found" ;;
         emsdk)    echo "emsdk not found (run: tools/setup-emsdk.sh)" ;;
@@ -156,6 +158,7 @@ need_reason() {   # need_reason <tag> -> prints why it is unmet
 need_met() {
     case "$1" in
         build) have_build ;; wad) have_wad ;; native) have_native ;; gcc) have_gcc ;; fs) have_fs ;;
+        systemd) have_systemd ;;
         zig) have_zig ;; qemuarm) have_qemuarm ;; clangfmt) have_clangfmt ;;
         n64) have_n64 ;;
         browser) have_browser ;; firefox) have_firefox ;; emsdk) have_emsdk ;;
@@ -394,6 +397,11 @@ leg docs-index      -    "every doc is reachable from docs/README.md" -- node to
 # GAME_ORDER, absent from the manifest and refused by the importer, while
 # README advertised it as part of the shipped library (E1).
 leg menu-reachable  -    "no GAME_ORDER entry is unreachable"         -- node tools/check-menu-reachable.mjs
+# rme-009: README:41 says webdoom.service is a ready systemd unit and nothing
+# checked it -- no boot test, no file validation, not one assertion.
+# `systemd-analyze verify` alone would be a quiet exit-0: on a good unit it
+# exits 0 and prints NOTHING, so it cannot tell a sound unit from a dead check.
+leg service-file    systemd  "webdoom.service is a ready unit (rme-009)" -- bash tools/service-check.sh
 
 if [ "$TIER" = "quick" ]; then
     QUICK_ONLY=1
@@ -417,6 +425,11 @@ leg stamp-full      build,fresh-perf  "verify-all --full: +30 measurement-stamp 
 # ── engine boots and makes sound ─────────────────────────────────────────────
 leg smoke-doom      build,wad  "boots doom.wad headless, 700 frames"   -- node tools/smoke-test.mjs doom.wad 700
 leg smoke-doom2     build,wad  "boots doom2.wad headless, 1100 frames" -- node tools/smoke-test.mjs doom2.wad 1100
+# rme-008: the demo goldens cover the four demo-bearing IWADs. The other 24
+# entries in wads/manifest.json -- SIGIL, NRFTL, Chex Quest and the 20 Master
+# Levels -- had no automated test of any kind, so a shipped WAD that failed to
+# load would have been found by a player. Target list derived from the manifest.
+leg smoke-pwad      build,wad  "24 ungated library WADs boot and render (rme-008)" -- node tools/smoke-pwad-test.mjs
 leg opl-mode        build,wad  "OPL2 byte-identical to ref; OPL3 RMS"  -- node tools/opl-mode-test.mjs doom.wad
 leg gm-frames       build,wad  "GM/GUS pump chain + DMXGUS mapping"    -- node tools/gm-frames-test.mjs doom.wad
 

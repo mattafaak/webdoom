@@ -619,3 +619,17 @@ never calls — so R3 first read green over a sabotage that was never in the pat
 
 Registry 84 → 85 legs. `promises-index` rule 6 caught the count drift on both
 occasions it happened, which is the gate doing its job.
+
+## Phase W: the four README promises, gated rather than narrowed
+
+The owner's call, taken against the cheaper path of narrowing the README text
+to what was already proven.
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| W1 | `rme-009` — README:41 says `webdoom.service` is a ready systemd unit, and **nothing checked it**: no boot test, no file validation, not one assertion | `service-file` leg (`tools/service-check.sh`), quick tier, **15 assertions**. `systemd-analyze verify` alone was NOT made the gate: on a good unit it exits 0 and prints NOTHING, so a bare wrapper cannot tell a sound unit from a dead check — its OUTPUT is graded as well as its status, since warnings exit 0. Adds the nine directives a ready unit must carry, ExecStart's program and script, WorkingDirectory's basename, and DOOM_HOST/DOOM_PORT agreeing with `server/serve.js`'s own defaults. Red-proofed on **five** arms, each rc=1 naming a different failure. **What it does not check is stated, not implied**: whether the unit BOOTS needs root and a live systemd | cc:完了 |
+| W2 | `rme-008` — the demo goldens cover the four demo-bearing IWADs; the other **24** manifest entries (SIGIL, NRFTL, Chex Quest, the 20 Master Levels) had no automated test of any kind | `smoke-pwad` leg: 24 of 24 booted and rendered, four assertions each, target list **derived from `wads/manifest.json`** so a new WAD joins the gate with no edit. Two vacuity floors (fewer than 20 discovered, or fewer than 20 booted, is a FAIL) | cc:完了 |
+| W2b | **The red-proof failed first, and the gate was wrong, not the proof.** Truncating `tnt31.wad` to 40 KB still PASSED: the engine fell back to `tnt.wad`'s own MAP31, so "it booted and drew a level" never proved the PWAD loaded at all | a base-IWAD control, the same shape as T2's A3/A4 — boot the base at the same map and require the PWAD's frame to differ. It now reds: `identical to tnt.wad at the same map — the PWAD contributed nothing (did it load?)`. A control that ERRORS is itself proof, since that map exists only in the PWAD (sigil's E5) | cc:完了 |
+| W2c | Two harness defects this leg walked into. `chex.wad` failed `W_InitFiles: no files found` — the engine identifies games by 1993 filenames and a doom-shaped TC must register as `doomu.wad`; `client/js/main.js:20`'s `ENGINE_NAME` map already said so and the gate had re-derived it wrongly. And the first cut read **1, 2, 3, 4, 5 … tics** down the target list | the tic count was measuring the harness's own position in its run: outside `-timedemo` the engine advances from real elapsed time via `TryRunTics`, so an unpaced loop reports the process's age. Paced at 70 fps like `smoke-test.mjs`; every target now reads a uniform 53 tics | cc:完了 |
+| W3 | `rme-005` — "second load is instant" is a performance claim with no gate | — | cc:TODO |
+| W4 | `rme-002` — `firefox-smoke` asserts UA + JS + `/api/wads` but never a rendered frame | — | cc:TODO |
