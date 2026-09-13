@@ -1,0 +1,8 @@
+{
+  "host": "alder",
+  "recorded": "2026-09-13",
+  "cold_ms": 371,
+  "warm_ms": 331,
+  "budget_ms": 4000,
+  "note": "REGRESSION budget, not a performance claim: warm_ms x2.5 with a 4 s floor, headroom for an unloaded-vs-busy machine. Re-record with --record."
+}

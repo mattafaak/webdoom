@@ -121,6 +121,7 @@ have_baseline(){ [ -f "tools/golden/browser-pipeline-$(hostname).json" ]; }
 # was hiding.
 SHARED_UP=0
 have_shared()  { [ "$SHARED_UP" = "1" ]; }
+have_loadbudget(){ [ -f "tools/golden/load-budget-$(hostname).json" ]; }
 have_xvfb()    { command -v xvfb-run >/dev/null 2>&1; }
 have_systemd() { command -v systemd-analyze >/dev/null 2>&1; }
 have_perf()    { [ "$PERF" = "1" ]; }
@@ -146,6 +147,7 @@ need_reason() {   # need_reason <tag> -> prints why it is unmet
         gcc)      echo "gcc not on PATH" ;;
         systemd)  echo "systemd-analyze not on PATH (the unit file cannot be validated here)" ;;
         xvfb)     echo "xvfb-run not on PATH (headless Firefox has NO WebGL here, so the frame gate needs a real X display)" ;;
+        loadbudget) echo "no load-budget baseline for host $(hostname) (record: node tools/load-budget-test.mjs --record)" ;;
         browser)  echo "Chrome not found (set CHROME_BIN)" ;;
         firefox)  echo "/usr/bin/firefox not found" ;;
         emsdk)    echo "emsdk not found (run: tools/setup-emsdk.sh)" ;;
@@ -162,6 +164,7 @@ need_met() {
         build) have_build ;; wad) have_wad ;; native) have_native ;; gcc) have_gcc ;; fs) have_fs ;;
         systemd) have_systemd ;;
         xvfb) have_xvfb ;;
+        loadbudget) have_loadbudget ;;
         zig) have_zig ;; qemuarm) have_qemuarm ;; clangfmt) have_clangfmt ;;
         n64) have_n64 ;;
         browser) have_browser ;; firefox) have_firefox ;; emsdk) have_emsdk ;;
@@ -606,6 +609,10 @@ fi
 # These three own their servers (dedicated ports, per the 12.2b stale-server
 # lesson), so they are ordinary legs.
 leg browser-insecure browser "real insecure origin: IDB WAD cache + music fallback" -- node tools/browser-insecure-test.mjs
+# rme-005: "second load is instant". The offline half is gated; "instant" was a
+# performance claim with no gate. This is a REGRESSION gate against a baseline
+# committed per host -- a host without one SKIPs by name, as browser-pipeline does.
+leg load-budget     browser,loadbudget,build,wad "warm load within this host's budget (rme-005)" -- node tools/load-budget-test.mjs
 leg browser-pipeline browser,baseline "per-frame JS/GPU cost vs this host's baseline" -- bash tools/pipeline-gate.sh
 leg firefox-smoke    firefox "Firefox UA executes JS and fetches /api/wads" -- bash tools/firefox-smoke.sh
 # rme-002: firefox-smoke proves the HTML parsed and JS ran; it asserts NO frame.
