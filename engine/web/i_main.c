@@ -189,6 +189,21 @@ EMSCRIPTEN_KEEPALIVE void web_set_smooth (int on)
     smoothrender = on;
 }
 
+#ifdef WEBDOOM_INVARIANTS
+//
+// web_set_fractic: pin the interpolation fraction (0..FRACUNIT), -1 to unpin.
+// Test-only, and deliberately absent from the shipping build -- see the note on
+// doom_fractic_override in r_main.c.  Adding an export to build/ would move
+// __heap_base and turn perf-009 red.
+//
+extern int doom_fractic_override;
+
+EMSCRIPTEN_KEEPALIVE void web_set_fractic (int v)
+{
+    doom_fractic_override = v;
+}
+#endif
+
 //
 // web_set_detail (14.2b): opt-in detail level for bare-metal/testing use.
 // Routes through the vanilla R_SetViewSize mechanism so R_ExecuteSetViewSize

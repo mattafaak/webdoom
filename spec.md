@@ -34,7 +34,7 @@ shipped, gated feature that the contract never claimed at all.
 | **Persistence**: savegames and config across reloads, per IWAD | `persist` |
 | Offline single player once a WAD is cached | `browser-offline`, `sw-precache` |
 | Rebindable keys, gamepad, and an OPTIONS screen on the launcher menu | `browser-options` |
-| Freelook and frame interpolation — render-side, opt-in | **ungated** — promises-index spc-011 |
+| Freelook and frame interpolation — render-side, opt-in | `sim-freelook`, `sim-invariants` |
 | Music: in-engine OPL2/OPL3, or a GM SoundFont backend | `opl-mode`, `gm-frames`, `gm-config`, `browser-sf2`, `browser-music-fallback` |
 | **Five compile-time render variants**, each pixel-identical or explained | `render-fakeflat`, `render-potato`, `render-sbskip`, `render-diffblit`, `toggle-identity` |
 | **A freestanding core** with no OS, and an N64 correctness leg | `freestanding-sim`, `ro-wad`, `arm-cross`, `n64-demos` |
@@ -333,7 +333,7 @@ never been worth a task.
 
 **Decision: the promise stands, and it is a CHROMIUM promise.** README
 and this file say "stock Chrome / Edge / Firefox" because that is what a
-player reads on the box; the evidence is Chromium (gated, 21 legs) plus
+player reads on the box; the evidence is Chromium (gated, 19 legs) plus
 Firefox (smoke-gated, limits stated above). Edge specifically is
 **untested by policy, not by oversight** — the same standing Safari/iOS
 gets below, with the opposite conclusion about whether it will work.
@@ -341,7 +341,7 @@ If Edge ever diverges from Chromium in a way that reaches this code, it
 becomes a bug report with a reproducer, not a missing leg.
 
 Decision: README claim "stock Chrome / Edge / Firefox" is kept.
-Gate: `run-tests.sh` firefox smoke leg, plus the 21 Chromium legs.
+Gate: `run-tests.sh` firefox smoke leg, plus the 19 Chromium legs.
 
 ### Safari / iOS — explicit non-goal
 

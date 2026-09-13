@@ -416,13 +416,22 @@ leg gm-frames       build,wad  "GM/GUS pump chain + DMXGUS mapping"    -- node t
 # ── the sim-safety gate: an assert names the broken invariant at its call site,
 #    which a golden diff cannot do.  It runs BEFORE the goldens for that reason.
 leg build-invariants emsdk     "compile -DWEBDOOM_INVARIANTS"          -- bash tools/build-toggle.sh WEBDOOM_INVARIANTS build-invariants
-leg sim-invariants   wad,fresh-invariants     "13 demos under armed invariant asserts" -- node tools/demo-test.mjs --build-dir build-invariants
+# --sim-drawn, not -nodraw: this is the ONLY leg on the armed build, and until
+# round 8 it ran with the renderer switched off -- so DOOM_ASSERT(doom_in_render_path
+# == 0), the assert written to catch render->sim contamination, had never once run
+# in a process where the renderer executes.  --fractic pins the interpolation
+# fraction, which -timedemo otherwise saturates at FRACUNIT (see demo-test.mjs).
+leg sim-invariants   wad,fresh-invariants     "13 demos, armed asserts, renderer running, freelook + interpolation active" -- node tools/demo-test.mjs --sim-drawn --smooth --fractic 32768 --pitch 40 --build-dir build-invariants
 
 # ── differential + goldens ───────────────────────────────────────────────────
 leg fuzz-diff       native,wad "20 mutated demos: wasm == native"      -- node tools/fuzz/run-fuzz.mjs --seeds 20 --parallel 8 --require-native
 leg sim-goldens     build,wad  "13 demos, per-tic gamestate hashes"    -- node tools/demo-test.mjs
 leg render-goldens  build,wad  "13 demos, per-tic framebuffer hashes"  -- node tools/demo-test.mjs --render
 leg render-low      build,wad  "low-detail render goldens (14.2b)"     -- node tools/demo-test.mjs --render --low-detail
+# spc-011: spec.md promises freelook and interpolation are render-side and cannot
+# reach the playsim.  sim-wide was the only leg proving that class and it was
+# deleted with widescreen.  This is its successor on the shipping artifact.
+leg sim-freelook    build,wad  "13 demos, freelook active, playsim untouched (spc-011)" -- node tools/demo-test.mjs --sim-drawn --pitch 40
 
 leg build-fakeflat   emsdk     "compile -DWEBDOOM_FAKEFLAT"            -- bash tools/build-toggle.sh WEBDOOM_FAKEFLAT build-fakeflat
 leg render-fakeflat  wad,fresh-fakeflat       "fakeflat render goldens (20.3a)"       -- node tools/demo-test.mjs --render-fakeflat
@@ -437,10 +446,10 @@ leg render-potato    wad,fresh-potato         "potato render goldens (20.3c)"   
 # surviving evidence until now was an md5 typed into a document.
 leg build-sbskip     emsdk     "compile -DWEBDOOM_SBSKIP"              -- bash tools/build-toggle.sh WEBDOOM_SBSKIP build-sbskip
 leg render-sbskip    wad,fresh-sbskip         "sbskip pixel-identical to vanilla (20.3b)" -- node tools/demo-test.mjs --render --build-dir build-sbskip
-leg sim-sbskip       wad,fresh-sbskip         "sbskip leaves the playsim untouched"   -- node tools/demo-test.mjs --build-dir build-sbskip
+leg sim-sbskip       wad,fresh-sbskip         "sbskip leaves the playsim untouched"   -- node tools/demo-test.mjs --sim-drawn --build-dir build-sbskip
 leg build-diffblit   emsdk     "compile -DWEBDOOM_DIFFBLIT"            -- bash tools/build-toggle.sh WEBDOOM_DIFFBLIT build-diffblit
 leg render-diffblit  wad,fresh-diffblit       "diffblit pixel-identical to vanilla (20.3d)" -- node tools/demo-test.mjs --render --build-dir build-diffblit
-leg sim-diffblit     wad,fresh-diffblit       "diffblit leaves the playsim untouched" -- node tools/demo-test.mjs --build-dir build-diffblit
+leg sim-diffblit     wad,fresh-diffblit       "diffblit leaves the playsim untouched" -- node tools/demo-test.mjs --sim-drawn --build-dir build-diffblit
 
 # Every md5 the ledger states about a built artifact, checked against the
 # artifact — including the toggle-off byte-identity claim that all four 20.3

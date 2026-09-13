@@ -557,3 +557,51 @@ Baseline at the end of the round: **83 legs** (was 89), **19 browser** (was 21).
   first row was caught.
 - The campaign tail (**20.4d / 20.5a / 20.6b**), the analog twin-stick path
   (`rme-004`) and Firefox's no-rendered-frame limit (`rme-002`) are unchanged.
+
+---
+
+# Planning round 8 (2026-09-12) — the gates that were never armed
+
+The brief: close the round-7 tail. Three things set the scope, and the third was
+found while planning.
+
+- **`spc-011` was the only ungated row in the contract.** `spec.md`'s "What
+  ships" table has 18 rows; seventeen named a leg and "Freelook and frame
+  interpolation — render-side, opt-in" read `**ungated**`. `sim-wide` was the
+  leg that proved a render-side option cannot reach the playsim, and it was
+  deleted with widescreen in round 7.
+- **`perf-009` has no default-tier gate.** `wasm-stamp.mjs` runs only from
+  `verify-all.sh` under `--full`, and the `doc-drift` leg calls it with no
+  arguments, so no suite leg has ever executed it.
+- **The vacuity turned out to be a CLASS, not a case.** The blindness is
+  `-nodraw`, not `_web_set_smooth(0)`: `d_main.c:234` returns from `D_Display`
+  before any drawer runs, so the sim family never executed `R_SetupFrame`,
+  `R_ShearView`, `R_InterpolateSectors`, `ST_Drawer` or `I_FinishUpdate`.
+
+## Phase T: the render-path invariance gates
+
+| Task | 内容 | DoD | Status |
+|------|------|-----|--------|
+| T1 | Whether `sim-sbskip`/`sim-diffblit` verify anything was a PREDICTION. Decided by measurement, not by reading | `prndindex++` poisoned into each toggle's guarded block (`web_state_hash` hashes `prndindex`, so one execution desyncs). **CONFIRMED for both.** The poisoned binaries printed `PASS — all demos bit-identical to golden (13 demos)`, rc=0, under today's `-nodraw` leg, while the SAME binaries failed the render gate 13/13 (first divergence plutonia-demo2 tic 51 / tic 49). Poison-compiled-in proved by md5 against the clean toggle build. Both legs have verified nothing since 20.3b/20.3d landed 2026-07-18/19 | cc:完了 [tdd:skip:experiment-produces-a-finding] |
+| T2 | `spc-011`: the 13 demos had never run with freelook or interpolation active | `--sim-drawn` family in `demo-test.mjs`: no `-nodraw`, per-tic `web_state_hash()` compared byte-exact against the EXISTING sim goldens; records nothing and owns no goldens. **ONE PASS PER MODIFIER** — the first cut ran one combined pass, reported "1710/1710 frames changed" and looked excellent, but `--smooth` alone changed **0 of 1710**: an active pitch was vouching for an inert smooth. Five assertions: A1 sim-exact on every pass, A2 control pass, A3 control framebuffer == `-render.json` (instrument), A4 per-modifier inequality at the CONSUMPTION SITE (vacuity), A5 `web_perf_frames() >= tics/2` (the path ran). No new shipping export: `web_perf_frames()` already exists and is incremented at `r_main.c:1038` inside `R_RenderPlayerView` | cc:完了 |
+| T2b | **Frame interpolation is INERT under `-timedemo` and no leg could have caught it.** That path sets `singletics`, whose branch never calls `run_tic()`, and `run_tic()` is the only writer of `web_lastticms` — so `I_GetTimeFrac()` measures against a stale timestamp, clamps at `f > 1.0`, and `fractic` saturates at FRACUNIT, bit-identical to smooth off | `--fractic N` pins the fraction, via `doom_fractic_override` **entirely inside `#ifdef WEBDOOM_INVARIANTS`**: a new global in the shipping build would move `__heap_base` and turn `perf-009` red. `build/doom.wasm` byte-identical across the change, md5 `a1109b9c2ad9c04374767cce8dd51712`, 355,893 B, proved by rebuild. `--smooth` without `--fractic` is rc=2, and `--fractic` on a build without the export is a hard FAIL, never a skip | cc:完了 |
+| T3 | Four legs re-pointed onto the family; one added | NEW `sim-freelook` (shipping artifact, `--pitch 40`). Re-pointed: `sim-invariants` (**the only leg on the armed build, and it was `-nodraw`** — so `DOOM_ASSERT(doom_in_render_path == 0)`, the assert written to catch render→sim contamination, had never run in a process where the renderer executes), `sim-sbskip`, `sim-diffblit`. Re-pointed, not deleted: the old form did serve the weaker claim that the toggle build's codegen still reproduces the goldens. **Red-proof is T1's arm (c)**: the same poisoned binaries that passed the old leg now FAIL at tic 1 and tic 0. Registry 83 → 84 legs | cc:完了 |
+| T4 | The contract row and the promise | `spec.md` row 8 cites `sim-freelook`, `sim-invariants` (rule 7 validates the tokens, so the legs landed first). `promises-index` spc-011 FLAGGED → **GATED** (flagged 11 → 10, gated 19 → 20) carrying the interpolation limit rather than papering over it; `rme-003`'s "the toggle's *effect* remains unasserted" half closed, its uncapped-framerate half explicitly left open | cc:完了 |
+
+**Red-proofs, all four quoted with their numbers.** Against a build with
+`R_InterpolateSectors (true)` deleted: `sim-goldens` rc=0 (13/13), `render-goldens`
+rc=0 (13/13), `render-low` rc=0 (13/13), `sim-freelook` rc=0 (13/13) — and
+`sim-invariants` **rc=1, DESYNC at tic 14**. Forcing a modifier pass to control
+values: rc=1, `changed 0 of 1710 frames (need 85)`. A constant framebuffer hash:
+rc=1, `control framebuffer differs from doom-demo1-render.json at tic 0 — the
+instrument is not trustworthy`. `-nodraw` reinstated: rc=1, `control pass rendered
+0 frames over 1710 tics`.
+
+**Two traps this phase walked into, both caught by a gate rather than by
+reading.** `git checkout -- engine/core/r_main.c`, used to undo a red-proof's
+sabotage, also reverted the legitimate change in the same file; the guard
+asserted the sabotage was GONE and never that the intended change was still
+THERE, and `build-invariants` then failed to link on `undefined symbol:
+doom_fractic_override`. And a red-proof that sabotaged `fnv1aRender` hit the
+first of the file's TWO definitions — the render family's, which `--sim-drawn`
+never calls — so R3 first read green over a sabotage that was never in the path.
