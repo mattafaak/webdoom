@@ -144,6 +144,9 @@ function musicValue() {
     return 'GM';
 }
 
+// wrap-around step through a list; an unknown value steps from the start
+const cyc = (arr, cur, dir) => arr[(arr.indexOf(cur) + dir + arr.length) % arr.length];
+
 const keyName = code => String(code)
     .replace(/[^a-zA-Z0-9]/g, '')      // codes are alphanumeric; localStorage is not trusted
     .replace(/^Key|^Digit/, '')
@@ -152,19 +155,25 @@ const keyName = code => String(code)
     .trim()                            // 'ArrowLeft' -> 'Left' -> ' Left' without this
     .toUpperCase();
 
-// Step a setting through a fixed ladder, wrapping.  `steps` is the ladder, so
-// a value that is in range but not ON the ladder (hand-edited localStorage,
-// which sanitizeSettings clamps but does not round) lands on the next rung up
-// rather than jumping to the start.
-const stepper = (key, steps) => dir => {
-    const cur = S()[key];
-    let i = steps.indexOf(cur);
-    if (i < 0) i = steps.findIndex(v => v >= cur);
-    if (i < 0) i = 0;
-    S()[key] = steps[(i + dir + steps.length) % steps.length];
+// Every OPTIONS value row: ←/→ steps it, Enter steps it forward, and each
+// change is saved and re-rendered.  `next(cur, dir)` computes the new value.
+const setting = (key, next) => dir => {
+    S()[key] = next(S()[key], dir);
     saveSettings(S());
     menu.refresh(optionsScreen());
 };
+const flip = key => setting(key, v => !v);
+// A ladder of allowed values.  A stored value that is in range but not on the
+// ladder (hand-edited localStorage; sanitizeSettings clamps, it does not round)
+// lands on the next rung up rather than jumping to the start.
+const ladder = steps => (cur, dir) => {
+    let i = steps.indexOf(cur);
+    if (i < 0) i = Math.max(0, steps.findIndex(v => v >= cur));
+    return steps[(i + dir + steps.length) % steps.length];
+};
+// Left/right cycles and Enter advances by one -- the same function, so the
+// two cannot drift apart.
+const both = fn => ({ cycle: fn, action: () => fn(1) });
 
 const SENS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 const PADTURN = [0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0];
@@ -172,25 +181,12 @@ const DEADZONE = [0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.9];
 const MOUSEY = ['off', 'look', 'move'];
 const BACKENDS = ['opl2', 'opl3', 'gm'];
 
+const onoff = v => (v ? 'ON' : 'OFF');
+
 function optionsScreen() {
     loadGmState();
-    const onoff = v => (v ? 'ON' : 'OFF');
-    const flip = key => () => {
-        S()[key] = !S()[key];
-        saveSettings(S());
-        menu.refresh(optionsScreen());
-    };
-    const cycleIn = (key, list, after) => dir => {
-        const i = list.indexOf(S()[key]);
-        S()[key] = list[((i < 0 ? 0 : i) + dir + list.length) % list.length];
-        after?.();
-        saveSettings(S());
-        menu.refresh(optionsScreen());
-    };
-    // Left/right cycles and Enter advances by one -- the same function, so the
-    // two cannot drift apart.
-    const both = fn => ({ cycle: fn, action: () => fn(1) });
-    const opl3sync = () => { S().opl3 = S().musicBackend === 'opl3'; };
+    // opl3 is a legacy bool kept in step with musicBackend for back-compat.
+    const music = (v, dir) => { const b = cyc(BACKENDS, v, dir); S().opl3 = b === 'opl3'; return b; };
     return {
         title: 'OPTIONS',
         nowrap: true,
@@ -201,23 +197,19 @@ function optionsScreen() {
         items: [
             { label: 'CONTROLS', action: () => menu.push(controlsScreen()) },
             { label: 'MOUSE SENSITIVITY: ', value: String(S().mouseSens), maxValue: '12',
-              ...both(stepper('mouseSens', SENS)) },
+              ...both(setting('mouseSens', ladder(SENS))) },
             { label: 'MOUSE Y: ', value: S().mouseY.toUpperCase(), maxValue: 'LOOK',
-              ...both(cycleIn('mouseY', MOUSEY)) },
+              ...both(setting('mouseY', (v, d) => cyc(MOUSEY, v, d))) },
             { label: 'ALWAYS RUN: ', value: onoff(S().alwaysRun), maxValue: 'OFF',
               ...both(flip('alwaysRun')) },
             { label: 'SMOOTH RENDERING: ', value: onoff(S().smooth), maxValue: 'OFF',
               ...both(flip('smooth')) },
-            // opl3 is a legacy bool kept in sync for back-compat (task 17.2b).
             { label: 'MUSIC: ', value: musicValue(), maxValue: 'GM - NO SYNTH URL',
-              ...both(cycleIn('musicBackend', BACKENDS, opl3sync)) },
+              ...both(setting('musicBackend', music)) },
             { label: 'GAMEPAD TURN: ', value: S().padTurnSpeed.toFixed(1), maxValue: '2.0',
-              ...both(stepper('padTurnSpeed', PADTURN)) },
-            // padDeadzone was in the schema with no control at all: reachable
-            // only by hand-editing localStorage, while the comment above SCHEMA
-            // said the bounds "match the panel's own controls".
+              ...both(setting('padTurnSpeed', ladder(PADTURN))) },
             { label: 'GAMEPAD DEADZONE: ', value: S().padDeadzone.toFixed(2), maxValue: '0.90',
-              ...both(stepper('padDeadzone', DEADZONE)) },
+              ...both(setting('padDeadzone', ladder(DEADZONE))) },
             { label: 'RESET DEFAULTS', action: () => {
                 Object.assign(S(), defaultSettings());
                 saveSettings(S());
@@ -614,22 +606,17 @@ const skillPick = () => picker('HOW TOUGH ARE YOU?', SKILLS.map((label, i) =>
 // gameplay flags: toggles stay on this screen; Esc returns to the lobby
 function optionsPick() {
     const p = roster?.params ?? {};
-    const onoff = v => v ? 'ON' : 'OFF';
     const set = patch => { setParams(patch); menu.refresh(optionsPick()); };
     const timers = [0, 5, 10, 15, 20, 30];
-    const bump = dir => set({ timer: timers[(timers.indexOf(p.timer ?? 0) + dir + timers.length) % timers.length] });
-    const flip = key => () => set({ [key]: !p[key] });
+    const toggle = key => both(() => set({ [key]: !p[key] }));
     return {
         title: 'OPTIONS',
         items: [
-            { label: 'NO MONSTERS: ', value: onoff(p.nomonsters),
-              action: flip('nomonsters'), cycle: flip('nomonsters') },
-            { label: 'FAST MONSTERS: ', value: onoff(p.fast),
-              action: flip('fast'), cycle: flip('fast') },
-            { label: 'RESPAWN MONSTERS: ', value: onoff(p.respawn),
-              action: flip('respawn'), cycle: flip('respawn') },
+            { label: 'NO MONSTERS: ', value: onoff(p.nomonsters), ...toggle('nomonsters') },
+            { label: 'FAST MONSTERS: ', value: onoff(p.fast), ...toggle('fast') },
+            { label: 'RESPAWN MONSTERS: ', value: onoff(p.respawn), ...toggle('respawn') },
             { label: 'TIME LIMIT: ', value: p.timer ? `${p.timer} MIN` : 'OFF',
-              action: () => bump(1), cycle: bump },
+              ...both(dir => set({ timer: cyc(timers, p.timer ?? 0, dir) })) },
         ],
     };
 }
@@ -639,8 +626,6 @@ function mapName(p) {
     return isCommercial(e) ? `MAP${String(p.map).padStart(2, '0')}` : `E${p.episode}M${p.map}`;
 }
 
-// wrap-around cycle helper
-const cyc = (arr, cur, dir) => arr[(arr.indexOf(cur) + dir + arr.length) % arr.length];
 
 // Shown when you open MULTIPLAYER and a game is already live: a summary
 // (wad art, map, mode, who's in) plus optional color/name and a DROP IN that
@@ -681,7 +666,7 @@ function inProgressScreen() {
     const refresh = () => menu.refresh(inProgressScreen());
     const cycleColor = dir => {
         if (free.length < 2) return;
-        ipSlot = free[(free.indexOf(ipSlot) + dir + free.length) % free.length];
+        ipSlot = cyc(free, ipSlot, dir);
         refresh();
     };
     const dropIn = () => {
@@ -729,20 +714,19 @@ function lobbyScreen() {
     };
     const cycleMap = dir => {
         const w = entry(p.wad), maps = w?.maps ?? [];
-        const cur = mapName(p);
-        const next = maps[(maps.indexOf(cur) + dir + maps.length) % maps.length];
+        const next = cyc(maps, mapName(p), dir);
         if (!next) return;
         if (isCommercial(w)) setParams({ map: +next.slice(3) });
         else setParams({ episode: +next[1], map: +next[3] });
         refresh();
     };
     const cycleMode = dir => { setParams({ mode: cyc(MODES.map(m => m[0]), p.mode, dir) }); refresh(); };
-    const cycleSkill = dir => { setParams({ skill: ((p.skill - 1 + dir + 5) % 5) + 1 }); refresh(); };
+    const cycleSkill = dir => { setParams({ skill: cyc([1, 2, 3, 4, 5], p.skill, dir) }); refresh(); };
     const cycleColor = dir => {
-        const order = [lobby.slot, ...free].sort((a, b) => a - b);
-        const next = order[(order.indexOf(lobby.slot) + dir + order.length) % order.length];
+        const next = cyc([lobby.slot, ...free].sort((a, b) => a - b), lobby.slot, dir);
         if (next !== lobby.slot) lobby.send({ t: 'slot', slot: next });
     };
+
 
     return {
         id: 'lobby',
