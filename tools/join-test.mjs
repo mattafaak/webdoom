@@ -5,45 +5,33 @@
 // re-simulates the identical world (state hashes match the veterans at every
 // common tic, including after it spawns). Runs co-op by default; `dm` for
 // deathmatch. usage: node tools/join-test.mjs [dm]
-import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { startServer } from './lib/server.mjs';
+import { bootEngine, loadWad } from './lib/engine.mjs';
+import { root, sleep, buildDirArg } from './lib/util.mjs';
 
 process.on('uncaughtException', e => {
     console.error('UNCAUGHT:', e?.message ?? String(e).slice(0, 300));
     process.exit(1);
 });
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const mode = process.argv[2] === 'dm' ? 'deathmatch' : 'coop';
-const PORT = 8669;
-const base = `ws://127.0.0.1:${PORT}`;
 
 const { connectLobby, attachRelay, launchArgs } = await import(join(root, 'client/js/net.js'));
-const createDoom = (await import(join(root, 'build/doom.js'))).default;
-const wadBytes = readFileSync(join(root, 'wads/lib/doom.wad'));
+const buildDir = buildDirArg();
+const wadBytes = loadWad('doom.wad');
 
-const server = spawn('node', [join(root, 'server/serve.js')], {
-    env: { ...process.env, DOOM_PORT: PORT, DOOM_HOST: '127.0.0.1' },
-    stdio: ['ignore', 'pipe', 'inherit'],
-});
-server.stdout.on('data', d => process.stdout.write(`  [srv] ${d}`));
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-await sleep(800);
+const srv = await startServer({ onStdout: d => process.stdout.write(`  [srv] ${d}`) });
+const base = srv.ws;
 
-const fail = msg => { console.error(`FAIL: ${msg}`); server.kill(); process.exit(1); };
+const fail = msg => { console.error(`FAIL: ${msg}`); srv.stop(); process.exit(1); };
 
 async function makeClient(name) {
     let fatal = null;
-    const doom = await createDoom({
-        print: () => {},
+    const doom = await bootEngine(buildDir, [['doomu.wad', wadBytes]], {
         printErr: t => { if (/consistency|I_Error/i.test(t)) { fatal = t; console.error(`  [${name}] ${t}`); } },
         onDoomError: msg => { fatal = msg; },
     });
-    const p = doom._malloc(wadBytes.length);
-    doom.HEAPU8.set(wadBytes, p);
-    doom.ccall('web_register_file', null, ['string', 'number', 'number'], ['doomu.wad', p, wadBytes.length]);
     return { name, doom, isFatal: () => fatal, hashes: new Map(), active: false, slot: -1 };
 }
 
@@ -135,5 +123,5 @@ if (jCommon.length < 200) fail(`joiner too few shared tics (${jCommon.length}) â
 if (jAfter < 35) fail(`joiner did not play live long enough after joining (${jAfter} tics)`);
 console.log(`PASS â€” drop-in ${mode}: slot ${joiner.slot} caught up, spawned, and stayed in lockstep (0 desync)`);
 for (const c of clients) { c.relay?.quit(); c.lobby?.close(); }
-server.kill();
+srv.stop();
 process.exit(0);

@@ -5,44 +5,32 @@
 // spectator re-simulates the identical world: per-tic _web_state_hash
 // matches the veterans at every common tic after the frontier.
 // usage: node tools/spectate-test.mjs
-import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { startServer } from './lib/server.mjs';
+import { bootEngine, loadWad } from './lib/engine.mjs';
+import { root, sleep, buildDirArg } from './lib/util.mjs';
 
 process.on('uncaughtException', e => {
     console.error('UNCAUGHT:', e?.message ?? String(e).slice(0, 300));
     process.exit(1);
 });
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const PORT = 8673;
-const base = `ws://127.0.0.1:${PORT}`;
 
 const { connectLobby, attachRelay, attachSpectate, launchArgs } = await import(join(root, 'client/js/net.js'));
-const createDoom = (await import(join(root, 'build/doom.js'))).default;
-const wadBytes = readFileSync(join(root, 'wads/lib/doom.wad'));
+const buildDir = buildDirArg();
+const wadBytes = loadWad('doom.wad');
 
-const server = spawn('node', [join(root, 'server/serve.js')], {
-    env: { ...process.env, DOOM_PORT: PORT, DOOM_HOST: '127.0.0.1' },
-    stdio: ['ignore', 'pipe', 'inherit'],
-});
-server.stdout.on('data', d => process.stdout.write(`  [srv] ${d}`));
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-await sleep(800);
+const srv = await startServer({ onStdout: d => process.stdout.write(`  [srv] ${d}`) });
+const base = srv.ws;
 
-const fail = msg => { console.error(`FAIL: ${msg}`); server.kill(); process.exit(1); };
+const fail = msg => { console.error(`FAIL: ${msg}`); srv.stop(); process.exit(1); };
 
 async function makeClient(name) {
     let fatal = null;
-    const doom = await createDoom({
-        print: () => {},
+    const doom = await bootEngine(buildDir, [['doomu.wad', wadBytes]], {
         printErr: t => { if (/consistency|I_Error/i.test(t)) { fatal = t; console.error(`  [${name}] ${t}`); } },
         onDoomError: msg => { fatal = msg; },
     });
-    const p = doom._malloc(wadBytes.length);
-    doom.HEAPU8.set(wadBytes, p);
-    doom.ccall('web_register_file', null, ['string', 'number', 'number'], ['doomu.wad', p, wadBytes.length]);
     return { name, doom, isFatal: () => fatal, hashes: new Map(), active: false, slot: -1 };
 }
 
@@ -137,5 +125,5 @@ if (afterFrontier < 20) fail(`spectator did not watch live long enough after cat
 
 console.log(`PASS — spectator caught up, per-tic hash matches P0 at all ${common.length} common tics (0 desync)`);
 for (const c of clients) { c.relay?.quit(); c.lobby?.close(); }
-server.kill();
+srv.stop();
 process.exit(0);
