@@ -16,97 +16,22 @@
 //   Impossible-state guard: countdown cleared on ESC mid-countdown (Bug#1/T25)
 //   Impossible-state guard: booted reset on MP WAD fail (Bug#2)
 //
-// usage: node tools/browser-lobby-test.mjs [url] [outdir]
-import { spawn } from 'node:child_process';
-import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
+import { launchChrome } from './lib/cdp.mjs';
+import { sleep } from './lib/util.mjs';
+import { check, summary } from './lib/report.mjs';
 
 const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
-const outdir = process.argv[3] ?? '/tmp';
-const CDP_PORT = 9226;
-
-const chrome = spawn(chromeBin(), [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, chromeProfileArg(),
-    '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
-    '--use-angle=swiftshader', '--window-size=1280,960',
-    '--autoplay-policy=no-user-gesture-required', 'about:blank',
-], { stdio: 'ignore', detached: true });
-reapOnExit(chrome);
-
+const chrome = await launchChrome();
+const openTab = () => chrome.tab(url);
 const cleanup = code => { chrome.kill(); process.exit(code); };
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-await sleep(1500);
 
-// ── CDP helper ────────────────────────────────────────────────────────────────
+// thin names over the tab helpers, so the cases read as they always did
+const waitForMenu = (tab, secs) => tab.waitForMenu(secs);
+const clickItem = (tab, text, retries) => tab.click(text, retries);
+const pressEsc = tab => tab.esc();
 
-async function openTab() {
-    const target = await (await fetch(
-        `http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent(url)}`,
-        { method: 'PUT' },
-    )).json();
-    const targetId = target.id;
-    const ws = new WebSocket(target.webSocketDebuggerUrl);
-    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-
-    let msgId = 0;
-    const pending = new Map();
-    const errors = [];
-
-    ws.onmessage = ev => {
-        const msg = JSON.parse(ev.data);
-        if (msg.id && pending.has(msg.id)) {
-            pending.get(msg.id)(msg);
-            pending.delete(msg.id);
-        }
-        if (msg.method === 'Runtime.exceptionThrown')
-            errors.push(
-                msg.params.exceptionDetails?.exception?.description
-                ?? msg.params.exceptionDetails?.text
-                ?? '?',
-            );
-        if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error')
-            errors.push(msg.params.args.map(a => a.value ?? a.description).join(' '));
-    };
-
-    const cdp = (method, params = {}) => new Promise(res => {
-        const i = ++msgId;
-        pending.set(i, res);
-        ws.send(JSON.stringify({ id: i, method, params }));
-    });
-    const ev = async expr =>
-        (await cdp('Runtime.evaluate', {
-            expression: expr, returnByValue: true, awaitPromise: true,
-        })).result?.result?.value;
-
-    await cdp('Runtime.enable');
-    await cdp('Page.enable');
-
-    return {
-        cdp, ev, errors,
-        // Properly close the Chrome tab (releases its WebSockets), not just CDP session
-        async close() {
-            try {
-                await fetch(`http://127.0.0.1:${CDP_PORT}/json/close/${targetId}`, { method: 'GET' });
-            } catch { /* tab may already be gone */ }
-            ws.close();
-        },
-    };
-}
-
-// Wait for the root menu (SINGLE PLAYER row) to be rendered
-async function waitForMenu(tab, secs = 25) {
-    for (let i = 0; i < secs * 2; i++) {
-        const ready = await tab.ev(
-            `!!document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]')`,
-        );
-        if (ready) return true;
-        const s = await tab.ev(`document.getElementById('status')?.textContent`);
-        if (s?.startsWith('cannot')) throw new Error(`server: ${s}`);
-        await sleep(500);
-    }
-    return false;
-}
-
-// Patch WebSocket constructor in the page to capture the lobby ws
+// Patch the page's WebSocket constructor to capture the lobby socket, so a
+// case can close it from outside or inject a server frame.
 async function patchWS(tab) {
     await tab.ev(`
         (() => {
@@ -124,76 +49,39 @@ async function patchWS(tab) {
         })()
     `);
 }
+const forceCloseWS = tab => tab.ev(`if (window.__lobbyWS) window.__lobbyWS.close()`);
 
-// Force-close the captured lobby WebSocket from outside
-async function forceCloseWS(tab) {
-    await tab.ev(`if (window.__lobbyWS) window.__lobbyWS.close()`);
-}
-
-// Wait for the server lobby to be free of any active game session.
-// Polls by opening a fresh tab and checking whether MULTIPLAYER shows
-// START GAME (roster, clean) vs DROP IN (session active).
+// Wait for the server to have no live session: open a tab, look at what
+// MULTIPLAYER offers (START GAME = clean, DROP IN = a session is live).
 async function waitForCleanServer(secs = 20) {
     const deadline = Date.now() + secs * 1000;
     while (Date.now() < deadline) {
         const tab = await openTab();
         try {
-            if (!await waitForMenu(tab, 6)) { await tab.close(); await sleep(1000); continue; }
+            if (!await tab.waitForMenu(6)) { await tab.close(); await sleep(1000); continue; }
             await patchWS(tab);
-            await clickItem(tab, 'MULTIPLAYER', 6);
+            await tab.click('MULTIPLAYER', 6);
             let clean = false;
             for (let i = 0; i < 8; i++) {
-                const hasStart = await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`);
-                if (hasStart) { clean = true; break; }
+                if (await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`)) { clean = true; break; }
                 const hasDropIn = await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="DROP IN"]')`);
-                if (!hasDropIn && i > 2) { clean = true; break; } // maybe no roster yet
+                if (!hasDropIn && i > 2) { clean = true; break; }   // maybe no roster yet
                 await sleep(500);
             }
             await tab.close();
             if (clean) return;
         } catch {
-            try { await tab.close(); } catch {}
+            try { await tab.close(); } catch { /* gone */ }
         }
         await sleep(1000);
     }
 }
 
-// Click a menu item whose data-label contains `text`; returns true on success
-async function clickItem(tab, text, retries = 15) {
-    for (let i = 0; i < retries; i++) {
-        const ok = await tab.ev(
-            `(() => { const r = document.querySelector('#dmenu .row[data-label*=${JSON.stringify(text)}]');
-                      return r ? (r.click(), true) : false; })()`,
-        );
-        if (ok) return true;
-        await sleep(300);
-    }
-    return false;
-}
-
-// Press Escape in the page via CDP key injection
-async function pressEsc(tab) {
-    await tab.cdp('Input.dispatchKeyEvent', {
-        type: 'keyDown', code: 'Escape', key: 'Escape', windowsVirtualKeyCode: 27,
-    });
-    await tab.cdp('Input.dispatchKeyEvent', {
-        type: 'keyUp', code: 'Escape', key: 'Escape', windowsVirtualKeyCode: 27,
-    });
-}
-
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
-
-const results = [];
 async function runTest(name, fn) {
     console.log(`\n[TEST] ${name}`);
-    try {
-        await fn();
-        results.push({ name, passed: true });
-        console.log(`  PASS`);
-    } catch (err) {
-        results.push({ name, passed: false, reason: err.message });
-        console.log(`  FAIL: ${err.message}`);
-    }
+    try { await fn(); check(name, true); }
+    catch (err) { check(name, false, err.message); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -796,20 +684,5 @@ await runTest('mp-launch-wad-fail', async () => {
 // Results
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('\n── lobby state-machine test results ────────────────────────');
-let allPassed = true;
-for (const r of results) {
-    if (r.passed) {
-        console.log(`  PASS  ${r.name}`);
-    } else {
-        console.log(`  FAIL  ${r.name}: ${r.reason}`);
-        allPassed = false;
-    }
-}
-
-if (allPassed) {
-    console.log('PASS — all lobby state-machine edges covered and clean');
-    cleanup(0);
-} else {
-    console.log('FAIL — one or more lobby state-machine edges failed');
-    cleanup(1);
-}
+summary('lobby state-machine edges covered and clean');
+cleanup(process.exitCode ?? 0);

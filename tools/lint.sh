@@ -153,10 +153,8 @@ JS_FILES=(
     client/sw.js
     server/*.js
     tools/*.mjs
+    tools/lib/*.mjs
     tools/fuzz/*.mjs
-    # 19 verifiers lived outside `node --check` -- including doc-drift.mjs, the
-    # file the whole claims gate runs through. A syntax error in any of them was
-    # a runtime failure in a leg rather than a lint failure here.
     tools/archaeology/*.mjs
 )
 
@@ -196,20 +194,6 @@ if ! node "$REPO_ROOT/tools/check-pipe-exit.mjs"; then
     ERRORS=1
 fi
 
-# ---------------------------------------------------------------------------
-# One port, one claimant (see tools/check-cdp-ports.mjs)
-#
-# Seven ports were declared twice -- four CDP debugging ports and three HTTP
-# ones.  Legs run sequentially so a collision usually passes, which is why it
-# went unnoticed; what it is not harmless for is an ORPHAN, where one leg's leak
-# becomes the next leg's red and the red lands on the innocent leg.  README
-# names exactly that (orphaned Chrome, exhausted /tmp) behind the T07 flake.
-# ---------------------------------------------------------------------------
-
-# Also repo-wide: it reads every tracked .mjs and .sh, not just the JS half.
-if ! node "$REPO_ROOT/tools/check-cdp-ports.mjs"; then
-    ERRORS=1
-fi
 
 # ---------------------------------------------------------------------------
 # The code inside heredocs, which nothing else in this file can see

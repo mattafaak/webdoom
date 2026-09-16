@@ -1,82 +1,15 @@
 #!/usr/bin/env node
-// Drop-in edge-case probe: exercises the relay's slot/session bookkeeping
-// (reservations, simultaneous joins, full-lobby, join+drop) at the protocol
-// level with raw WebSockets and a lightweight fake host — no wasm needed, so
-// it's fast and targets the race/leak/timeout logic directly.
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-import { createRequire } from 'node:module';
+// Drop-in edge-case probe: the relay's slot/session bookkeeping (reservations,
+// simultaneous joins, full lobby, join+drop) at the protocol level with raw
+// WebSockets and a lightweight fake host — no wasm, so it is fast and targets
+// the race/leak/timeout logic directly.
+import { startServer } from './lib/server.mjs';
+import { WebSocket, open, attachBuf, onceMsg, lobbyJoin } from './lib/ws.mjs';
+import { sleep } from './lib/util.mjs';
+import { check, summary } from './lib/report.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const WebSocket = createRequire(join(root, 'server/game.js'))('ws');
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-let PORT = 8670;
-const liveServers = new Set();
-process.on('exit', () => { for (const s of liveServers) s.kill(); });
-function spawnServer(extraEnv = {}) {
-    const port = PORT++;
-    const srv = spawn('node', [join(root, 'server/serve.js')],
-        { env: { ...process.env, DOOM_PORT: port, DOOM_HOST: '127.0.0.1', ...extraEnv }, stdio: ['ignore', 'ignore', 'ignore'] });
-    liveServers.add(srv);
-    srv.on('exit', () => liveServers.delete(srv));
-    return { srv, base: `ws://127.0.0.1:${port}`, kill: () => srv.kill() };
-}
-
-// Watchdog: every ws await is bounded.  An unbounded open()/onceMsg() await
-// hung CI for 49 minutes when a join race was lost (scenario 3) — a timeout
-// turns that into a fast, named failure instead.
-const AWAIT_MS = 20000;
-const withTimeout = (p, label) => Promise.race([p, new Promise((_, rej) =>
-    setTimeout(() => rej(new Error(`timeout ${AWAIT_MS}ms: ${label}`)), AWAIT_MS).unref())]);
-const open = ws => withTimeout(
-    new Promise((res, rej) => { ws.on('open', res); ws.on('error', rej); }), 'ws open');
-// Frames are recorded from the moment the socket exists, and onceMsg consults
-// that buffer before waiting for more.
-//
-// THE RACE THIS FIXES (F1, diagnosed 2026-09-11): the server sends `welcome`
-// the instant a lobby socket connects, but onceMsg attached its listener only
-// when CALLED, one or two microtasks after `await open(ws)` resolved.  A frame
-// arriving in that window was emitted to no listener and dropped, and the wait
-// then timed out against a server that had already answered -- surfacing here
-// as "Error: timeout 20000ms: onceMsg" on ~1 full-suite run in 2.  The same
-// race, independently written, was the whole of net-fuzz-test.mjs's flake.
-function attachBuf(ws) {
-    ws._buf = [];
-    ws._waiters = [];
-    ws.on('message', raw => {
-        let m; try { m = JSON.parse(raw); } catch { return; }
-        ws._buf.push(m);
-        // Each arriving frame satisfies AT MOST ONE waiter, and a satisfied
-        // frame leaves the buffer.  Resolving from the buffer while also
-        // leaving it there would let a later wait match the same frame again,
-        // which is a false pass in a different direction.
-        for (let i = 0; i < ws._waiters.length; i++) {
-            const w = ws._waiters[i];
-            const j = ws._buf.findIndex(w.pred);
-            if (j >= 0) {
-                const hit = ws._buf.splice(j, 1)[0];
-                ws._waiters.splice(i, 1); i--;
-                w.resolve(hit);
-            }
-        }
-    });
-    return ws;
-}
-function onceMsg(ws, pred) {
-    if (!ws._buf) attachBuf(ws);
-    const i = ws._buf.findIndex(pred);
-    if (i >= 0) return Promise.resolve(ws._buf.splice(i, 1)[0]);
-    return withTimeout(new Promise(res => {
-        const w = { pred, resolve: res };
-        ws._waiters.push(w);
-    }), 'onceMsg');
-}
-const lobbyJoin = base => attachBuf(new WebSocket(base + '/ws/lobby'));
-
-// A fake host: 1 real player that starts a session and keeps sealing tics so
-// history accumulates and the session stays alive.
+// A fake host: one real player that starts a session and keeps sealing tics
+// so history accumulates and the session stays alive.
 async function startSession(base, wad = 'doom.wad') {
     const lob = lobbyJoin(base);
     await open(lob);
@@ -95,12 +28,23 @@ async function startSession(base, wad = 'doom.wad') {
         setTimeout(loop, 28);
     };
     loop();
-    return { lob, g, stop() { stopped = true; try { g.close(); } catch {} try { lob.close(); } catch {} } };
+    return { lob, g, stop() { stopped = true; try { g.close(); } catch { /* gone */ } try { lob.close(); } catch { /* gone */ } } };
 }
 
-// connect a lobby client during a live game. The server sends 'inprogress'
-// first (no reservation); we optionally request a drop-in, which reserves a
-// slot (welcome carries it) and returns 'launch'/'full'.
+// A relay socket for a joined slot that keeps sending cmds.
+async function playSlot(base, slot) {
+    const g = attachBuf(new WebSocket(base + '/ws/game?slot=' + slot));
+    g.binaryType = 'nodebuffer';
+    await open(g);
+    let tic = 0, alive = true;
+    const loop = () => { if (!alive) return; const b = Buffer.alloc(12); b.writeUInt32LE(tic++, 0); if (g.readyState === 1) g.send(b); setTimeout(loop, 28); };
+    loop();
+    return { g, close() { alive = false; g.close(); } };
+}
+
+// connect a lobby client during a live game: the server sends 'inprogress'
+// first (no reservation); optionally request a drop-in, which reserves a
+// slot (welcome carries it) and answers 'launch' or 'full'.
 async function probeJoin(base, { requestJoin = true, slot, name } = {}) {
     const w = lobbyJoin(base);
     await open(w);
@@ -114,88 +58,73 @@ async function probeJoin(base, { requestJoin = true, slot, name } = {}) {
     return { w, offered: m.t, join: !!m.join, slot: mySlot, reason: m.reason };
 }
 
-const results = [];
-const check = (name, ok, detail) => { results.push({ name, ok, detail }); console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${name} — ${detail}`); };
-
 // ── scenario 1: fifth player rejected ────────────────────────────────────
 async function fifthPlayer() {
-    const s = spawnServer(); await sleep(700);
-    const host = await startSession(s.base);
+    const s = await startServer();
+    const host = await startSession(s.ws);
     await sleep(300);
-    // fill the other 3 slots with real joiners (lobby + game ws + cmds)
     const fillers = [];
     for (let i = 1; i <= 3; i++) {
-        const p = await probeJoin(s.base);
-        const g = attachBuf(new WebSocket(s.base + '/ws/game?slot=' + p.slot)); g.binaryType = 'nodebuffer';
-        await open(g);
-        let tic = 0; const loop = () => { const b = Buffer.alloc(12); b.writeUInt32LE(tic++, 0); if (g.readyState === 1) { g.send(b); setTimeout(loop, 28); } }; loop();
-        fillers.push({ p, g });
+        const p = await probeJoin(s.ws);
+        fillers.push({ p, play: await playSlot(s.ws, p.slot) });
     }
     await sleep(600);   // let them promote
-    const fifth = await probeJoin(s.base);
-    check('5th player rejected', fifth.offered === 'full', `5th got '${fifth.offered}' (${fifth.reason ?? ''})`);
-    host.stop(); fillers.forEach(f => { f.g.close(); f.p.w.close(); }); fifth.w.close(); s.kill();
+    const fifth = await probeJoin(s.ws);
+    check(`5th player rejected — got '${fifth.offered}' (${fifth.reason ?? ''})`, fifth.offered === 'full');
+    host.stop(); fillers.forEach(f => { f.play.close(); f.p.w.close(); }); fifth.w.close(); s.stop();
 }
 
 // ── scenario 2: two simultaneous joins get distinct slots ────────────────
 async function simultaneousJoins() {
-    const s = spawnServer(); await sleep(700);
-    const host = await startSession(s.base);
+    const s = await startServer();
+    const host = await startSession(s.ws);
     await sleep(300);
-    const [a, b] = await Promise.all([probeJoin(s.base), probeJoin(s.base)]);
-    const distinct = a.offered === 'launch' && b.offered === 'launch' && a.slot !== b.slot;
-    check('2 simultaneous joins → distinct slots', distinct, `slots ${a.slot} & ${b.slot} (offers ${a.offered}/${b.offered})`);
-    host.stop(); a.w.close(); b.w.close(); s.kill();
+    const [a, b] = await Promise.all([probeJoin(s.ws), probeJoin(s.ws)]);
+    check(`2 simultaneous joins → distinct slots ${a.slot} & ${b.slot} (offers ${a.offered}/${b.offered})`,
+          a.offered === 'launch' && b.offered === 'launch' && a.slot !== b.slot);
+    host.stop(); a.w.close(); b.w.close(); s.stop();
 }
 
 // ── scenario 3: viewing never reserves; stalled reservations time out ────
 async function reservations() {
-    const s = spawnServer({ WEBDOOM_JOIN_TIMEOUT: '2000' }); await sleep(700);
-    const host = await startSession(s.base);
+    const s = await startServer({ env: { WEBDOOM_JOIN_TIMEOUT: '2000' } });
+    const host = await startSession(s.ws);
     await sleep(300);
-    // three clients just LOOK (inprogress, no join request) — must hold no slot
     const viewers = [];
-    for (let i = 0; i < 3; i++) viewers.push(await probeJoin(s.base, { requestJoin: false }));
+    for (let i = 0; i < 3; i++) viewers.push(await probeJoin(s.ws, { requestJoin: false }));
     const allViewing = viewers.every(v => v.offered === 'inprogress');
     const stillFree = viewers[2].summary?.freeSlots?.length === 3;
-    check('viewing the game reserves no slot', allViewing && stillFree,
-        `3 viewers all got 'inprogress', freeSlots=${JSON.stringify(viewers[2].summary?.freeSlots)}`);
-    // three clients REQUEST join (reserve 1,2,3) then vanish without a game-ws
+    check(`viewing the game reserves no slot — freeSlots=${JSON.stringify(viewers[2].summary?.freeSlots)}`, allViewing && stillFree);
     const stalled = [];
-    for (let i = 0; i < 3; i++) stalled.push(await probeJoin(s.base, { requestJoin: true }));
+    for (let i = 0; i < 3; i++) stalled.push(await probeJoin(s.ws, { requestJoin: true }));
     const reserved = stalled.filter(x => x.offered === 'launch').length;
-    const fourth = await probeJoin(s.base, { requestJoin: true });
+    const fourth = await probeJoin(s.ws, { requestJoin: true });
     const blocked = fourth.offered === 'full';
     stalled.forEach(x => x.w.close());       // abandon the reservations
-    await sleep(2600);                       // past the 2s timeout + a sweep
-    const after = await probeJoin(s.base, { requestJoin: true });
-    check('stalled reservations reclaimed after timeout', reserved === 3 && blocked && after.offered === 'launch',
-        `reserved ${reserved}/3, 4th='${fourth.offered}', after timeout='${after.offered}'`);
-    host.stop(); viewers.forEach(v => v.w.close()); fourth.w.close(); after.w?.close(); s.kill();
+    await sleep(2600);                       // past the 2 s timeout + a sweep
+    const after = await probeJoin(s.ws, { requestJoin: true });
+    check(`stalled reservations reclaimed after timeout — reserved ${reserved}/3, 4th='${fourth.offered}', after='${after.offered}'`,
+          reserved === 3 && blocked && after.offered === 'launch');
+    host.stop(); viewers.forEach(v => v.w.close()); fourth.w.close(); after.w?.close(); s.stop();
 }
 
 // ── scenario 4: join + drop simultaneously ───────────────────────────────
 async function joinAndDrop() {
-    const s = spawnServer(); await sleep(700);
-    // 2-player session
-    const host = await startSession(s.base);
-    const p1 = await probeJoin(s.base);
-    const g1 = attachBuf(new WebSocket(s.base + '/ws/game?slot=' + p1.slot)); g1.binaryType = 'nodebuffer';
-    await open(g1);
-    let t1 = 0, alive = true; const loop1 = () => { if (!alive) return; const b = Buffer.alloc(12); b.writeUInt32LE(t1++, 0); if (g1.readyState === 1) g1.send(b); setTimeout(loop1, 28); }; loop1();
+    const s = await startServer();
+    const host = await startSession(s.ws);
+    const p1 = await probeJoin(s.ws);
+    const play1 = await playSlot(s.ws, p1.slot);
     await sleep(800);
-    // simultaneously: p1 drops, a new joiner arrives
-    let crashed = false;
-    const [_, j] = await Promise.all([
-        (async () => { alive = false; g1.close(); p1.w.close(); })(),
-        probeJoin(s.base),
+    const [, j] = await Promise.all([
+        (async () => { play1.close(); p1.w.close(); })(),
+        probeJoin(s.ws),
     ]);
     await sleep(500);
-    check('join + drop simultaneously', j.offered === 'launch' && !crashed, `new joiner got '${j.offered}' slot ${j.slot}, server alive`);
-    // server still responsive?
-    const after = await probeJoin(s.base).catch(() => ({ offered: 'ERROR' }));
-    check('server responsive after join+drop', after.offered === 'launch' || after.offered === 'full', `follow-up probe='${after.offered}'`);
-    host.stop(); j.w.close(); after.w?.close(); s.kill();
+    check(`join + drop simultaneously — new joiner got '${j.offered}' slot ${j.slot}`, j.offered === 'launch');
+    const after = await probeJoin(s.ws).catch(() => ({ offered: 'ERROR' }));
+    check(`server responsive after join+drop — follow-up probe='${after.offered}'`,
+          after.offered === 'launch' || after.offered === 'full');
+    host.stop(); j.w.close(); after.w?.close(); s.stop();
 }
 
 console.log('drop-in edge cases:');
@@ -203,7 +132,4 @@ await fifthPlayer();
 await simultaneousJoins();
 await joinAndDrop();
 await reservations();
-
-const failed = results.filter(r => !r.ok);
-console.log(failed.length ? `\nEDGE FAILURES: ${failed.length}` : `\nPASS — all ${results.length} edge cases handled`);
-process.exit(failed.length ? 1 : 0);
+summary('all 6 edge cases handled');
