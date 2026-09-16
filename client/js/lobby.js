@@ -329,6 +329,7 @@ async function handleSf2Import(file) {
 // lobby) -- passing '' would blank a message another path just set.
 function resetToLauncher(reason) {
     booted = false;
+    recOverlay.hide();
     const l = lobby;
     lobby = null;
     try { l?.close(); } catch { /* already gone */ }
@@ -347,73 +348,63 @@ function resetToLauncher(reason) {
 // Quit Game (→ Y) inside the engine returns here.
 function returnToMenu() { resetToLauncher(); }
 
+// ── one way into a game ──────────────────────────────────────────────────────
+// Every path that boots the engine -- single player, a lobby launch, a
+// spectator, a demo permalink -- comes through here: the guard, the fire and
+// menu state, the recording overlay, and the one catch.
+//   after(doom): runs once the engine is up (start a replay, close the lobby)
+function enterGame({ wads, args = [], net = null, record = false, after = null }) {
+    if (booted) return;
+    booted = true;
+    fire?.pause();
+    menu.hide();
+    if (record) recOverlay.show();
+    bootDoom({ wads, args, net, record, onQuit: returnToMenu })
+        .then(doom => {
+            if (record) recOverlay.arm(doom, wads[0].file);
+            after?.(doom);
+        })
+        .catch(err => resetToLauncher(err));
+}
+
+// A REC badge while recording and, once the engine is up, a STOP & SHARE
+// button.  resetToLauncher() removes both, so a quit mid-recording leaves
+// nothing over the launcher.
+const recOverlay = {
+    show() {
+        const el = document.createElement('div');
+        el.id = 'rec-indicator';
+        el.textContent = '● REC';
+        document.body.appendChild(el);
+    },
+    arm(doom, wadFile) {
+        const btn = document.createElement('button');
+        btn.id = 'demo-stop-btn';
+        btn.textContent = '⏹ STOP & SHARE';
+        btn.title = 'Stop recording and generate a share link';
+        btn.onclick = async () => {
+            recOverlay.hide();
+            try { showSharePanel(await stopAndShare(doom, wadFile)); }
+            catch (e) { status('demo share error: ' + e.message); }
+        };
+        document.body.appendChild(btn);
+    },
+    hide() {
+        for (const id of ['rec-indicator', 'demo-stop-btn']) document.getElementById(id)?.remove();
+    },
+};
+
 // a single-map PWAD (a Master Level, at its own slot like MAP25) is
 // launched straight into that map — the engine's New Game would start at
 // MAP01, i.e. the base IWAD's map, not the one you picked.
 const singleMap = w => (w.maps?.length === 1 && !w.maps[0].startsWith('E')) ? +w.maps[0].slice(3) : null;
 
 function spGameScreen() {
-    // Boot helper. record=true arms the demo bridge before callMain so that
-    // G_RecordDemo is called before D_DoomLoop runs G_BeginRecording.
+    // a single-map PWAD warps straight to its own slot; the engine's New
+    // Game would start the base IWAD's MAP01 instead
     const boot = (w, record = false) => {
-        if (booted) return;
-        booted = true;
-        fire?.pause();    // stop fire while the game is running
-        menu.hide();
         const m = singleMap(w);
-        const args = m ? ['-warp', String(m), '-skill', '3'] : [];
-
-        // REC indicator overlay: shown while recording, pointer-events:none so it
-        // never intercepts game input.  Removed when STOP & SHARE is clicked.
-        let recIndicator = null;
-        if (record) {
-            recIndicator = document.createElement('div');
-            recIndicator.id = 'rec-indicator';
-            recIndicator.textContent = '● REC';
-            recIndicator.style.cssText =
-                'position:fixed;top:8px;left:8px;z-index:100;' +
-                'color:#f33;font-family:monospace;font-size:14px;font-weight:bold;' +
-                'pointer-events:none;text-shadow:0 0 4px #000;';
-            document.body.appendChild(recIndicator);
-        }
-
-        // Pass record flag so main.js can arm the bridge before callMain.
-        bootDoom({ wads: stackFor(w.file), args, onQuit: returnToMenu, record })
-            .then(doom => {
-                if (record && doom) {
-                    // Inject a stop-and-share button into the overlay during gameplay.
-                    const btn = document.createElement('button');
-                    btn.id = 'demo-stop-btn';
-                    btn.textContent = '⏹ STOP & SHARE';
-                    btn.title = 'Stop recording and generate a share link';
-                    btn.style.cssText =
-                        'position:fixed;top:8px;right:8px;z-index:100;' +
-                        'background:#222;color:#eee;border:1px solid #666;' +
-                        'font-family:monospace;font-size:11px;padding:4px 10px;cursor:pointer;';
-                    document.body.appendChild(btn);
-                    btn.addEventListener('click', async () => {
-                        btn.remove();
-                        recIndicator?.remove();
-                        recIndicator = null;
-                        try {
-                            const shareUrl = await stopAndShare(doom, w.file);
-                            showSharePanel(shareUrl);
-                        } catch (e) {
-                            status('demo share error: ' + e.message);
-                        }
-                    });
-                }
-            })
-            .catch(err => {
-                // WAD fetch / engine boot failed: reset so the user can retry
-                // without reloading the page.  main.js has already restored
-                // #landing visibility via restoreOnFailure().  recIndicator is
-                // local to this boot helper, so it is cleaned up here rather
-                // than inside the shared reset.
-                recIndicator?.remove();
-                recIndicator = null;
-                resetToLauncher(err);
-            });
+        enterGame({ wads: stackFor(w.file), args: m ? ['-warp', String(m), '-skill', '3'] : [], record });
     };
 
     // Game list for recording: same entries as the main SP list but each boots
@@ -487,60 +478,26 @@ function enterMultiplayer() {
         .on('countdown', m => { if (!booted) countdown.show(m.n); })
         .on('launch', async m => {
             if (booted) return;
-            booted = true;
-            fire?.pause();    // stop fire for the duration of the game
             if (!m.join) countdown.show('GO');    // drop-ins get the catch-up bar, not a countdown
-            // Sample RTT and size the buffer to a ROBUST jitter estimate:
-            // the 75th-percentile spread above the fastest ping, not the mean
-            // (already in lockstep's inherent lag) nor the worst spike. On a
-            // high-jitter relay link the max would balloon the buffer into
-            // pure lag; the sim's safety drain absorbs the rare straggler a
-            // tighter buffer lets through.
-            //
-            // `.catch(() => 50)` used to be the whole story here, and it could
-            // never fire: ping() returned a promise with no timeout and no
-            // reject path, so if the server stopped answering 'pong' -- or the
-            // socket closed, which does nothing to a pending ping -- this loop
-            // hung FOREVER. bootDoom was never reached and the player sat under
-            // a "GO" countdown that never resolved, with no user-visible
-            // timeout anywhere on the path. ping() resolves null on timeout now
-            // (net.js PING_TIMEOUT_MS); an unanswered ping is not a
-            // zero-latency ping, so it takes the same 50 ms fallback the dead
-            // catch was written to supply.
+            // Size the jitter buffer from the 75th-percentile spread above the
+            // fastest of 12 pings: the mean is already lockstep's own lag and
+            // the max would turn one spike into permanent lag.  An unanswered
+            // ping (null, PING_TIMEOUT_MS) counts as 50 ms, not as 0.
             const rtts = [];
-            let unanswered = 0;
-            for (let i = 0; i < 12; i++) {
-                const rtt = await lobby.ping();
-                if (rtt === null) unanswered++;
-                rtts.push(rtt ?? 50);
-            }
-            if (unanswered) console.warn(`webdoom: ${unanswered}/12 pings unanswered — jitter estimate is a guess`);
+            for (let i = 0; i < 12; i++) rtts.push((await lobby.ping()) ?? 50);
             rtts.sort((a, b) => a - b);
             const jitterMs = rtts[Math.floor(rtts.length * 0.75)] - rtts[0];
             const e = entry(m.params.wad);
-            menu.hide();
-            bootDoom({
+            enterGame({
                 wads: stackFor(m.params.wad),
                 args: launchArgs(m.params, isCommercial(e)),
                 net: { slot: lobby.slot, numplayers: m.numplayers, jitterMs, names: m.names, slots: m.slots,
                        join: !!m.join, frontier: m.frontier },
-                onQuit: returnToMenu,
-            }).then(() => {
-                countdown.dismiss();
-                lobby.close();
-            }).catch(err => {
-                // Guard T16/T20: WAD fetch or engine boot failed in MP / drop-in path.
-                resetToLauncher(err);
+                after: () => { countdown.dismiss(); lobby.close(); },
             });
         })
-        .on('closed', () => {
-            if (booted || !lobby) return;   // deliberate leave already reset
-            lobby = null; roster = null;
-            ipSummary = null; ipSlot = -1;
-            countdown.reset();              // guard T23: dismiss countdown if ws lost mid-countdown
-            status('lobby connection lost');
-            menu.reset(rootScreen());
-        });
+        // a dropped connection; a deliberate leave nulls `lobby` first
+        .on('closed', () => { if (!booted && lobby) resetToLauncher('lobby connection lost'); });
 }
 
 // generic one-screen picker: choose → apply → back to the lobby
@@ -633,30 +590,16 @@ function mapName(p) {
 // Shown when you open MULTIPLAYER and a game is already live: a summary
 // (wad art, map, mode, who's in) plus optional color/name and a DROP IN that
 // catches you up into the running game.
-async function spectateGame() {
-    if (booted) return;
+function spectateGame() {
     const s = ipSummary; if (!s) return;
-    booted = true; fire?.pause();
-    const e = entry(s.params.wad);
-    menu.hide();
-    const names = (() => {
-        const n = [null, null, null, null];
-        (s.players ?? []).forEach(pl => { n[pl.slot] = pl.name ?? pl.color; });
-        return n;
-    })();
-    bootDoom({
+    const names = [null, null, null, null];
+    (s.players ?? []).forEach(pl => { names[pl.slot] = pl.name ?? pl.color; });
+    enterGame({
         wads: stackFor(s.params.wad),
-        args: launchArgs(s.params, isCommercial(e)),
-        net: {
-            numplayers: 4,
-            slots: (s.players ?? []).map(pl => pl.slot),
-            names,
-            spectate: true,
-            frontier: s.frontier ?? 0,
-        },
-        onQuit: returnToMenu,
-    }).then(() => { lobby.close(); }).catch(err => {
-        resetToLauncher(err);
+        args: launchArgs(s.params, isCommercial(entry(s.params.wad))),
+        net: { numplayers: 4, slots: (s.players ?? []).map(pl => pl.slot), names,
+               spectate: true, frontier: s.frontier ?? 0 },
+        after: () => lobby.close(),
     });
 }
 
@@ -937,29 +880,18 @@ function leaveLobby() { resetToLauncher(); }
             menu.reset(rootScreen());
             return;
         }
-        // Hide the menu and replay the demo.
-        booted = true;
-        fire?.pause();
-        menu.hide();
         showReplayNotice();
-        bootDoom({ wads: stackFor(wadEntry.file), args: [], onQuit: returnToMenu })
-            .then(doom => {
-                if (!doom) return;
-                const rc = startReplay(doom, bytes);
-                if (rc !== 0) {
-                    resetToLauncher('demo replay failed: version mismatch');
-                    return;
-                }
-                // task 19.3: attach scrubber below the canvas.
-                // window.webdoom.attachScrubber is set by bootDoom (main.js).
-                // Container: the element that holds #screen (defaults to body).
-                const scrubContainer = document.getElementById('screen')?.parentElement
-                    ?? document.body;
-                window.webdoom?.attachScrubber?.(bytes, scrubContainer);
-            })
-            .catch(err => { resetToLauncher(err); });
+        enterGame({
+            wads: stackFor(wadEntry.file),
+            after: doom => {
+                if (startReplay(doom, bytes) !== 0) { resetToLauncher('demo replay failed: version mismatch'); return; }
+                // the scrubber sits under the canvas; bootDoom installs attachScrubber
+                window.webdoom?.attachScrubber?.(bytes, document.getElementById('screen')?.parentElement ?? document.body);
+            },
+        });
         return;
     }
+
 
     menu.reset(rootScreen());   // triggers onTransition('reset') → fire.flare()
     status('');

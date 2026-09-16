@@ -216,6 +216,19 @@ html, body {
 
 #countdown #melt { image-rendering: pixelated; }
 
+/* recording: a badge that never takes input, and the button that ends it */
+#rec-indicator {
+    position: fixed; top: 8px; left: 8px; z-index: 100;
+    color: #f33; font: bold 14px ui-monospace, monospace;
+    pointer-events: none; text-shadow: 0 0 4px #000;
+}
+#demo-stop-btn {
+    position: fixed; top: 8px; right: 8px; z-index: 100;
+    background: #222; color: #eee; border: 1px solid #666;
+    font: 11px ui-monospace, monospace; padding: 4px 10px; cursor: pointer;
+}
+
+
 /* ── prefers-reduced-motion ───────────────────────────────────────────────
    spec.md promises "prefers-reduced-motion gets a static frame" and this
    stylesheet had NO @media block of any kind.  The promise was half-kept:
