@@ -40,6 +40,7 @@ module-scope values in `lobby.js` plus two UI objects:
 | 11 | **DROP-IN-LOADING** | true* | live | null | set | hidden | hidden |
 | 12 | **OPTIONS** | false | null | null | null | options (depth 2) | hidden |
 | 13 | **OPTIONS-KEYS** | false | null | null | null | controls (depth 3) | hidden |
+| 14 | **MP-CONNECTING** | false | live | null | null | id='connecting' (depth 2) | hidden |
 
 \* `booted` is set to `true` in the `launch` event handler before `bootDoom()` is called.
 
@@ -55,8 +56,8 @@ module-scope values in `lobby.js` plus two UI objects:
 | T02 | SP-PICK | LANDING | ESC / back (stack pop) |
 | T03 | SP-PICK | SP-LOADING | click a game title → `bootDoom()` starts |
 | T06 | IN-GAME-SP | LANDING | Quit Game → Y → `onQuit` → `returnToMenu()` |
-| T07 | LANDING | MP-LOBBY | click MULTIPLAYER (ws connects; roster arrives) |
-| T08 | LANDING | DROP-IN-OFFER | click MULTIPLAYER while a game is live (inprogress arrives) |
+| T07 | LANDING | MP-LOBBY | click MULTIPLAYER → MP-CONNECTING at once; `roster` replaces it |
+| T08 | LANDING | DROP-IN-OFFER | click MULTIPLAYER while a game is live → MP-CONNECTING; `inprogress` replaces it |
 | T09 | MP-LOBBY | MP-PARAMS | click GAME / MAP / RULES (MODE and SKILL step in place, no screen) |
 | T10 | MP-PARAMS | MP-LOBBY | ESC / back from picker |
 | T11 | MP-LOBBY | LANDING | ESC / back on lobby → `leaveLobby()` |
@@ -64,6 +65,7 @@ module-scope values in `lobby.js` plus two UI objects:
 | T13 | MP-LOBBY | MP-COUNTDOWN | click START GAME → server sends `countdown` 3/2/1 |
 | T17 | IN-GAME-MP | LANDING | Quit Game → Y → `onQuit` → `returnToMenu()` |
 | T18 | DROP-IN-OFFER | DROP-IN-LOADING | click DROP IN → `lobby.send({t:'join'…})` → server welcome+launch |
+| T31 | DROP-IN-OFFER | IN-GAME-MP | click SPECTATE → `bootDoom({net:{spectate:true}})`, receive-only, no slot |
 | T26 | LANDING | OPTIONS | click OPTIONS |
 | T27 | OPTIONS | LANDING | ESC / back (stack pop) |
 | T28 | OPTIONS | OPTIONS-KEYS | click CONTROLS |
@@ -77,6 +79,7 @@ module-scope values in `lobby.js` plus two UI objects:
 | T14 | MP-COUNTDOWN | MP-LOADING | server `launch` → `menu.hide()` + `bootDoom()` starts |
 | T15 | MP-LOADING | IN-GAME-MP | `bootDoom()` resolves |
 | T19 | DROP-IN-LOADING | IN-GAME-MP | catch-up done, relay goes live |
+| T30 | MP-LOBBY | LANDING | server `full` → `resetToLauncher(reason)`; the same handler serves MP-CONNECTING and DROP-IN-OFFER |
 
 ### Failure transitions
 
@@ -138,6 +141,7 @@ stateDiagram-v2
     MP_PARAMS --> LANDING      : ws close (T24)
 
     DROP_IN_OFFER --> LANDING  : ESC → leaveLobby (T12)
+    DROP_IN_OFFER --> IN_GAME_MP : click SPECTATE (T31)
 
     MP_LOBBY --> MP_COUNTDOWN  : click START GAME (T13)
     MP_COUNTDOWN --> MP_LOADING    : server launch (T14)
@@ -151,6 +155,7 @@ stateDiagram-v2
     DROP_IN_LOADING --> LANDING       : WAD / boot failure — guarded (T20)
 
     MP_LOBBY --> LANDING       : ws close (T21)
+    MP_LOBBY --> LANDING       : server full (T30)
     DROP_IN_OFFER --> LANDING  : ws close (T22)
     MP_COUNTDOWN --> LANDING   : ws close — guarded (T23)
     MP_COUNTDOWN --> LANDING   : ESC → leaveLobby — guarded (T25)
@@ -191,8 +196,10 @@ stateDiagram-v2
 | T27 | OPTIONS → LANDING | `options-back` | browser-options-test.mjs |
 | T28 | OPTIONS → OPTIONS-KEYS | `controls-open` | browser-options-test.mjs |
 | T29 | OPTIONS-KEYS → OPTIONS | `controls-back` | browser-options-test.mjs |
+| T30 | MP-LOBBY → LANDING (server full) | `mp-lobby-full` | browser-lobby-test.mjs |
+| T31 | DROP-IN-OFFER → IN-GAME-MP (SPECTATE) | `spectate` | browser-join-test.mjs (existing) |
 
-Coverage: **29 / 29 edges** covered.
+Coverage: **31 / 31 edges** covered.
 
 ---
 
@@ -202,5 +209,8 @@ The engine's `m_menu.c` is wasm, driven by the game loop. It handles the
 in-game menus (New Game, Options, Load/Save, Quit). That state machine is
 not in scope here. The boundary is `bootDoom()` returning: after that call
 resolves, `m_menu.c` is live and the JS lobby layer steps back (menu
-hidden, lobby WS stays open for tic relay). `returnToMenu()` / `onQuit`
-are the only callbacks crossing the boundary back from engine to JS.
+hidden, lobby WS stays open for tic relay). Callbacks crossing the boundary
+back from engine to JS: `onQuit` (→ `returnToMenu()`), `onDoomError`,
+`netQuit`, `onFileWrite` (persist.js), and the five audio hooks
+`sfxStart`/`sfxStop`/`sfxPlaying`/`sfxUpdate`/`musicEvent` (audio.js).
+

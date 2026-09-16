@@ -664,7 +664,62 @@ await runTest('mp-countdown-esc', async () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Test 7b: mp-lobby-full
+// Covers T30: MP-LOBBY → LANDING (server `full`).  The handler is the same
+// from MP-CONNECTING and DROP-IN-OFFER.  The frame is injected through the
+// captured socket, since a real refusal needs four other players.  It used to
+// null the handle WITHOUT closing the socket: a second MULTIPLAYER opened a
+// second socket beside the orphan, and DROP IN dereferenced null.
+// ═══════════════════════════════════════════════════════════════════════════
+await waitForCleanServer(16);
+await runTest('mp-lobby-full', async () => {
+    const tab = await openTab();
+    try {
+        assert(await waitForMenu(tab), 'root menu did not appear');
+        await patchWS(tab);
+        assert(await clickItem(tab, 'MULTIPLAYER'), 'MULTIPLAYER not found');
+        let inLobby = false;
+        for (let i = 0; i < 20; i++) {
+            if (await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`))
+                { inLobby = true; break; }
+            await sleep(300);
+        }
+        assert(inLobby, 'mp-lobby-full: MP-LOBBY did not appear');
+
+        await tab.ev(`window.__lobbyWS.onmessage({ data: JSON.stringify({ t: 'full', reason: 'game full (injected)' }) })`);
+        await sleep(600);
+        assert(
+            await tab.ev(`!!document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]') &&
+                          !document.querySelector('#dmenu .row[data-label*="START GAME"]')`),
+            'T30: server full did not reset to LANDING',
+        );
+        assert(
+            (await tab.ev(`document.getElementById('status')?.textContent`) ?? '').includes('full'),
+            'T30: the refusal reason is not shown',
+        );
+        assert(await tab.ev(`window.__lobbyWS.readyState >= 2`), 'T30: lobby socket left open after full');
+
+        // and MULTIPLAYER works again, on a fresh socket
+        assert(await clickItem(tab, 'MULTIPLAYER'), 'T30: MULTIPLAYER not found after full');
+        inLobby = false;
+        for (let i = 0; i < 20; i++) {
+            if (await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`))
+                { inLobby = true; break; }
+            await sleep(300);
+        }
+        assert(inLobby, 'T30: MP-LOBBY did not reappear after full');
+        assert(await tab.ev(`window.__lobbyWS.readyState === 1`), 'T30: no live lobby socket after re-entry');
+        await pressEsc(tab);
+        await sleep(300);
+        assert(tab.errors.length === 0, `exceptions: ${tab.errors.join('; ')}`);
+    } finally {
+        await tab.close();
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Test 8: mp-launch-wad-fail
+
 // Covers T16: MP-LOADING → LANDING (WAD failure) + impossible-state Bug#2
 // Also exercises the same catch path for T20 (DROP-IN-LOADING → LANDING,
 // same catch block — drop-in entry point not independently driven).

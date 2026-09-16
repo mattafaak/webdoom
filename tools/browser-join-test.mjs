@@ -8,6 +8,7 @@
 // State-machine edge coverage (docs/state-machine.md):
 //   T18 DROP-IN-OFFER → DROP-IN-LOADING  (click DROP IN → lobby.send join → server welcome+launch)
 //   T19 DROP-IN-LOADING → IN-GAME-MP     (catch-up done, relay goes live)
+//   T31 DROP-IN-OFFER → IN-GAME-MP       (click SPECTATE → receive-only boot)
 import { spawn } from 'node:child_process';
 import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
 import { writeFileSync } from 'node:fs';
@@ -89,7 +90,18 @@ await sleep(2000);
 if (!await C.inGame()) fail('C: fell out of the game after joining');
 await C.shot('webdoom-droppedin.png');
 
-const errs = [...A.errors, ...C.errors];
+// D: SPECTATE from the same screen → a receive-only boot into the running game
+const D = await openTab('D');
+await sleep(2500);
+if (!await D.click('MULTIPLAYER')) fail('D: MULTIPLAYER not found');
+if (!await D.click('SPECTATE')) fail('D: SPECTATE not offered on the in-progress screen');
+if (!await waitInGame(D, 30)) fail('D: spectator never reached in-game');
+await sleep(1500);
+if (!await D.inGame()) fail('D: spectator fell out of the game');
+console.log('D is spectating');
+
+const errs = [...A.errors, ...C.errors, ...D.errors];
 if (errs.length) { console.log('exceptions:', errs.slice(0, 3)); fail('page exceptions'); }
-console.log('PASS — browser drop-in: GAME IN PROGRESS → DROP IN → caught up in-game');
+console.log('PASS — browser drop-in: GAME IN PROGRESS → DROP IN → caught up in-game; SPECTATE → watching');
+
 cleanup(0);

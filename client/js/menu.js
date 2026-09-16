@@ -175,7 +175,13 @@ export function createMenu(font, host, opts = {}) {
             if (item.thumb) row.appendChild(item.thumb);
             row.appendChild(font.text(label, { scale: item.thumb ? 3 : scale, color: item.color ?? null }));
             row.onmouseenter = () => { if (!entry && !capture && sel !== i) { sel = i; render(); } };
-            row.onclick = () => { if (!entry && !capture) { sel = i; activate(false); } };
+            // a click while typing a name commits it, so a mouse-only player
+            // is not held in the entry until they find Enter
+            row.onclick = () => {
+                if (capture) return;
+                if (entry) { commitEntry(); return; }
+                sel = i; activate(false);
+            };
             list.appendChild(row);
         });
         root.appendChild(list);
@@ -193,6 +199,13 @@ export function createMenu(font, host, opts = {}) {
             const perCol = Math.ceil(rows.length / cols);
             list.style.maxHeight = (perCol * (rowH + gapV)) + 'px';
         }
+    }
+
+    function commitEntry() {
+        const { item, value } = entry;
+        entry = null;
+        item.entry.commit(value);
+        render();
     }
 
     function activate(viaKeydown) {
@@ -251,7 +264,8 @@ export function createMenu(font, host, opts = {}) {
         if (entry) {
             e.preventDefault();
             const it = entry.item;
-            if (e.key === 'Enter') { const v = entry.value; entry = null; it.entry.commit(v); }
+            if (e.key === 'Enter') commitEntry();
+
             else if (e.key === 'Escape') entry = null;
             else if (e.key === 'Backspace') entry.value = entry.value.slice(0, -1);
             else if (/^[a-zA-Z0-9 _-]$/.test(e.key) && entry.value.length < 10)

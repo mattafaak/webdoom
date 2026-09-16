@@ -92,6 +92,7 @@ const serverGames = () => _serverGamesFilter
 
 function rootScreen() {
     return {
+        id: 'root',
         items: [
             { label: 'SINGLE PLAYER', action: () => menu.push(spGameScreen()) },
             { label: 'MULTIPLAYER', action: enterMultiplayer },
@@ -129,7 +130,7 @@ async function loadGmState() {
         fetch('/api/config').then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
     gmState = { sf2: !!meta, url: !!cfg?.spessaSynthUrl };
-    if (menu.current()?.title === 'OPTIONS') menu.refresh(optionsScreen());
+    if (menu.current()?.id === 'options') menu.refresh(optionsScreen());
 }
 
 // What the MUSIC row reads.  For GM it names the reason it cannot work, at the
@@ -188,6 +189,7 @@ function optionsScreen() {
     // opl3 is a legacy bool kept in step with musicBackend for back-compat.
     const music = (v, dir) => { const b = cyc(BACKENDS, v, dir); S().opl3 = b === 'opl3'; return b; };
     return {
+        id: 'options',
         title: 'OPTIONS',
         nowrap: true,
         // DOOM's own menu is still there and still owns four settings, one of
@@ -221,6 +223,7 @@ function optionsScreen() {
 
 function controlsScreen() {
     return {
+        id: 'controls',
         title: 'CONTROLS',
         nowrap: true,
         header: [{ text: 'ENTER REBINDS  -  ESC CANCELS' }],
@@ -266,7 +269,7 @@ async function handleWadImport(file) {
 
         await libraryAdd(entry, bytes);
         manifest.push(entry);
-        status(`Imported: ${entry.title}`);
+        status(`Imported: ${entry.title}`, 6000);
 
         // Refresh the menu so the new entry appears immediately.
         if (menu.depth() <= 1) menu.reset(rootScreen());
@@ -295,7 +298,8 @@ async function handleSf2Import(file) {
         // setGmMode accepts the new bytes live; takes effect on next arm() or reload.
         window.doomAudio?.setGmMode?.(true, bytes);
 
-        status(`SoundFont loaded: ${name}`);
+        status(`SoundFont loaded: ${name}`, 6000);
+
     } catch (err) {
         const msg = err instanceof Sf2Error
             ? `SF2 rejected: ${err.message}`
@@ -431,6 +435,7 @@ function spGameScreen() {
     });
 
     return {
+        id: 'sp',
         title: 'CHOOSE GAME',
         // Game row click = immediate PLAY (vanilla-first: 1 click to launch).
         // RECORD & SHARE is a separate top-level item at the end of the list.
@@ -459,23 +464,26 @@ function spGameScreen() {
 
 let countdown = null;
 
+// On the stack from the click until the server answers, so leaving it (ESC)
+// closes the socket: a connection with no screen would hold a colour slot
+// nobody can see.
+const connectingScreen = () => ({ id: 'connecting', title: 'CONNECTING…', items: [], onBack: leaveLobby });
+
 function enterMultiplayer() {
-    if (lobby) { menu.push(ipSummary ? inProgressScreen() : lobbyScreen()); return; }
+    if (lobby) resetToLauncher();          // a stale handle: start clean
     const base = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
     lobby = connectLobby(base);
+    menu.push(connectingScreen());
+    // roster: a lobby is forming.  inprogress: a game is live, offer to drop
+    // in.  Either replaces CONNECTING, then refreshes its own screen in place.
+    const show = (id, build) => {
+        const cur = menu.current()?.id;
+        if (cur === id || cur === 'connecting') menu.refresh(build());
+    };
     lobby
-        // a game is already live: offer to drop in rather than form a lobby
-        .on('inprogress', m => {
-            ipSummary = m;
-            if (menu.current()?.id === 'inprogress') menu.refresh(inProgressScreen());
-            else if (menu.depth() === 1) menu.push(inProgressScreen());
-        })
-        .on('roster', m => {
-            roster = m;
-            if (menu.current()?.id === 'lobby') menu.refresh(lobbyScreen());
-            else if (menu.depth() === 1) menu.push(lobbyScreen());
-        })
-        .on('full', m => { status(m.reason); lobby = null; })
+        .on('inprogress', m => { ipSummary = m; show('inprogress', inProgressScreen); })
+        .on('roster', m => { roster = m; show('lobby', lobbyScreen); })
+        .on('full', m => resetToLauncher(m.reason))
         .on('countdown', m => { if (!booted) countdown.show(m.n); })
         .on('launch', async m => {
             if (booted) return;
@@ -604,6 +612,7 @@ function rulesScreen() {
     const timers = [0, 5, 10, 15, 20, 30];
     const toggle = key => both(() => set({ [key]: !p[key] }));
     return {
+        id: 'rules',
         title: 'RULES',
         items: [
             { label: 'NO MONSTERS: ', value: onoff(p.nomonsters), ...toggle('nomonsters') },

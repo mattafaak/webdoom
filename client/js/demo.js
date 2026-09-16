@@ -196,7 +196,8 @@ export function showWadWarning(wadFile) {
 
 // Show a "replaying demo" notice.
 export function showReplayNotice() {
-    setStatus('REPLAYING DEMO — watch the recording');
+    setStatus('REPLAYING DEMO — watch the recording', 6000);
+
 }
 
 // ── base64url helpers ─────────────────────────────────────────────────────────

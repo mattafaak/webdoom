@@ -21,11 +21,19 @@
 // Look the element up EVERY time, and tolerate its absence.  The launcher
 // creates and replaces DOM around it, and modules load in an order no single
 // module controls.
-export function setStatus(msg) {
+let statusTimer = 0;
+// ttlMs: an informational message clears itself; an error (no ttl) stays until
+// something replaces it.
+export function setStatus(msg, ttlMs = 0) {
     if (typeof document === 'undefined') return;
     const el = document.getElementById('status');
-    if (el) el.textContent = msg;
+    if (!el) return;
+    el.textContent = msg;
+    clearTimeout(statusTimer);
+    if (ttlMs && msg)
+        statusTimer = setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, ttlMs);
 }
+
 
 // ── the loading panel ────────────────────────────────────────────────────────
 //
