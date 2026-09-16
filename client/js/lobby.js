@@ -399,52 +399,41 @@ const recOverlay = {
 // MAP01, i.e. the base IWAD's map, not the one you picked.
 const singleMap = w => (w.maps?.length === 1 && !w.maps[0].startsWith('E')) ? +w.maps[0].slice(3) : null;
 
+// The game list in curated order, grouped entries (Master Levels) one screen
+// down.  onPick(w, depth) gets how many screens deep the pick was made, so a
+// multiplayer picker can unwind back to the lobby.  local=false hides
+// user-imported WADs: the server cannot serve them to the other players.
+function gameItems(onPick, local = true) {
+    const games = local ? sortedGames() : serverGames();
+    return games.map(w => ({ label: w.title, thumb: font.titleThumb(w.file, 52), action: () => onPick(w, 1) }))
+        .concat(groups().map(g => ({
+            label: g,
+            action: () => menu.push({
+                id: 'group', title: g,
+                items: manifest.filter(w => w.group === g && (local || !w.local))
+                    .map(w => ({ label: w.title, action: () => onPick(w, 2) })),
+            }),
+        })));
+}
+
+let recordNext = false;     // the RECORD DEMO row on CHOOSE GAME
+
 function spGameScreen() {
     // a single-map PWAD warps straight to its own slot; the engine's New
     // Game would start the base IWAD's MAP01 instead
-    const boot = (w, record = false) => {
+    const boot = w => {
         const m = singleMap(w);
-        enterGame({ wads: stackFor(w.file), args: m ? ['-warp', String(m), '-skill', '3'] : [], record });
+        enterGame({ wads: stackFor(w.file), args: m ? ['-warp', String(m), '-skill', '3'] : [], record: recordNext });
     };
-
-    // Game list for recording: same entries as the main SP list but each boots
-    // with record=true.  Used by the RECORD & SHARE top-level item.
-    const recordPickerScreen = () => ({
-        title: 'RECORD & SHARE',
-        items: sortedGames().map(w => ({
-            label: w.title,
-            thumb: font.titleThumb(w.file, 52),
-            action: () => boot(w, true),
-        })).concat(groups().map(g => ({
-            label: g,
-            action: () => menu.push({
-                title: g,
-                items: manifest.filter(w => w.group === g)
-                    .map(w => ({ label: w.title, action: () => boot(w, true) })),
-            }),
-        }))),
-    });
-
     return {
         id: 'sp',
         title: 'CHOOSE GAME',
-        // Game row click = immediate PLAY (vanilla-first: 1 click to launch).
-        // RECORD & SHARE is a separate top-level item at the end of the list.
-        items: sortedGames().map(w => ({
-            label: w.title,
-            thumb: font.titleThumb(w.file, 52),
-            action: () => boot(w),
-        })).concat(groups().map(g => ({
-            label: g,
-            action: () => menu.push({
-                title: g,
-                items: manifest.filter(w => w.group === g)
-                    .map(w => ({ label: w.title, action: () => boot(w) })),
-            }),
-        }))).concat([{
-            label: 'RECORD & SHARE…',
-            action: () => menu.push(recordPickerScreen()),
-        }]),
+        items: [
+            ...gameItems(boot),
+            // recording is a switch on this list, not a second copy of it
+            { label: 'RECORD DEMO: ', value: onoff(recordNext), maxValue: 'OFF',
+              ...both(() => { recordNext = !recordNext; menu.refresh(spGameScreen()); }) },
+        ],
     };
 }
 
@@ -524,23 +513,11 @@ const setParams = p => {
 // its own slot, e.g. MAP25, not MAP01)
 const pickWad = w => setParams({ wad: w.file, episode: 1, map: singleMap(w) ?? 1 });
 
-function gamePick() {
-    // serverGames() excludes local:true WADs — MP requires the server library
-    // because the server coordinates WAD distribution; local shas are unknown
-    // to other players.
-    return picker('CHOOSE GAME', serverGames().map(w => ({
-        label: w.title,
-        thumb: font.titleThumb(w.file, 52),
-        apply: () => pickWad(w),
-    })).concat(groups().map(g => ({
-        label: g,
-        action: () => menu.push(picker(g,
-            manifest.filter(w => w.group === g && !w.local).map(w => ({
-                label: w.title,
-                apply: () => pickWad(w),
-            })), 2)),
-    }))));
-}
+const gamePick = () => ({
+    title: 'CHOOSE GAME',
+    items: gameItems((w, depth) => { pickWad(w); menu.unwind(depth); menu.refresh(lobbyScreen()); }, false),
+});
+
 
 function mapPick() {
     const w = entry(roster?.params.wad);

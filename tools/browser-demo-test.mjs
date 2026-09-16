@@ -136,22 +136,25 @@ try {
     // Wait for service worker to control the page.
     await waitFor(() => tabA.eval(`!!navigator.serviceWorker.controller`), 20000);
 
-    // Navigate: SINGLE PLAYER → RECORD & SHARE… → doom.wad game entry.
-    // (Game row click now boots immediately; RECORD & SHARE is a separate item.)
+    // Navigate: SINGLE PLAYER → RECORD DEMO: ON → doom.wad game entry.
     const spOk = await tabA.click('SINGLE PLAYER');
     ok('Tab A: SINGLE PLAYER menu item found', spOk);
 
-    // Wait for SP game list, then click the RECORD & SHARE… item.
+    // RECORD DEMO is a value row on the game list: one click turns it ON and
+    // the row says so.  Asserting the label is what makes this a test of the
+    // switch rather than of "a row containing RECORD took a click".
     await sleep(500);
-    const recOk = await waitFor(async () => {
-        const hit = await tabA.eval(
-            `(() => { const r = document.querySelector('#dmenu .row[data-label*="RECORD"]');
-                      return r ? (r.click(), true) : false; })()`);
-        return hit;
-    }, 10000, 300);
-    ok('Tab A: RECORD & SHARE item clicked', recOk);
+    const recOk = await waitFor(async () => tabA.eval(
+        `(() => { const r = document.querySelector('#dmenu .row[data-label^="RECORD DEMO:"]');
+                  return r ? (r.click(), true) : false; })()`), 10000, 300);
+    ok('Tab A: RECORD DEMO row clicked', recOk);
+    await sleep(300);
+    const recLabel = await tabA.eval(
+        `document.querySelector('#dmenu .row[data-label^="RECORD DEMO:"]')?.dataset.label`);
+    ok(`Tab A: RECORD DEMO reads ON (${recLabel})`, recLabel === 'RECORD DEMO: < ON >');
 
-    // Wait for record-picker list, then click doom.wad's entry.
+    // Still on the game list: click doom.wad's entry.
+
     await sleep(400);
     const doomOk = await waitFor(async () => {
         // Try common title strings for doom.wad
