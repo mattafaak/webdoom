@@ -248,9 +248,25 @@ await runTest('lobby-menu-nav', async () => {
         }
         assert(inLobby, 'T07: MP-LOBBY (START GAME row) did not appear after 3 attempts');
 
-        // T09/T10 × 5 pickers: open each picker, verify screen changed, ESC back
-        for (const label of ['GAME:', 'MAP:', 'MODE:', 'SKILL:', 'OPTIONS']) {
+        // MODE and SKILL are value rows, not pickers: a click steps the value
+        // in place and the lobby screen stays.
+        const rowLabel = async pfx => tab.ev(
+            `[...document.querySelectorAll('#dmenu .row')].find(r => r.dataset.label.startsWith(${JSON.stringify(pfx)}))?.dataset.label ?? null`);
+        for (const label of ['MODE:', 'SKILL:']) {
+            const before = await rowLabel(label);
+            assert(before, `${label} row not found`);
+            assert(await clickItem(tab, label), `${label} row not clickable`);
+            await sleep(200);
+            const after = await rowLabel(label);
+            assert(after && after !== before, `${label} did not step on click (${before} -> ${after})`);
+            assert(await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`),
+                   `${label} left the lobby screen`);
+        }
+
+        // T09/T10 × 3 pickers: open each picker, verify screen changed, ESC back
+        for (const label of ['GAME:', 'MAP:', 'RULES']) {
             assert(await clickItem(tab, label), `T09: ${label} row not found`);
+
             await sleep(200);
             const notLobby = await tab.ev(`!document.querySelector('#dmenu .row[data-label*="START GAME"]')`);
             assert(notLobby, `T09: ${label} picker did not replace lobby screen`);

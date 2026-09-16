@@ -57,7 +57,7 @@ module-scope values in `lobby.js` plus two UI objects:
 | T06 | IN-GAME-SP | LANDING | Quit Game → Y → `onQuit` → `returnToMenu()` |
 | T07 | LANDING | MP-LOBBY | click MULTIPLAYER (ws connects; roster arrives) |
 | T08 | LANDING | DROP-IN-OFFER | click MULTIPLAYER while a game is live (inprogress arrives) |
-| T09 | MP-LOBBY | MP-PARAMS | click GAME / MAP / MODE / SKILL / OPTIONS |
+| T09 | MP-LOBBY | MP-PARAMS | click GAME / MAP / RULES (MODE and SKILL step in place, no screen) |
 | T10 | MP-PARAMS | MP-LOBBY | ESC / back from picker |
 | T11 | MP-LOBBY | LANDING | ESC / back on lobby → `leaveLobby()` |
 | T12 | DROP-IN-OFFER | LANDING | ESC / back on inprogress → `leaveLobby()` |
@@ -131,7 +131,8 @@ stateDiagram-v2
     LANDING --> MP_LOBBY       : click MULTIPLAYER + roster (T07)
     LANDING --> DROP_IN_OFFER  : click MULTIPLAYER + inprogress (T08)
 
-    MP_LOBBY --> MP_PARAMS     : click GAME/MAP/MODE/SKILL/OPTIONS (T09)
+    MP_LOBBY --> MP_PARAMS     : click GAME/MAP/RULES (T09)
+
     MP_PARAMS --> MP_LOBBY     : ESC / back (T10)
     MP_LOBBY --> LANDING       : ESC → leaveLobby (T11)
     MP_PARAMS --> LANDING      : ws close (T24)

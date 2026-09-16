@@ -90,24 +90,25 @@ await sleep(700);
 if (!await A.eval(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`))
     fail('A: never reached the lobby screen');
 
-// exercise one optional picker: SKILL → ULTRA-VIOLENCE → back at lobby
-if (!await A.click('SKILL')) fail('A: SKILL item not found');
-if (!await A.click('ULTRA-VIOLENCE')) fail('A: skill option not found');
-await sleep(500);
-// back on the lobby, the SKILL row now reads the chosen value (the
-// selected row also shows a "< >" cycle hint, so match on the value)
-const skillRow = await A.eval(
+// SKILL is a value row: a click steps it (server default 3 → ULTRA-VIOLENCE)
+// and the lobby screen stays
+const skillLabel = () => A.eval(
     `[...document.querySelectorAll('#dmenu .row')].find(r => r.dataset.label.startsWith('SKILL'))?.dataset.label`);
+if (!await A.click('SKILL')) fail('A: SKILL item not found');
+await sleep(500);
+const skillRow = await skillLabel();
 if (!skillRow?.includes('ULTRA-VIOLENCE'))
-    fail(`A: picker did not return to lobby with the new value (${skillRow})`);
+    fail(`A: clicking SKILL did not step it to ULTRA-VIOLENCE (${skillRow})`);
+if (!await A.eval(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`))
+    fail('A: SKILL click left the lobby screen');
 
 // left/right also cycles a lobby value in place: right-arrow on SKILL
 // should advance it (and it's already the selected row)
 await A.key('ArrowRight');
 await sleep(300);
-const skillAfter = await A.eval(
-    `[...document.querySelectorAll('#dmenu .row')].find(r => r.dataset.label.startsWith('SKILL'))?.dataset.label`);
+const skillAfter = await skillLabel();
 if (skillAfter === skillRow) fail('A: left/right did not cycle SKILL');
+
 await A.key('ArrowLeft');   // back to ULTRA-VIOLENCE
 await sleep(300);
 

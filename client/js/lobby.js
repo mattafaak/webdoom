@@ -106,7 +106,7 @@ function rootScreen() {
 // The web-side settings used to live in an F8 HTML overlay (client/js/settings.js)
 // that belonged to neither this menu nor the engine's, and was the only way to
 // reach any of them.  They are menu screens now, in the same shape as
-// optionsPick() below: a value rendered as text, left/right or Enter to change
+// rulesScreen() below: a value rendered as text, left/right or Enter to change
 // it, and nothing else on screen.
 //
 // There is no `doom` here -- the launcher runs before any engine exists -- so
@@ -597,20 +597,14 @@ function mapPick() {
     };
 }
 
-const modePick = () => picker('WHICH MODE?', MODES.map(([value, label]) =>
-    ({ label, apply: () => setParams({ mode: value }) })));
-
-const skillPick = () => picker('HOW TOUGH ARE YOU?', SKILLS.map((label, i) =>
-    ({ label, apply: () => setParams({ skill: i + 1 }) })));
-
-// gameplay flags: toggles stay on this screen; Esc returns to the lobby
-function optionsPick() {
+// game rules: toggles stay on this screen; Esc returns to the lobby
+function rulesScreen() {
     const p = roster?.params ?? {};
-    const set = patch => { setParams(patch); menu.refresh(optionsPick()); };
+    const set = patch => { setParams(patch); menu.refresh(rulesScreen()); };
     const timers = [0, 5, 10, 15, 20, 30];
     const toggle = key => both(() => set({ [key]: !p[key] }));
     return {
-        title: 'OPTIONS',
+        title: 'RULES',
         items: [
             { label: 'NO MONSTERS: ', value: onoff(p.nomonsters), ...toggle('nomonsters') },
             { label: 'FAST MONSTERS: ', value: onoff(p.fast), ...toggle('fast') },
@@ -734,10 +728,9 @@ function lobbyScreen() {
         header: (roster?.players ?? []).map(pl =>
             ({ text: pl.name + '  ', color: pl.color })),
         onBack: leaveLobby,
-        // GAME/MAP/MODE/SKILL/COLOR: Enter opens the full picker, ←/→
-        // cycles the value in place (both land on the same result)
-        // maxValue = the longest value each cycler can show, so the menu
-        // scale/width never changes as you cycle through them
+        // GAME and MAP open a picker on Enter (long lists); every value row
+        // cycles with ←/→.  maxValue is the longest value a row can show, so
+        // the menu never re-scales as a value changes.
         items: [
             { label: 'START GAME', action: () => lobby.start() },
             { label: 'GAME: ', value: entry(p.wad)?.title ?? p.wad,
@@ -745,11 +738,11 @@ function lobbyScreen() {
               action: () => menu.push(gamePick()), cycle: cycleGame },
             { label: 'MAP: ', value: mapName(p), maxValue: 'MAP00',
               action: () => menu.push(mapPick()), cycle: cycleMap },
-            { label: 'MODE: ', value: mode, maxValue: 'DEATHMATCH 2.0',
-              action: () => menu.push(modePick()), cycle: cycleMode },
+            { label: 'MODE: ', value: mode, maxValue: 'DEATHMATCH 2.0', ...both(cycleMode) },
             { label: 'SKILL: ', value: SKILLS[p.skill - 1] ?? '', maxValue: "I'M TOO YOUNG TO DIE",
-              action: () => menu.push(skillPick()), cycle: cycleSkill },
-            { label: 'OPTIONS', action: () => menu.push(optionsPick()) },
+              ...both(cycleSkill) },
+            { label: 'RULES', action: () => menu.push(rulesScreen()) },
+
             {
                 label: 'NAME: ', value: me?.name ?? '',
                 color: me?.color ?? null,
