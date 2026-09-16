@@ -672,18 +672,21 @@ function inProgressScreen() {
     return {
         id: 'inprogress',
         title: 'GAME IN PROGRESS',
-        header: (s.players ?? []).map(pl =>
-            ({ text: (pl.name ?? pl.color) + (pl.live ? '  ' : '… '), color: pl.color })),
+        // who is in, then what they are playing -- a header line, not rows,
+        // so the cursor only lands on things that do something
+        header: [
+            ...(s.players ?? []).map(pl =>
+                ({ text: (pl.name ?? pl.color) + (pl.live ? '  ' : '… '), color: pl.color })),
+            { text: `-  ${entry(p.wad)?.title ?? p.wad}  ${mapName(p)}  ${mode}` },
+        ],
         onBack: leaveLobby,
         items: [
             free.length
                 ? { label: 'DROP IN', action: dropIn }
                 : { label: 'GAME FULL', color: 'Red' },
             { label: 'SPECTATE', action: () => spectateGame() },
-            { label: 'GAME: ', value: entry(p.wad)?.title ?? p.wad, thumb: font.titleThumb(p.wad, 52) },
-            { label: 'MAP: ', value: mapName(p) },
-            { label: 'MODE: ', value: mode },
             { label: 'NAME: ', value: ipName,
+
               color: free.length ? COLORS[ipSlot] : null,
               entry: { initial: ipName, commit: v => { ipName = v; refresh(); } } },
             ...(free.length > 1 ? [{
