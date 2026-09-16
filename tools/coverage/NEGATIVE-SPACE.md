@@ -1,6 +1,6 @@
 # Negative-Space Classification — 284 Never-Executed Functions
 
-Generated for task 9.2b. Source of truth: `tools/coverage/report-full.json` (427/711 functions hit by demos + fuzz corpus).
+Generated for task 9.2b. Source of truth: `tools/coverage/report-full.json` as written by `run-coverage.sh` on 2026-07-17 (427/711 functions hit by demos + fuzz corpus); the JSON is regenerated, not tracked.
 
 **Reconciliation**: 711 total − 427 hit = 284 never executed. All 284 are classified below. Zero unknowns.
 
