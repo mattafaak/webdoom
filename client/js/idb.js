@@ -1,7 +1,7 @@
 // One IndexedDB open, one transaction wrapper, one open-run-close.
 //
 // Every module that keeps something in IndexedDB (persist, wad-cache,
-// wad-library, sf2-library) goes through these three, so the error paths --
+// wad-library) goes through these three, so the error paths --
 // onerror, onabort, and onblocked, the one that hung the launcher when an
 // open raced a version change in another tab -- are handled once.
 

@@ -3,7 +3,6 @@
 import { createRenderer } from './video.js';
 import { createInput, loadSettings } from './input.js';
 import { createAudio } from './audio.js';
-import { sf2GetCurrentBytes } from './sf2-library.js';
 import { attachRelay, attachSpectate } from './net.js';
 import { loadPersisted, startSync } from './persist.js';
 import { wadCacheGet, wadCachePut } from './wad-cache.js';
@@ -207,12 +206,6 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     // musicBackend supersedes the legacy opl3 bool
     const musicBackend = input.settings.musicBackend ?? (input.settings.opl3 ? 'opl3' : 'opl2');
     doom._web_set_opl_mode(musicBackend === 'opl3' ? 1 : 0);
-    if (musicBackend === 'gm') {
-        // best-effort: arm() waits for a gesture, the IDB read lands first
-        sf2GetCurrentBytes()
-            .then(bytes => { window.doomAudio?.setGmMode(true, bytes ?? null); })
-            .catch(() => { window.doomAudio?.setGmMode(true, null); });
-    }
 
     running = true;
     // Everything the boot allocated, released in one place.  The relay would

@@ -4,19 +4,17 @@
 import { bootDoom } from './main.js';
 import { connectLobby, launchArgs } from './net.js';
 import { loadDoomFont } from './doomfont.js';
-import { setStatus, loading, serverConfig } from './ui.js';
+import { setStatus, loading } from './ui.js';
 
 import { createMenu } from './menu.js';
 import { createCountdown } from './countdown.js';
 import { createFire } from './fire.js';
 import { identifyWad, WadError } from './wad-import.js';
 import { libraryAdd, libraryList } from './wad-library.js';
-import { validateSf2, Sf2Error, sf2StoreCurrent } from './sf2-library.js';
 import { parseDemoUrl, startReplay, stopAndShare, showSharePanel, showWadWarning } from './demo.js';
 import {
     ACTIONS, loadSettings, saveSettings, defaultSettings, captureBind,
 } from './input.js';
-import { sf2GetCurrentMeta } from './sf2-library.js';
 
 const $ = id => document.getElementById(id);
 // the call sites read `status(...)`
@@ -92,28 +90,6 @@ function rootScreen() {
 let settings = null;
 const S = () => (settings ??= loadSettings());
 
-// GM needs a stored .sf2 and the operator's synth URL: fetched once on entry,
-// so the MUSIC row can name what is missing.
-let gmState = null;
-async function loadGmState() {
-    if (gmState) return;
-    const [meta, cfg] = await Promise.all([sf2GetCurrentMeta().catch(() => null), serverConfig()]);
-    gmState = { sf2: !!meta, url: !!cfg?.spessaSynthUrl };
-    if (menu.current()?.id === 'options') menu.refresh(optionsScreen());
-}
-
-// What the MUSIC row reads.  For GM it names the reason it cannot work, at the
-// place the choice is made -- audio.js used to setStatus() that reason over the
-// running game, where #status has no timeout and it stayed for the session.
-function musicValue() {
-    const b = S().musicBackend ?? (S().opl3 ? 'opl3' : 'opl2');
-    if (b !== 'gm') return b.toUpperCase();
-    if (!gmState) return 'GM';
-    if (!gmState.url) return 'GM - NO SYNTH URL';
-    if (!gmState.sf2) return 'GM - NO SF2';
-    return 'GM';
-}
-
 // wrap-around step through a list; an unknown value steps from the start
 const cyc = (arr, cur, dir) => arr[(arr.indexOf(cur) + dir + arr.length) % arr.length];
 
@@ -149,12 +125,11 @@ const SENS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 const PADTURN = [0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0];
 const DEADZONE = [0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.9];
 const MOUSEY = ['off', 'look', 'move'];
-const BACKENDS = ['opl2', 'opl3', 'gm'];
+const BACKENDS = ['opl2', 'opl3'];
 
 const onoff = v => (v ? 'ON' : 'OFF');
 
 function optionsScreen() {
-    loadGmState();
     // opl3 is a legacy bool kept in step with musicBackend for back-compat.
     const music = (v, dir) => { const b = cyc(BACKENDS, v, dir); S().opl3 = b === 'opl3'; return b; };
     return {
@@ -175,7 +150,7 @@ function optionsScreen() {
               ...both(flip('alwaysRun')) },
             { label: 'SMOOTH RENDERING: ', value: onoff(S().smooth), maxValue: 'OFF',
               ...both(flip('smooth')) },
-            { label: 'MUSIC: ', value: musicValue(), maxValue: 'GM - NO SYNTH URL',
+            { label: 'MUSIC: ', value: S().musicBackend.toUpperCase(), maxValue: 'OPL3',
               ...both(setting('musicBackend', music)) },
             { label: 'GAMEPAD TURN: ', value: S().padTurnSpeed.toFixed(1), maxValue: '2.0',
               ...both(setting('padTurnSpeed', ladder(PADTURN))) },
@@ -245,32 +220,6 @@ async function handleWadImport(file) {
         const msg = err instanceof WadError
             ? `Rejected: ${err.message}`
             : `Import error: ${err.message ?? String(err)}`;
-        status(msg);
-    }
-}
-
-// Handle a .sf2 SoundFont file import from either drag-drop or file picker.
-// Validates the RIFF/sfbk magic, stores bytes in IDB via sf2-library.js, and
-// passes bytes to the active GM audio sink (if GM mode is already armed).
-async function handleSf2Import(file) {
-    try {
-        status('Reading SoundFont…');
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        validateSf2(bytes);   // throws Sf2Error on bad RIFF/sfbk magic or bounds
-
-        const name = file.name.replace(/^.*[/\\]/, '');  // basename only
-        await sf2StoreCurrent(name, bytes);
-
-        // If GM mode is already active (game running), pass bytes to the audio sink.
-        // setGmMode accepts the new bytes live; takes effect on next arm() or reload.
-        window.doomAudio?.setGmMode?.(true, bytes);
-
-        status(`SoundFont loaded: ${name}`, 6000);
-
-    } catch (err) {
-        const msg = err instanceof Sf2Error
-            ? `SF2 rejected: ${err.message}`
-            : `SF2 error: ${err.message ?? String(err)}`;
         status(msg);
     }
 }
@@ -707,11 +656,10 @@ function leaveLobby() { resetToLauncher(); }
         return;
     }
 
-    // --- WAD / SF2 import: file picker (for keyboard/test access) + drag-drop --
-    // Hidden file input — triggered by "IMPORT WAD / SF2" menu item or programmatically.
+    // --- WAD import: file picker (for keyboard/test access) + drag-drop ------
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
-    fileInput.accept = '.wad,.sf2';
+    fileInput.accept = '.wad';
     fileInput.id = 'wad-file-input';
     fileInput.style.cssText = 'position:absolute;left:-9999px;top:-9999px;';
     document.body.appendChild(fileInput);
@@ -719,12 +667,10 @@ function leaveLobby() { resetToLauncher(); }
         const f = e.target.files[0];
         if (!f) return;
         fileInput.value = '';
-        if (f.name.toLowerCase().endsWith('.sf2')) handleSf2Import(f);
-        else handleWadImport(f);
+        handleWadImport(f);
     });
 
     // Drag-and-drop on #landing (the full landing menu area).
-    // Routes .sf2 files to handleSf2Import; everything else to handleWadImport.
     const landing = $('landing');
     landing.addEventListener('dragover', e => {
         e.preventDefault();
@@ -739,17 +685,15 @@ function leaveLobby() { resetToLauncher(); }
         landing.classList.remove('drop-hover');
         const f = e.dataTransfer.files[0];
         if (!f) return;
-        if (f.name.toLowerCase().endsWith('.sf2')) handleSf2Import(f);
-        else handleWadImport(f);
+        handleWadImport(f);
     });
 
-    // The one test seam (browser-wadimport, browser-sf2, browser-mp-gating).
+    // The one test seam (browser-wadimport, browser-mp-gating).
     // setServerGamesFilter(false) is the red-proof that the MP filter is
     // load-bearing; injectManifest bypasses IDB.
     window.__wd = {
-        handleWadImport, handleSf2Import,
+        handleWadImport,
         wadImport: { identifyWad, WadError },
-        sf2Library: { validateSf2, Sf2Error },
         injectManifest: entry => manifest.push(entry),
         setServerGamesFilter: enabled => { serverGamesFilter = enabled; },
     };

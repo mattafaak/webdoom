@@ -302,7 +302,6 @@ leg sw-precache     -    "sw.js SHELL list <-> app-shell imports"   -- node tool
 leg http-fuzz       -    "static HTTP path attacks (ws-005)"        -- node tools/http-fuzz-test.mjs
 leg demo-store-fuzz -    "demo-store cap enforcement (19.2)"        -- node tools/demo-store-fuzz-test.mjs
 leg net-fuzz        -    "malformed/hostile WebSocket clients"      -- node tools/net-fuzz-test.mjs
-leg gm-config       -    "the GM backend's operator config path (25.1)" -- node tools/gm-config-test.mjs
 # The claims index is both the human inventory and doc-drift's locator table,
 # and nothing checked the inventory itself: 50 rows said "verified" while
 # nothing anywhere checked them (task 24.2).
@@ -370,7 +369,6 @@ leg smoke-doom2     build,wad  "boots doom2.wad headless, 1100 frames" -- node t
 # load would have been found by a player. Target list derived from the manifest.
 leg smoke-pwad      build,wad  "24 ungated library WADs boot and render (rme-008)" -- node tools/smoke-pwad-test.mjs
 leg opl-mode        build,wad  "OPL2 byte-identical to ref; OPL3 RMS"  -- node tools/opl-mode-test.mjs doom.wad
-leg gm-frames       build,wad  "GM/GUS pump chain + DMXGUS mapping"    -- node tools/gm-frames-test.mjs doom.wad
 
 # ── the sim-safety gate: an assert names the broken invariant at its call site,
 #    which a golden diff cannot do.  It runs BEFORE the goldens for that reason.
@@ -523,7 +521,6 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
     leg browser-rafdeath      browser,build,wad,shared "rAF death recovery"                    -- node tools/browser-rafdeath-test.mjs "$U"
     leg browser-wadimport     browser,build,wad,shared "user WAD import (16.6a)"               -- node tools/browser-wadimport-test.mjs "$U"
     leg browser-mp-gating     browser,build,wad,shared "local-WAD MP gating (16.6b)"           -- node tools/browser-mp-gating-test.mjs "$U"
-    leg browser-sf2           browser,build,wad,shared "SoundFont UX (17.2b)"                  -- node tools/browser-sf2-test.mjs "$U"
     leg browser-offline       browser,build,wad,shared "offline single player"                 -- node tools/browser-offline-test.mjs
     leg browser-demo          browser,build,wad,shared "demo permalink replay (19.2)"          -- node tools/browser-demo-test.mjs "$U"
         # The old runner gave this its own server on 8669 "per the 12.2b

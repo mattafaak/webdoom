@@ -1,20 +1,11 @@
 // WebAudio bridge: SFX (DMX PCM lumps → AudioBuffers, per-channel vol/sep/
-// pitch as vanilla) and music (the wasm OPL sequencer, or a GM SoundFont).
+// pitch as vanilla) and music from the wasm OPL sequencer, pulled by a pump.
 //
 // Music sinks:
-//   WorkletSink  — AudioWorklet (OPL; secure context only)
-//   BufferSink   — AudioBufferSourceNode chain (OPL; any origin)
-//   GmMainSink   — SpessaSynth on the main thread (GM; opt-in).  Its
-//                  Synthetizer builds its own worklet chain and is fed
-//                  through a relay GainNode; pump() is a no-op for it.
-//
-// GM without its prerequisites (no synth URL, or no .sf2) is a configured
-// state, not a failure: the sink stays null, OPL plays, and the OPTIONS
-// screen's MUSIC row names what is missing.  If SpessaSynth is configured
-// but its import fails, the OPL sink is rebuilt and #status says so.
+//   WorkletSink  — AudioWorklet (secure context only)
+//   BufferSink   — AudioBufferSourceNode chain (any origin)
 
-import { musToMidi } from './mus2mid.js';
-import { setStatus, serverConfig } from './ui.js';
+import { setStatus } from './ui.js';
 
 const TARGET_BACKLOG = 0.25;    // seconds of music buffered ahead
 const PUMP_MS = 100;
@@ -90,60 +81,11 @@ function makeBufferSink(ctx) {
     };
 }
 
-// ── GmMainSink ────────────────────────────────────────────────────────────────
-// Sentinel sink for the GM main-thread SpessaSynth path.
-// SpessaSynth manages its own AudioWorklet chain and output scheduling;
-// push() is never called.  pump() skips this sink entirely.
-// queued always returns 0 so the pump deficit check short-circuits cleanly.
-function makeGmMainSink() {
-    return {
-        kind: 'gm-main',
-        get queued() { return 0; },
-    };
-}
-
-
 export function createAudio(doom) {
     let ctx = null;
     const buffers = new Map();          // sfx id → AudioBuffer
     const active = new Map();           // handle → {src, gain, pan}
     let sink = null, musicScratch = 0, pumpTimer = 0;
-
-    // DMXGUS map (optional; null = not loaded).
-    // Set by setDmxgus(bytes); forwarded to musToMidi() as dmxgusMap so that
-    // MUS instrument-change values are remapped per the WAD's GUS patch table.
-    let dmxgusMap = null;
-
-    // GM mode state (inactive by default; activated by setGmMode).
-    let gmEnabled = false;
-    // gmSf2Bytes: Uint8Array from IDB; passed to SpessaSynth Synthetizer.
-    let gmSf2Bytes = null;
-    // gmSpessaSynthUrl: operator-hosted SpessaSynth URL (null = not configured).
-    // Always null in test/CI; real playback requires operator to host the lib.
-    let gmSpessaSynthUrl = null;
-    // Fetched at most once per page: a missing endpoint must not retry per arm().
-
-    // gmSynth: SpessaSynth Synthetizer instance (null until loaded).
-    let gmSynth = null;
-    // gmMidiQueue: MIDI byte arrays queued before synth is ready to receive events.
-    let gmMidiQueue = [];
-    // gmPathBuilt: true when the relay GainNode has been connected to ctx.destination
-    // AND SpessaSynth URL + sf2 were both present (gm-main sink constructed + import in
-    // flight or succeeded).  False in the SKIP path (no URL / no sf2 → OPL fallback).
-    let gmPathBuilt = false;
-
-    // ── gmDispatchMidi ────────────────────────────────────────────────────────
-    // Dispatch a raw MIDI byte array to SpessaSynth using the correct per-command
-    // Synthetizer API.  Shared by live routing and pre-init queue drain.
-    function gmDispatchMidi(bytes) {
-        if (!gmSynth) return;
-        const cmd = bytes[0] >> 4;
-        const ch  = bytes[0] & 0xf;
-        if      (cmd === 0x9) gmSynth.noteOn?.(ch, bytes[1], bytes[2] ?? 64);
-        else if (cmd === 0x8) gmSynth.noteOff?.(ch, bytes[1]);
-        else if (cmd === 0xb) gmSynth.controllerChange?.(ch, bytes[1], bytes[2]);
-        else if (cmd === 0xc) gmSynth.programChange?.(ch, bytes[1]);
-    }
 
     // Browsers gate audio behind a user gesture; arm on the first one.
     // Later gestures re-resume a context the browser suspended.
@@ -173,116 +115,25 @@ export function createAudio(doom) {
         // broken worklet file, etc.).
         const insecure = !ctx.audioWorklet;
 
-        // ── buildOplSink ──────────────────────────────────────────────────
-        // Constructs WorkletSink (secure) or BufferSink (any origin).
-        // Called from the default OPL path and from GM fallback paths.
-        // gmFallbackStatus: when true, the caller already set an 'OPL fallback'
-        // status message; suppress the 'compatibility mode' override so the
-        // user sees "why GM is not active" rather than "why worklet is not used".
-        async function buildOplSink(gmFallbackStatus = false) {
+        // WorkletSink on a secure origin, BufferSink anywhere else
+        try {
+            await ctx.audioWorklet.addModule('js/music-worklet.js');
+            const node = new AudioWorkletNode(ctx, 'music-sink', { outputChannelCount: [2] });
+            node.connect(ctx.destination);
+            // captured at construction; the harness installs it before the
+            // first gesture
+            sink = makeWorkletSink(node, window.__wd_perf ?? null);
+        } catch (err) {
+            console.warn('music worklet unavailable:', err);
+            const reason = insecure ? 'insecure origin' : 'worklet unavailable';
             try {
-                await ctx.audioWorklet.addModule('js/music-worklet.js');
-                const node = new AudioWorkletNode(ctx, 'music-sink', {
-                    outputChannelCount: [2],
-                });
-                node.connect(ctx.destination);
-                // captured at construction; the harness installs it before the
-                // first gesture
-                sink = makeWorkletSink(node, window.__wd_perf ?? null);
-            } catch (err) {
-                console.warn('music worklet unavailable:', err);
-                // Fall back to the AudioBufferSourceNode chain which works on any
-                // origin (no AudioWorklet required).
-                const reason = insecure ? 'insecure origin' : 'worklet unavailable';
-                try {
-                    sink = makeBufferSink(ctx);
-                    if (!gmFallbackStatus) {
-                        setStatus(`music: compatibility mode (${reason})`);
-                    }
-                } catch (fallbackErr) {
-                    console.warn('music fallback sink failed:', fallbackErr);
-                    setStatus('music unavailable: ' + (fallbackErr.message ?? String(fallbackErr)));
-                }
+                sink = makeBufferSink(ctx);
+                setStatus(`music: compatibility mode (${reason})`);
+            } catch (fallbackErr) {
+                console.warn('music fallback sink failed:', fallbackErr);
+                setStatus('music unavailable: ' + (fallbackErr.message ?? String(fallbackErr)));
+                return;
             }
-        }
-
-        if (gmEnabled) {
-            // the operator's SpessaSynth URL comes from the server, once
-            if (!gmSpessaSynthUrl) {
-                const cfg = await serverConfig();
-                if (cfg?.spessaSynthUrl) gmSpessaSynthUrl = String(cfg.spessaSynthUrl);
-            }
-            if (gmSpessaSynthUrl && gmSf2Bytes?.byteLength > 0) {
-                // GM path: URL + sf2 both present — attempt lazy-load of SpessaSynth.
-                // Synthetizer(targetNode, sf2ArrayBuffer) — SpessaSynth API (v3+).
-                // targetNode is a relay GainNode → ctx.destination; SpessaSynth
-                // connects its output chain to it.
-                try {
-                    const relayNode = ctx.createGain();
-                    relayNode.connect(ctx.destination);
-                    sink = makeGmMainSink();
-                    gmPathBuilt = true;
-
-                    setStatus('music: GM SoundFont mode (loading…)');
-                    import(gmSpessaSynthUrl)
-                        .then(ss => {
-                            const SoundFont2  = ss.SoundFont2  ?? ss.default?.SoundFont2;
-                            const Synthetizer = ss.Synthetizer ?? ss.default?.Synthetizer;
-                            if (!SoundFont2 || !Synthetizer) {
-                                throw new Error(
-                                    'SpessaSynth module does not export SoundFont2/Synthetizer',
-                                );
-                            }
-                            // Transfer a copy so the main thread retains the original Uint8Array.
-                            const sf2Buf = gmSf2Bytes.buffer.slice(
-                                gmSf2Bytes.byteOffset,
-                                gmSf2Bytes.byteOffset + gmSf2Bytes.byteLength,
-                            );
-                            // SpessaSynth creates its own internal AudioWorkletNode connected to
-                            // relayNode.  It is NOT instantiated inside a foreign worklet.
-                            gmSynth = new Synthetizer(relayNode, sf2Buf);
-                            // Drain MIDI events queued before synth was ready.
-                            for (const bytes of gmMidiQueue) gmDispatchMidi(bytes);
-                            gmMidiQueue = [];
-                            setStatus('music: GM SoundFont mode');
-                        })
-                        .catch(err => {
-                            // SpessaSynth load failed — destroy gm-main sink and rebuild OPL
-                            // so music plays instead of producing silence.
-                            const reason = err?.message ?? String(err);
-                            console.warn(
-                                '[audio] SpessaSynth load failed — rebuilding OPL fallback.',
-                                'Reason:', reason,
-                            );
-                            gmPathBuilt = false;
-                            sink = null;
-                            setStatus('music: OPL fallback (GM soundfont unavailable)');
-                            // pumpTimer is already running; after buildOplSink sets sink,
-                            // the next pump() cycle delivers OPL audio.
-                            buildOplSink(true);
-                        });
-                } catch (err) {
-                    console.warn('[audio] GM path setup failed, falling back to OPL:', err);
-                    gmEnabled = false;
-                    gmPathBuilt = false;
-                    sink = null;  // fall through to OPL path below
-                }
-            } else {
-                // No URL or no sf2: SKIP loudly — do NOT build gm-main sink.
-                // Fall through to OPL path so music plays immediately.
-                const reason = !gmSpessaSynthUrl
-                    ? 'no spessaSynthUrl configured (set WEBDOOM_SPESSASYNTH_URL on the server)'
-                    : 'no sf2 loaded';
-                console.warn('[audio] SpessaSynth SKIP:', reason, '→ OPL fallback');
-                // no status here: the OPTIONS row carries the reason; sink stays
-                // null and the OPL path below builds
-            }
-        }
-
-        if (!sink) {
-            // OPL, the default -- and the fallback when GM could not be built
-            await buildOplSink();
-            if (!sink) return;   // buildOplSink already reported 'music unavailable'
         }
 
         pumpTimer = setInterval(pump, PUMP_MS);
@@ -309,10 +160,6 @@ export function createAudio(doom) {
 
     function pump() {
         if (!sink) return;
-        // GM main-thread path: SpessaSynth self-schedules (or silence via undriven
-        // relay node).  Nothing for the pump to push.
-        if (sink.kind === 'gm-main') return;
-
         const deficit = Math.floor(TARGET_BACKLOG * ctx.sampleRate) - sink.queued;
         const frames = Math.min(16384, Math.max(0, deficit));
         if (!frames) return;
@@ -375,47 +222,10 @@ export function createAudio(doom) {
 
     return {
         armed: () => !!ctx,
-        // Returns the active sink kind: 'worklet' | 'buffer' | 'gm-main' | null.
-        // Used by tests to verify fallback path activation and GM path construction.
+        // the active sink kind, 'worklet' | 'buffer' | null, and the last
+        // chunk pushed -- the fallback tests read both
         sinkKind: () => sink?.kind ?? null,
-        // Returns the most recently pushed audio chunk (Float32Array).
-        // Used by tests to verify the OPL pump produced non-zero frames.
-        // Returns null for gm-main (SpessaSynth self-schedules; no push-wire).
         lastChunk: () => sink?._lastChunk ?? null,
-        // Returns true when the GM relay GainNode was connected to ctx.destination
-        // AND SpessaSynth URL + sf2 were both present (import in flight or succeeded).
-        // False in the SKIP path (no URL / no sf2 → OPL fallback activated, no relay built).
-        // Used by tests to assert GM was attempted vs. OPL fallback taken.
-        gmPathBuilt: () => gmPathBuilt,
-
-        // Enable/disable the GM SoundFont backend.
-        // Must be called BEFORE the first user gesture (before arm() runs) for
-        // the sink selection to take effect.  If called after arm(), the
-        // setting is saved for the next game session.
-        // sf2Bytes: Uint8Array from IDB (task 17.2b); null = no soundfont loaded.
-        // spessaSynthUrl: operator-hosted SpessaSynth URL; null = not configured.
-        setGmMode(enabled, sf2Bytes = null, spessaSynthUrl = null) {
-            gmEnabled = !!enabled;
-            gmSf2Bytes = (sf2Bytes instanceof Uint8Array) ? sf2Bytes : null;
-            if (spessaSynthUrl) gmSpessaSynthUrl = String(spessaSynthUrl);
-        },
-
-        // NAMED SEAM -- not dead code.  Nothing in the product calls
-        // setDmxgus() or musToMidi(); docs/decision-17.3-gus-flavor.md parks
-        // the engine-side DMXGUS wiring (the lump is text and must be parsed
-        // first), and tools/gm-frames-test.mjs gate 4 gates the mapping.
-
-        // The GUS-flavour map: a PRE-PARSED Uint8Array[175], MUS instrument →
-        // GM program.  null clears it.
-        setDmxgus(bytes) {
-            dmxgusMap = (bytes instanceof Uint8Array && bytes.length >= 175)
-                ? bytes.slice(0, 175)
-                : null;
-        },
-
-        // Expose mus2mid for engine integration (future: MUS data from WAD).
-        // dmxgusMap is forwarded automatically when set via setDmxgus().
-        musToMidi: (mus) => musToMidi(mus, dmxgusMap),
 
         // called on quit: stop the render pump and release the context so
         // the interval doesn't poke a force-exited wasm instance

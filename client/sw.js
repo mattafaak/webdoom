@@ -1,7 +1,7 @@
 // webdoom service worker: WADs are content-hashed (?v=sha8) → cache-first
 // forever; everything else network-first with cache fallback, so repeat
 // loads are instant and single player works offline once a WAD is cached.
-const SHELL = 'webdoom-shell-v15'; // v15: perf-marks.js added
+const SHELL = 'webdoom-shell-v16'; // v16: the GM backend (mus2mid, sf2-library) removed
 const WADS = 'webdoom-wads-v1';
 
 // The app shell, one entry per file.  tools/check-sw-precache.mjs parses THIS
@@ -9,10 +9,10 @@ const WADS = 'webdoom-wads-v1';
 const SHELL_FILES = [
     '/', '/css/webdoom.css',
     '/js/lobby.js', '/js/main.js', '/js/video.js', '/js/input.js',
-    '/js/audio.js', '/js/mus2mid.js', '/js/net.js', '/js/music-worklet.js',
+    '/js/audio.js', '/js/net.js', '/js/music-worklet.js',
     '/js/menu.js', '/js/doomfont.js', '/js/persist.js', '/js/wad-cache.js',
     '/js/fire.js', '/js/countdown.js',
-    '/js/wad-import.js', '/js/wad-library.js', '/js/sf2-library.js',
+    '/js/wad-import.js', '/js/wad-library.js',
     '/js/demo.js', '/js/scrubber.js', '/js/idb.js', '/js/ui.js', '/js/perf-marks.js',
 
     '/engine/doom.js', '/engine/doom.wasm',

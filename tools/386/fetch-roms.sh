@@ -14,7 +14,7 @@
 #   - ROM available as a single 64 KB binary on GitHub (public, no login)
 #   - Used by the 386dx40.cfg config in this directory
 #
-# Design mirrors tools/setup-emsdk.sh and tools/fetch-soundfont.sh:
+# Design mirrors tools/setup-emsdk.sh:
 # idempotent (skip if already present), fail-fast on download error.
 set -eo pipefail
 

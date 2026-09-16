@@ -1,6 +1,6 @@
 # webdoom documentation index
 
-**32 documents** (19 top-level `.md` beside this index, 6 in `archive/`, 5 hardware bring-ups in
+**30 documents** (17 top-level `.md` beside this index, 6 in `archive/`, 5 hardware bring-ups in
 subdirectories, and id Software's 2 originals), ~15,250 lines. The count names
 its SET on purpose: this line read "26 documents" while `docs-index-check`'s own
 PASS line, in the same breath, said "all 32 documents under docs/" — both true
@@ -57,13 +57,6 @@ heading rather than the top.
 | [claims-index.md](claims-index.md) | every quantitative claim in the archaeology docs, with its status and reproducer |
 | [promises-index.md](promises-index.md) | every qualitative promise in README and spec, with its disposition — including the ones with no gate |
 | [web-scrutiny.md](web-scrutiny.md) | the ws-NNN review ledger: 14 findings, each with a disposition |
-
-## Decision records
-
-| document | what it is |
-|---|---|
-| [decision-17.2a-soundfont-gm.md](decision-17.2a-soundfont-gm.md) | the SoundFont GM backend: why, and what is never bundled |
-| [decision-17.3-gus-flavor.md](decision-17.3-gus-flavor.md) | GUS flavour via DMXGUS, without the proprietary patches |
 
 ## Hardware bring-ups
 

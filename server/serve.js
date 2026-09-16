@@ -90,13 +90,6 @@ const server = createServer((req, res) => {
     if (LOG_REQ) process.stderr.write(`${req.method} ${path} ${req.headers['user-agent'] ?? '-'}\n`);
     if (path.includes('..')) return send(res, 400, 'bad path');
 
-    // operator configuration: SpessaSynth is operator-hosted by decision
-    // (never a CDN, never vendored), so only the operator knows its URL
-    if (path === '/api/config')
-        return send(res, 200, JSON.stringify({
-            spessaSynthUrl: process.env.WEBDOOM_SPESSASYNTH_URL || null,
-        }), { 'content-type': 'application/json' });
-
     if (path === '/api/wads')
         return send(res, 200, manifest().body, { 'content-type': 'application/json' });
 

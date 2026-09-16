@@ -191,16 +191,15 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | File | Raw (bytes) | gzip-9 (bytes) | gzip-9 (KB) |
 |------|------------|---------------|------------|
 | `build/doom.wasm` | 355,883 | 146,551 | 143.1 |
-| `client/js/lobby.js` | 35,081 | 11,966 | 11.7 |
-| `client/js/audio.js` | 21,488 | 6,855 | 6.7 |
-| `client/js/input.js` | 17,098 | 6,201 | 6.1 |
+| `client/js/lobby.js` | 32,498 | 11,114 | 10.9 |
+| `client/js/input.js` | 17,073 | 6,194 | 6.0 |
 | `client/js/menu.js` | 15,543 | 5,401 | 5.3 |
-| `client/js/main.js` | 12,491 | 4,676 | 4.6 |
+| `client/js/main.js` | 12,138 | 4,564 | 4.5 |
 | `client/js/net.js` | 11,713 | 4,462 | 4.4 |
 | `client/js/wad-import.js` | 11,300 | 4,249 | 4.1 |
-| `client/css/webdoom.css` | 10,378 | 3,890 | 3.8 |
-| `client/js/mus2mid.js` | 12,075 | 3,746 | 3.7 |
+| `client/css/webdoom.css` | 10,370 | 3,885 | 3.8 |
 | `build/doom.js` | 8,761 | 3,719 | 3.6 |
+| `client/js/audio.js` | 10,669 | 3,692 | 3.6 |
 | `client/js/fire.js` | 9,371 | 3,481 | 3.4 |
 | `client/js/doomfont.js` | 8,524 | 3,321 | 3.2 |
 | `client/js/demo.js` | 7,291 | 2,733 | 2.7 |
@@ -208,28 +207,27 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/js/video.js` | 6,462 | 2,396 | 2.3 |
 | `client/js/countdown.js` | 7,068 | 2,396 | 2.3 |
 | `client/js/persist.js` | 4,786 | 1,774 | 1.7 |
-| `client/js/sf2-library.js` | 3,571 | 1,332 | 1.3 |
-| `client/js/ui.js` | 2,533 | 1,118 | 1.1 |
-| `client/js/idb.js` | 2,227 | 972 | 0.9 |
+| `client/js/ui.js` | 2,211 | 966 | 0.9 |
+| `client/js/idb.js` | 2,214 | 964 | 0.9 |
 | `client/index.html` | 1,732 | 905 | 0.9 |
 | `client/js/perf-marks.js` | 2,008 | 855 | 0.8 |
 | `client/js/music-worklet.js` | 1,970 | 843 | 0.8 |
 | `client/js/wad-cache.js` | 1,517 | 716 | 0.7 |
 | `client/js/wad-library.js` | 1,159 | 565 | 0.6 |
-| **Total (all, raw)** | **579,988** | — | — |
-| **Total (all, gzip-9)** | — | **227,824** | **222.5** |
-| **JS+CSS+HTML only (raw)** | 215,344 | — | — |
-| **JS+CSS+HTML only (gzip-9)** | — | 77,554 | **75.7** |
+| **Total (all, raw)** | **550,219** | — | — |
+| **Total (all, gzip-9)** | — | **218,447** | **213.3** |
+| **JS+CSS+HTML only (raw)** | 185,575 | — | — |
+| **JS+CSS+HTML only (gzip-9)** | — | 68,177 | **66.6** |
 
 The WAD file itself (doom.wad ≈ 11.8 MB, doom2.wad ≈ 13.9 MB, etc.) is
 fetched separately on first play and cached in the browser; it is not part of
 the initial page-load transfer.
 
 **Finding**: the entire deliverable (wasm + JS glue + client JS + CSS +
-HTML) compresses to **222.5 KB gzip** on the wire, gated by
+HTML) compresses to **213.3 KB gzip** on the wire, gated by
 `payload-size` (perf-015/perf-016) since round 8. The wasm is
-64% of that. The JS+CSS+HTML surface is **75.7 KB gzip**
-— note that is **2.2x the 35.1 KB this table used to
+67% of that. The JS+CSS+HTML surface is **66.6 KB gzip**
+— note that is **1.9x the 35.1 KB this table used to
 claim**, which went stale unnoticed precisely because both figures were
 marked *not machine-verified*: the old table still listed
 `client/js/settings.js`, deleted in round 7, and omitted `wad-import`,

@@ -35,7 +35,7 @@ shipped, gated feature that the contract never claimed at all.
 | Offline single player once a WAD is cached | `browser-offline`, `sw-precache` |
 | Rebindable keys, gamepad, and an OPTIONS screen on the launcher menu | `browser-options` |
 | Freelook and frame interpolation — render-side, opt-in | `sim-freelook`, `sim-invariants` |
-| Music: in-engine OPL2/OPL3, or a GM SoundFont backend | `opl-mode`, `gm-frames`, `gm-config`, `browser-sf2`, `browser-music-fallback` |
+| Music: the in-engine OPL2/OPL3 sequencer from the IWAD's own GENMIDI | `opl-mode`, `browser-music-fallback` |
 | **Five compile-time render variants**, each pixel-identical or explained | `render-fakeflat`, `render-potato`, `render-sbskip`, `render-diffblit`, `toggle-identity` |
 | **A freestanding core** with no OS, and an N64 correctness leg | `freestanding-sim`, `ro-wad`, `arm-cross`, `n64-demos` |
 | **The gate machinery itself**: claims, promises, doc drift, status drift, the census | `doc-drift`, `claims-index`, `promises-index`, `status-drift`, `docs-index`, `gate-census`, `web-contract` |
@@ -233,31 +233,12 @@ The primary player environment is plain-HTTP on a LAN/tailnet address
   programmed from the IWAD's own GENMIDI lump (zero-asset, DMX-faithful).
   An OPL2-voice (mono, 9 voices, authentic 1993) vs OPL3-mode (stereo,
   18 voices) toggle is render-side audio flavor; neither reads game state.
-- **SoundFont GM backend** (optional, lazy-loaded): mus2mid + a worklet
-  soundfont synth. Default font is GeneralUser GS (clean license) served
-  from this project's own server with its license text alongside —
-  **never a CDN**. User-loadable .sf2 via the local WAD/asset library.
-  This is the project's first third-party JS runtime dependency; it is
-  lazy-loaded, excluded from the SHELL precache unless deliberately
-  added, and its size lands as an explicit size-budget line item.
-- **GUS flavor** (decision record: `docs/decision-17.3-gus-flavor.md`,
-  task 17.3, 2026-07-22): **GREEN-LIT AS A DESIGN; NOT WIRED.** The
-  original Gravis patches (proprietary, no redistribution right) and
-  eawpats (redistribution-unclear; Debian dropped from non-free ~2016)
-  are NOT used, and no GUS .pat files are required, fetched, or
-  redistributed — that half of the decision is settled and permanent.
-  What ships is the mapping half: `musToMidi(mus, dmxgusMap)` applies a
-  175-byte table to GM program selection, and `tools/gm-frames-test.mjs`
-  gate 4 proves it does.
-  **What does not ship is the path that would SUPPLY that table.** The
-  DMXGUS lump is 175 lines of TEXT, so the wiring
-  (`W_CheckNumForName` → text parse → `setDmxgus`) must include the
-  parse; feeding it raw lump bytes would be garbage. Until that lands,
-  `audio.setDmxgus()` is a test-injection seam and nothing in the
-  product calls it — which is exactly what decision-17.3 §"Delivery"
-  says, and what this clause said the opposite of until round 6.
-  Amended 2026-09-12: a spec that reads as if a feature ships is a
-  promise without a gate, which tenet 6 calls doc drift.
+- **No SoundFont / GM backend (removed 2026-09-16, round 10).** A GM path
+  shipped 2026-07 behind an operator-hosted SpessaSynth URL that no
+  deployment set; it could not activate without it and could not be gated
+  end to end because the dependency was, by decision, never vendored. The
+  GUS-flavour mapping that rode on it was never wired to the DMXGUS lump.
+  Both are gone; the in-engine OPL sequencer is the whole music contract.
 - **Never bundled**: Microsoft GS wavetable, Roland ROMs/Nuked-SC55,
   provenance-unclear soundfonts. User-supplied files are fine.
 - Determinism rule (unchanged): engine music state changes only via

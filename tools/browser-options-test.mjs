@@ -122,7 +122,7 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
     check('IN FORCE: out-of-range padDeadzone is clamped',
         num('padDeadzone', 0, 0.9), `settings.padDeadzone = ${JSON.stringify(live.padDeadzone)}`);
     check('IN FORCE: an unknown musicBackend is not the live value',
-        ['opl2', 'opl3', 'gm'].includes(live.musicBackend), `settings.musicBackend = ${JSON.stringify(live.musicBackend)}`);
+        ['opl2', 'opl3'].includes(live.musicBackend), `settings.musicBackend = ${JSON.stringify(live.musicBackend)}`);
     check('IN FORCE: an unknown mouseY is not the live value',
         ['off', 'look', 'move'].includes(live.mouseY), `settings.mouseY = ${JSON.stringify(live.mouseY)}`);
     check('IN FORCE: non-boolean flags are booleans',
@@ -383,31 +383,19 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
         a11y?.orphanItems === 0, `${a11y?.orphanItems} orphaned`);
 }
 
-// ── 7. the MUSIC row names why GM cannot work, instead of the game doing it ──
-//
-// audio.js used to setStatus('music: OPL fallback (GM soundfont unavailable)')
-// for an ordinary configured state -- GM selected with no .sf2 stored and/or
-// no operator synth URL -- and #status has no timeout, so it sat over the game
-// for the session.  The reason belongs where the choice is made.
+// ── 7. the MUSIC row cycles the two OPL flavours and nothing else ──────────
 {
-    if (!await bootLauncher({ musicBackend: 'gm' })) hardFail('launcher never came up for the music case');
+    if (!await bootLauncher({ musicBackend: 'opl2' })) hardFail('launcher never came up for the music case');
     if (!await openOptions()) hardFail('OPTIONS would not open (music case)');
-    let music = null;
-    for (let i = 0; i < 20; i++) {          // the GM probe is two async lookups
-        await sleep(300);
-        music = await rowText('MUSIC');
-        if (music && !/MUSIC:\s*<?\s*GM\s*>?$/.test(music)) break;
-    }
-    check('the MUSIC row says GM cannot work, and why',
-        /NO SF2|NO SYNTH URL/.test(String(music ?? '')), `row reads ${JSON.stringify(music)}`);
-
-    if (!await bootLauncher({ musicBackend: 'opl2' })) hardFail('launcher never came up for the music control');
-    if (!await openOptions()) hardFail('OPTIONS would not open (music control)');
-    await sleep(800);
-    const ctl = await rowText('MUSIC');
-    check('CONTROL: an OPL backend carries no such warning',
-        /OPL2/.test(String(ctl ?? '')) && !/NO SF2|NO SYNTH URL/.test(String(ctl ?? '')),
-        `row reads ${JSON.stringify(ctl)}`);
+    await sleep(300);
+    const m0 = await rowText('MUSIC');
+    check('the MUSIC row reads the stored backend', /OPL2/.test(String(m0 ?? '')), `row reads ${JSON.stringify(m0)}`);
+    await clickRow('MUSIC'); await sleep(300);
+    const m1 = await rowText('MUSIC');
+    check('a click steps MUSIC to OPL3', /OPL3/.test(String(m1 ?? '')), `row reads ${JSON.stringify(m1)}`);
+    await clickRow('MUSIC'); await sleep(300);
+    const m2 = await rowText('MUSIC');
+    check('and back to OPL2 -- there is no third backend', /OPL2/.test(String(m2 ?? '')), `row reads ${JSON.stringify(m2)}`);
 }
 
 // A run that asserted nothing must not pass.  The old F8 test held 28; this
@@ -420,5 +408,5 @@ check('no uncaught exception while abusing the OPTIONS surface',
 const bad = results.filter(r => !r.ok);
 console.log(bad.length
     ? `FAIL — browser-options: ${bad.length} of ${results.length} assertions failed`
-    : `PASS — browser-options: all ${results.length} assertions (hostile localStorage, partial binds, reset defaults, rebind capture, boot round trip, a11y, GM reporting)`);
+    : `PASS — browser-options: all ${results.length} assertions (hostile localStorage, partial binds, reset defaults, rebind capture, boot round trip, a11y, the MUSIC row)`);
 done(bad.length ? 1 : 0);

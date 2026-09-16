@@ -50,7 +50,7 @@ does not count them and no leg runs them: `bench.mjs` (run remotely by
 `fleet-bench.sh`, the `perf-fleet` leg), `browser-metrics.mjs`, `gen-tables.mjs`
 (writes `golden/tables-canon.json`), `hol-measure.mjs`, `plane-measure.mjs`,
 `zone-measure.mjs`, `build-choco-reference.sh` (needs SDL2),
-`fetch-soundfont.sh`, `freestanding/{cycle-attrib,cycle-floor,gen-imports,zone-stats}.sh`,
+`freestanding/{cycle-attrib,cycle-floor,gen-imports,zone-stats}.sh`,
 `native-sanitize/compare.py`, `coverage/parse-gcov.py`, `386/fetch-roms.sh`,
 `rp2040/prep-whd.sh`. The three that are gate-shaped but cannot run are in
 `tools/gates-not-in-suite.json` with their reasons.

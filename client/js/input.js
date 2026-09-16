@@ -54,7 +54,7 @@ export const defaultSettings = () => ({
     smooth: true,          // uncapped-fps render interpolation
     opl3: false,           // task 17.1 legacy: false=OPL2 mono, true=OPL3 stereo
                            // superseded by musicBackend in task 17.2b; kept for compat
-    musicBackend: 'opl2',  // task 17.2b: 'opl2' | 'opl3' | 'gm'
+    musicBackend: 'opl2',  // 'opl2' | 'opl3'
     padDeadzone: 0.15,
     padTurnSpeed: 1.0,
 });
@@ -69,7 +69,7 @@ const SCHEMA = {
     padDeadzone:    { num: [0, 0.9] },
     padTurnSpeed:   { num: [0.4, 2] },
     mouseY:         { oneOf: ['off', 'look', 'move'] },
-    musicBackend:   { oneOf: ['opl2', 'opl3', 'gm'] },
+    musicBackend:   { oneOf: ['opl2', 'opl3'] },
     alwaysRun:      { bool: true },
     smooth:         { bool: true },
     opl3:           { bool: true },

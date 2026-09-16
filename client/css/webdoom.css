@@ -143,7 +143,7 @@ html, body {
     align-items: center;
 }
 
-/* Drag a WAD or .sf2 onto the launcher.  lobby.js has toggled `.drop-hover`
+/* Drag a WAD onto the launcher.  lobby.js has toggled `.drop-hover`
    on this element since WAD import shipped and there was no rule for it, so
    drag-and-drop had ZERO visual feedback: the drop worked and nothing on
    screen ever acknowledged the file was over the window.  An inset ring
