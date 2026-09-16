@@ -3,58 +3,40 @@
 //
 // Relay: clients send [u32 tic][8B ticcmd]; when every live player's
 // cmd for tic T is in, the server broadcasts a sealed bundle
-// [u32 tic][u8 ingameMask][ticcmd × numplayers]. WebSocket (TCP) makes
-// delivery ordered+reliable — no resend protocol exists or is needed.
-// A player silent past the grace window gets their last cmd duplicated
-// (bounded stall for others); past the drop window they're marked out.
+// [u32 tic][u8 ingameMask][u8 fabricatedMask][ticcmd × numplayers].
+// WebSocket (TCP) makes delivery ordered+reliable — no resend protocol exists
+// or is needed. A player silent past the grace window gets their last cmd
+// duplicated (bounded stall for others); past the drop window they're out.
 import { WebSocketServer } from 'ws';
+import { envInt } from './env.js';
 
 const COLORS = ['Green', 'Indigo', 'Brown', 'Red'];
 const MAXPLAYERS = 4;
 const CMD_SIZE = 8;
-const GRACE_MS = 250;       // fabricate a missing cmd after this
-const DROP_MS = 5000;       // remove the player after this
-const JOIN_MARGIN = 12;     // tics between a drop-in going live and spawning
-const JOIN_TIMEOUT_MS = +(process.env.WEBDOOM_JOIN_TIMEOUT || 30000);  // reclaim a stalled reservation
+const GRACE_MS = 250;           // fabricate a missing cmd after this
+const DROP_MS = 5000;           // remove the player after this
+const NEVER_JOINED_MS = 10000;  // a launched player that never connected is dropped
+const JOIN_MARGIN = 12;         // tics between a drop-in going live and spawning
+const JOIN_TIMEOUT_MS = envInt('WEBDOOM_JOIN_TIMEOUT', 30000);   // reclaim a stalled reservation
 
-// Resource caps — all sized well above legitimate LAN 4-player play at 35 Hz.
-// 4 players × 2 sockets each + 10 lobby observers = 18 legit; 50 gives 2.7× headroom.
-const MAX_CONNS = +(process.env.WEBDOOM_MAX_CONNS || 50);
-// Spectators were capped only by MAX_CONNS, which is shared with PLAYERS: 46
-// observers could exhaust the budget and lock real players out of /ws/game,
-// and each one forced a full-history burst into the Node heap on connect.
-// Spectating needs no slot and no credential, so it is the cheapest way in.
-const MAX_SPECTATORS = +(process.env.WEBDOOM_MAX_SPECTATORS || 8);
-// Above this many bytes queued on one socket, that peer is not keeping up and
-// is dropped rather than allowed to grow the server's heap without bound.
-const SEND_BACKLOG_CAP = +(process.env.WEBDOOM_SEND_BACKLOG || 4 * 1024 * 1024);
-// session.history is the ONLY unbounded structure left on the server: one sealed
-// bundle per tic, pushed at 35 Hz, kept for the life of the session because
-// drop-in and spectator catch-up replay it FROM TIC 0.
-//
-// docs/netcode.md sized this as "38 bytes/tic ... 4.8 MB/hr", which is the
-// PAYLOAD.  Each entry is its own Buffer.alloc -- its own ArrayBuffer and
-// object header, no pool -- so the payload is not what is retained.  Measured
-// on this Node, 63,000 entries of 38 bytes: heapUsed +15.99 MB, rss +31.45 MB,
-// = 266 bytes retained per 38-byte bundle, 7x the figure the doc quotes.  That
-// is 9.3 KB/s, ~34 MB/hour, forever, on a server whose whole job is to sit on
-// a LAN all evening.
-//
-// A ring buffer is NOT the fix: catch-up needs the history from tic 0, so
-// dropping the head would hand a joiner a prefix-less stream and desync it
-// silently -- much worse than the leak.  So the history stops GROWING at the
-// cap, and the two features that read it refuse, by name, past that point.
-// 35 Hz * 60 * 30 = 63,000 tics = 30 minutes of play = ~17 MB retained.  Live
-// play is unaffected and continues indefinitely; only JOINING a session that
-// has already run half an hour is refused.
-const MAX_HISTORY_TICS = +(process.env.WEBDOOM_MAX_HISTORY_TICS || 35 * 60 * 30);
-// 4 players × 35 Hz = 140 msg/s aggregate; per-conn cap at 300 gives a single client
-// 2× the full-table aggregate — plenty for legit play, kills flood attacks.
-const RATE_CAP_PER_SEC = +(process.env.WEBDOOM_RATE_CAP || 300);
+// Resource caps, all well above legitimate 4-player LAN play at 35 Hz.
+// 4 players × 2 sockets + observers = ~18 legit connections.
+const MAX_CONNS = envInt('WEBDOOM_MAX_CONNS', 50);
+// spectators need no slot and no credential, so they get their own cap
+const MAX_SPECTATORS = envInt('WEBDOOM_MAX_SPECTATORS', 8);
+// a peer with more than this queued is not keeping up and is dropped
+const SEND_BACKLOG_CAP = envInt('WEBDOOM_SEND_BACKLOG', 4 * 1024 * 1024);
+// session.history is one Buffer per sealed tic (~266 B retained each,
+// measured), kept from tic 0 because drop-in and spectator catch-up replay
+// it whole -- a ring would hand a joiner a prefix and desync it silently.
+// So it stops growing at the cap and those two features refuse past it;
+// live play continues.  35 Hz × 30 min ≈ 17 MB.
+const MAX_HISTORY_TICS = envInt('WEBDOOM_MAX_HISTORY_TICS', 35 * 60 * 30);
+// 4 players × 35 Hz = 140 msg/s aggregate; 300 per connection is 2× that
+const RATE_CAP_PER_SEC = envInt('WEBDOOM_RATE_CAP', 300);
 const RATE_WINDOW_MS = 1000;
 
-// Player names arrive from the network.  Both sites that accept one applied
-// the same three steps in the same order; a third would have had to know them.
+// player names arrive from the network
 const cleanName = n => String(n ?? '').replace(/[^A-Za-z0-9 _-]/g, '').trim().slice(0, 10);
 
 const defaultParams = () => ({
@@ -62,61 +44,29 @@ const defaultParams = () => ({
     nomonsters: false, fast: false, respawn: false, timer: 0,
 });
 
-// Attach a no-op error handler so protocol violations (e.g. maxPayload exceeded,
-// malformed frame) are absorbed rather than propagated as uncaught exceptions.
-// The ws library terminates the socket on its own after emitting 'error';
-// the 'close' event fires next and any normal cleanup runs from there.
-// Refuse one socket, the way every refusal in this file has to work.
-//
-// `try { ws.terminate(); } catch {}` stood FIFTEEN times in this file, and
-// only EIGHT of them carried an `ws.on('error', () => {})` in front of it --
-// the guard whose own comment explains that a frame racing in between the
-// WebSocket handshake completing and terminate() firing otherwise emits an
-// unhandled 'error' and ENDS THE PROCESS.  (At the start of round 6 it was
-// 6 of 13; this round's two new refusal paths were written with the guard,
-// which is the problem: every author has to know.)  One spelling now, with
-// the guard always on, so the next rejection path cannot be written the
-// unsafe way.
-//
-// The one call site left outside this helper is safeWs's own error handler:
-// it is ALREADY inside an 'error' listener, so attaching another would be the
-// thing this helper exists to make unnecessary.
-//
-// The one call site left outside this helper is safeWs's own error handler:
-// it is ALREADY inside an 'error' listener, so attaching another would be the
-// thing this helper exists to make unnecessary.
-// ONCE PER SOCKET.  rateOk() calls this on every message of a flood, and the
-// first version attached a fresh 'error' listener each time: 5,000 messages
-// produced a MaxListenersExceededWarning with a stack trace, which net-fuzz's
-// crash detector correctly read as a crash.  The helper was making the thing
-// it exists to prevent easier to write, which is the only way a helper like
-// this can be worse than the fifteen copies it replaced.
+// The one way to refuse a socket.  A frame racing in between the handshake
+// and terminate() emits 'error', and an unhandled 'error' ends the process,
+// so a no-op listener goes on first (once: rateOk() refuses on every message
+// of a flood).  safeWs() sockets already carry a listener.
 function refuse(ws, log = null, why = '') {
     if (ws._refused) return;
     ws._refused = true;
-    if (why) log(why);
-    ws.on('error', () => {});
+    if (why) (log ?? console.log)(why);
+    if (!ws.listenerCount('error')) ws.on('error', () => {});
     try { ws.terminate(); } catch { /* already gone */ }
 }
 
 function safeWs(ws, log, tag) {
     ws.on('error', err => {
         log(`ws error [${tag}]: ${err?.message ?? err}`);
-        try { ws.terminate(); } catch {}
+        try { ws.terminate(); } catch { /* already gone */ }
     });
     return ws;
 }
 
-// Per-connection rate guard. Returns true and increments the counter if the
-// message is within the rate cap; returns false (and terminates the socket) if
-// the client is flooding. State is attached directly to the ws object.
-//
-// Window model: TUMBLING (fixed-duration, non-overlapping). When the first
-// message arrives after the previous window closed, a fresh window starts at
-// that moment. This means a client can burst up to 2× RATE_CAP_PER_SEC across
-// a window boundary (tail of old window + head of new). That ~2× headroom is
-// intentional: legitimate 35 Hz play never hits 300 msg/s, while a flood attack
-// sustains far above it and is caught within the very next window.
+// Per-connection rate guard over a tumbling window (a burst may straddle a
+// boundary and reach 2× the cap; legitimate play never approaches it).
+// Refuses the socket on a flood and returns false.
 function rateOk(ws) {
     const now = Date.now();
     if (!ws._rateTs || now - ws._rateTs >= RATE_WINDOW_MS) {
@@ -124,34 +74,20 @@ function rateOk(ws) {
         ws._rateCount = 0;
     }
     ws._rateCount++;
-    if (ws._rateCount > RATE_CAP_PER_SEC) {
-        // Flooding: terminate immediately, don't send a close frame (avoids
-        // being stuck in CLOSING while the attacker ignores the handshake).
-        // No log: rateOk() is module-scope and `log` is createGame's local --
-        // passing it here was a ReferenceError on every flooded message, which
-        // round 5's uncaughtException backstop absorbed and net-fuzz reported
-        // as a crash.  A helper that is easy to call wrongly is worth one
-        // default parameter.
-        refuse(ws);
-        return false;
-    }
+    if (ws._rateCount > RATE_CAP_PER_SEC) { refuse(ws); return false; }
     return true;
 }
 
-// servedWads: () => string[] of the WAD filenames this server actually serves.
-// Without it the lobby accepted any character-sanitised `wad` string and cast
-// it to every client in the `launch` frame -- so one lobby member could steer
-// the whole table into a WAD nobody has, and each client hit it as a TypeError
-// inside bootDoom (stackFor returns [], main.js reads wads[0].file).  Defaults
-// to a source that names nothing, which REFUSES every wad change rather than
-// accepting every one: a caller that cannot say what it serves should not be
-// able to hand out arbitrary names.
+// servedWads: () => the WAD filenames this server serves.  The lobby's `wad`
+// is cast to every client in the `launch` frame, so a name not in the
+// library is refused rather than handed out.  The default names nothing,
+// which refuses every change -- the safe direction.
 export function createGame(log = console.log, servedWads = () => []) {
     // --- lobby state -------------------------------------------------------
     const lobby = new Map();        // slot → {ws, name} (name null = color default)
     let params = defaultParams();
     let session = null;             // active relay session or null
-    let connCount = 0;              // total open ws connections (lobby + game + spectate)
+    let connCount = 0;              // open sockets across all three endpoints
 
     const displayName = slot => lobby.get(slot)?.name ?? COLORS[slot];
     const roster = () => ({
@@ -162,97 +98,88 @@ export function createGame(log = console.log, servedWads = () => []) {
         params,
         inGame: !!session,
     });
+    // what a newcomer sees while a game is live
+    const inProgress = () => ({
+        t: 'inprogress',
+        params: session.params,
+        frontier: session.tic,
+        players: session.players.filter(p => p.ingame || p.joining).map(p =>
+            ({ slot: p.slot, color: COLORS[p.slot], name: session.names?.[p.slot] ?? COLORS[p.slot], live: p.ingame })),
+        freeSlots: session.players.filter(p => !p.ingame && !p.joining).map(p => p.slot),
+    });
     const cast = msg => {
         const s = JSON.stringify(msg);
         for (const p of lobby.values()) if (p.ws.readyState === 1) p.ws.send(s);
     };
 
+    // A lobby socket is one of two things: a seat in the lobby (slot >= 0,
+    // before a game starts) or an observer of a live game, who reserves a
+    // slot only on `join` -- so merely looking never blocks one.
     function lobbyConnect(ws) {
         safeWs(ws, log, 'lobby');
+        const reply = m => ws.send(JSON.stringify(m));
+        let slot = -1;          // lobby seat
+        let reserved = -1;      // drop-in reservation
 
-        // Join in progress: a game is live. Show the newcomer a summary and
-        // let them choose to drop in — no slot is reserved until they ask, so
-        // merely looking never blocks a slot.
         if (session) {
-            const inProgress = () => ({
-                t: 'inprogress',
-                params: session.params,
-                frontier: session.tic,
-                players: session.players.filter(p => p.ingame || p.joining).map(p =>
-                    ({ slot: p.slot, color: COLORS[p.slot], name: session.names?.[p.slot] ?? COLORS[p.slot], live: p.ingame })),
-                freeSlots: session.players.filter(p => !p.ingame && !p.joining).map(p => p.slot),
-            });
-            ws.send(JSON.stringify(inProgress()));
-            let mySlot = -1;
-            ws.on('message', raw => {
-                if (!rateOk(ws)) return;
-                let m; try { m = JSON.parse(raw); } catch { return; }
-                if (m.t === 'ping') { ws.send(JSON.stringify({ t: 'pong', t0: m.t0 })); return; }
-                if (!session) { ws.send(JSON.stringify({ t: 'full', reason: 'game over' })); return; }
-                if (m.t === 'join' && mySlot < 0) {
-                    const want = Number.isInteger(m.slot) ? m.slot : -1;
-                    const p = session.players.find(q => q.slot === want && !q.ingame && !q.joining && !q.ws)
-                        ?? session.players.find(q => !q.ingame && !q.joining && !q.ws);
-                    if (!p) { ws.send(JSON.stringify({ t: 'full', reason: 'game full' })); return; }
-                    mySlot = p.slot;
-                    p.joining = true;
-                    p.reservedAt = Date.now();
-                    const nm = cleanName(m.name);
-                    if (nm) { session.names = session.names ?? [null, null, null, null]; session.names[p.slot] = nm; }
-                    ws.send(JSON.stringify({ t: 'welcome', slot: p.slot, color: COLORS[p.slot] }));
-                    ws.send(JSON.stringify({ t: 'launch', params: session.params, numplayers: MAXPLAYERS,
-                        slots: session.slots, names: session.names, join: true, frontier: session.tic }));
-                    log(`lobby: ${COLORS[p.slot]} dropping in (frontier ${session.tic})`);
-                }
-            });
-            ws.on('close', () => {
-                const p = mySlot >= 0 && session?.players[mySlot];
-                if (p && !p.ingame && !p.ws) { p.joining = false; p.reservedAt = 0; }
-            });
-            return;
+            reply(inProgress());
+        } else {
+            slot = 0;
+            while (lobby.has(slot)) slot++;
+            if (slot >= MAXPLAYERS) {
+                reply({ t: 'full', reason: 'lobby full' });
+                refuse(ws, log);
+                return;
+            }
+            lobby.set(slot, { ws, name: null });
+            reply({ t: 'welcome', slot, color: COLORS[slot] });
+            cast(roster());
+            log(`lobby: ${COLORS[slot]} joined (${lobby.size} in lobby)`);
         }
-
-        let slot = 0;
-        while (lobby.has(slot)) slot++;
-        if (slot >= MAXPLAYERS) {
-            ws.send(JSON.stringify({ t: 'full', reason: 'lobby full' }));
-            refuse(ws, log);
-            return;
-        }
-        lobby.set(slot, { ws, name: null });
-        ws.send(JSON.stringify({ t: 'welcome', slot, color: COLORS[slot] }));
-        cast(roster());
-        log(`lobby: ${COLORS[slot]} joined (${lobby.size} in lobby)`);
 
         ws.on('message', raw => {
             if (!rateOk(ws)) return;
             let m;
             try { m = JSON.parse(raw); } catch { return; }
-            if (m.t === 'ping') { ws.send(JSON.stringify({ t: 'pong', t0: m.t0 })); return; }
-            if (session) return;
-            if (m.t === 'name') {
-                const name = cleanName(m.name);
-                lobby.get(slot).name = name || null;
-                cast(roster());
+            if (m.t === 'ping') { reply({ t: 'pong', t0: m.t0 }); return; }
+
+            if (slot < 0) {     // observer of a live game
+                if (!session) { reply({ t: 'full', reason: 'game over' }); return; }
+                if (m.t !== 'join' || reserved >= 0) return;
+                const want = Number.isInteger(m.slot) ? m.slot : -1;
+                const p = session.players.find(q => q.slot === want && !q.ingame && !q.joining && !q.ws)
+                    ?? session.players.find(q => !q.ingame && !q.joining && !q.ws);
+                if (!p) { reply({ t: 'full', reason: 'game full' }); return; }
+                reserved = p.slot;
+                p.joining = true;
+                p.reservedAt = Date.now();
+                const nm = cleanName(m.name);
+                if (nm) { session.names = session.names ?? [null, null, null, null]; session.names[p.slot] = nm; }
+                reply({ t: 'welcome', slot: p.slot, color: COLORS[p.slot] });
+                reply({ t: 'launch', params: session.params, numplayers: MAXPLAYERS,
+                        slots: session.slots, names: session.names, join: true, frontier: session.tic });
+                log(`lobby: ${COLORS[p.slot]} dropping in (frontier ${session.tic})`);
                 return;
             }
-            if (m.t === 'slot') {
+
+            if (session) return;    // the lobby is frozen once a game starts
+            if (m.t === 'name') {
+                lobby.get(slot).name = cleanName(m.name) || null;
+                cast(roster());
+            } else if (m.t === 'slot') {
                 // color choice IS slot choice (the engine colors by slot)
                 const want = +m.slot;
                 if (want >= 0 && want < MAXPLAYERS && !lobby.has(want) && want !== slot) {
                     lobby.set(want, lobby.get(slot));
                     lobby.delete(slot);
                     slot = want;
-                    ws.send(JSON.stringify({ t: 'welcome', slot, color: COLORS[slot] }));
+                    reply({ t: 'welcome', slot, color: COLORS[slot] });
                     cast(roster());
                 }
-                return;
-            }
-            if (m.t === 'params') {
+            } else if (m.t === 'params') {
                 const p = { ...params, ...m.params };
-                // Character-sanitising a filename says nothing about whether
-                // this server HAS it.  A name we do not serve keeps the
-                // current one and says so, rather than being cast to everyone.
+                // a sanitised filename says nothing about whether this server
+                // HAS it: an unserved name keeps the current one, and says so
                 const wantWad = String(p.wad).replace(/[^a-z0-9_.-]/g, '');
                 let served = [];
                 try { served = servedWads() ?? []; }
@@ -272,13 +199,19 @@ export function createGame(log = console.log, servedWads = () => []) {
                     timer: [0, 5, 10, 15, 20, 30].includes(+p.timer) ? +p.timer : 0,
                 };
                 cast(roster());
+            } else if (m.t === 'start' && lobby.size >= 1) {
+                startGame();
             }
-            if (m.t === 'start' && lobby.size >= 1) startGame();
         });
         ws.on('close', () => {
-            lobby.delete(slot);
-            cast(roster());
-            log(`lobby: ${COLORS[slot]} left`);
+            if (slot >= 0) {
+                lobby.delete(slot);
+                cast(roster());
+                log(`lobby: ${COLORS[slot]} left`);
+                return;
+            }
+            const p = reserved >= 0 && session?.players[reserved];
+            if (p && !p.ingame && !p.ws) { p.joining = false; p.reservedAt = 0; }
         });
     }
 
@@ -304,7 +237,7 @@ export function createGame(log = console.log, servedWads = () => []) {
             params: { ...params },      // frozen for the game; handed to drop-ins
             slots,                      // the tic-0 ingame slots
             names: null,
-            history: [],                // every sealed bundle, for drop-in and spectator catch-up
+            history: [],                // every sealed bundle, for catch-up
             historyFull: false,         // cap reached: catch-up can no longer be served
             spectators: new Set(),      // read-only observers; never in session.players
         };
@@ -326,18 +259,15 @@ export function createGame(log = console.log, servedWads = () => []) {
         if (!session) return;
         clearInterval(session.timer);
         for (const p of session.players) p.ws?.close();
-        for (const sw of session.spectators) try { sw.close(); } catch {}
+        for (const sw of session.spectators) try { sw.close(); } catch { /* gone */ }
         session = null;
         log(`game: over (${reason})`);
         cast(roster());
     }
 
-    // Stream the whole sealed history to a joining socket, dropping it if it
-    // cannot keep up.  Both readers of session.history did this identically:
-    // the backpressure check exists because ws.send() buffers in the Node heap,
-    // so a deliberately-stalled peer would otherwise pull the session's whole
-    // history into memory with no ceiling.
-    // Returns false when the socket was refused, so the caller stops.
+    // Stream the whole sealed history to a joining socket.  ws.send() buffers
+    // in the Node heap, so a stalled peer is refused rather than allowed to
+    // pull the whole history into memory.  Returns false when refused.
     function burstHistory(ws, who) {
         for (const b of session.history) {
             if (ws.bufferedAmount > SEND_BACKLOG_CAP) {
@@ -350,16 +280,12 @@ export function createGame(log = console.log, servedWads = () => []) {
     }
 
     // --- spectator endpoint ---------------------------------------------------
-    // A spectator is a receive-only observer: it gets the full sealed-bundle
-    // history as a burst on connect, then follows live bundles. The handler has
-    // NO ws.on('message') listener — zero ticcmd write code by design — so
-    // injection is structurally impossible, not just guarded by a flag.
+    // Receive-only: the history burst, then live bundles.  There is NO
+    // ws.on('message') here, so injection is structurally impossible.
     function spectateConnect(ws) {
         safeWs(ws, log, 'spectate');
         if (!session) { refuse(ws, log); return; }
-        // Past the cap the history is a PREFIX of the session, so replaying it
-        // would leave the observer's sim short of the live frontier with no way
-        // to notice.  Refuse instead of desyncing.
+        // past the cap the history is a prefix; replaying it would desync silently
         if (session.historyFull) {
             refuse(ws, log, `spectate: refusing — session is past the ${MAX_HISTORY_TICS}-tic history cap, catch-up cannot be served`);
             return;
@@ -368,11 +294,7 @@ export function createGame(log = console.log, servedWads = () => []) {
             refuse(ws, log, `spectate: cap hit (${session.spectators.size}/${MAX_SPECTATORS}) — refusing`);
             return;
         }
-        // Backpressure: the history burst is sent unconditionally, and ws.send()
-        // buffers in the Node heap when the socket cannot keep up.  A slow or
-        // deliberately-stalled observer would otherwise pull the whole session
-        // history into memory with no ceiling.
-        if (!burstHistory(ws, `spectate: observer`)) return;
+        if (!burstHistory(ws, 'spectate: observer')) return;
         session.spectators.add(ws);
         log(`spectate: observer connected (history ${session.history.length} tics)`);
         ws.on('close', () => {
@@ -383,38 +305,20 @@ export function createGame(log = console.log, servedWads = () => []) {
 
     function relayConnect(ws, url) {
         safeWs(ws, log, 'game');
-
-        // Validate slot: must be an integer 0–3, session must exist, slot must
-        // be unoccupied. Use terminate() for any rejection — avoids leaving
-        // the socket in CLOSING state if the client ignores the close frame,
-        // and makes the rejection visible immediately on the client side.
+        // slot must be an integer 0–3 naming an unoccupied seat of a live session
         let slot;
-        try { slot = +new URL(url, 'http://x').searchParams.get('slot'); } catch {
-            refuse(ws, log);
-            return;
-        }
-        if (!Number.isFinite(slot) || slot < 0 || slot >= MAXPLAYERS || !Number.isInteger(slot)) {
-            refuse(ws, log);
-            return;
-        }
+        try { slot = +new URL(url, 'http://x').searchParams.get('slot'); } catch { refuse(ws, log); return; }
+        if (!Number.isInteger(slot) || slot < 0 || slot >= MAXPLAYERS) { refuse(ws, log); return; }
         const p = session?.players.find(p => p.slot === slot);
-        if (!p || p.ws) {
-            // Slot occupied or no session: reject immediately so the client
-            // sees an error/close without waiting for the close handshake, and
-            // the slot owner is unaffected.
-            refuse(ws, log);
-            return;
-        }
+        if (!p || p.ws) { refuse(ws, log); return; }
         p.ws = ws;
         p.joined = true;
         p.lastSeen = Date.now();
         ws.binaryType = 'nodebuffer';
 
-        // Drop-in: a slot connecting while not-ingame during a live game is a
-        // joiner. Stream the whole sealed history so it can re-simulate to the
-        // current frontier; live bundles then follow via sealTic's broadcast.
+        // a slot connecting while not-ingame is a drop-in: stream the history
+        // so it can re-simulate to the frontier; live bundles follow
         if (!p.ingame) {
-            // Same reason as spectate: a truncated history desyncs silently.
             if (session.historyFull) {
                 refuse(ws, log, `game: ${COLORS[slot]} refused — session is past the ${MAX_HISTORY_TICS}-tic history cap, catch-up cannot be served`);
                 return;
@@ -431,8 +335,8 @@ export function createGame(log = console.log, servedWads = () => []) {
             const tic = buf.readUInt32LE(0);
             p.sentAny = true;
             p.lastSeen = Date.now();
-            // a joiner's first cmd means it caught up and went live: promote
-            // it a short margin ahead so its cmds are ready by the join tic
+            // a joiner's first cmd means it caught up: promote it a short
+            // margin ahead so its cmds are ready by the join tic
             if (p.joining && !p.ingame && !p.joinAt) {
                 p.joinAt = session.tic + JOIN_MARGIN;
                 log(`game: ${COLORS[slot]} live — dropping in at tic ${p.joinAt}`);
@@ -454,9 +358,8 @@ export function createGame(log = console.log, servedWads = () => []) {
 
     const allJoined = () => session.players.every(p => p.joined || !p.ingame);
 
-    // Seal every tic whose live cmds are all present. Recompute the live set
-    // each pass: sealTic may promote a drop-in mid-loop, and the next tic
-    // must then wait for that new player's cmd rather than fabricating it.
+    // Seal every tic whose live cmds are all present.  The live set is
+    // recomputed each pass: sealTic may promote a drop-in mid-loop.
     function seal() {
         if (!session || !allJoined()) return;
         for (;;) {
@@ -470,8 +373,7 @@ export function createGame(log = console.log, servedWads = () => []) {
     function sealSweep() {
         if (!session) return;
         const now = Date.now();
-        // reclaim a drop-in reservation that never caught up and went live in
-        // the window — a crashed or abandoned joiner must not hold a slot
+        // a reservation that never went live must not hold the slot
         for (const p of session.players)
             if (p.joining && !p.ingame && now - (p.reservedAt || now) > JOIN_TIMEOUT_MS) {
                 p.joining = false;
@@ -479,8 +381,8 @@ export function createGame(log = console.log, servedWads = () => []) {
                 if (p.ws) { p.ws.close(); p.ws = null; }
                 log(`game: ${COLORS[p.slot]} join timed out — slot freed`);
             }
-        // a client that never connected can't block the launch forever
-        if (now - session.launched > 10000)
+        // a client that never connected cannot block the launch forever
+        if (now - session.launched > NEVER_JOINED_MS)
             for (const p of session.players)
                 if (!p.joined && p.ingame) {
                     p.ingame = false;
@@ -490,7 +392,7 @@ export function createGame(log = console.log, servedWads = () => []) {
         const live = session.players.filter(p => p.ingame);
         if (!live.length || !allJoined()) return;
         // no fabrication until the game is rolling — wasm boot times differ
-        if (!live.every(p => p.sentAny) && now - session.launched < 10000) return;
+        if (!live.every(p => p.sentAny) && now - session.launched < NEVER_JOINED_MS) return;
         const laggards = live.filter(p => !p.cmds.has(session.tic));
         if (!laggards.length) return;
         for (const p of laggards) {
@@ -508,14 +410,12 @@ export function createGame(log = console.log, servedWads = () => []) {
     }
 
     // bundle: [u32 tic][u8 ingameMask][u8 fabricatedMask][ticcmd × n].
-    // Fabricated cmds carry no valid consistancy checksum — the flag tells
-    // clients to skip the desync comparison for exactly those, keeping the
-    // detector fully armed for every real cmd.
+    // A fabricated cmd carries no valid consistancy checksum; the flag tells
+    // clients to skip the desync comparison for exactly those.
     function sealTic() {
         const tic = session.tic++;
-        // A drop-in goes live exactly at its scheduled tic — every client
-        // sees the ingame bit flip on the same sealed tic and spawns it in
-        // lockstep (engine's PST_REBORN path).
+        // a drop-in goes live exactly at its scheduled tic, so every client
+        // flips the ingame bit on the same sealed tic and spawns it in lockstep
         for (const p of session.players)
             if (p.joinAt && tic >= p.joinAt) {
                 p.ingame = true;
@@ -535,7 +435,6 @@ export function createGame(log = console.log, servedWads = () => []) {
         });
         buf[4] = mask;
         buf[5] = fab;
-        // for drop-in and spectator catch-up replay, up to the cap
         if (session.history.length < MAX_HISTORY_TICS) session.history.push(buf);
         else if (!session.historyFull) {
             session.historyFull = true;
@@ -543,36 +442,22 @@ export function createGame(log = console.log, servedWads = () => []) {
         }
         for (const p of session.players)
             if (p.ws?.readyState === 1) p.ws.send(buf);
-        // Broadcast sealed bundle to all spectators (same bundle, same tic).
         for (const sw of session.spectators)
             if (sw.readyState === 1) sw.send(buf);
     }
 
     // --- ws mounting ---------------------------------------------------------
-    // maxPayload: lobby messages are small JSON, relay messages are 12
-    // bytes — anything bigger is garbage (default cap is 100MB).
-    // perMessageDeflate off: compressing 12-byte, latency-critical packets
-    // only burns CPU and adds delay; pin it so a ws default flip can't
-    // silently re-enable it.
+    // maxPayload: lobby frames are small JSON, relay frames 12 bytes; the
+    // spectate endpoint has no message handler at all.  perMessageDeflate
+    // off: compressing 12-byte latency-critical packets only adds delay.
     const lobbyWss    = new WebSocketServer({ noServer: true, maxPayload: 1024, perMessageDeflate: false });
     const gameWss     = new WebSocketServer({ noServer: true, maxPayload: 64,   perMessageDeflate: false });
-    // spectateWss: receive-only — maxPayload 64 accepts zero-payload pings only;
-    // no ws.on('message') in spectateConnect so even those are no-ops.
     const spectateWss = new WebSocketServer({ noServer: true, maxPayload: 64,   perMessageDeflate: false });
+    for (const [wss, tag] of [[lobbyWss, 'lobby'], [gameWss, 'game'], [spectateWss, 'spectate']])
+        wss.on('error', err => log(`${tag}Wss error: ${err?.message ?? err}`));
 
-    // Absorb server-level errors (e.g. bad handshake packets) so the process
-    // doesn't exit if a single malformed upgrade sneaks through.
-    lobbyWss.on('error',    err => log(`lobbyWss error: ${err?.message ?? err}`));
-    gameWss.on('error',     err => log(`gameWss error: ${err?.message ?? err}`));
-    spectateWss.on('error', err => log(`spectateWss error: ${err?.message ?? err}`));
-
-    // Connection cap: connCount tracks every open socket across both endpoints.
-    // Managed here (at connection event level) so every accepted socket has
-    // exactly one increment and one decrement — regardless of what the handler
-    // does internally (lobby-full reject, slot-occupied reject, etc.).
-    // The same eight lines stood three times, differing in one word, and the
-    // third copy had lost the comment explaining why the 'error' listener has
-    // to go on before terminate().  One counter, one place.
+    // one connection counter, at the connection event, so every accepted
+    // socket has exactly one increment and one decrement
     const capped = (wss, what, connect) => wss.on('connection', (ws, req) => {
         if (connCount >= MAX_CONNS) {
             refuse(ws, log, `conn cap hit (${connCount}/${MAX_CONNS}): rejecting ${what} connection`);
@@ -582,16 +467,13 @@ export function createGame(log = console.log, servedWads = () => []) {
         ws.on('close', () => connCount--);
         connect(ws, req);
     });
-
     capped(lobbyWss,    'lobby',    ws => lobbyConnect(ws));
     capped(gameWss,     'game',     (ws, req) => relayConnect(ws, req.url));
     capped(spectateWss, 'spectate', ws => spectateConnect(ws));
 
     return {
         upgrade(req, socket, head) {
-            // Guard against malformed upgrade URLs (e.g. raw control bytes that
-            // llhttp lets through but the WHATWG URL ctor rejects). Without the
-            // try/catch, a TypeError here is uncaught and crashes the process.
+            // a URL llhttp accepts and the WHATWG parser rejects must not throw
             let path;
             try { path = new URL(req.url, 'http://x').pathname; }
             catch { socket.destroy(); return; }
@@ -600,9 +482,7 @@ export function createGame(log = console.log, servedWads = () => []) {
                       : path === '/ws/spectate' ? spectateWss
                       : null;
             if (!wss) { socket.destroy(); return; }
-            // Kill Nagle: ticcmds and bundles are tiny and time-critical, so
-            // batching them behind delayed-ACK would add tens of ms of lag.
-            socket.setNoDelay(true);
+            socket.setNoDelay(true);    // no Nagle on tiny, time-critical frames
             wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
         },
     };

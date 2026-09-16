@@ -15,14 +15,7 @@
 
 import { createHash } from 'node:crypto';
 
-// Operator-tunable, same shape as game.js's WEBDOOM_MAX_SPECTATORS: a server
-// owner may legitimately want shorter retention or a smaller footprint, and it
-// is what lets a gate drive real eviction and real expiry instead of asserting
-// the policy by inspection.  Defaults are unchanged.
-const envInt = (name, dflt) => {
-    const v = +(process.env[name] ?? NaN);
-    return Number.isInteger(v) && v > 0 ? v : dflt;
-};
+import { envInt } from './env.js';   // operator-tunable: a gate drives real eviction and expiry
 
 export const PER_DEMO_CAP  = envInt('WEBDOOM_DEMO_CAP', 1_048_576);        // 1 MiB per demo
 export const TOTAL_QUOTA   = envInt('WEBDOOM_DEMO_QUOTA', 134_217_728);    // 128 MiB total

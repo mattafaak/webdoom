@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// webdoom server: static client + engine + WAD library. Single process,
-// single port. The lobby WS and game tic-relay WS mount here next.
+// webdoom server: static client + engine + WAD library, the demo store, and
+// the lobby / tic-relay / spectate WebSockets.  Single process, single port.
 import { createServer } from 'node:http';
 import { createReadStream, readFileSync, statSync } from 'node:fs';
 import { join, normalize, extname } from 'node:path';
@@ -29,47 +29,34 @@ const MOUNTS = [
     ['/',        join(root, 'client')],
 ];
 
-// The manifest, cached against its own mtime.
-//
-// This was `readFileSync(...)` called straight from the request handler. A
-// missing or unreadable wads/manifest.json therefore threw INSIDE a Node
-// 'request' listener -- uncaught, process exit -- so one bad file in the data
-// directory took the game down for everyone on the LAN. That is the exact
-// failure server/ui-assets.js was hardened against in task 23.3 ("One corrupt
-// WAD takes the game down for everyone"); the hardening went into lumpsOf() and
-// stopped one call short of the read beside it.
-//
-// It was also a synchronous disk read on every /api/wads request.
-let manifestCache = null;   // { mtimeMs, body }
+// The manifest, cached against its own mtime, bytes and parsed form both.
+// A missing or malformed wads/manifest.json is declined, never thrown: a
+// throw inside a request listener ends the process for everyone on the LAN.
+const EMPTY = { body: Buffer.from('{"wads":[]}'), parsed: null };
+let manifestCache = null;   // { mtimeMs, body, parsed }
 function manifest() {
     const f = join(root, 'wads/manifest.json');
     try {
         const { mtimeMs } = statSync(f);
-        if (!manifestCache || manifestCache.mtimeMs !== mtimeMs)
-            manifestCache = { mtimeMs, body: readFileSync(f) };
-        return manifestCache.body;
+        if (!manifestCache || manifestCache.mtimeMs !== mtimeMs) {
+            const body = readFileSync(f);
+            let parsed = null;
+            try { parsed = JSON.parse(body); }
+            catch (e) { console.error(`webdoom: wads/manifest.json is not valid JSON (${e.message})`); }
+            manifestCache = { mtimeMs, body, parsed };
+        }
+        return manifestCache;
     } catch (e) {
-        // Decline, do not die. Same shape as ui-assets.js.
         console.error(`webdoom: wads/manifest.json unreadable (${e?.code ?? e?.message}) — serving an empty library`);
-        return Buffer.from('{"wads":[]}');
+        return EMPTY;
     }
 }
 
-// Headers on every response.
-//
-// The server set none of these. For a LAN game the realistic threat is small,
-// but this project treats hostile input as a first-class concern everywhere
-// else -- Phase 23 fuzzed the WAD path, the net path and the lump path -- and
-// the transport layer was the one place that concern was invisible.
-//
-// The CSP is written to fit what the client actually does rather than to be
-// maximal, because a policy that breaks the app is a policy someone removes:
-//   'wasm-unsafe-eval'  the engine is WebAssembly
-//   style-src unsafe-inline   five elements are styled by element.style.cssText
-//   worker-src blob:    AudioWorklet
-//   connect-src ws:     the lobby and tic relay, on a plain-HTTP origin
-// script-src has NO 'unsafe-inline': the one inline handler in the codebase
-// (index.html's reload button) moved into lobby.js for exactly this reason.
+// On every response.  The CSP fits what the client does, not a maximal
+// policy someone would remove: 'wasm-unsafe-eval' for the engine,
+// style-src 'unsafe-inline' for the few element.style writes, worker-src
+// blob: for the AudioWorklet, connect-src ws: for a plain-HTTP origin.
+// script-src has no 'unsafe-inline'.
 const SECURITY_HEADERS = {
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'no-referrer',
@@ -87,20 +74,15 @@ const SECURITY_HEADERS = {
     ].join('; '),
 };
 
+// one guard for every path that could answer a request twice (a body timer
+// racing 'error', 'error' racing 'end'): a second writeHead would throw
 function send(res, code, body, headers = {}) {
-    // Two paths could each call send() for one request: the verify body timer
-    // (408) racing req 'error' (400), and the demo POST's 'error' racing its
-    // 'end'. The second call throws ERR_HTTP_HEADERS_SENT, which -- inside an
-    // event handler -- is an uncaught exception. The timer path wrapped its own
-    // send in try/catch; the error paths did not. One guard for all of them.
     if (res.headersSent || res.writableEnded) return;
     res.writeHead(code, { 'cache-control': 'no-store', ...SECURITY_HEADERS, ...headers });
     res.end(body);
 }
 
-// Optional per-request logging for smoke tests: set LOG_REQUESTS=1 in env.
-// Logs to stderr so stdout (used by some callers for structured output) is unaffected.
-const LOG_REQ = !!process.env.LOG_REQUESTS;
+const LOG_REQ = !!process.env.LOG_REQUESTS;   // per-request log to stderr, for smoke tests
 
 const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
@@ -108,45 +90,25 @@ const server = createServer((req, res) => {
     if (LOG_REQ) process.stderr.write(`${req.method} ${path} ${req.headers['user-agent'] ?? '-'}\n`);
     if (path.includes('..')) return send(res, 400, 'bad path');
 
-    // Operator configuration.  docs/decision-17.2a Decision 5 deferred the
-    // SpessaSynth URL wiring to 17.2b; 17.2b wired the backend picker and the
-    // soundfont bytes but never this, so setGmMode's third parameter had no
-    // caller and the GM path could never activate — it always logged
-    // "no spessaSynthUrl configured" and fell back to OPL (task 25.1).
-    //
-    // Env-supplied, matching DOOM_PORT/DOOM_HOST/WEBDOOM_MAX_CONNS, and empty
-    // by default: SpessaSynth is operator-hosted by decision (never a CDN, not
-    // vendored, not a package.json dependency), so only the operator knows the
-    // URL.  Read-only, no parameters.
+    // operator configuration: SpessaSynth is operator-hosted by decision
+    // (never a CDN, never vendored), so only the operator knows its URL
     if (path === '/api/config')
         return send(res, 200, JSON.stringify({
             spessaSynthUrl: process.env.WEBDOOM_SPESSASYNTH_URL || null,
         }), { 'content-type': 'application/json' });
 
     if (path === '/api/wads')
-        return send(res, 200, manifest(), { 'content-type': 'application/json' });
+        return send(res, 200, manifest().body, { 'content-type': 'application/json' });
 
-
-    // ── demo store API ────────────────────────────────────────────────────────
-    //
-    // POST /api/demos
-    //   Body: raw .lmp bytes (application/octet-stream), max PER_DEMO_CAP.
-    //   Query: ?wad=<wadfilename> (optional; stored alongside, returned on GET)
-    //   Returns 201 {"id":"<sha256>","size":<bytes>}
-    //   Returns 413 if body > PER_DEMO_CAP; 400 on read error.
-    //
-    // GET /api/demos/<id>
-    //   id must be 64 lowercase hex chars (sha256); anything else → 400.
-    //   Returns 200 with x-demo-wad header and raw .lmp body.
-    //   Returns 404 if not found or TTL expired.
-    //
+    // ── demo store ────────────────────────────────────────────────────────────
+    // POST /api/demos?wad=<file>   raw .lmp body up to PER_DEMO_CAP → 201 {id, size}
+    // GET  /api/demos/<sha256>     raw .lmp, x-demo-wad header; 404 if expired
+    // GET  /api/demos/stats        counts and bytes only, never ids or content
     if (path === '/api/demos' && req.method === 'POST') {
         const wad = url.searchParams.get('wad') ?? '';
         const chunks = [];
         let size = 0;
-        // Drain full request body even if oversized: draining avoids RST and
-        // allows a clean 413 response on 'end'.  We stop accumulating chunks
-        // once the cap is exceeded but continue reading to drain the socket.
+        // drain an oversized body so the 413 goes out cleanly, without a RST
         req.on('data', chunk => {
             size += chunk.length;
             if (size <= PER_DEMO_CAP) chunks.push(chunk);
@@ -164,26 +126,10 @@ const server = createServer((req, res) => {
         });
         return;
     }
-
-    // GET /api/demos/stats — what the store is actually holding.
-    //
-    // storeStats() was exported and labelled "for tests" and had no caller
-    // anywhere: not in server/, not in client/, not in tools/.  So the one
-    // instrument built to show the store's footprint was not reachable, and the
-    // attestation leak (task A3) grew with nothing able to observe it.  A store
-    // with no readout is a store nobody can prove is bounded.  (The attestation
-    // store itself is gone -- it was a CLI verification workflow wired into the
-    // live multiplayer server with no product caller -- but the demo store it
-    // sat beside is still here, and still needs the readout.)
-    //
-    // Counts and byte totals only — no ids, no content, nothing that would let
-    // an unauthenticated LAN caller enumerate what other people have uploaded.
     if (path === '/api/demos/stats') {
         if (req.method !== 'GET') return send(res, 405, 'method not allowed');
-        return send(res, 200, JSON.stringify(storeStats()),
-                    { 'content-type': 'application/json' });
+        return send(res, 200, JSON.stringify(storeStats()), { 'content-type': 'application/json' });
     }
-
     const demoMatch = path.match(/^\/api\/demos\/([0-9a-f]{64})$/);
     if (demoMatch) {
         if (req.method !== 'GET') return send(res, 405, 'method not allowed');
@@ -198,31 +144,11 @@ const server = createServer((req, res) => {
         res.end(rec.bytes);
         return;
     }
-    // Bad id format (non-hex or wrong length) → 400 (path traversal guard)
     if (path.startsWith('/api/demos/')) return send(res, 400, 'invalid demo id');
 
     if (path === '/api/ui-assets') {
-        // no-store: a stale hour-long cache kept serving the old logo
-        //
-        // JSON.parse(manifest()) was unguarded, and manifest() returns bytes
-        // without parsing them -- so a wads/manifest.json that is present but
-        // not valid JSON threw here, inside a 'request' listener, and ENDED THE
-        // PROCESS. Measured against the shipped server: the request returns
-        // nothing, and so does the next one, because there is no longer a
-        // server. One malformed file in the data directory took the game down
-        // for everyone on the LAN, which is the failure ui-assets.js itself was
-        // hardened against in task 23.3 -- the hardening went into lumpsOf()
-        // and stopped one call short of its own caller.
-        //
-        // The uncaughtException handler at the bottom would now catch this, but
-        // a backstop is not a guard: it cannot answer the request, and the
-        // operator would see a stack trace instead of the reason.
-        let parsed;
-        try { parsed = JSON.parse(manifest()); }
-        catch (e) {
-            console.error(`webdoom: wads/manifest.json is not valid JSON (${e.message}) — /api/ui-assets declines`);
-            return send(res, 503, 'wads/manifest.json is unreadable or not valid JSON — run tools/fetch-wads.sh');
-        }
+        const { parsed } = manifest();
+        if (!parsed) return send(res, 503, 'wads/manifest.json is unreadable or not valid JSON — run tools/fetch-wads.sh');
         const assets = uiAssets(join(root, 'wads/lib'), parsed);
         return assets
             ? send(res, 200, assets, { 'content-type': 'application/json' })
@@ -237,20 +163,15 @@ const server = createServer((req, res) => {
         try { st = statSync(file); } catch { continue; }
         if (!st.isFile()) continue;
 
-        // WADs are immutable by content; the client caches by manifest hash.
-        const headers = {
+        // WADs are immutable by content; the client caches by manifest hash
+        res.writeHead(200, {
             ...SECURITY_HEADERS,
             'content-type': MIME[extname(file)] ?? 'application/octet-stream',
             'content-length': st.size,
             'cache-control': prefix === '/wads/' ? 'public, max-age=31536000, immutable' : 'no-store',
-        };
-        res.writeHead(200, headers);
-        // statSync above and the open below are not atomic: a file deleted or
-        // truncated in between emits 'error' on the stream, and an unhandled
-        // stream 'error' is an uncaught exception -- process exit, for one
-        // vanished file. Headers are already sent here, so the only honest
-        // recovery is to destroy the response and let the client see a truncated
-        // body rather than a dead server.
+        });
+        // a file that vanishes between stat and open errors the stream;
+        // headers are out, so the honest recovery is a truncated body
         const stream = createReadStream(file);
         stream.on('error', err => {
             console.error(`webdoom: read failed for ${file} — ${err?.code ?? err?.message}`);
@@ -262,30 +183,15 @@ const server = createServer((req, res) => {
     send(res, 404, 'not found');
 });
 
-// The lobby's `wad` param is cast to every client in the `launch` frame, so the
-// server has to know what it serves.  Read per call, not once: manifest() is
-// already mtime-keyed, so an operator adding a WAD needs no restart here either.
-const servedWads = () => {
-    try { return (JSON.parse(manifest()).wads ?? []).map(w => w.file).filter(Boolean); }
-    catch (e) {
-        console.error(`webdoom: wads/manifest.json unreadable (${e?.message ?? e}) — the lobby will refuse every wad change`);
-        return [];
-    }
-};
+// the lobby's `wad` is cast to every client, so the server names what it
+// serves; read per call, so an added WAD needs no restart
+const servedWads = () => (manifest().parsed?.wads ?? []).map(w => w.file).filter(Boolean);
 const game = createGame(console.log, servedWads);
 server.on('upgrade', (req, socket, head) => game.upgrade(req, socket, head));
 
-// LAST RESORT, not a substitute for the guards above.
-//
-// There was no uncaughtException or unhandledRejection handler anywhere in
-// server/, so any throw reaching the top of a request listener ended the
-// process -- and with it everyone's game. The specific paths that could do it
-// are fixed above; this is here because the next one has not been found yet,
-// and a DOOM night should not end because of it.
-//
-// It deliberately does NOT swallow silently: the error is printed in full, and
-// a fatal one during startup still exits, because a server that cannot bind or
-// cannot read its own tree should fail loudly rather than limp.
+// Last resort, not a substitute for the guards above: a throw that reaches
+// the top of a listener is printed in full and the server survives, except
+// before listen, where a server that cannot start should say so and exit.
 let started = false;
 const survive = (kind) => (err) => {
     console.error(`webdoom: ${kind} — the request that caused this is lost, the server is not:`);
@@ -298,12 +204,8 @@ const survive = (kind) => (err) => {
 process.on('uncaughtException', survive('uncaught exception'));
 process.on('unhandledRejection', survive('unhandled rejection'));
 
-// Without this, a listen failure is an unhandled 'error' event: the process dies
-// with a stack trace, and any harness that spawned it and then slept for a fixed
-// interval carries on talking to WHATEVER ELSE holds that port — a stale server
-// from an earlier run, serving a different build.  That is the 12.2b failure
-// ("port 8666 once served an uninstrumented client to the collector") and the
-// orphaned-server hangs on the 867x range.  Fail loudly and name the port.
+// a listen failure names the port: a harness that sleeps and then talks to
+// whatever else holds it would be testing a stale server
 server.on('error', err => {
     if (err && err.code === 'EADDRINUSE') {
         console.error(`webdoom: port ${PORT} is already in use on ${HOST} — refusing to start.`);
@@ -317,8 +219,7 @@ server.on('error', err => {
 
 server.listen(PORT, HOST, async () => {
     started = true;
-    // one lobby, any route in: LAN and tailnet clients land in the same
-    // game because everything relays through this server
+    // one lobby, any route in: LAN and tailnet clients land in the same game
     const { networkInterfaces } = await import('node:os');
     const urls = [];
     for (const addrs of Object.values(networkInterfaces()))
