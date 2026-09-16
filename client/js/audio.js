@@ -48,7 +48,7 @@ import { musToMidi } from './mus2mid.js';
 // module had its own, and it was the only one of the six that both looked the
 // element up per call AND null-checked it -- which is why it is the shape the
 // shared one took.
-import { setStatus } from './ui.js';
+import { setStatus, serverConfig } from './ui.js';
 
 const TARGET_BACKLOG = 0.25;    // seconds of music buffered ahead
 const PUMP_MS = 100;
@@ -160,7 +160,7 @@ export function createAudio(doom) {
     // Always null in test/CI; real playback requires operator to host the lib.
     let gmSpessaSynthUrl = null;
     // Fetched at most once per page: a missing endpoint must not retry per arm().
-    let gmConfigFetched = false;
+
     // gmSynth: SpessaSynth Synthetizer instance (null until loaded).
     let gmSynth = null;
     // gmMidiQueue: MIDI byte arrays queued before synth is ready to receive events.
@@ -245,30 +245,11 @@ export function createAudio(doom) {
             }
         }
 
-        // The GM sync-SKIP path used to set an 'OPL fallback' status, and this
-        // flag stopped buildOplSink overwriting it with 'compatibility mode'.
-        // That status is gone (the OPTIONS row carries the reason now), so
-        // there is nothing to protect -- and leaving the flag set would have
-        // SUPPRESSED the compatibility-mode notice on an insecure origin,
-        // which is the one message spec.md's insecure-origin clause is about.
-        // Kept as a named constant rather than deleted at the call site so the
-        // reason is visible where the argument is passed.
-        const gmSyncSkip = false;
-
         if (gmEnabled) {
-            // Ask the server once for the operator's SpessaSynth URL.  Nothing
-            // ever passed setGmMode's third parameter — decision-17.2a's
-            // Decision 5 deferred that wiring to 17.2b, and 17.2b wired the
-            // backend picker and the soundfont bytes but not this — so the GM
-            // path could never activate and always logged "no spessaSynthUrl
-            // configured" (task 25.1).  Doing it here rather than at the three
-            // call sites means all of them benefit without a signature change.
-            if (!gmSpessaSynthUrl && !gmConfigFetched) {
-                gmConfigFetched = true;
-                try {
-                    const cfg = await (await fetch('/api/config')).json();
-                    if (cfg?.spessaSynthUrl) gmSpessaSynthUrl = String(cfg.spessaSynthUrl);
-                } catch { /* no config endpoint: stays null, OPL fallback below */ }
+            // the operator's SpessaSynth URL comes from the server, once
+            if (!gmSpessaSynthUrl) {
+                const cfg = await serverConfig();
+                if (cfg?.spessaSynthUrl) gmSpessaSynthUrl = String(cfg.spessaSynthUrl);
             }
             if (gmSpessaSynthUrl && gmSf2Bytes?.byteLength > 0) {
                 // GM path: URL + sf2 both present — attempt lazy-load of SpessaSynth.
@@ -339,9 +320,9 @@ export function createAudio(doom) {
         }
 
         if (!sink) {
-            // OPL path (default) — also taken when GM sync-SKIP or GM try-block fails.
-            await buildOplSink(gmSyncSkip);
-            if (!sink) return;   // fatal: buildOplSink already set 'music unavailable' status
+            // OPL, the default -- and the fallback when GM could not be built
+            await buildOplSink();
+            if (!sink) return;   // buildOplSink already reported 'music unavailable'
         }
 
         pumpTimer = setInterval(pump, PUMP_MS);

@@ -80,7 +80,7 @@ function _sha256pure(data) {
 // Returns a hex SHA-256 string for a Uint8Array.
 // Uses crypto.subtle on secure contexts (HTTPS/localhost); pure-JS fallback
 // on insecure origins where crypto.subtle is undefined.
-export async function sha256hex(bytes) {
+async function sha256hex(bytes) {
     if (typeof crypto !== 'undefined' && crypto.subtle) {
         const buf = await crypto.subtle.digest('SHA-256', bytes);
         return Array.from(new Uint8Array(buf))

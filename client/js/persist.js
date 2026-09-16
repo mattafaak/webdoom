@@ -39,7 +39,7 @@ export async function loadPersisted(iwad) {
 
 // Flush fileMap → IDB directly, no wasm calls — safe even when the engine
 // has died (onQuit / onDoomError path).
-export async function flushDirect(doom, iwad) {
+async function flushDirect(doom, iwad) {
     const m = doom['fileMap'];
     if (!m) return;
     let d = null;

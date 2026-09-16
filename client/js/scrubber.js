@@ -33,14 +33,14 @@
 //
 // Ownership: JS only — no engine writes, determinism safe.
 
-export const BTN_FIRE   = 0x01;
-export const BTN_USE    = 0x02;
-export const BTN_SPEED  = 0x08;
+const BTN_FIRE   = 0x01;
+const BTN_USE    = 0x02;
+const BTN_SPEED  = 0x08;
 
 // parseDemoTimeline: extract per-tic input data from raw .lmp bytes.
 // Returns an array of { forward, side, angle, buttons } objects (one per tic).
 // header is 13 bytes; each tic is 4 bytes; last byte is DEMOMARKER (0x80).
-export function parseDemoTimeline(demoBytes) {
+function parseDemoTimeline(demoBytes) {
     const HEADER = 13;
     const MARKER = 0x80;
     const ticks = [];

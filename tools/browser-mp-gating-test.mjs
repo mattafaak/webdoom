@@ -7,7 +7,7 @@
 //   (3) Red-proof: with filter temporarily disabled, local WAD IS visible in MP
 //       picker — verifying the filter is load-bearing, not accidental.
 //
-// Requires window.__testInjectManifest (test hook exposed by lobby.js).
+// Requires window.__wd.injectManifest (test hook exposed by lobby.js).
 //
 // RED-PROOF (documented):
 //   Without the serverGames() filter (i.e. using sortedGames() in gamePick()),
@@ -155,9 +155,9 @@ const tab = await openTab(BASE_URL);
 await waitForMenu(tab, 'tab');
 
 // Verify that the test hook is available (lobby.js must expose it).
-const hasHook = await tab.ev(`typeof window.__testInjectManifest === 'function'`);
+const hasHook = await tab.ev(`typeof window.__wd.injectManifest === 'function'`);
 if (!hasHook) {
-    console.error('FAIL: window.__testInjectManifest not found — lobby.js test hook missing');
+    console.error('FAIL: window.__wd.injectManifest not found — lobby.js test hook missing');
     cleanup(1);
 }
 
@@ -175,7 +175,7 @@ const LOCAL_WAD = {
     base: 'doom2.wad',
     maps: ['MAP01'],
 };
-await tab.ev(`window.__testInjectManifest(${JSON.stringify(LOCAL_WAD)})`);
+await tab.ev(`window.__wd.injectManifest(${JSON.stringify(LOCAL_WAD)})`);
 console.log('Injected local WAD: localmod.wad (local:true)');
 
 // ── Test 1: SP picker includes local WAD ─────────────────────────────────────
@@ -261,14 +261,14 @@ await sleep(400);
 // then verify LOCAL-MOD-TEST DOES appear (RED state). Restore → absent (GREEN).
 console.log('\n[3] Red-proof: disable filter → local WAD appears in MP picker...');
 
-const hasFilterHook = await tab.ev(`typeof window.__testSetServerGamesFilter === 'function'`);
+const hasFilterHook = await tab.ev(`typeof window.__wd.setServerGamesFilter === 'function'`);
 if (!hasFilterHook) {
-    console.error('FAIL: window.__testSetServerGamesFilter not found — lobby.js filter hook missing');
+    console.error('FAIL: window.__wd.setServerGamesFilter not found — lobby.js filter hook missing');
     cleanup(1);
 }
 
 // Disable filter (bypass local exclusion)
-await tab.ev(`window.__testSetServerGamesFilter(false)`);
+await tab.ev(`window.__wd.setServerGamesFilter(false)`);
 
 // Re-enter MP lobby
 inLobby = false;
@@ -314,7 +314,7 @@ await sleep(200);
 await pressEsc(tab);
 await sleep(400);
 
-await tab.ev(`window.__testSetServerGamesFilter(true)`);
+await tab.ev(`window.__wd.setServerGamesFilter(true)`);
 
 // Re-verify: filter restored → local WAD absent again
 inLobby = false;

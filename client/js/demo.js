@@ -27,7 +27,7 @@
 
 import { setStatus } from './ui.js';
 
-export const FRAGMENT_MAX = 6_000;   // raw bytes; mirror of server value
+const FRAGMENT_MAX = 6_000;   // raw bytes; server/demo-store.js carries the same value (wire-constants)
 
 // ── Recording ─────────────────────────────────────────────────────────────────
 

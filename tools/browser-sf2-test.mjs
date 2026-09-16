@@ -17,8 +17,8 @@
 //
 // RED-PROOF:
 //   On master (17.2b absent):
-//     [1] window.__sf2Library is undefined → immediate FAIL
-//     [2] window.__handleSf2Import is undefined → FAIL
+//     [1] window.__wd?.sf2Library is undefined → immediate FAIL
+//     [2] window.__wd.handleSf2Import is undefined → FAIL
 //     [3] IDB 'webdoom-sf2' absent → FAIL
 //     [4] musicBackend key absent in defaultSettings → GM option absent in picker
 //     [5] without fix, GM sink arms (gm-main, silence) → sinkKind === 'gm-main' → FAIL (expected worklet/buffer)
@@ -176,8 +176,8 @@ console.log('[1] Malformed-corpus SF2 rejection tests...');
 
 const corpusResult = await tab.ev(`
     (async () => {
-        if (!window.__sf2Library) return JSON.stringify({ fatal: 'sf2-library module not available' });
-        const { validateSf2, Sf2Error } = window.__sf2Library;
+        if (!window.__wd?.sf2Library) return JSON.stringify({ fatal: 'sf2-library module not available' });
+        const { validateSf2, Sf2Error } = window.__wd?.sf2Library;
         const cases = [
             { desc: 'zero-byte file',            bytes: new Uint8Array(0) },
             { desc: 'truncated header (<12B)',    bytes: new Uint8Array(8) },
@@ -246,8 +246,8 @@ console.log('  ok  malformed corpus: all 5 inputs rejected cleanly');
 // ── [2] SF2 drag-drop → IDB ───────────────────────────────────────────────────
 console.log('[2] SF2 drag-drop via DataTransfer...');
 
-if (!await tab.ev(`typeof window.__handleSf2Import === 'function'`)) {
-    console.error('FAIL: window.__handleSf2Import not available (feature not implemented)');
+if (!await tab.ev(`typeof window.__wd.handleSf2Import === 'function'`)) {
+    console.error('FAIL: window.__wd.handleSf2Import not available (feature not implemented)');
     cleanup(1);
 }
 

@@ -109,7 +109,6 @@ export function createFire(container) {
             flare:   () => {},
             pause:   () => {},
             resume:  () => {},
-            destroy: () => { canvas.remove(); },
             _lastMs: () => 0,
         };
     }
@@ -223,12 +222,6 @@ export function createFire(container) {
         _startInterval();
     }
 
-    function destroy() {
-        pause();
-        clearTimeout(flareTimer);
-        canvas.remove();
-    }
-
     // Single-tick cost (subject to performance.now() precision floor ~0.1ms).
     function _lastMs() { return lastTickMs; }
 
@@ -243,5 +236,5 @@ export function createFire(container) {
     // Expose on window for browser test access.
     window._fireBg = { flare, pause, resume, _lastMs, _benchMs };
 
-    return { flare, pause, resume, destroy, _lastMs, _benchMs };
+    return { flare, pause, resume, _lastMs, _benchMs };
 }

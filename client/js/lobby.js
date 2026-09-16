@@ -5,9 +5,10 @@
 //                   one-screen pickers. Doing nothing = you're
 //                   Green/Indigo/… and ready to go.
 import { bootDoom } from './main.js';
-import { connectLobby, launchArgs, attachSpectate } from './net.js';
+import { connectLobby, launchArgs } from './net.js';
 import { loadDoomFont } from './doomfont.js';
-import { setStatus, loading } from './ui.js';
+import { setStatus, loading, serverConfig } from './ui.js';
+
 import { createMenu } from './menu.js';
 import { createCountdown } from './countdown.js';
 import { createFire } from './fire.js';
@@ -42,6 +43,7 @@ let ipSlot = -1;               // chosen drop-in color/slot
 let ipName = '';               // chosen drop-in name (optional)
 let booted = false;
 
+const MAXWEBFILES = 40;     // the engine's file registry cap; mirrored in engine/web/files.c
 const entry = file => manifest.find(w => w.file === file);
 const isCommercial = e => e?.maps?.[0]?.startsWith('MAP');
 
@@ -73,16 +75,12 @@ const sortedGames = () => manifest.filter(w => !w.patch && !w.group)
     });
 const groups = () => [...new Set(manifest.filter(w => w.group).map(w => w.group))];
 
-// MP gating: local WADs (imported by the user, local:true) are SP-only.
-// The server never knows about local shas, so they must not appear in the
-// MP game picker — a client that selects one would send a sha the other
-// players cannot fetch.  serverGames() is the canonical list for all MP paths.
-// _serverGamesFilter is togglable via window.__testSetServerGamesFilter for
-// browser tests that need to red-prove the filter is load-bearing.
-let _serverGamesFilter = true;
-const serverGames = () => _serverGamesFilter
-    ? sortedGames().filter(w => !w.local)
-    : sortedGames();
+// Multiplayer offers only what the server can serve: a user-imported WAD
+// (local:true) has a sha the other players cannot fetch.  The flag exists for
+// the browser test that red-proves this filter.
+let serverGamesFilter = true;
+const serverGames = () => serverGamesFilter ? sortedGames().filter(w => !w.local) : sortedGames();
+
 
 // --- screens -----------------------------------------------------------------
 
@@ -121,10 +119,7 @@ const S = () => (settings ??= loadSettings());
 let gmState = null;
 async function loadGmState() {
     if (gmState) return;
-    const [meta, cfg] = await Promise.all([
-        sf2GetCurrentMeta().catch(() => null),
-        fetch('/api/config').then(r => r.ok ? r.json() : null).catch(() => null),
-    ]);
+    const [meta, cfg] = await Promise.all([sf2GetCurrentMeta().catch(() => null), serverConfig()]);
     gmState = { sf2: !!meta, url: !!cfg?.spessaSynthUrl };
     if (menu.current()?.id === 'options') menu.refresh(optionsScreen());
 }
@@ -246,10 +241,8 @@ function controlsScreen() {
 // Reads file.arrayBuffer(), identifies the WAD, stores in local library,
 // and adds the entry to the in-memory manifest.
 async function handleWadImport(file) {
-    // MAXWEBFILES=40: engine only accepts 40 files per boot;
-    // cap the local library to prevent pathological stacks.
-    if (manifest.length >= 40) {
-        status('WAD library full (max 40 files)');
+    if (manifest.length >= MAXWEBFILES) {
+        status(`WAD library full (max ${MAXWEBFILES} files)`);
         return;
     }
     try {
@@ -726,12 +719,8 @@ function leaveLobby() { resetToLauncher(); }
         loading.show('READING THE WAD LIBRARY…');
         manifest = (await (await fetch('/api/wads')).json()).wads;
 
-        // Merge local-library entries into the manifest.
-        // Entries already on the server (same sha256) are skipped.
-        // Capped at MAXWEBFILES=40 total (16.6b review: import-time enforcement
-        // alone let server-manifest + local entries exceed the engine limit at
-        // boot). Overflow entries are skipped loudly, never silently dropped.
-        const MAXWEBFILES = 40;
+        // merge the local library in, capped at the engine's registry size;
+        // overflow is skipped loudly, never silently dropped
         const serverShas = new Set(manifest.map(e => e.sha256));
         const localEntries = await libraryList().catch(() => []);
         for (const e of localEntries) {
@@ -807,19 +796,16 @@ function leaveLobby() { resetToLauncher(); }
         else handleWadImport(f);
     });
 
-    // Expose for test injection and external tooling.
-    window.__handleWadImport = handleWadImport;
-    window.__handleSf2Import = handleSf2Import;
-    window.__wadImport = { identifyWad, WadError };
-    window.__sf2Library = { validateSf2, Sf2Error };
-
-    // Test hooks (browser test use only):
-    //   __testInjectManifest(entry) — push a fake manifest entry (bypasses IDB)
-    //   __testSetServerGamesFilter(bool) — toggle the local-WAD filter in serverGames()
-    //     false = disable (red-proof: local WADs appear in MP picker)
-    //     true  = restore (green state: local WADs absent from MP picker)
-    window.__testInjectManifest = entry => manifest.push(entry);
-    window.__testSetServerGamesFilter = enabled => { _serverGamesFilter = enabled; };
+    // The one test seam (browser-wadimport, browser-sf2, browser-mp-gating).
+    // setServerGamesFilter(false) is the red-proof that the MP filter is
+    // load-bearing; injectManifest bypasses IDB.
+    window.__wd = {
+        handleWadImport, handleSf2Import,
+        wadImport: { identifyWad, WadError },
+        sf2Library: { validateSf2, Sf2Error },
+        injectManifest: entry => manifest.push(entry),
+        setServerGamesFilter: enabled => { serverGamesFilter = enabled; },
+    };
 
     // PSX DOOM fire background. Inserted into #stage so it sits behind
     // the menu and is invisible during gameplay (paused while game runs).

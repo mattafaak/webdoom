@@ -11,9 +11,9 @@
 //   (4) Reload survival — page reload → local entry still present (IDB).
 //
 // RED-PROOF (documented):
-//   On master (feature absent), window.__wadImport is undefined → check [1]
+//   On master (feature absent), window.__wd?.wadImport is undefined → check [1]
 //   fails with "FAIL: wad-import module not available".  The import-flow checks
-//   [2-4] also fail because window.__handleWadImport does not exist.
+//   [2-4] also fail because window.__wd.handleWadImport does not exist.
 //   Run: node tools/browser-wadimport-test.mjs -- will exit 1 on master.
 //
 // Chrome flags: --disable-gpu (NOT --use-angle=swiftshader, which crashes in
@@ -181,9 +181,9 @@ console.log('[1] Malformed-corpus rejection tests...');
 
 const corpusResult = await tab.ev(`
     (async () => {
-        // RED-PROOF: on master window.__wadImport is undefined → TypeError here.
-        if (!window.__wadImport) return JSON.stringify({ fatal: 'wad-import module not available' });
-        const { identifyWad, WadError } = window.__wadImport;
+        // RED-PROOF: on master window.__wd?.wadImport is undefined → TypeError here.
+        if (!window.__wd?.wadImport) return JSON.stringify({ fatal: 'wad-import module not available' });
+        const { identifyWad, WadError } = window.__wd?.wadImport;
         const results = [];
         const cases = [
             { desc: 'zero-byte file',           bytes: new Uint8Array(0),    name: 'test.wad' },
@@ -284,10 +284,10 @@ console.log('[2] Import flow: synthetic PWAD via DataTransfer drop...');
 
 const pwadBytes = Array.from(makeSyntheticPWAD());  // array of numbers for JSON serialization
 
-// RED-PROOF check: on master window.__handleWadImport is undefined (feature absent).
-const hasImportFn = await tab.ev(`typeof window.__handleWadImport === 'function'`);
+// RED-PROOF check: on master window.__wd.handleWadImport is undefined (feature absent).
+const hasImportFn = await tab.ev(`typeof window.__wd.handleWadImport === 'function'`);
 if (!hasImportFn) {
-    console.error('FAIL: window.__handleWadImport not available (feature not implemented)');
+    console.error('FAIL: window.__wd.handleWadImport not available (feature not implemented)');
     cleanup(1);
 }
 

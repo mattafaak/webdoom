@@ -67,7 +67,17 @@ export const loading = {
     hide() { const e = this._el('loading'); if (e) e.hidden = true; },
 };
 
+// The server's /api/config, fetched once and shared (the OPTIONS screen and
+// the audio path both need spessaSynthUrl).  null when the request fails.
+let configPromise = null;
+export function serverConfig() {
+    return configPromise ??= fetch('/api/config')
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null);
+}
+
 // A ledger of "how to undo this", returned as { on, off }.
+
 //   on(target, event, fn, opts)  adds the listener and records its removal
 //   off()                        runs every recorded removal, once
 export function teardownLedger() {
