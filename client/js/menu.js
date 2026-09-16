@@ -1,16 +1,10 @@
-// Drill-down menu in the DOOM idiom: one short list per screen, skull
-// cursor, Enter descends, Escape/Backspace ascends. Arrow keys, mouse
-// hover/click, inline text entry for names, and key capture for rebinds.
-// Screens are plain data:
-//   { title?: string|{patch}, header?: [{text, color}] roster line, nowrap?,
-//     items: [{ label, color?, action?, entry?, capture? }], onBack? }
-// opts.onTransition(type): optional callback fired on every real screen change.
-//   type: 'push' (descending), 'back' (popping/unwinding), 'reset' (full replace).
-//   Called AFTER the stack is mutated, BEFORE render(). Cursor-within-screen
-//   events (ArrowUp/Down, refresh) do NOT trigger this — only actual screen
-//   changes do, so it is safe to call fire.flare() here without over-triggering.
-//   fire.flare() while paused (in-game) is harmless: sim is stopped, and
-//   pause() clears any pending timers if a flare was in flight.
+// Drill-down menu in the DOOM idiom: one short list per screen, skull cursor,
+// Enter descends, Escape/Backspace ascends; arrows, mouse hover/click, inline
+// text entry for names, key capture for rebinds.  Screens are plain data:
+//   { id?, title?, header?: [{text, color}], nowrap?, onBack?,
+//     items: [{ label, value?, maxValue?, color?, thumb?, action?, cycle?, entry?, capture? }] }
+// opts.onTransition(type): 'push' | 'back' | 'reset', fired after the stack
+// changes and before render -- cursor moves and refreshes do not fire it.
 export function createMenu(font, host, opts = {}) {
     const { onTransition } = opts;
     const root = document.createElement('div');
@@ -30,12 +24,8 @@ export function createMenu(font, host, opts = {}) {
     // the skull. Skull ×3 ≈ 57px; body text ×5 ≈ 45px sits just under it.
     const skulls = [font.patch('M_SKULL1', 3), font.patch('M_SKULL2', 3)];
     const logo = font.patch('M_DOOM', 3);
-    // The skull blink is a querySelector over the launcher's DOM every 250 ms.
-    // It used to be armed once, with the handle discarded, so it kept running
-    // for the life of the page -- including through every frame of gameplay,
-    // where the launcher is hidden and there is no skull to flip.  It follows
-    // visibility now; browser-teardown-test.mjs reads the live timers DURING
-    // play and fails on any the launcher owns.
+    // the blink follows visibility: browser-teardown fails on a launcher
+    // timer that is live during play
     let blink = null;
     const startBlink = () => {
         if (blink !== null) return;
@@ -132,10 +122,7 @@ export function createMenu(font, host, opts = {}) {
             root.appendChild(h);
         }
 
-        // role="menuitem" was set on every row and there was no role="menu" to
-        // contain them, which is an orphaned role: a menuitem outside a menu
-        // means nothing.  The list is the menu, and it is labelled by the
-        // screen's own title where there is one.
+        // the list is the menu (role=menu), labelled by the screen's title
         const list = Object.assign(document.createElement('div'), { className: 'items' });
         list.setAttribute('role', 'menu');
         if (s.title) list.setAttribute('aria-label', String(s.title));
@@ -168,10 +155,8 @@ export function createMenu(font, host, opts = {}) {
             // anywhere the whole launcher was unreachable by Tab.
             row.tabIndex = i === sel ? 0 : -1;
             if (i === sel) row.setAttribute('aria-current', 'true');
-            // '.art' was added here and never styled or queried; the thumb
-            // itself is the affordance.  ('.sel' below has no CSS rule either
-            // and STAYS -- menu.js queries '.row.sel .skull' and the teardown
-            // gate counts '.row.sel'; it is a hook, not decoration.)
+            // '.sel' has no CSS rule and stays: the blink queries it and the
+            // teardown gate counts it
             if (item.thumb) row.appendChild(item.thumb);
             row.appendChild(font.text(label, { scale: item.thumb ? 3 : scale, color: item.color ?? null }));
             row.onmouseenter = () => { if (!entry && !capture && sel !== i) { sel = i; render(); } };
@@ -220,16 +205,11 @@ export function createMenu(font, host, opts = {}) {
         item.action?.();
     }
 
-    // Rebind capture.  Two things make this more than a call to captureBind():
-    //
-    //   1. Enter is still DOWN.  activate() runs on the Enter *keydown*, so a
-    //      capture armed synchronously sees that same press and binds the
-    //      action to Enter -- the same shape as the old "Escape became the
-    //      binding" bug.  Arm on the following keyup instead.
-    //   2. This menu owns a bubble-phase keydown listener on window.  The
-    //      capture listener is capture-phase and calls stopPropagation, so
-    //      while it is armed the arrow keys do not move the skull and Escape
-    //      does not pop the screen.
+    // Two things make this more than a call to captureBind(): Enter is still
+    // DOWN when activate() runs, so a capture armed now would bind Enter --
+    // arm on the following keyup; and the capture listener is capture-phase
+    // with stopPropagation, so the arrows and Escape do not reach this menu
+    // while it is armed.
     function armCapture(item, viaKeydown) {
         if (capture) return;
         const arm = () => {
@@ -274,10 +254,7 @@ export function createMenu(font, host, opts = {}) {
             return;
         }
         const n = screen().items.length;
-        // A screen with no items: (sel + n - 1) % n is NaN, sel becomes NaN,
-        // and every later render reads items[NaN].  Escape and Backspace still
-        // have to work -- an empty picker you cannot leave is the worse bug --
-        // so they are handled before the guard.
+        // an empty screen: no cursor arithmetic (NaN), but Escape must still leave
         if (n === 0) {
             if (e.code === 'Escape' || e.code === 'Backspace') { e.preventDefault(); back(); }
             return;

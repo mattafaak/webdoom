@@ -89,18 +89,8 @@ export function createRenderer(canvas) {
     return {
         kind: 'webgl2',
 
-        // Task 23.7b: createRenderer runs per boot and getContext returns the
-        // SAME context for the same canvas, so each boot leaked a program, two
-        // shaders, a VBO and two textures with nothing ever deleting them.
-        //
-        // This body lived in createRenderer2D until this commit, where every
-        // name in it -- gl, prog, quad, _textures -- was a local of THIS
-        // function.  So the WebGL2 path, which is the one every real browser
-        // takes, had no dispose at all: main.js's `h?.dispose?.()` found no
-        // method and silently did nothing, while the canvas2d path threw
-        // ReferenceError into its own catch.  The fix shipped and never ran,
-        // and browser-teardown-test.mjs named these objects in its header while
-        // measuring only DOM nodes.  It counts them now.
+        // per boot: the same canvas returns the same GL context, so what this
+        // boot created must be deleted here (browser-teardown counts them)
         dispose() {
             try {
                 gl.deleteProgram(prog);
@@ -143,11 +133,8 @@ function createRenderer2D(canvas) {
 
 
     return {
-        // Task 23.7b: this path allocates no GL objects -- its per-boot cost is
-        // the ImageData and the palette LUT, both plain JS, collected once this
-        // object is dropped.  Kept as an explicit no-op so both renderers have
-        // the same shape and an ABSENT dispose can never again read to
-        // main.js's `h?.dispose?.()` as "nothing needed freeing".
+        // no GL objects on this path; kept so both renderers have the same
+        // shape and a missing dispose can never read as "nothing to free"
         dispose() {
             img  = null;
             rgba = null;

@@ -18,9 +18,7 @@ export function connectLobby(baseUrl, WS = WebSocket) {
     const api = {
         slot: -1, color: null,
         on(t, fn) { handlers.set(t, fn); return api; },
-        // ws.send throws InvalidStateError before OPEN and after CLOSE. The
-        // relay half of this same file already checks readyState before every
-        // send; the lobby half did not, so the two disagreed inside one file.
+        // ws.send throws before OPEN and after CLOSE
         send(msg) {
             if (ws.readyState !== 1) return false;
             try { ws.send(JSON.stringify(msg)); return true; }
@@ -28,19 +26,8 @@ export function connectLobby(baseUrl, WS = WebSocket) {
         },
         setParams(params) { api.send({ t: 'params', params }); },
         start() { api.send({ t: 'start' }); },
-        // A ping that can never reject, awaited in a loop, is a hang.
-        //
-        // lobby.js does `for (let i = 0; i < 12; i++) rtts.push(await
-        // lobby.ping().catch(() => 50))` between `launch` and bootDoom. This
-        // promise had no timeout and no reject path, so that `.catch` could
-        // never fire: if the server stopped answering 'pong' -- or the socket
-        // closed, which fires 'closed' and does nothing to a pending ping --
-        // the await hung FOREVER, the game never booted, and the player sat
-        // under a "GO" countdown that never resolved. There is no user-visible
-        // timeout anywhere on that path.
-        //
-        // Resolving (rather than rejecting) with the caller's own fallback
-        // keeps the jitter estimate honest about what it measured: an
+        // Resolves null on timeout rather than hanging or rejecting: the
+        // caller's 12-ping loop runs between `launch` and bootDoom, and an
         // unanswered ping is not a zero-latency ping.
         ping() {
             return new Promise(res => {
@@ -55,19 +42,10 @@ export function connectLobby(baseUrl, WS = WebSocket) {
         close() { closed = true; ws.close(); },
     };
     ws.onmessage = ev => {
-        // THE ASYMMETRY THIS CLOSES
-        //
-        // server/game.js does `let m; try { m = JSON.parse(raw); } catch
-        // { return; }` on both its receive paths: the server treats the client
-        // as hostile. This did a bare JSON.parse on whatever arrived, inside a
-        // WebSocket event handler -- so one malformed frame threw unhandled,
-        // and neither 'error' nor 'closed' fires for a throw, which means
-        // lobby.js never learned the connection was unusable. It just stopped.
-        //
-        // spec.md's own threat model is a plain-HTTP LAN (§"Deployment reality:
-        // insecure origins"), where anything on the network can answer
-        // ws://host:8666/ws/lobby. The server hardened its side in task 23.6.
-        // This is the same guard, pointing the other way.
+        // The server treats the client as hostile (try/catch around every
+        // parse); on a plain-http LAN anything can answer ws://host/ws/lobby,
+        // so this side does the same -- a throw here would leave lobby.js
+        // never learning the connection was unusable.
         let m;
         try { m = JSON.parse(ev.data); }
         catch { return; }                       // not JSON: not a message
@@ -85,19 +63,12 @@ export function connectLobby(baseUrl, WS = WebSocket) {
 }
 
 // ── Shared bundle plumbing ───────────────────────────────────────────────────
-// attachRelay and attachSpectate are the same receiver with three differences:
-// the URL, where fabMask comes from, and one extra step when catch-up ends.
-// Everything else -- the malloc'd ingame ring, the length and tic-range checks,
-// the buffer-until-live queue, and the 512-tic chunked replay -- was written
-// out twice, so the 23.1 hostile-tic guard had to be added twice and a future
-// one could reach only one path.  It lives here once.
-//
-//   fabOverride: null  -> read fabMask from the wire (byte 5), as a player does
-//                0xFF  -> mark every slot fabricated, as a spectator must, so
-//                         the engine's consistancy ring check is bypassed (a
-//                         spectator's clean replay legitimately disagrees with
-//                         a live veteran's gametic/maketic ratio; the SIM is
-//                         still bit-identical, verified by _web_state_hash)
+// attachRelay and attachSpectate are one receiver with three differences:
+// the URL, where fabMask comes from, and one step when catch-up ends.
+//   fabOverride: null -> read fabMask from the wire (byte 5), as a player does
+//                0xFF -> mark every slot fabricated, as a spectator must, so
+//                        the engine's consistancy check is bypassed (the sim
+//                        is still bit-identical, verified by _web_state_hash)
 function makeBundlePump(doom, numplayers, fabOverride) {
     const scratch = doom._web_net_scratch();
     const ingamePtr = doom._malloc(8);

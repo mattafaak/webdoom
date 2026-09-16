@@ -1,37 +1,10 @@
-// scrubber.js — task 19.3 replay scrubber ("demo as video").
-//
-// Attaches a range scrubber + input timeline strip below the canvas when a
-// demo is playing.  The scrubber drives web_seek_demo(N) to jump to any tic
-// in the demo without needing keyframe data — always re-sims from tic 0.
-//
-// Design:
-//   - The scrubber is a <input type="range"> for the tic position.
-//   - The input timeline strip is a <canvas> showing per-tic button events
-//     (fire, use, speed) as coloured marks — parsed from the raw .lmp bytes.
-//   - Seeking pauses the normal rAF loop (via seekPending flag in main.js)
-//     and renders a single frame at the target tic.
-//   - After seek, playback resumes from the next tic (gametic=N+1 from the
-//     rendering frame that followed the seek).
-//
-// Latency note (docs/perf.md §seek-latency):
-//   Node.js measurement: seek-to-59 in ~0.4 ms (~4000× realtime).
-//   Worst-case 44,580-tic seek extrapolated: ~0.3 s on devbox.
-//   Wbox (Raspberry Pi 5): see docs/perf.md for measured figures.
-//   The UI cites the measured wbox worst case (~2.2 s, 2026-07-22) — the wbox
-//   measurement refines or confirms this figure; see docs/perf.md §19.3.
-//
-// Demo LMP tic format (bytes per tic, vanilla):
-//   byte 0: forwardmove (-127..127)
-//   byte 1: sidemove    (-127..127)
-//   byte 2: angleturn   (-127..127) lo byte; vanilla stores angleturn/8 here
-//   byte 3: buttons bitmask:
-//              bit 0 = fire
-//              bit 1 = use
-//              bit 2 = strafe-on (modifier)
-//              bit 3 = speed     (shift)
-//              bits 4-7 = weapon-change slots (vanilla)
-//
-// Ownership: JS only — no engine writes, determinism safe.
+// The replay scrubber ("demo as video"): a range input and an input timeline
+// strip under the canvas.  Seeking calls web_seek_demo(N), which re-sims from
+// tic 0 -- no keyframes -- so the worst case is the whole demo (measured
+// ~2.2 s for 44,580 tics on the slowest host; docs/perf.md §19.3).
+// Demo tic format (vanilla .lmp, 4 bytes): forwardmove, sidemove, angleturn/8,
+// buttons (bit 0 fire, 1 use, 2 strafe, 3 speed, 4-7 weapon slots).
+// JS only: no engine writes, determinism safe.
 
 const BTN_FIRE   = 0x01;
 const BTN_USE    = 0x02;

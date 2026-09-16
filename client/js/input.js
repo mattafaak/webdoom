@@ -59,20 +59,11 @@ export const defaultSettings = () => ({
     padTurnSpeed: 1.0,
 });
 
-// The shape localStorage is ALLOWED to have.  spec.md tenet 4 names "the
-// network, the WAD, or the user"; localStorage is the third -- editable in
-// devtools, shared by every page on the origin, and carried across versions of
-// this app -- and `{ ...defaultSettings(), ...stored }` validated none of it.
-// A stored mouseSens of "abc" reached the input path as a string and every
-// mouse delta became NaN; the settings panel of the day showed "7", because an
-// <input type=range> with an invalid value renders its midpoint.  The widget
-// is not the value in force.  (The OPTIONS screen that replaced it renders the
-// value as text, so what you read IS what is in force -- but the validation
-// below is what makes that true, not the rendering.)
-//
-// Bounds match the OPTIONS screen's own steps (lobby.js: sens 1-12, pad turn
-// 0.4-2, deadzone 0-0.9), so a hand-edited value cannot reach somewhere the
-// UI cannot.
+// The shape localStorage is ALLOWED to have.  It is user input (devtools,
+// shared by every page on the origin, carried across versions), so every key
+// is typed, ranged or enumerated here; the value the OPTIONS screen renders
+// is the value in force because of this, not because of the row.  Bounds
+// match the OPTIONS screen's own steps.
 const SCHEMA = {
     mouseSens:      { num: [1, 12] },
     padDeadzone:    { num: [0, 0.9] },
@@ -132,22 +123,11 @@ export function saveSettings(s) {
     } catch { /* quota exceeded or storage disabled — continue in-memory */ }
 }
 
-// Rebind one action, from anywhere.
-//
-// This used to live inside createInput()'s keydown closure, which meant it
-// needed a `doom` instance and a canvas -- neither of which exists on the
-// launcher, where the OPTIONS screen now lives.  Nothing about arming a key
-// capture needs the engine: it needs the settings object and ACTIONS.
-//
-// The listener is on `window` in the CAPTURE phase and stops propagation,
-// because the launcher menu has its own bubble-phase keydown handler
-// (menu.js) -- without that, ArrowDown would still move the skull, Enter
-// would still activate a row and Escape would still pop the screen while the
-// player is trying to bind a key.
-//
-// Returns a cancel function.  Every exit path -- bound, cancelled, timed out,
-// screen left -- runs through endCapture exactly once, so no row can be left
-// reading "PRESS A KEY" with a binding that can no longer be read.
+// Rebind one action, from anywhere (the launcher has no engine).  The
+// listener is capture-phase on window and stops propagation, so the menu's
+// own keydown handler does not move the skull or pop the screen meanwhile.
+// Returns a cancel function; every exit -- bound, cancelled, timed out --
+// runs endCapture exactly once.
 export function captureBind(settings, actionId, onDone) {
     let done = false;
     let timer = 0;
@@ -197,10 +177,7 @@ const WEAPON_DIGITS = [
 ];
 
 export function createInput(doom, canvas, settings) {
-    // Teardown ledger (task 23.7b).  Every listener this module attaches is
-    // recorded here so quit-to-menu can remove it.  Without this each boot
-    // added another live handler on `window`, and after a quit they kept firing
-    // into a wasm instance I_Quit had force-exited.
+    // every listener this module attaches, so quit-to-menu can remove it
     const { on, off: _teardownAll } = teardownLedger();
 
     const post = (t, a = 0, b = 0, c = 0) => doom._web_input_event(t, a, b, c);

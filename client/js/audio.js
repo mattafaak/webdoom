@@ -1,53 +1,19 @@
-// WebAudio bridge: SFX (DMX PCM lumps → AudioBuffers, per-channel
-// vol/sep/pitch as vanilla) and music (wasm OPL sequencer or GM SoundFont).
+// WebAudio bridge: SFX (DMX PCM lumps → AudioBuffers, per-channel vol/sep/
+// pitch as vanilla) and music (the wasm OPL sequencer, or a GM SoundFont).
 //
-// Music delivery uses one of three sinks:
-//   WorkletSink  — AudioWorklet (OPL; requires secure context / HTTPS / localhost)
-//   BufferSink   — AudioBufferSourceNode chain (OPL fallback; any origin)
-//   GmMainSink   — main-thread SpessaSynth path (GM backend; opt-in)
+// Music sinks:
+//   WorkletSink  — AudioWorklet (OPL; secure context only)
+//   BufferSink   — AudioBufferSourceNode chain (OPL; any origin)
+//   GmMainSink   — SpessaSynth on the main thread (GM; opt-in).  Its
+//                  Synthetizer builds its own worklet chain and is fed
+//                  through a relay GainNode; pump() is a no-op for it.
 //
-// Default: OPL (WorkletSink or BufferSink depending on origin security).
-// GM backend is activated by setGmMode(true, sf2Bytes, spessaSynthUrl) (task 17.2b).
-//
-// SpessaSynth architecture (task 17.2b):
-//   SpessaSynth's Synthetizer is a main-thread AudioNode class that creates
-//   its own AudioWorklet chain internally.  It CANNOT be instantiated inside
-//   a foreign AudioWorkletProcessor.  The correct wiring is:
-//     relayGain = ctx.createGain() → ctx.destination
-//     new Synthetizer(relayGain, sf2ArrayBuffer)
-//   SpessaSynth manages its own scheduling; audio.js pump() is a no-op for GM.
-//
-// GM fallback contract (field-fix; the first case amended 2026-09-12):
-//   When SpessaSynth is absent (gmSpessaSynthUrl null OR sf2 not loaded):
-//     → gm-main sink is NOT constructed.  sink stays null → OPL path activates.
-//     → console.warn, and the launcher's OPTIONS screen renders the reason on
-//       its MUSIC row ("GM - NO SF2" / "GM - NO SYNTH URL").
-//     → gmPathBuilt = false.
-//   This case is a CONFIGURED STATE, not a failure: GM is selected and its
-//   prerequisites are absent, which is true on every boot until the operator
-//   sets WEBDOOM_SPESSASYNTH_URL and the player drops in an .sf2.  It used to
-//   call setStatus(), and #status has no timeout (client/js/ui.js) -- so a
-//   permanent "music: OPL fallback (GM soundfont unavailable)" sat over the
-//   game for the whole session, every session.  spec.md's insecure-origin
-//   clause asks for LOUD degradation, and the OPTIONS row is louder in the
-//   only sense that matters: it is at the control that caused it, where it
-//   can be acted on.
-//   When SpessaSynth URL + sf2 are present but the async import() fails:
-//     → gm-main sink is destroyed (gmPathBuilt = false, sink = null).
-//     → OPL fallback path is rebuilt so music plays.
-//     → status = 'music: OPL fallback (GM soundfont unavailable)'.
-//   gmPathBuilt = true only when the relay GainNode was successfully connected
-//   AND the SpessaSynth import() is in flight or has succeeded.
-//
-// Pump routing:
-//   OPL mode: pump() calls doom._web_music_render() → PCM → sink.push()
-//   GM mode:  pump() is a no-op (SpessaSynth self-schedules)
+// GM without its prerequisites (no synth URL, or no .sf2) is a configured
+// state, not a failure: the sink stays null, OPL plays, and the OPTIONS
+// screen's MUSIC row names what is missing.  If SpessaSynth is configured
+// but its import fails, the OPL sink is rebuilt and #status says so.
 
 import { musToMidi } from './mus2mid.js';
-// setStatus: one implementation for the whole client (client/js/ui.js).  This
-// module had its own, and it was the only one of the six that both looked the
-// element up per call AND null-checked it -- which is why it is the shape the
-// shared one took.
 import { setStatus, serverConfig } from './ui.js';
 
 const TARGET_BACKLOG = 0.25;    // seconds of music buffered ahead
@@ -89,12 +55,8 @@ function makeBufferSink(ctx) {
     let _lastChunk = null;   // test hook: captured on every push()
     return {
         kind: 'buffer',
-        // LIVE computation — never a stored value.  A cached `queued` (only
-        // updated inside push()) deadlocked the pump permanently once the
-        // backlog crossed TARGET_BACKLOG: deficit went negative, push() was
-        // never called again, and the stale value never decayed as playback
-        // drained.  Field symptom: music played ~0.25 s then stopped forever
-        // (present since 16.4 — CI only asserted the first chunk's RMS).
+        // computed live: a cached value never decayed as playback drained and
+        // the pump deadlocked once the backlog crossed TARGET_BACKLOG
         get queued() {
             return Math.max(0, (schedClock - ctx.currentTime) * ctx.sampleRate);
         },
@@ -224,9 +186,8 @@ export function createAudio(doom) {
                     outputChannelCount: [2],
                 });
                 node.connect(ctx.destination);
-                // window.__wd_perf captured at WorkletSink construction time;
-                // browser-pipeline.mjs always sets it before the first user
-                // gesture, so this is equivalent to a dynamic read in practice.
+                // captured at construction; the harness installs it before the
+                // first gesture
                 sink = makeWorkletSink(node, window.__wd_perf ?? null);
             } catch (err) {
                 console.warn('music worklet unavailable:', err);
@@ -313,9 +274,8 @@ export function createAudio(doom) {
                     ? 'no spessaSynthUrl configured (set WEBDOOM_SPESSASYNTH_URL on the server)'
                     : 'no sf2 loaded';
                 console.warn('[audio] SpessaSynth SKIP:', reason, '→ OPL fallback');
-                // No setStatus() here: see the GM fallback contract above.
-                // The OPTIONS screen's MUSIC row carries this reason.
-                // sink stays null → falls through to !sink block below
+                // no status here: the OPTIONS row carries the reason; sink stays
+                // null and the OPL path below builds
             }
         }
 
@@ -440,25 +400,13 @@ export function createAudio(doom) {
             if (spessaSynthUrl) gmSpessaSynthUrl = String(spessaSynthUrl);
         },
 
-        // NAMED SEAM -- do not delete as unused.  Nothing in the product calls
-        // setDmxgus() or musToMidi(): docs/decision-17.3-gus-flavor.md parks
-        // the engine-side DMXGUS wiring (the lump is 175 lines of TEXT, so
-        // W_CheckNumForName -> parse -> setDmxgus must include the parse) and
-        // calls this seam "test-injection-only until then".  spec.md's music
-        // contract was amended in round 6 to say the same.  The mapping these
-        // two feed IS gated: tools/gm-frames-test.mjs gate 4.
-        //
-        // A sendMidi(bytes) wrapper sat here too, routing raw MIDI to
-        // SpessaSynth.  It had no caller in the product OR the tests and no
-        // decision record naming it, so round 6 deleted it; gmDispatchMidi is
-        // the live path and is called from the queue drain and from here.
+        // NAMED SEAM -- not dead code.  Nothing in the product calls
+        // setDmxgus() or musToMidi(); docs/decision-17.3-gus-flavor.md parks
+        // the engine-side DMXGUS wiring (the lump is text and must be parsed
+        // first), and tools/gm-frames-test.mjs gate 4 gates the mapping.
 
-        // Set the GUS-flavor instrument map: a PRE-PARSED Uint8Array[175]
-        // (index = MUS instrument, value = remapped GM program). The raw DMXGUS
-        // WAD lump is TEXT-format — the future engine wiring must parse it into
-        // this table first; raw lump bytes here would be garbage.
-        // After this call, musToMidi() applies the remap automatically.
-        // Pass null to clear the map (reverts to default GM program numbers).
+        // The GUS-flavour map: a PRE-PARSED Uint8Array[175], MUS instrument →
+        // GM program.  null clears it.
         setDmxgus(bytes) {
             dmxgusMap = (bytes instanceof Uint8Array && bytes.length >= 175)
                 ? bytes.slice(0, 175)

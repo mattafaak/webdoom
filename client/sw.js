@@ -19,10 +19,8 @@ const SHELL_FILES = [
 ];
 
 self.addEventListener('install', e => {
-    // cache.addAll() is ALL-OR-NOTHING: one path that 404s rejects the whole
-    // call, nothing is cached, and offline mode is silently off -- for a file
-    // the player may never need.  Per file, with the failures named, so a
-    // missing scrubber.js costs the scrubber offline and not the game.
+    // per file, failures named: cache.addAll() is all-or-nothing, and a
+    // missing scrubber.js should cost the scrubber offline, not the game
     e.waitUntil((async () => {
         const c = await caches.open(SHELL);
         const settled = await Promise.allSettled(SHELL_FILES.map(p => c.add(p)));
@@ -70,11 +68,8 @@ self.addEventListener('fetch', e => {
     // shell: network-first (dev-friendly), cache fallback (offline SP)
     e.respondWith(
         fetch(e.request).then(res => {
-            // The .catch() below belongs to the OUTER chain: this inner promise
-            // had none, so a cache write that rejected (quota, an opaque
-            // response, a storage-disabled profile) surfaced as an unhandled
-            // rejection in the worker rather than as a response that still
-            // worked.  Caching is best-effort by definition.
+            // best-effort: a rejected cache write (quota, opaque response) must
+            // not become an unhandled rejection in the worker
             if (res.ok)
                 caches.open(SHELL)
                     .then(c => c.put(e.request, res.clone()))

@@ -1,29 +1,12 @@
-// webdoom demo bridge: one-click record → share, and demo permalink replay.
-//
-// Recording (sender):
-//   1. bootDoom({ record: true }) passes -record to callMain, so
-//      G_RecordDemo runs inside D_DoomMain and G_BeginRecording fires from
-//      D_DoomLoop.  (An armRecording(doom) export used to offer a second way
-//      in; it had no caller and was removed in round 6.)
-//   2. stopAndShare(doom, wadFile) stops recording, uploads to the server,
-//      and returns a share URL.  Displays the URL in the share panel.
-//
-// Replay (receiver):
-//   - parseDemoUrl() checks location.search / location.hash for a demo param.
-//   - If found, downloadDemo() fetches the bytes.
-//   - startReplay(doom, bytes) injects bytes into the engine via
-//     web_play_demo_buf and lets the rAF loop drive frames.
-//
-// Caps (stated, matching server/demo-store.js):
-//   PER_DEMO_CAP  1,048,576 bytes — server rejects larger uploads with 413
-//   FRAGMENT_MAX  6,000 bytes raw — URL-fragment embed only below this threshold
-//   TTL           24 hours from upload
-//
-// WAD ownership check (receiver):
-//   If the share URL carries a wad= param and the receiver does not own the
-//   WAD (server manifest or 16.6 local library), lobby.js shows the warning
-//   and aborts the replay — the ownership check gates BOTH the server-id and
-//   fragment-embed paths.
+// The demo bridge: record → share link, and permalink replay.
+//   record:  bootDoom({ record: true }) passes -record; stopAndShare() stops,
+//            uploads (or embeds a small demo in the URL fragment) and returns
+//            the link.
+//   replay:  parseDemoUrl() reads ?demo=<id>&wad= (server-stored) or
+//            #demo=<base64url>&wad= (fragment); startReplay() feeds the bytes
+//            to web_play_demo_buf.  lobby.js checks the receiver owns the WAD.
+// Caps match server/demo-store.js: PER_DEMO_CAP 1 MiB (413 above),
+// FRAGMENT_MAX 6,000 raw bytes, TTL 24 h.
 
 import { setStatus } from './ui.js';
 
@@ -80,9 +63,8 @@ export async function parseDemoUrl() {
         if (b64) {
             try {
                 const bytes = _fromBase64Url(b64);
-                // FRAGMENT_MAX was enforced only when WRITING a share link, so
-                // a hand-made URL could put any amount of base64 through this
-                // path.  Enforce it on the way in as well (task 23.4).
+                // the cap is enforced on the way in too, not only when a link is
+                // written
                 if (bytes.length > FRAGMENT_MAX) {
                     console.warn(`demo: fragment is ${bytes.length} bytes, over the ` +
                                  `${FRAGMENT_MAX}-byte limit — ignoring`);
@@ -112,17 +94,10 @@ export async function parseDemoUrl() {
     return { bytes, wad: demoWad };
 }
 
-// Start demo playback in an already-booted doom instance.
-// bytes: Uint8Array of raw .lmp data.
-// Returns 0 on success, -1 on version error.
-//
-// singletics (1 tic per rAF) is enabled before web_play_demo_buf so that
-// the first requestAnimationFrame callback does not burst-process all
-// pending wall-clock tics in one call.  Without this, a browser that spent
-// ~3 s loading the WAD would accumulate ~105 wall-clock tics and consume the
-// entire 50-tic demo in a single frame — making per-tic hash collection and
-// test-harness hook injection impossible.  In normal (non-test) replay the
-// 1-tic-per-frame rate is also the correct playback speed.
+// Start playback in a booted instance; 0 on success, -1 on a version error.
+// singletics first, so the first frame plays one tic instead of every
+// wall-clock tic accrued while the WAD loaded (a 50-tic demo would finish in
+// one frame, and per-tic hash collection with it).
 export function startReplay(doom, bytes) {
     if (typeof doom._web_play_demo_buf !== 'function')
         throw new Error('web_play_demo_buf not available — rebuild engine');

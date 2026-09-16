@@ -1,9 +1,6 @@
-// DOOM-style drill-down front end. One short list per screen:
-//   SINGLE PLAYER → game → boot (engine's own menu takes it from there)
-//   MULTIPLAYER   → everyone lands in the lobby, START ready on the
-//                   current defaults; GAME/MAP/MODE/SKILL are optional
-//                   one-screen pickers. Doing nothing = you're
-//                   Green/Indigo/… and ready to go.
+// The launcher: a DOOM-style drill-down menu.  SINGLE PLAYER → a game → boot;
+// MULTIPLAYER → the lobby, START ready on the current defaults, GAME and MAP
+// pickers and value rows for the rest.  Doing nothing = you are Green/Indigo/…
 import { bootDoom } from './main.js';
 import { connectLobby, launchArgs } from './net.js';
 import { loadDoomFont } from './doomfont.js';
@@ -22,9 +19,7 @@ import {
 import { sf2GetCurrentMeta } from './sf2-library.js';
 
 const $ = id => document.getElementById(id);
-// setStatus looks the element up each time and tolerates its absence; the six
-// hand-written copies of this line did not all do either.  Imported under the
-// local name so the twenty call sites below read unchanged.
+// the call sites read `status(...)`
 const status = setStatus;
 
 const SKILLS = ["I'M TOO YOUNG TO DIE", 'HEY, NOT TOO ROUGH', 'HURT ME PLENTY',
@@ -57,14 +52,8 @@ function stackFor(file) {
     return stack.map(w => ({ file: w.file, sha: w.sha256 }));
 }
 
-// Curated order; grouped entries (Master Levels) fold into a submenu so
-// each screen stays short.
-// hacx.wad was here and could never load: absent from the server manifest (the
-// only one of the eight that was) and explicitly refused by wad-import.js as
-// "HACX v2 is not vanilla-engine compatible".  So it could not be served and it
-// could not be imported -- a menu row with no reachable destination, which
-// README then advertised as part of the shipped library.
-// tools/check-menu-reachable.mjs gates the class.
+// Curated order; grouped entries (Master Levels) fold into a submenu.
+// tools/check-menu-reachable.mjs asserts every entry can be served or imported.
 const GAME_ORDER = ['doom.wad', 'doom2.wad', 'sigil.wad', 'nerve.wad',
     'tnt.wad', 'plutonia.wad', 'chex.wad'];
 
@@ -97,25 +86,14 @@ function rootScreen() {
 }
 
 // --- OPTIONS -------------------------------------------------------------------
-//
-// The web-side settings used to live in an F8 HTML overlay (client/js/settings.js)
-// that belonged to neither this menu nor the engine's, and was the only way to
-// reach any of them.  They are menu screens now, in the same shape as
-// rulesScreen() below: a value rendered as text, left/right or Enter to change
-// it, and nothing else on screen.
-//
-// There is no `doom` here -- the launcher runs before any engine exists -- so
-// nothing is applied live.  Everything is persisted through saveSettings() and
-// main.js applies the whole set at boot, which it already did for every one of
-// these.  The cost is that a setting cannot be changed mid-game; DOOM's own
-// menu (Escape) still owns volume, detail and screen size in game.
+// Nothing is applied live: the launcher runs before any engine exists.
+// saveSettings() persists and main.js applies the set at boot; DOOM's own
+// menu (Escape) owns volume, detail and screen size in game.
 let settings = null;
 const S = () => (settings ??= loadSettings());
 
-// GM status is two async lookups (the stored .sf2 and the operator's synth
-// URL).  Fetch once on entry, cache, and refresh the screen when they land, so
-// the MUSIC row can say GM - NO SF2 instead of the game shouting it over the
-// player later.  gmState stays null until both have answered.
+// GM needs a stored .sf2 and the operator's synth URL: fetched once on entry,
+// so the MUSIC row can name what is missing.
 let gmState = null;
 async function loadGmState() {
     if (gmState) return;
@@ -298,24 +276,11 @@ async function handleSf2Import(file) {
 }
 
 // ── one way back to the launcher ─────────────────────────────────────────────
-//
-// This used to be seven partly-overlapping combinations of the same nine
-// statements -- booted, fire.resume, menu.show, menu.reset, lobby.close,
-// lobby=null, roster=null, ipSummary/ipSlot, countdown.reset -- one per exit
-// path, each with its own subset.  Round 5's A2 gave the ENGINE side one owner
-// (main.js endSession); this is the launcher side.
-//
-// Every step is idempotent, so one function can serve a path that never had a
-// lobby (single player) and one that is leaving a live one:
-//   fire.resume()      returns immediately unless paused
-//   menu.show()        a no-op when the menu is already visible
-//   countdown.reset()  cancels a rAF and a timeout that may not exist
-//   lobby              guarded, and NULLED BEFORE close() -- the 'closed'
-//                      handler reads `!lobby` to tell a deliberate leave from
-//                      a dropped connection, and that ordering is load-bearing
-//
-// reason: shown in #status.  Omit it for a clean return (Quit Game, leaving a
-// lobby) -- passing '' would blank a message another path just set.
+// Every step is idempotent, so single player and a live lobby take the same
+// path.  `lobby` is nulled BEFORE close(): the 'closed' handler reads !lobby
+// to tell a deliberate leave from a dropped connection.
+// reason: shown in #status; omit it for a clean return (passing '' would
+// blank a message another path just set).
 function resetToLauncher(reason) {
     booted = false;
     recOverlay.hide();
@@ -688,22 +653,12 @@ function leaveLobby() { resetToLauncher(); }
 // --- boot ------------------------------------------------------------------------
 (async () => {
     if ('serviceWorker' in navigator) {
-        // The reload button used to be `<button onclick="location.reload()">` in
-    // index.html -- the only inline event handler in the codebase, and the one
-    // thing a script-src CSP would silently break. Wired here instead.
-    document.getElementById('sw-reload')?.addEventListener('click', () => location.reload());
-    // Was this page already controlled when we registered?  sw.js calls
-    // skipWaiting() + clients.claim(), so on a FIRST visit the brand-new worker
-    // claims this already-loaded page and fires controllerchange -- and the
-    // banner below used to read that as "a new version replaced the old one".
-    // It has no old one.  Every first-time visitor was told to reload, on a
-    // page that had just finished loading.  controllerchange cannot tell the
-    // two apart; the controller's existence BEFORE registration can.
-    const hadController = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
-        // When a new service worker takes control mid-session, surface a
-        // non-intrusive reload prompt rather than silently serving a mixed
-        // old/new asset state. The prompt never interrupts an active match.
+        // wired here, not inline in index.html, so a script-src CSP holds
+        document.getElementById('sw-reload')?.addEventListener('click', () => location.reload());
+        // controllerchange also fires when a FIRST worker claims this page;
+        // only a page that was already controlled has an old version to replace
+        const hadController = !!navigator.serviceWorker.controller;
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
         navigator.serviceWorker.addEventListener('controllerchange', () => {
             if (!hadController) return;   // first claim, not an update
             const el = document.getElementById('sw-update');
@@ -711,11 +666,8 @@ function leaveLobby() { resetToLauncher(); }
         });
     }
     try {
-        // The launcher's OWN startup had no indicator: a /api/wads fetch, an
-        // IndexedDB read and a base64 decode of ~63 font patches happen before
-        // the first menu row exists, and #loading was owned entirely by
-        // main.js and never shown until a game was already booting.  On a slow
-        // host that is a black page for seconds with nothing to read.
+        // the launcher's own startup (manifest, IDB, ~63 font patches) is long
+        // enough on a slow host to need a bar
         loading.show('READING THE WAD LIBRARY…');
         manifest = (await (await fetch('/api/wads')).json()).wads;
 
@@ -734,11 +686,8 @@ function leaveLobby() { resetToLauncher(); }
 
         loading.set('DECODING THE MENU FONT…', 0.66);
         font = await loadDoomFont();
-        // onTransition: single hook for every real screen change in the launcher
-        // menu. Full-flare (peak 36) on return-to-root; subtle nav flare (peak 28)
-        // for push/back between sub-screens. fire is initialized below; the closure
-        // captures the module-scope variable by reference so it will be set by the
-        // time any transition fires. fire?.flare() is a no-op while paused (in-game).
+            // a full flare on return to root, a subtle one between screens;
+            // fire is created below, and flare() is a no-op while paused
         menu = createMenu(font, $('landing'), {
             onTransition(type) {
                 if (type === 'reset') fire?.flare();    // full arrival flare at root
@@ -750,11 +699,9 @@ function leaveLobby() { resetToLauncher(); }
     } catch (err) {
         loading.hide();
         console.error(err);
-        // "cannot reach server" was printed for EVERY failure in this block,
-        // including the server answering perfectly with no IWAD to offer.  A
-        // genuinely unreachable server keeps that wording (it is true, and
-        // tools/browser-resilience-test.mjs keys its early exit on it); an
-        // answered request that we could not use now says what it was.
+        // "cannot reach server" only when the server really was unreachable
+        // (browser-resilience keys on it); an answered request that could not
+        // be used says what it was
         const msg = String(err?.message ?? err);
         status(/fetch|network|load failed/i.test(msg) ? `cannot reach server — ${msg}` : msg);
         return;
@@ -818,12 +765,9 @@ function leaveLobby() { resetToLauncher(); }
         else if (!booted) fire.resume();
     });
 
-    // ── Demo permalink: check URL for a demo share param ──────────────────────
-    // ?demo=<sha256id>&wad=<wadfile>  → server-stored demo
-    // #demo=<base64url>&wad=<wadfile> → fragment-embedded demo (≤ FRAGMENT_MAX bytes)
-    //
-    // WAD ownership check: the named WAD must be in the server's manifest.
-    // If missing, show a warning and abort replay (receiver must own the WAD).
+    // ── Demo permalink ───────────────────────────────────────────────────────
+    // ?demo=<sha256id>&wad=<file> is server-stored; #demo=<base64url>&wad=<file>
+    // is fragment-embedded.  The receiver must own the WAD.
     const demoInfo = await parseDemoUrl().catch(() => null);
     if (demoInfo) {
         const { bytes, wad } = demoInfo;
@@ -855,13 +799,8 @@ function leaveLobby() { resetToLauncher(); }
 
     menu.reset(rootScreen());   // triggers onTransition('reset') → fire.flare()
     status('');
-    // On insecure origins (plain http://<LAN-IP>) navigator.serviceWorker is
-    // absent — the SW never engages and its WAD cache is unavailable. WADs
-    // still cache locally via IndexedDB; only installable offline mode is
-    // lost. Browsers hard-block SW on plain-HTTP non-localhost origins, so
-    // this is informational, not an error — word it that way (field report:
-    // the old "offline caching unavailable" phrasing was read as a bug three
-    // times). Shown once per browser, not every launch.
+    // No service worker on a plain-http LAN origin: WADs still cache in IDB,
+    // only offline install is lost.  Informational, once per browser.
     if (!('serviceWorker' in navigator) &&
             !localStorage.getItem('http-notice-shown')) {
         localStorage.setItem('http-notice-shown', '1');
