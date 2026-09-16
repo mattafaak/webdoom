@@ -78,32 +78,20 @@ export function createScrubberUI(doom, demoBytes, { container = document.body, s
     if (totalTics === 0) return { destroy: () => {} };
 
     // ── Panel ─────────────────────────────────────────────────────────────────
-    const panel = document.createElement('div');
-    panel.id = 'scrubber-panel';
-    panel.style.cssText =
-        'display:flex;flex-direction:column;gap:4px;padding:6px 8px;' +
-        'background:#111;border-top:1px solid #333;user-select:none;';
+    // styled in webdoom.css under #scrubber-panel
+    const el = (tag, className, props = {}) =>
+        Object.assign(document.createElement(tag), { className, ...props });
+    const panel = el('div', '', { id: 'scrubber-panel' });
 
     // ── Scrubber row ──────────────────────────────────────────────────────────
-    const scrubRow = document.createElement('div');
-    scrubRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
-
-    const label = document.createElement('span');
-    label.style.cssText = 'color:#aaa;font-family:monospace;font-size:11px;min-width:56px;';
-    label.textContent = 'TIC 0';
-
-    const scrubber = document.createElement('input');
-    scrubber.type  = 'range';
-    scrubber.min   = '0';
-    scrubber.max   = String(totalTics - 1);
-    scrubber.value = '0';
-    scrubber.style.cssText = 'flex:1;cursor:pointer;accent-color:#c00;';
+    const scrubRow = el('div', 'row');
+    const label = el('span', 'tic', { textContent: 'TIC 0' });
+    const scrubber = el('input', '', { type: 'range', min: '0', max: String(totalTics - 1), value: '0' });
     scrubber.setAttribute('aria-label', 'Demo scrubber');
-
-    const latencyNote = document.createElement('span');
-    latencyNote.style.cssText = 'color:#666;font-family:monospace;font-size:10px;min-width:90px;text-align:right;';
-    latencyNote.title = 'Seek re-sims from tic 0. Worst-case 44,580-tic seek measured at ~2.2 s on the slowest fleet host (wbox). See docs/perf.md §19.3.';
-    latencyNote.textContent = '↩ re-sim/tic';
+    const latencyNote = el('span', 'note', {
+        textContent: '↩ re-sim/tic',
+        title: 'Seek re-sims from tic 0. Worst-case 44,580-tic seek measured at ~2.2 s on the slowest fleet host (wbox). See docs/perf.md §19.3.',
+    });
 
     scrubRow.appendChild(label);
     scrubRow.appendChild(scrubber);
@@ -112,14 +100,8 @@ export function createScrubberUI(doom, demoBytes, { container = document.body, s
     // ── Timeline strip ───────────────────────────────────────────────────────
     // A narrow canvas showing per-tic button events as coloured pixels.
     // Red = fire, yellow = use, white = speed.  Each pixel = one tic (scaled).
-    const strip = document.createElement('canvas');
-    strip.height = 16;
-    strip.style.cssText = 'width:100%;height:16px;display:block;image-rendering:pixelated;cursor:pointer;';
-    // The strip is a CANVAS with an aria-label and no keyboard path: it
-    // announces itself as something you can interact with and then cannot be
-    // reached or operated by a keyboard.  The <input type="range"> beside it
-    // IS natively seekable and covers the same tics, so the honest fix is to
-    // mark this decorative rather than bolt a second, worse control onto it.
+    const strip = el('canvas', 'strip', { height: 16 });
+    // decorative: the range input beside it is the keyboard-reachable control
     strip.setAttribute('role', 'presentation');
     strip.setAttribute('aria-hidden', 'true');
 
@@ -151,11 +133,8 @@ export function createScrubberUI(doom, demoBytes, { container = document.body, s
     renderStrip();
 
     // Playhead overlay
-    const stripWrap = document.createElement('div');
-    stripWrap.style.cssText = 'position:relative;';
-    const playhead = document.createElement('div');
-    playhead.style.cssText =
-        'position:absolute;top:0;bottom:0;width:1px;background:#fff;pointer-events:none;';
+    const stripWrap = el('div', 'stripwrap');
+    const playhead = el('div', 'playhead');
     stripWrap.appendChild(strip);
     stripWrap.appendChild(playhead);
 
@@ -163,19 +142,16 @@ export function createScrubberUI(doom, demoBytes, { container = document.body, s
     panel.appendChild(stripWrap);
     container.appendChild(panel);
 
-    // ── Legend (safe DOM construction — no innerHTML) ─────────────────────────
-    const legend = document.createElement('div');
-    legend.style.cssText = 'display:flex;gap:10px;font-family:monospace;font-size:10px;color:#666;';
-    for (const [color, text] of [['#f00','fire'],['#ff0','use'],['#0ff','speed'],['#a50','move']]) {
-        const item = document.createElement('span');
-        const swatch = document.createElement('span');
-        swatch.textContent = '▬';  // ▬
-        swatch.style.color = color;
-        item.appendChild(swatch);
+    // ── Legend ───────────────────────────────────────────────────────────────
+    const legend = el('div', 'legend');
+    for (const [color, text] of [['#f00', 'fire'], ['#ff0', 'use'], ['#0ff', 'speed'], ['#a50', 'move']]) {
+        const item = el('span');
+        item.appendChild(el('span', '', { textContent: '▬' })).style.color = color;
         item.appendChild(document.createTextNode(' ' + text));
         legend.appendChild(item);
     }
     panel.appendChild(legend);
+
 
     // ── Seek logic ────────────────────────────────────────────────────────────
     let currentTic = 0;

@@ -14,11 +14,7 @@ import { createFire } from './fire.js';
 import { identifyWad, WadError } from './wad-import.js';
 import { libraryAdd, libraryList } from './wad-library.js';
 import { validateSf2, Sf2Error, sf2StoreCurrent } from './sf2-library.js';
-import {
-    parseDemoUrl, startReplay, ownsWad,
-    stopAndShare,
-    showSharePanel, showWadWarning, showReplayNotice,
-} from './demo.js';
+import { parseDemoUrl, startReplay, stopAndShare, showSharePanel, showWadWarning } from './demo.js';
 import {
     ACTIONS, loadSettings, saveSettings, defaultSettings, captureBind,
 } from './input.js';
@@ -845,7 +841,7 @@ function leaveLobby() { resetToLauncher(); }
     const demoInfo = await parseDemoUrl().catch(() => null);
     if (demoInfo) {
         const { bytes, wad } = demoInfo;
-        if (wad && !ownsWad(manifest, wad)) {
+        if (wad && !entry(wad)) {
             showWadWarning(wad);   // sets #status — do NOT clear it with status('')
             menu.reset(rootScreen());
             return;
@@ -857,8 +853,9 @@ function leaveLobby() { resetToLauncher(); }
             menu.reset(rootScreen());
             return;
         }
-        showReplayNotice();
+        status('REPLAYING DEMO — watch the recording', 6000);
         enterGame({
+
             wads: stackFor(wadEntry.file),
             after: doom => {
                 if (startReplay(doom, bytes) !== 0) { resetToLauncher('demo replay failed: version mismatch'); return; }

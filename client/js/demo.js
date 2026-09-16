@@ -139,65 +139,26 @@ export function startReplay(doom, bytes) {
     return rc;
 }
 
-// WAD ownership check: returns true if wadFile is present in the manifest.
-// manifest: the array returned by /api/wads.
-export function ownsWad(manifest, wadFile) {
-    return manifest.some(w => w.file === wadFile);
-}
 
 // ── Share panel helpers ───────────────────────────────────────────────────────
 
-// Show a share panel below the canvas with the given URL.
-// Uses safe DOM construction (no innerHTML interpolation of untrusted data).
+// The share panel: the link, COPY, and a close.  Built with properties, never
+// innerHTML -- the URL carries a base64 demo.  Styled under #demo-share-panel.
 export function showSharePanel(shareUrl) {
-    let panel = document.getElementById('demo-share-panel');
-    if (!panel) {
-        panel = document.createElement('div');
-        panel.id = 'demo-share-panel';
-        panel.style.cssText =
-            'position:fixed;bottom:8px;left:50%;transform:translateX(-50%);' +
-            'background:#222;color:#eee;padding:8px 12px;border-radius:4px;' +
-            'font-family:monospace;font-size:12px;z-index:999;max-width:90vw;' +
-            'display:flex;gap:8px;align-items:center;flex-wrap:wrap;';
-        document.body.appendChild(panel);
-    }
-    panel.textContent = '';  // clear previous content
-
-    const label = document.createElement('span');
-    label.textContent = 'DEMO LINK: ';
-
-    const link = document.createElement('a');
-    link.href = shareUrl;                  // href is set via property, not innerHTML
-    link.textContent = shareUrl.length > 60 ? shareUrl.slice(0, 57) + '…' : shareUrl;
-    link.style.color = '#4af';
-
-    const copyBtn = document.createElement('button');
-    copyBtn.textContent = 'COPY';
-    copyBtn.style.cssText = 'cursor:pointer;padding:2px 8px';
-    copyBtn.onclick = () => navigator.clipboard?.writeText(shareUrl).catch(() => {});
-
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = 'X';
-    closeBtn.style.cssText = 'cursor:pointer;padding:2px 8px';
-    closeBtn.onclick = () => panel.remove();
-
-    panel.appendChild(label);
-    panel.appendChild(link);
-    panel.appendChild(copyBtn);
-    panel.appendChild(closeBtn);
+    const el = (tag, props) => Object.assign(document.createElement(tag), props);
+    const panel = document.getElementById('demo-share-panel') ??
+        document.body.appendChild(el('div', { id: 'demo-share-panel' }));
+    panel.replaceChildren(
+        el('span', { textContent: 'DEMO LINK: ' }),
+        el('a', { href: shareUrl, textContent: shareUrl.length > 60 ? shareUrl.slice(0, 57) + '…' : shareUrl }),
+        el('button', { textContent: 'COPY', onclick: () => navigator.clipboard?.writeText(shareUrl).catch(() => {}) }),
+        el('button', { textContent: 'X', onclick: () => panel.remove() }),
+    );
 }
 
-// Show a WAD ownership warning in the status bar.
+// The receiver does not own the WAD the demo needs.
 export function showWadWarning(wadFile) {
-    setStatus(`DEMO requires ${wadFile || 'unknown WAD'} — `
-            + 'you must own this WAD to replay.  '
-            + 'Add it via the library or import from task 16.6.');
-}
-
-// Show a "replaying demo" notice.
-export function showReplayNotice() {
-    setStatus('REPLAYING DEMO — watch the recording', 6000);
-
+    setStatus(`DEMO requires ${wadFile || 'unknown WAD'} — you must own this WAD to replay. Add it to the library (IMPORT WAD).`);
 }
 
 // ── base64url helpers ─────────────────────────────────────────────────────────
