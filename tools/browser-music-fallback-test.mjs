@@ -15,62 +15,14 @@
 // assertions (i)-(iii) all fail.
 //
 // usage: node tools/browser-music-fallback-test.mjs [url] [outdir]
-import { spawn } from 'node:child_process';
-import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
-import { existsSync } from 'node:fs';
+import { launchChrome } from './lib/cdp.mjs';
+import { sleep } from './lib/util.mjs';
 
 const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
-const CDP_PORT = 9235;
-
-// Resolve Chrome binary: CHROME_BIN env > /opt/google/chrome/chrome (container) >
-// google-chrome-stable (system PATH).  Use --disable-gpu (not --use-angle=swiftshader)
-// which is required in container/sandbox environments to avoid GPU process crashes.
-const CHROME_BIN =
-    process.env.CHROME_BIN ??
-    (existsSync('/opt/google/chrome/chrome') ? '/opt/google/chrome/chrome' : 'google-chrome-stable');
-
-const chrome = spawn(CHROME_BIN, [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, chromeProfileArg(),
-    '--no-first-run', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
-    '--window-size=1280,960',
-    '--autoplay-policy=no-user-gesture-required', 'about:blank',
-], { stdio: 'ignore', detached: true });
-reapOnExit(chrome);
+const chrome = await launchChrome({ gpu: 'none' });
 const cleanup = code => { chrome.kill(); process.exit(code); };
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-await sleep(1500);
-
-// Open a target pointing directly at the game URL (same pattern as browser-test.mjs).
-const target = await (await fetch(
-    `http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' }
-)).json();
-const ws = new WebSocket(target.webSocketDebuggerUrl);
-await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-
-let id = 0;
-const pending = new Map();
-const consoleErrors = [];
-ws.onmessage = ev => {
-    const msg = JSON.parse(ev.data);
-    if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
-    if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error')
-        consoleErrors.push(msg.params.args.map(a => a.value ?? a.description).join(' '));
-    if (msg.method === 'Runtime.exceptionThrown')
-        consoleErrors.push(msg.params.exceptionDetails.text);
-};
-const cdp = (method, params = {}) => new Promise(res => {
-    const i = ++id;
-    pending.set(i, res);
-    ws.send(JSON.stringify({ id: i, method, params }));
-});
-const evaluate = async expr =>
-    (await cdp('Runtime.evaluate', {
-        expression: expr, returnByValue: true, awaitPromise: true,
-    })).result?.result?.value;
-
-await cdp('Runtime.enable');
-await cdp('Page.enable');
+const tab = await chrome.tab(url);
+const { cdp, ev: evaluate, errors: consoleErrors } = tab;
 
 // Wait for the service worker to activate and claim this page (same as browser-test.mjs).
 for (let i = 0; i < 30; i++) {

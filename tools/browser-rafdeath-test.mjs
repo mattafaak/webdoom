@@ -18,52 +18,14 @@
 // restored and #status stays empty.
 //
 // Usage: node tools/browser-rafdeath-test.mjs [url]
-import { spawn } from 'node:child_process';
-import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
+import { launchChrome } from './lib/cdp.mjs';
+import { sleep } from './lib/util.mjs';
 
 const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
-const CDP_PORT = 9232;
-
-const chrome = spawn(chromeBin(), [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, chromeProfileArg(),
-    '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
-    '--use-angle=swiftshader', '--window-size=1280,960',
-    '--autoplay-policy=no-user-gesture-required', 'about:blank',
-], { stdio: 'ignore', detached: true });
-reapOnExit(chrome);
-
+const chrome = await launchChrome();
 const cleanup = code => { chrome.kill(); process.exit(code); };
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-await sleep(1500);
-
-const target = await (await fetch(
-    `http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent(url)}`,
-    { method: 'PUT' },
-)).json();
-const ws = new WebSocket(target.webSocketDebuggerUrl);
-await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-
-let msgId = 0;
-const pending = new Map();
-const errors = [];
-ws.onmessage = ev => {
-    const msg = JSON.parse(ev.data);
-    if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
-    if (msg.method === 'Runtime.exceptionThrown')
-        errors.push(msg.params.exceptionDetails?.exception?.description ?? msg.params.exceptionDetails?.text ?? '?');
-    if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error')
-        errors.push(msg.params.args.map(a => a.value ?? a.description).join(' '));
-};
-const cdp = (method, params = {}) => new Promise(res => {
-    const i = ++msgId;
-    pending.set(i, res);
-    ws.send(JSON.stringify({ id: i, method, params }));
-});
-const ev = async expr =>
-    (await cdp('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true })).result?.result?.value;
-
-await cdp('Runtime.enable');
-await cdp('Page.enable');
+const tab = await chrome.tab(url);
+const { cdp, ev, errors } = tab;
 
 // ── Wait for service worker ────────────────────────────────────────────────────
 for (let i = 0; i < 30; i++) {

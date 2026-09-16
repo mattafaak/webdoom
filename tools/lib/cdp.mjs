@@ -36,7 +36,9 @@ async function openTab(port, url = 'about:blank') {
     let id = 0;
     const pending = new Map();
     const errors = [];    // exceptions + console.error
+    const warnings = [];  // console.warn
     const logs = [];      // every console call
+    const handlers = new Map();   // CDP event method → handler (tab.on)
     ws.onmessage = ev => {
         const m = JSON.parse(ev.data);
         if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
@@ -46,7 +48,9 @@ async function openTab(port, url = 'about:blank') {
             const text = m.params.args.map(a => a.value ?? a.description).join(' ');
             logs.push(text);
             if (m.params.type === 'error') errors.push(text);
+            if (m.params.type === 'warning') warnings.push(text);
         }
+        handlers.get(m.method)?.(m.params);
     };
     const cdp = (method, params = {}) => new Promise(res => {
         const i = ++id;
@@ -57,7 +61,8 @@ async function openTab(port, url = 'about:blank') {
     await cdp('Page.enable');
 
     const tab = {
-        id: target.id, cdp, errors, logs,
+        id: target.id, cdp, errors, warnings, logs,
+        on: (method, fn) => handlers.set(method, fn),
         ev: async (expression, opts = {}) =>
             (await cdp('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, ...opts })).result?.result?.value,
         navigate: url => cdp('Page.navigate', { url }),

@@ -49,101 +49,19 @@
 //
 // Usage: node tools/browser-offline-test.mjs [url]
 // url defaults to http://127.0.0.1:8692/ matching the embedded server below.
-import { spawn } from 'node:child_process';
-import { chromeBin, reapOnExit } from './chrome-harness.mjs';
-import { mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
-import { dirname } from 'node:path';
+import { launchChrome } from './lib/cdp.mjs';
+import { startServer } from './lib/server.mjs';
+import { sleep } from './lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const OFFLINE_PORT = 8692;
-const url = process.argv[2] ?? `http://127.0.0.1:${OFFLINE_PORT}/`;
-const CDP_PORT = 9242;   // dedicated — does not clash with any other suite
-
-// Fresh profile per invocation so SW cache is always cold on entry.
-const userDataDir = mkdtempSync(join(tmpdir(), 'chrome-offline-test-'));
-
-let server = null;
-let serverKilledIntentionally = false;
-const chrome = spawn(chromeBin(), [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`,
-    '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
-    '--use-angle=swiftshader', '--window-size=1280,960',
-    '--autoplay-policy=no-user-gesture-required',
-    `--user-data-dir=${userDataDir}`,
-    'about:blank',
-], { stdio: 'ignore', detached: true });
-reapOnExit(chrome);
-
-const cleanup = code => {
-    if (server) { try { server.kill(); } catch (_) {} }
-    chrome.kill();
-    process.exit(code);
-};
+let srv = await startServer();
+const url = srv.url;
+// a fresh profile per run (launchChrome), so the SW cache is always cold on entry
+const chrome = await launchChrome({ gpu: 'none' });
+const cleanup = code => { srv?.stop(); chrome.kill(); process.exit(code); };
 process.on('SIGINT',  () => cleanup(1));
 process.on('SIGTERM', () => cleanup(1));
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-// ── start dedicated server ────────────────────────────────────────────────────
-server = spawn('node', [join(root, 'server/serve.js')], {
-    env: { ...process.env, DOOM_PORT: String(OFFLINE_PORT), DOOM_HOST: '127.0.0.1' },
-    stdio: 'ignore',
-});
-server.on('exit', (code, sig) => {
-    if (!serverKilledIntentionally && code !== null && code !== 0) {
-        console.error(`FAIL: server exited unexpectedly (code ${code} sig ${sig})`);
-        cleanup(1);
-    }
-});
-
-await sleep(1500);   // chrome + server startup
-
-// ── CDP helpers ───────────────────────────────────────────────────────────────
-
-async function openTab(tabUrl) {
-    const res = await fetch(
-        `http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent(tabUrl)}`,
-        { method: 'PUT' },
-    );
-    const target = await res.json();
-    const ws = new WebSocket(target.webSocketDebuggerUrl);
-    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-
-    let msgId = 0;
-    const pending = new Map();
-    const errors = [];
-
-    ws.onmessage = ev => {
-        const msg = JSON.parse(ev.data);
-        if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
-        if (msg.method === 'Runtime.exceptionThrown')
-            errors.push(
-                msg.params.exceptionDetails?.exception?.description
-                ?? msg.params.exceptionDetails?.text
-                ?? '?',
-            );
-        if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error')
-            errors.push(msg.params.args.map(a => a.value ?? a.description).join(' '));
-    };
-
-    const cdp = (method, params = {}) => new Promise(res => {
-        const i = ++msgId;
-        pending.set(i, res);
-        ws.send(JSON.stringify({ id: i, method, params }));
-    });
-    const ev = async expr =>
-        (await cdp('Runtime.evaluate', {
-            expression: expr, returnByValue: true, awaitPromise: true,
-        })).result?.result?.value;
-
-    await cdp('Runtime.enable');
-    await cdp('Page.enable');
-
-    return { cdp, ev, errors, close() { ws.close(); } };
-}
+const openTab = tabUrl => chrome.tab(tabUrl);
 
 // Wait for navigator.serviceWorker.controller to be non-null.
 // This is the precache-complete signal: sw.js only calls skipWaiting() after
@@ -259,9 +177,8 @@ tab1.close();
 // ── Phase 2: kill server (simulate offline) ───────────────────────────────────
 
 console.log('[2] Killing server — simulating offline...');
-serverKilledIntentionally = true;
-server.kill();
-server = null;
+srv.stop();
+srv = null;
 await sleep(600);   // let OS reclaim the listening socket
 console.log('  server killed; all subsequent network requests will fail');
 

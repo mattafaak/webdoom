@@ -21,128 +21,25 @@
 // Wired into run-tests.sh as the insecure-origin CI leg (task 16.5).
 //
 // Usage: node tools/browser-insecure-test.mjs
-import { spawn } from 'node:child_process';
-import { chromeBin, reapOnExit } from './chrome-harness.mjs';
-import { existsSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
-import { dirname } from 'node:path';
+import { launchChrome } from './lib/cdp.mjs';
+import { startServer } from './lib/server.mjs';
+import { sleep } from './lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const INSECURE_PORT = 8674;
-const insecureUrl = `http://insecure.test:${INSECURE_PORT}/`;
-const CDP_PORT = 9246;
-
-// Resolve Chrome binary: CHROME_BIN env > /opt/google/chrome/chrome (container) >
-// google-chrome-stable (system PATH).  Use --disable-gpu (not --use-angle=swiftshader)
-// which is required in container/sandbox environments to avoid GPU process crashes.
-const CHROME_BIN =
-    process.env.CHROME_BIN ??
-    (existsSync('/opt/google/chrome/chrome') ? '/opt/google/chrome/chrome' : 'google-chrome-stable');
-
-// A fixed user-data-dir shared across both sessions: IDB survives between
-// tab opens within the same Chrome instance (same profile = same IDB origin).
-const userDataDir = mkdtempSync(join(tmpdir(), 'chrome-insecure-test-'));
-
-// Track /wads/ server hits per session via LOG_REQUESTS stderr output.
+// the server logs each request; the test counts /wads/ hits per session
 const wadHits = { s1: 0, s2: 0 };
 let activeSession = 0;
-
-let server = null;
-const chrome = spawn(CHROME_BIN, [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`,
-    '--no-first-run', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
-    '--window-size=1280,960',
-    '--autoplay-policy=no-user-gesture-required',
-    '--host-resolver-rules=MAP insecure.test 127.0.0.1',
-    `--user-data-dir=${userDataDir}`,
-    'about:blank',
-], { stdio: 'ignore', detached: true });
-reapOnExit(chrome);
-
-const cleanup = code => {
-    if (server) { try { server.kill(); } catch (_) {} }
-    chrome.kill();
-    process.exit(code);
-};
+const srv = await startServer({ env: { LOG_REQUESTS: '1' }, onStderr: chunk => {
+    for (const line of chunk.split('\n'))
+        if (line.includes('/wads/')) { if (activeSession === 1) wadHits.s1++; else if (activeSession === 2) wadHits.s2++; }
+} });
+const insecureUrl = `http://insecure.test:${srv.port}/`;
+// a fresh profile per run (launchChrome), so the SW cache is always cold on entry
+const chrome = await launchChrome({ gpu: 'none', flags: ['--host-resolver-rules=MAP insecure.test 127.0.0.1'] });
+const cleanup = code => { srv?.stop(); chrome.kill(); process.exit(code); };
 process.on('SIGINT',  () => cleanup(1));
 process.on('SIGTERM', () => cleanup(1));
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-// ── start server with request logging ─────────────────────────────────────────
-server = spawn('node', [join(root, 'server/serve.js')], {
-    env: {
-        ...process.env,
-        DOOM_PORT: String(INSECURE_PORT),
-        DOOM_HOST: '127.0.0.1',
-        LOG_REQUESTS: '1',
-    },
-    stdio: ['ignore', 'ignore', 'pipe'],
-});
-server.stderr.on('data', chunk => {
-    for (const line of chunk.toString().split('\n')) {
-        if (line.includes('/wads/')) {
-            if (activeSession === 1) wadHits.s1++;
-            else if (activeSession === 2) wadHits.s2++;
-        }
-    }
-});
-server.on('exit', (code, sig) => {
-    if (code !== null && code !== 0) {
-        console.error(`FAIL: server exited unexpectedly (code ${code} sig ${sig})`);
-        cleanup(1);
-    }
-});
-
-await sleep(1500);  // chrome + server startup
-
-// ── CDP helpers ───────────────────────────────────────────────────────────────
-async function openTab(tabUrl) {
-    const res = await fetch(
-        `http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent(tabUrl)}`,
-        { method: 'PUT' },
-    );
-    const target = await res.json();
-    const ws = new WebSocket(target.webSocketDebuggerUrl);
-    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-
-    let msgId = 0;
-    const pending = new Map();
-    const errors = [];
-
-    ws.onmessage = ev => {
-        const msg = JSON.parse(ev.data);
-        if (msg.id && pending.has(msg.id)) {
-            pending.get(msg.id)(msg);
-            pending.delete(msg.id);
-        }
-        if (msg.method === 'Runtime.exceptionThrown')
-            errors.push(
-                msg.params.exceptionDetails?.exception?.description
-                ?? msg.params.exceptionDetails?.text
-                ?? '?',
-            );
-        if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error')
-            errors.push(msg.params.args.map(a => a.value ?? a.description).join(' '));
-    };
-
-    const cdp = (method, params = {}) => new Promise(res => {
-        const i = ++msgId;
-        pending.set(i, res);
-        ws.send(JSON.stringify({ id: i, method, params }));
-    });
-    const ev = async expr =>
-        (await cdp('Runtime.evaluate', {
-            expression: expr, returnByValue: true, awaitPromise: true,
-        })).result?.result?.value;
-
-    await cdp('Runtime.enable');
-    await cdp('Page.enable');
-
-    return { cdp, ev, errors, close() { ws.close(); } };
-}
+const openTab = tabUrl => chrome.tab(tabUrl);
 
 // Wait for lobby menu (#dmenu .row[data-label="SINGLE PLAYER"]).
 async function waitForMenu(tab, label = 'tab', timeoutSecs = 30) {

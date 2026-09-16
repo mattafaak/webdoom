@@ -34,106 +34,19 @@
 // this container per env notes).
 //
 // Usage: node tools/browser-sf2-test.mjs [url]
-import { spawn }       from 'node:child_process';
-import { chromeBin, reapOnExit } from './chrome-harness.mjs';
-import { mkdtempSync } from 'node:fs';
-import { join }        from 'node:path';
-import { tmpdir }      from 'node:os';
-import { fileURLToPath } from 'node:url';
-import { dirname }     from 'node:path';
-import { existsSync }  from 'node:fs';
+import { join } from 'node:path';
+import { launchChrome } from './lib/cdp.mjs';
+import { startServer } from './lib/server.mjs';
+import { root, sleep } from './lib/util.mjs';
 
-const root      = join(dirname(fileURLToPath(import.meta.url)), '..');
-const BASE_URL  = process.argv[2] ?? 'http://127.0.0.1:8681/';
-const CDP_PORT  = 9251;
-const DOOM_PORT = 8681;
-
-const CHROME_BIN =
-    process.env.CHROME_BIN ??
-    (existsSync('/opt/google/chrome/chrome') ? '/opt/google/chrome/chrome' : 'google-chrome-stable');
-
-const userDataDir = mkdtempSync(join(tmpdir(), 'chrome-sf2-'));
-
-let server = null;
-const chrome = spawn(CHROME_BIN, [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`,
-    '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
-    '--disable-gpu', '--disable-dev-shm-usage',
-    '--window-size=1280,960',
-    '--autoplay-policy=no-user-gesture-required',
-    `--user-data-dir=${userDataDir}`,
-    'about:blank',
-], { stdio: 'ignore', detached: true });
-reapOnExit(chrome);
-
-const cleanup = code => {
-    if (server) { try { server.kill(); } catch (_) {} }
-    chrome.kill();
-    process.exit(code);
-};
+const srv = process.argv[2] ? null : await startServer();
+const BASE_URL = process.argv[2] ?? srv.url;
+// a fresh profile per run (launchChrome), so the SW cache is always cold on entry
+const chrome = await launchChrome({ gpu: 'none' });
+const cleanup = code => { srv?.stop(); chrome.kill(); process.exit(code); };
 process.on('SIGINT',  () => cleanup(1));
 process.on('SIGTERM', () => cleanup(1));
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-// ── Start server ──────────────────────────────────────────────────────────────
-server = spawn('node', [join(root, 'server/serve.js')], {
-    env: { ...process.env, DOOM_PORT: String(DOOM_PORT), DOOM_HOST: '127.0.0.1' },
-    stdio: 'ignore',
-});
-server.on('exit', (code, sig) => {
-    if (code !== null && code !== 0) {
-        console.error(`FAIL: server exited unexpectedly (code ${code} sig ${sig})`);
-        cleanup(1);
-    }
-});
-
-await sleep(1800);
-
-// ── CDP helpers ───────────────────────────────────────────────────────────────
-async function openTab(tabUrl) {
-    const res    = await fetch(
-        `http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent(tabUrl)}`,
-        { method: 'PUT' },
-    );
-    const target = await res.json();
-    const ws     = new WebSocket(target.webSocketDebuggerUrl);
-    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-
-    let msgId = 0;
-    const pending = new Map();
-    const errors  = [];
-
-    ws.onmessage = ev => {
-        const msg = JSON.parse(ev.data);
-        if (msg.id && pending.has(msg.id)) {
-            pending.get(msg.id)(msg);
-            pending.delete(msg.id);
-        }
-        if (msg.method === 'Runtime.exceptionThrown')
-            errors.push(
-                msg.params.exceptionDetails?.exception?.description
-                ?? msg.params.exceptionDetails?.text ?? '?',
-            );
-        if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error')
-            errors.push(msg.params.args.map(a => a.value ?? a.description).join(' '));
-    };
-
-    const cdp = (method, params = {}) => new Promise(res => {
-        const i = ++msgId;
-        pending.set(i, res);
-        ws.send(JSON.stringify({ id: i, method, params }));
-    });
-    const ev = async (expr, opts = {}) =>
-        (await cdp('Runtime.evaluate', {
-            expression: expr, returnByValue: true, awaitPromise: true, ...opts,
-        })).result?.result?.value;
-
-    await cdp('Runtime.enable');
-    await cdp('Page.enable');
-
-    return { cdp, ev, errors, close() { ws.close(); }, targetId: target.id };
-}
+const openTab = tabUrl => chrome.tab(tabUrl);
 
 async function waitForMenu(tab, label = 'tab', timeoutSecs = 30) {
     for (let i = 0; i < timeoutSecs * 2; i++) {
