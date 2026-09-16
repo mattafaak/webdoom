@@ -3,7 +3,7 @@
 //
 // WHY THIS EXISTS
 // ---------------
-// The project's most expensive recorded lesson (docs/Plans-refinement-complete.md:80)
+// The project's most expensive recorded lesson (docs/archive/Plans-refinement-complete.md:80)
 // is that "regolding a golden to make a failing gate pass can encode a real bug
 // — a regold needs an independent correctness reference, not just
 // self-consistency".  The 3.2 render regold had already encoded an artifact once.
@@ -67,7 +67,7 @@ export function recordReason(argv) {
         console.error('  A regold asserts the NEW output is correct.  Say why, and it is stored in');
         console.error('  the golden: --record-reason "20.3e: fake-flat now skips sky columns".');
         console.error('  Validate against a pre-change build, not against itself');
-        console.error('  (docs/Plans-refinement-complete.md:80 — a regold once encoded a real bug).');
+        console.error('  (docs/archive/Plans-refinement-complete.md:80 — a regold once encoded a real bug).');
         process.exit(2);
     }
     return reason;

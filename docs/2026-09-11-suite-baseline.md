@@ -120,7 +120,7 @@ to be edited in two places or the gate contradicts itself.
 instrumented `build-perf/` tree was built so `runtime-stat` runs too, and the
 skip message now prints the exact command to build it.
 
-(Prior art: `Plans-floor-initiative-complete.md:100` records the same claim
+(Prior art: `archive/Plans-floor-initiative-complete.md:100` records the same claim
 drifting once before, 5,461,072 -> 4,930,352, closed by task 14.4.)
 
 ### F5 — the build is byte-reproducible (CLOSED, new fact)

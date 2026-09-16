@@ -12,7 +12,7 @@
 // Four live instances when this landed, and the first two are the reason it is
 // worth a gate rather than a fix:
 //
-//   1. docs/retrospective.md's ARCHIVE banner — added by task 24.4, THE
+//   1. docs/archive/retrospective.md's ARCHIVE banner — added by task 24.4, THE
 //      STALE-DOC SWEEP — says "ZONESIZE is still open". The optimization ledger
 //      records C3 as "MEASURED (14.2c) — LANDED" and engine/web/web.h has
 //      `#define ZONESIZE (4 * 1024 * 1024)` in force. It shipped in July.
@@ -91,7 +91,7 @@ const reported = new Set();
 
 // A document that declares itself an archive is a statement about ITS date, and
 // grading it would mean rewriting history to satisfy a checker -- the opposite
-// of what this repo does with its records.  docs/retrospective.md carries
+// of what this repo does with its records.  docs/archive/retrospective.md carries
 // exactly such a banner and its body still describes ZONESIZE as it stood in
 // July, correctly.
 //
@@ -228,7 +228,7 @@ else {
 // (~~strikethrough~~, RESOLVED, or CLOSED).  It grades only what the document
 // itself asserts, so it cannot invent a verdict about work it does not
 // understand.
-const decisionDocs = docs.filter(f => /docs\/decision-[^/]+\.md$/.test(f));
+const decisionDocs = docs.filter(f => /docs\/(?:archive\/)?decision-[^/]+\.md$/.test(f));
 let handoffClaims = 0;
 for (const f of decisionDocs) {
     const text = read(f);

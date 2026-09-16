@@ -1,6 +1,6 @@
 # webdoom documentation index
 
-**32 documents** (25 top-level `.md` beside this index, 5 hardware bring-ups in
+**32 documents** (19 top-level `.md` beside this index, 6 in `archive/`, 5 hardware bring-ups in
 subdirectories, and id Software's 2 originals), ~15,250 lines. The count names
 its SET on purpose: this line read "26 documents" while `docs-index-check`'s own
 PASS line, in the same breath, said "all 32 documents under docs/" — both true
@@ -82,14 +82,14 @@ Read the banner first — all three carry a dated status.
 
 | document | what it is |
 |---|---|
-| [decision-18.1-wide-limits.md](decision-18.1-wide-limits.md) | widescreen: the BSS arithmetic and the limits it forced. **Archived 2026-09-12** — widescreen was removed; kept because its §5 arithmetic is what the revert was checked against |
-| [retrospective.md](retrospective.md) | the 2026-07-16 refinement-pass retrospective. Self-declared archive: its body describes that date, not this one |
-| [Plans-refinement-complete.md](Plans-refinement-complete.md) | the refinement initiative's task table, 26/26. Holds the regold lesson `tools/golden-provenance.mjs` cites by line |
-| [Plans-understanding-complete.md](Plans-understanding-complete.md) | phases 6–11, understanding-on-trial |
-| [Plans-floor-initiative-complete.md](Plans-floor-initiative-complete.md) | phases 12–15, 32/32 at `8305c4a` |
-| [Plans-field-fixes-complete.md](Plans-field-fixes-complete.md) | round 3, phases 16–19, 22/22 at `1f9f1e5`. The tasks `Plans.md`'s round-3 planning sections rank and sequence |
+| [archive/decision-18.1-wide-limits.md](archive/decision-18.1-wide-limits.md) | widescreen: the BSS arithmetic and the limits it forced. **Archived 2026-09-12** — widescreen was removed; kept because its §5 arithmetic is what the revert was checked against |
+| [archive/retrospective.md](archive/retrospective.md) | the 2026-07-16 refinement-pass retrospective. Self-declared archive: its body describes that date, not this one |
+| [archive/Plans-refinement-complete.md](archive/Plans-refinement-complete.md) | the refinement initiative's task table, 26/26. Holds the regold lesson `tools/golden-provenance.mjs` cites by line |
+| [archive/Plans-understanding-complete.md](archive/Plans-understanding-complete.md) | phases 6–11, understanding-on-trial |
+| [archive/Plans-floor-initiative-complete.md](archive/Plans-floor-initiative-complete.md) | phases 12–15, 32/32 at `8305c4a` |
+| [archive/Plans-field-fixes-complete.md](archive/Plans-field-fixes-complete.md) | round 3, phases 16–19, 22/22 at `1f9f1e5`. The tasks `Plans.md`'s round-3 planning sections rank and sequence |
 
-These four moved here from the repo root in round 6: 486 lines of closed
+These six live under `archive/` (round 8); the four `Plans-*` files are 486 lines of closed
 task tables that made the front door look like a planning directory. They
 are the record of how each initiative actually went, and `Plans.md` links
 them from its first paragraph.

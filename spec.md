@@ -285,7 +285,7 @@ else. `doom.wasm` shrank 357,060 → 355,893 bytes (README 349 → 348 KB).
 
 Retired with it: legs `render-wide`, `sim-wide`, `browser-wide`,
 `mixed-width-net` and `sprite-witness`, 14 golden files,
-`tools/wide-experiment/`, and `bench.mjs --wide`. `docs/decision-18.1-wide-limits.md`
+`tools/wide-experiment/`, and `bench.mjs --wide`. `docs/archive/decision-18.1-wide-limits.md`
 is archived, not deleted — it holds the BSS arithmetic this revert was checked
 against.
 

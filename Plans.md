@@ -1,9 +1,9 @@
 # webdoom Plans.md
 
-Prior initiatives archived: `docs/Plans-refinement-complete.md` (26/26),
-`docs/Plans-understanding-complete.md` (Phases 6–11),
-`docs/Plans-floor-initiative-complete.md` (Phases 12–15, 32/32 at 8305c4a),
-`docs/Plans-field-fixes-complete.md` (round 3 Phases 16–19, 22/22 at 1f9f1e5).
+Prior initiatives archived: `docs/archive/Plans-refinement-complete.md` (26/26),
+`docs/archive/Plans-understanding-complete.md` (Phases 6–11),
+`docs/archive/Plans-floor-initiative-complete.md` (Phases 12–15, 32/32 at 8305c4a),
+`docs/archive/Plans-field-fixes-complete.md` (round 3 Phases 16–19, 22/22 at 1f9f1e5).
 
 ## Markers used in the tables below
 
@@ -64,7 +64,7 @@ silent regold. Every new client module updates the SHELL precache
 
 > **These four sections are ROUND 3's planning apparatus, and the tasks they
 > rank, sequence and validate — 16.x through 19.x — were archived to
-> `docs/Plans-field-fixes-complete.md` when that round closed 22/22 at `1f9f1e5`.
+> `docs/archive/Plans-field-fixes-complete.md` when that round closed 22/22 at `1f9f1e5`.
 > They are kept as the record of how that round was planned, not as live
 > guidance: a reader looking for what is open should read the task tables
 > above, where 20.x onward live. (Round 6 flagged them; they were four
