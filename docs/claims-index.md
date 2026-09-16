@@ -177,8 +177,8 @@ and inline `*(not machine-verified)*` markers for the 15 unverifiable claims.
 | perf-012 | perf.md:134 | peak heap address worst-case single IWAD | ~25.42 MB | derived | 5,042,416 + 4,194,304 + 17,420,824 = 26,657,544 B ≈ 25.42 MB | derived-from-gated |
 | perf-013 | perf.md:135 | headroom vs 64 MB (single IWAD) | ~10.18 MB | derived | 64 MB − 53.82 MB ≈ 10.18 MB | derived-from-gated |
 | perf-014 | perf.md:148 | INITIAL_MEMORY floor (tested pass/fail boundary) | 56 MB | measurement | requires emcc INITIAL_MEMORY sweep build; no current script | unverifiable |
-| perf-015 | perf.md:212 | all deliverables total gzip-9 wire size | 236 KB | measurement | tools/payload-size.mjs (derived from sw.js SHELL_FILES) | verified |
-| perf-016 | perf.md:213 | JS + CSS + HTML gzip-9 total (no wasm, no glue) | 89.2 KB | measurement | tools/payload-size.mjs (derived from sw.js SHELL_FILES) | verified |
+| perf-015 | perf.md:212 | all deliverables total gzip-9 wire size | 222.5 KB | measurement | tools/payload-size.mjs (derived from sw.js SHELL_FILES) | verified |
+| perf-016 | perf.md:213 | JS + CSS + HTML gzip-9 total (no wasm, no glue) | 75.7 KB | measurement | tools/payload-size.mjs (derived from sw.js SHELL_FILES) | verified |
 | perf-017 | perf.md:225 | bsp+segs avg ms/frame — wbox (3-demo avg) | 0.2625 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
 | perf-018 | perf.md:225 | bsp+segs avg ms/frame — tank | 0.0549 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
 | perf-019 | perf.md:225 | bsp+segs avg ms/frame — pi5 | 0.0715 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
