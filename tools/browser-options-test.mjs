@@ -35,39 +35,14 @@
 //     keydown, so a synchronously-armed capture sees that same press.
 //
 // usage: node tools/browser-options-test.mjs [url]
-import { spawn } from 'node:child_process';
-import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
-
-const CDP = 9248;
-const chrome = spawn(chromeBin(), [
-    '--headless=new', `--remote-debugging-port=${CDP}`, chromeProfileArg(), '--no-first-run', '--no-sandbox',
-    '--use-angle=swiftshader', '--autoplay-policy=no-user-gesture-required', 'about:blank',
-], { stdio: 'ignore', detached: true });
-reapOnExit(chrome);
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-await sleep(1500);
-
+import { launchChrome } from './lib/cdp.mjs';
+import { sleep } from './lib/util.mjs';
+const chrome = await launchChrome();
 const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
-const t = await (await fetch(`http://127.0.0.1:${CDP}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' })).json();
-const ws = new WebSocket(t.webSocketDebuggerUrl);
-await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-let id = 0; const pend = new Map();
-const excs = [];
-ws.onmessage = e => {
-    const m = JSON.parse(e.data);
-    if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); }
-    if (m.method === 'Runtime.exceptionThrown')
-        excs.push(String(m.params.exceptionDetails?.exception?.description ?? '').split('\n')[0]);
-};
-const cdp = (m, p = {}) => new Promise(res => { const i = ++id; pend.set(i, res); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
-const ev = async e => (await cdp('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true })).result?.result?.value;
-const key = async (k, vk, code) => {
-    code ??= k.length === 1 ? `Key${k.toUpperCase()}` : k;
-    await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk, text: k.length === 1 ? k : undefined });
-    await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk });
-    await sleep(120);
-};
-await cdp('Runtime.enable'); await cdp('Page.enable');
+const tab = await chrome.tab(url);
+const { cdp, ev, key } = tab;
+// first line of each exception, as the assertions below compare them
+const excs = tab.errors;
 const done = c => { chrome.kill(); process.exit(c); };
 
 const results = [];

@@ -7,52 +7,17 @@
 // State-machine edge coverage (docs/state-machine.md):
 //   T03 SP-PICK → SP-LOADING  (click game title → bootDoom starts)
 //   T04 SP-LOADING → IN-GAME-SP  (bootDoom resolves)
-import { spawn } from 'node:child_process';
-import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { launchChrome } from './lib/cdp.mjs';
+import { sleep } from './lib/util.mjs';
 
 const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
 const outdir = process.argv[3] ?? '/tmp';
-const CDP_PORT = 9223;
-
-const chrome = spawn(chromeBin(), [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, chromeProfileArg(),
-    '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
-    '--use-angle=swiftshader', '--window-size=1280,960',
-    '--autoplay-policy=no-user-gesture-required', 'about:blank',
-], { stdio: 'ignore', detached: true });
-reapOnExit(chrome);
+const chrome = await launchChrome();
 const cleanup = code => { chrome.kill(); process.exit(code); };
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-await sleep(1500);
-
-const target = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' })).json();
-const ws = new WebSocket(target.webSocketDebuggerUrl);
-await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-
-let id = 0;
-const pending = new Map();
-const consoleErrors = [];
-ws.onmessage = ev => {
-    const msg = JSON.parse(ev.data);
-    if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
-    if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error')
-        consoleErrors.push(msg.params.args.map(a => a.value ?? a.description).join(' '));
-    if (msg.method === 'Runtime.exceptionThrown')
-        consoleErrors.push(msg.params.exceptionDetails.text);
-};
-const cdp = (method, params = {}) => new Promise(res => {
-    const i = ++id;
-    pending.set(i, res);
-    ws.send(JSON.stringify({ id: i, method, params }));
-});
-const evaluate = async expr =>
-    (await cdp('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true })).result?.result?.value;
-
-await cdp('Runtime.enable');
-await cdp('Page.enable');
+const tab = await chrome.tab(url);
+const { cdp, ev: evaluate, errors: consoleErrors } = tab;
 
 // Wait for the service worker to activate and claim this page.
 // sw.js uses skipWaiting()+clients.claim() so this is typically <2s on a

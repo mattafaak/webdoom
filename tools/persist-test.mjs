@@ -1,50 +1,17 @@
 // save in E1M1, reload the page, assert the savegame was restored into
 // the fresh engine FS from IndexedDB. Also tests ws-008 teardown: after
 // doom.onQuit() the sync interval must stop firing (no unhandled rejections).
-import { spawn } from 'node:child_process';
-import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
-const CDP = 9234;
-const chrome = spawn(chromeBin(), [
-    '--headless=new', `--remote-debugging-port=${CDP}`, chromeProfileArg(), '--no-first-run', '--no-sandbox',
-    '--use-angle=swiftshader', '--autoplay-policy=no-user-gesture-required', 'about:blank',
-], { stdio: 'ignore', detached: true });
-reapOnExit(chrome);
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-await sleep(1500);
+import { launchChrome } from './lib/cdp.mjs';
+import { sleep } from './lib/util.mjs';
+const chrome = await launchChrome();
 const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
-const t = await (await fetch(`http://127.0.0.1:${CDP}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' })).json();
-const ws = new WebSocket(t.webSocketDebuggerUrl);
-await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-let id = 0; const pend = new Map();
-const logs = [];
-ws.onmessage = ev => { const m = JSON.parse(ev.data); if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); }
-    if (m.method === 'Runtime.consoleAPICalled') logs.push(m.params.args.map(a => a.value ?? a.description).join(' '));
-    if (m.method === 'Runtime.exceptionThrown') logs.push('EXC ' + JSON.stringify(m.params.exceptionDetails).slice(0, 200)); };
-const cdp = (m, p = {}) => new Promise(res => { const i = ++id; pend.set(i, res); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
-const ev = async e => (await cdp('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true })).result?.result?.value;
-const key = async (k, vk, code) => {
-    code ??= k.length === 1 ? `Key${k.toUpperCase()}` : k;
-    await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk, text: k.length === 1 ? k : undefined });
-    await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk });
-    await sleep(120);
-};
-await cdp('Runtime.enable'); await cdp('Page.enable');
+const tab = await chrome.tab(url);
+const { cdp, ev, key } = tab;
+// every console line, exceptions marked, so the tail below can be filtered
+const logs = tab.logs;
 const fail = m => { console.error('FAIL:', m); chrome.kill(); process.exit(1); };
 
-async function bootSP() {
-    for (let i = 0; i < 30; i++) {
-        await sleep(500);
-        if (await ev(`(() => { const r = document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]');
-            if (!r) return false; r.click();
-            const g = document.querySelector('#dmenu .row[data-label*="ULTIMATE"]');
-            return g ? (g.click(), true) : false; })()`)) break;
-    }
-    for (let i = 0; i < 30; i++) {
-        await sleep(500);
-        if (await ev(`window.webdoom && document.getElementById('status')?.textContent === ''`)) return;
-    }
-    fail('boot timeout');
-}
+const bootSP = async () => { if (!await tab.bootSP(30)) fail('boot timeout'); };
 
 await bootSP();
 // menu → new game → E1M1

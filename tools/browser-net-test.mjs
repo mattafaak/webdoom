@@ -9,72 +9,26 @@
 //   T14 MP-COUNTDOWN → MP-LOADING  (server launch → menu.hide() + bootDoom starts)
 //   T15 MP-LOADING → IN-GAME-MP    (bootDoom resolves)
 //   T17 IN-GAME-MP → LANDING       (Quit Game → Y → onQuit → returnToMenu)
-import { spawn } from 'node:child_process';
-import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { launchChrome } from './lib/cdp.mjs';
+import { sleep } from './lib/util.mjs';
 
 const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
 const outdir = process.argv[3] ?? '/tmp';
-const CDP_PORT = 9224;
-
-const chrome = spawn(chromeBin(), [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, chromeProfileArg(),
-    '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
-    '--use-angle=swiftshader', '--window-size=1280,960',
-    '--autoplay-policy=no-user-gesture-required', 'about:blank',
-], { stdio: 'ignore', detached: true });
-reapOnExit(chrome);
+const chrome = await launchChrome();
 const cleanup = code => { chrome.kill(); process.exit(code); };
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-await sleep(1500);
 
 async function openTab(name) {
-    const target = await (await fetch(
-        `http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent(url)}`,
-        { method: 'PUT' })).json();
-    const ws = new WebSocket(target.webSocketDebuggerUrl);
-    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-    let id = 0;
-    const pending = new Map();
-    const errors = [];
-    ws.onmessage = ev => {
-        const m = JSON.parse(ev.data);
-        if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
-        if (m.method === 'Runtime.exceptionThrown')
-            errors.push(m.params.exceptionDetails.text);
-    };
-    const cdp = (method, params = {}) => new Promise(res => {
-        const i = ++id;
-        pending.set(i, res);
-        ws.send(JSON.stringify({ id: i, method, params }));
-    });
-    await cdp('Runtime.enable');
-    await cdp('Page.enable');
+    const tab = await chrome.tab(url);
     return {
-        name, errors, cdp,
-        eval: async expr => (await cdp('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true })).result?.result?.value,
+        name, errors: tab.errors, cdp: tab.cdp, eval: tab.ev, click: tab.click,
         shot: async file => {
-            const { result } = await cdp('Page.captureScreenshot', { format: 'png' });
+            const { result } = await tab.cdp('Page.captureScreenshot', { format: 'png' });
             writeFileSync(join(outdir, file), Buffer.from(result.data, 'base64'));
         },
-        async click(label) {
-            for (let i = 0; i < 10; i++) {
-                const ok = await this.eval(
-                    `(() => { const r = document.querySelector('#dmenu .row[data-label*=${JSON.stringify(label)}]');
-                              return r ? (r.click(), true) : false; })()`);
-                if (ok) return true;
-                await sleep(300);
-            }
-            return false;
-        },
-        async key(key) {
-            // the menu switches on e.code, so send a matching code
-            const code = key.length === 1 ? `Key${key.toUpperCase()}` : key;
-            for (const type of ['keyDown', 'keyUp'])
-                await this.cdp('Input.dispatchKeyEvent', { type, key, code, text: type === 'keyDown' && key.length === 1 ? key : undefined });
-            await sleep(80);
-        },
+        // the menu switches on e.code, so send a matching code
+        key: k => tab.key(k, undefined, k.length === 1 ? `Key${k.toUpperCase()}` : k),
     };
 }
 

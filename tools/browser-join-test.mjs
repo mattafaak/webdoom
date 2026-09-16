@@ -9,52 +9,24 @@
 //   T18 DROP-IN-OFFER → DROP-IN-LOADING  (click DROP IN → lobby.send join → server welcome+launch)
 //   T19 DROP-IN-LOADING → IN-GAME-MP     (catch-up done, relay goes live)
 //   T31 DROP-IN-OFFER → IN-GAME-MP       (click SPECTATE → receive-only boot)
-import { spawn } from 'node:child_process';
-import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { launchChrome } from './lib/cdp.mjs';
+import { sleep } from './lib/util.mjs';
 
 const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
 const outdir = process.argv[3] ?? '/tmp';
-const CDP_PORT = 9225;
-
-const chrome = spawn(chromeBin(), [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, chromeProfileArg(),
-    '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
-    '--use-angle=swiftshader', '--window-size=1280,960',
-    '--autoplay-policy=no-user-gesture-required', 'about:blank',
-], { stdio: 'ignore', detached: true });
-reapOnExit(chrome);
+const chrome = await launchChrome();
 const cleanup = code => { chrome.kill(); process.exit(code); };
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-await sleep(1500);
 
 async function openTab(name) {
-    const target = await (await fetch(
-        `http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' })).json();
-    const ws = new WebSocket(target.webSocketDebuggerUrl);
-    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-    let id = 0; const pending = new Map(); const errors = [];
-    ws.onmessage = ev => {
-        const m = JSON.parse(ev.data);
-        if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
-        if (m.method === 'Runtime.exceptionThrown') errors.push(m.params.exceptionDetails.text);
-    };
-    const cdp = (method, params = {}) => new Promise(res => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
-    await cdp('Runtime.enable'); await cdp('Page.enable');
+    const tab = await chrome.tab(url);
     return {
-        name, errors, cdp,
-        eval: async expr => (await cdp('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true })).result?.result?.value,
-        shot: async file => { const { result } = await cdp('Page.captureScreenshot', { format: 'png' }); writeFileSync(join(outdir, file), Buffer.from(result.data, 'base64')); },
-        async click(label) {
-            for (let i = 0; i < 10; i++) {
-                const ok = await this.eval(`(() => { const r = document.querySelector('#dmenu .row[data-label*=${JSON.stringify(label)}]'); return r ? (r.click(), true) : false; })()`);
-                if (ok) return true;
-                await sleep(300);
-            }
-            return false;
+        name, errors: tab.errors, cdp: tab.cdp, eval: tab.ev, click: tab.click, inGame: tab.inGame,
+        shot: async file => {
+            const { result } = await tab.cdp('Page.captureScreenshot', { format: 'png' });
+            writeFileSync(join(outdir, file), Buffer.from(result.data, 'base64'));
         },
-        inGame() { return this.eval(`!document.getElementById('screen').hidden && document.getElementById('status')?.textContent === ''`); },
     };
 }
 
