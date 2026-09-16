@@ -17,16 +17,14 @@
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
+import { join } from 'node:path';
+import { launchChrome } from './lib/cdp.mjs';
+import { startServer } from './lib/server.mjs';
+import { root, sleep } from './lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const HOST = hostname();
 const BASELINE = join(root, 'tools/golden', `load-budget-${HOST}.json`);
 const record = process.argv.includes('--record');
-const PORT = 8696, CDP_PORT = 9281;
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 if (!record && !existsSync(BASELINE)) {
     console.log(`SKIP load-budget: no baseline for host '${HOST}'`);
@@ -35,36 +33,19 @@ if (!record && !existsSync(BASELINE)) {
     process.exit(0);
 }
 
-const srv = spawn('node', [join(root, 'server/serve.js')], {
-    env: { ...process.env, DOOM_PORT: String(PORT), DOOM_HOST: '127.0.0.1' },
-    stdio: ['ignore', 'ignore', 'ignore'],
-});
+const srv = await startServer();
 // ONE profile across both loads: a fresh profile per load would make the second
 // load cold too, and the gate would measure nothing but noise.
-const chrome = spawn(chromeBin(), [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, chromeProfileArg(),
-    '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
-    '--use-angle=swiftshader', '--window-size=1280,960', 'about:blank',
-], { stdio: 'ignore', detached: true });
-reapOnExit(chrome);
-const cleanup = code => { try { chrome.kill(); } catch { /* gone */ } try { srv.kill(); } catch { /* gone */ } process.exit(code); };
+const chrome = await launchChrome();
+const cleanup = code => { try { chrome.kill(); } catch { /* gone */ } try { srv.stop(); } catch { /* gone */ } process.exit(code); };
 const fail = m => { console.log(`FAIL load-budget: ${m}`); cleanup(1); };
-await sleep(1800);
-
-const target = await (await fetch(
-    `http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent('about:blank')}`, { method: 'PUT' })).json();
-const ws = new WebSocket(target.webSocketDebuggerUrl);
-await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; }).catch(() => fail('CDP refused'));
-let id = 0; const pending = new Map();
-ws.onmessage = ev => { const m = JSON.parse(ev.data); if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } };
-const cdp = (method, params = {}) => new Promise(res => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
-const evaluate = async e => (await cdp('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true }))?.result?.result?.value;
-await cdp('Runtime.enable'); await cdp('Page.enable');
+const tab = await chrome.tab('about:blank');
+const { cdp, ev: evaluate } = tab;
 
 // One load: navigate, drill the launcher, wait for the engine. Returns ms.
 async function load(label) {
     const t0 = Date.now();
-    await cdp('Page.navigate', { url: `http://127.0.0.1:${PORT}/` });
+    await cdp('Page.navigate', { url: srv.url });
     let clicked = false;
     for (let i = 0; i < 120; i++) {
         await sleep(150);

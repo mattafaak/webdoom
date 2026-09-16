@@ -17,87 +17,29 @@
 //            Asserts the warning/status message is shown.
 //
 // usage: node tools/browser-demo-test.mjs [url] [outdir]
-import { spawn } from 'node:child_process';
-import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { launchChrome } from './lib/cdp.mjs';
+import { sleep } from './lib/util.mjs';
 
 const srvUrl  = process.argv[2] ?? 'http://127.0.0.1:8666/';
 const outdir  = process.argv[3] ?? '/tmp';
-const CDP_PORT = 9272;
 const TARGET_TICKS = 50;   // 13 + 50*4 + 1 = 214 bytes — well below FRAGMENT_MAX=6000
 
-const chrome = spawn(chromeBin(), [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, chromeProfileArg(),
-    '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
-    '--use-angle=swiftshader', '--window-size=1280,960',
-    '--autoplay-policy=no-user-gesture-required',
-    // Prevent Chrome from throttling rAF to 0fps in background/second tabs.
-    // Without these flags Tab B's requestAnimationFrame never fires (headless
-    // multi-tab backgrounding), so _replayDone is never set → 90s timeout.
-    '--disable-background-timer-throttling',
-    '--disable-renderer-backgrounding',
-    'about:blank',
-], { stdio: 'ignore', detached: true });
-reapOnExit(chrome);
+// a hidden tab's rAF is throttled, and Tab B replays under a frame hook
+const chrome = await launchChrome({ flags: ['--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
 const cleanup = code => { chrome.kill(); process.exit(code); };
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-await sleep(1500);
-
-// ── CDP helpers ───────────────────────────────────────────────────────────────
 
 async function openTab(url) {
-    const target = await (await fetch(
-        `http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent(url)}`,
-        { method: 'PUT' })).json();
-    const ws = new WebSocket(target.webSocketDebuggerUrl);
-    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-    let _id = 0;
-    const pending = new Map();
-    const errors = [];
-    ws.onmessage = ev => {
-        const m = JSON.parse(ev.data);
-        if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
-        if (m.method === 'Runtime.exceptionThrown')
-            errors.push(m.params.exceptionDetails?.text ?? JSON.stringify(m.params));
-        // Capture console.error / warn output so main.js wasm-abort catch is visible.
-        if (m.method === 'Runtime.consoleAPICalled' &&
-            (m.params.type === 'error' || m.params.type === 'warning')) {
-            const text = m.params.args?.map(a => a.value ?? a.description ?? '').join(' ');
-            errors.push(`[console.${m.params.type}] ${text}`);
-        }
-        // Chrome Log domain: captures browser-generated errors (network, wasm trap, etc.).
-        if (m.method === 'Log.entryAdded' &&
-            (m.params.entry?.level === 'error' || m.params.entry?.level === 'warning')) {
-            errors.push(`[Log.${m.params.entry.level}] ${m.params.entry.text}`);
-        }
+    const tab = await chrome.tab(url);
+    return {
+        cdp: tab.cdp, eval: tab.ev, errors: tab.errors,
+        click: label => tab.click(label, 20),
+        shot: async file => {
+            const { result } = await tab.cdp('Page.captureScreenshot', { format: 'png' });
+            writeFileSync(join(outdir, file), Buffer.from(result.data, 'base64'));
+        },
     };
-    const cdp = (method, params = {}) => new Promise(res => {
-        const i = ++_id;
-        pending.set(i, res);
-        ws.send(JSON.stringify({ id: i, method, params }));
-    });
-    await cdp('Runtime.enable');
-    await cdp('Page.enable');
-    await cdp('Log.enable');
-    const eval_ = async expr => (await cdp('Runtime.evaluate', {
-        expression: expr, returnByValue: true, awaitPromise: true,
-    })).result?.result?.value;
-    const click = async label => {
-        for (let i = 0; i < 20; i++) {
-            const ok = await eval_(
-                `(() => { const r = document.querySelector('#dmenu .row[data-label*=${JSON.stringify(label)}]');
-                          return r ? (r.click(), true) : false; })()`);
-            if (ok) return true;
-            await sleep(300);
-        }
-        return false;
-    };
-    const shot = async file => {
-        const { result } = await cdp('Page.captureScreenshot', { format: 'png' });
-        writeFileSync(join(outdir, file), Buffer.from(result.data, 'base64'));
-    };
-    return { cdp, eval: eval_, click, shot, errors };
 }
 
 // Poll until fn() returns truthy or timeout.

@@ -4,78 +4,16 @@
 //
 // State-machine edge coverage (docs/state-machine.md):
 //   T05 SP-LOADING → LANDING  (bootDoom rejects: WAD fetch / engine fail)
-import { spawn } from 'node:child_process';
-import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { launchChrome } from './lib/cdp.mjs';
+import { sleep } from './lib/util.mjs';
 
 const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
 const outdir = process.argv[3] ?? '/tmp';
-const CDP_PORT = 9233;
-
-const chrome = spawn(chromeBin(), [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, chromeProfileArg(),
-    '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
-    '--use-angle=swiftshader', '--window-size=1280,960',
-    '--autoplay-policy=no-user-gesture-required', 'about:blank',
-], { stdio: 'ignore', detached: true });
-reapOnExit(chrome);
-
+const chrome = await launchChrome();
 const cleanup = code => { chrome.kill(); process.exit(code); };
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-await sleep(1500);
-
-// ── CDP helper ────────────────────────────────────────────────────────────────
-
-async function openTab() {
-    const target = await (await fetch(
-        `http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent(url)}`,
-        { method: 'PUT' },
-    )).json();
-    const ws = new WebSocket(target.webSocketDebuggerUrl);
-    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-
-    let msgId = 0;
-    const pending = new Map();
-    const errors = [];
-    const warnings = [];
-    const evHandlers = new Map();
-
-    ws.onmessage = ev => {
-        const msg = JSON.parse(ev.data);
-        if (msg.id && pending.has(msg.id)) {
-            pending.get(msg.id)(msg);
-            pending.delete(msg.id);
-        }
-        if (msg.method === 'Runtime.exceptionThrown')
-            errors.push(
-                msg.params.exceptionDetails?.exception?.description
-                ?? msg.params.exceptionDetails?.text
-                ?? '?',
-            );
-        if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error')
-            errors.push(msg.params.args.map(a => a.value ?? a.description).join(' '));
-        if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'warning')
-            warnings.push(msg.params.args.map(a => a.value ?? a.description).join(' '));
-        const h = evHandlers.get(msg.method);
-        if (h) h(msg.params);
-    };
-
-    const cdp = (method, params = {}) => new Promise(res => {
-        const i = ++msgId;
-        pending.set(i, res);
-        ws.send(JSON.stringify({ id: i, method, params }));
-    });
-    const ev = async expr =>
-        (await cdp('Runtime.evaluate', {
-            expression: expr, returnByValue: true, awaitPromise: true,
-        })).result?.result?.value;
-
-    await cdp('Runtime.enable');
-    await cdp('Page.enable');
-
-    return { cdp, ev, errors, warnings, on(m, h) { evHandlers.set(m, h); }, close() { ws.close(); } };
-}
+const openTab = () => chrome.tab(url);
 
 // Wait for lobby menu to be rendered
 async function waitForMenu(tab, secs = 25) {

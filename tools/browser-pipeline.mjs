@@ -40,7 +40,9 @@
 //       --url http://127.0.0.1:8691/ --json
 
 import { spawn, execFileSync } from 'node:child_process';
-import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
+import { chromeBin } from './chrome-harness.mjs';
+import { launchChrome } from './lib/cdp.mjs';
+import { sleep } from './lib/util.mjs';
 import { existsSync }          from 'node:fs';
 import { join, dirname }       from 'node:path';
 import { fileURLToPath }       from 'node:url';
@@ -74,12 +76,10 @@ const MIN_FRAMES     = framesIdx >= 0 ? Number(args[framesIdx + 1]) : 200;
 
 // ── Config (env overrides) ─────────────────────────────────────────────────────
 const CHROME_BIN = chromeBin();
-const CDP_PORT   = Number(process.env.CDP_PORT ?? 9226);
 const DEFAULT_URL  = 'http://127.0.0.1:8666/';
 const SPAWN_PORT   = 8691;
 
 const hostname = os.hostname();
-const sleep    = ms => new Promise(r => setTimeout(r, ms));
 
 let chrome = null;
 let ownSrv = null;
@@ -138,54 +138,9 @@ const PERF_URL = BASE_URL.includes('?')
     ? BASE_URL + '&perfmarks=1'
     : BASE_URL + '?perfmarks=1';
 
-chrome = spawn(CHROME_BIN, [
-    '--headless=new',
-    `--remote-debugging-port=${CDP_PORT}`, chromeProfileArg(),
-    '--no-first-run',
-    '--no-sandbox',
-    '--disable-gpu-sandbox',
-    '--use-angle=swiftshader',
-    '--window-size=1280,960',
-    '--autoplay-policy=no-user-gesture-required',
-    'about:blank',
-], { stdio: 'ignore', detached: true });
-reapOnExit(chrome);
-chrome.on('error', e => fail(`chrome spawn: ${e.message}`));
-await sleep(1500);
-
-// ── 3. Open CDP target ─────────────────────────────────────────────────────────
-const target = await (await fetch(
-    `http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent(PERF_URL)}`,
-    { method: 'PUT' },
-)).json();
-
-const ws = new WebSocket(target.webSocketDebuggerUrl);
-await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-
-let mid       = 0;
-const pending = new Map();
-
-ws.onmessage = ev => {
-    const msg = JSON.parse(ev.data);
-    if (msg.id && pending.has(msg.id)) {
-        pending.get(msg.id)(msg);
-        pending.delete(msg.id);
-    }
-};
-
-const cdp = (method, params = {}) => new Promise(res => {
-    const i = ++mid;
-    pending.set(i, res);
-    ws.send(JSON.stringify({ id: i, method, params }));
-});
-
-const evaluate = async expr =>
-    (await cdp('Runtime.evaluate', {
-        expression: expr, returnByValue: true, awaitPromise: true,
-    })).result?.result?.value;
-
-await cdp('Runtime.enable');
-await cdp('Page.enable');
+chrome = await launchChrome();
+const tab = await chrome.tab(PERF_URL);
+const { cdp, ev: evaluate } = tab;
 
 // ── 4. Wait for service worker ─────────────────────────────────────────────────
 for (let i = 0; i < 40; i++) {

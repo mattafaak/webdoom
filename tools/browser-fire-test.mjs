@@ -9,53 +9,18 @@
 //       measured via window._fireBg._lastMs() exposed by fire.js)
 //
 // Usage: node tools/browser-fire-test.mjs [url]
-import { spawn }         from 'node:child_process';
-import { chromeBin, chromeProfileArg, reapOnExit } from './chrome-harness.mjs';
 import { writeFileSync } from 'node:fs';
 import { join }          from 'node:path';
+import { launchChrome }  from './lib/cdp.mjs';
+import { sleep }         from './lib/util.mjs';
 
 const url    = process.argv[2] ?? 'http://127.0.0.1:8666/';
 const outdir = process.argv[3] ?? '/tmp';
-const CDP_PORT = 9241;   // dedicated port — does not clash with browser-test.mjs (9223)
-
-const chrome = spawn(chromeBin(), [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, chromeProfileArg(),
-    '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
-    '--use-angle=swiftshader', '--window-size=1280,960',
-    '--autoplay-policy=no-user-gesture-required', 'about:blank',
-], { stdio: 'ignore', detached: true });
-reapOnExit(chrome);
+const chrome = await launchChrome();
 const cleanup = code => { chrome.kill(); process.exit(code); };
 const fail    = msg  => { console.error(`FAIL: ${msg}`); cleanup(1); };
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-await sleep(1500);
-
-const target = await (await fetch(
-    `http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent(url)}`,
-    { method: 'PUT' }
-)).json();
-
-const ws = new WebSocket(target.webSocketDebuggerUrl);
-await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-
-let id = 0;
-const pending = new Map();
-ws.onmessage = ev => {
-    const msg = JSON.parse(ev.data);
-    if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
-};
-const cdp = (method, params = {}) => new Promise(res => {
-    const i = ++id;
-    pending.set(i, res);
-    ws.send(JSON.stringify({ id: i, method, params }));
-});
-const evaluate = async expr =>
-    (await cdp('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true }))
-        .result?.result?.value;
-
-await cdp('Runtime.enable');
-await cdp('Page.enable');
+const tab = await chrome.tab(url);
+const { cdp, ev: evaluate } = tab;
 
 // ── (a) Wait for the landing screen to be ready, then check fire canvas ──────
 let ready = false;
@@ -238,27 +203,10 @@ console.log(`screenshot (steady state): ${shotPath}`);
 // because the preference was honoured" from "static because the fire is
 // broken".
 {
-    const RM_PORT = CDP_PORT + 1;
-    const rmChrome = spawn(chromeBin(), [
-        '--headless=new', `--remote-debugging-port=${RM_PORT}`, chromeProfileArg(),
-        '--no-first-run', '--no-sandbox', '--disable-gpu-sandbox',
-        '--use-angle=swiftshader', '--window-size=1280,960',
-        '--force-prefers-reduced-motion',
-        '--autoplay-policy=no-user-gesture-required', 'about:blank',
-    ], { stdio: 'ignore', detached: true });
-    reapOnExit(rmChrome);
-    const rmFail = msg => { try { rmChrome.kill(); } catch {} fail(msg); };
-    await sleep(1500);
-
-    const t2 = await (await fetch(
-        `http://127.0.0.1:${RM_PORT}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' })).json();
-    const ws2 = new WebSocket(t2.webSocketDebuggerUrl);
-    await new Promise((res, rej) => { ws2.onopen = res; ws2.onerror = rej; });
-    let id2 = 0; const pend2 = new Map();
-    ws2.onmessage = e => { const m = JSON.parse(e.data); if (m.id && pend2.has(m.id)) { pend2.get(m.id)(m); pend2.delete(m.id); } };
-    const cdp2 = (m, p = {}) => new Promise(res => { const i = ++id2; pend2.set(i, res); ws2.send(JSON.stringify({ id: i, method: m, params: p })); });
-    const ev2 = async e => (await cdp2('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true })).result?.result?.value;
-    await cdp2('Runtime.enable'); await cdp2('Page.enable');
+    const rmChrome = await launchChrome({ flags: ['--force-prefers-reduced-motion'] });
+    const rmFail = msg => { try { rmChrome.kill(); } catch { /* gone */ } fail(msg); };
+    const tab2 = await rmChrome.tab(url);
+    const ev2 = tab2.ev;
 
     // Wait for the launcher, the same way the first arm does.
     let up = false;
@@ -294,7 +242,7 @@ console.log(`screenshot (steady state): ${shotPath}`);
     if (r1 === 0)
         rmFail('(f) reduced-motion frame is entirely black — that is not a static frame, it is no frame');
     console.log(`(f) PASS — prefers-reduced-motion: static frame held across 600 ms (sum ${r1}, non-blank)`);
-    try { ws2.close(); } catch {}
+    await tab2.close();
     rmChrome.kill();
 }
 
