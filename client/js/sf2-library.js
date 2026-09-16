@@ -1,26 +1,12 @@
-// SF2 SoundFont library — IDB storage for user-dropped .sf2 files.
-//
-// Validation: RIFF sfbk magic (bytes 0-3: "RIFF", bytes 8-11: "sfbk") + bounds
-// check on the RIFF chunk-size field.  Hostile-input hardening mirrors wad-import.js.
-//
-// Storage: a separate DB ('webdoom-sf2') to avoid version-bump conflicts with
-// the WAD library ('webdoom-local-library').  One "current" soundfont is kept
-// at a time (key: 'current').  A future upgrade can add a named-list store.
-//
-// Exports:
-//   Sf2Error          — user-visible rejection reason
-//   validateSf2()     — throws Sf2Error on bad input; synchronous
-//   sf2StoreCurrent() — store bytes + meta under key 'current'
-//   sf2GetCurrentBytes() — Uint8Array | null
-//   sf2GetCurrentMeta()  — { name, size } | null
+// SF2 SoundFont library: the one "current" user-dropped .sf2, in its own
+// database.  validateSf2() checks the RIFF/sfbk header and the chunk-size
+// bound the way wad-import.js checks a WAD header -- hostile input is
+// rejected with a reason, never parsed.
 
-import { openDB } from './idb.js';
+import { tx, withDB } from './idb.js';
 
-const DB_NAME      = 'webdoom-sf2';
-const DB_VERSION   = 1;
-const META_STORE   = 'sf2-meta';
-const BYTES_STORE  = 'sf2-bytes';
-const CURRENT_KEY  = 'current';
+const DB = ['webdoom-sf2', 1, ['sf2-meta', 'sf2-bytes']];
+const CURRENT = 'current';
 
 // ── Sf2Error ──────────────────────────────────────────────────────────────────
 export class Sf2Error extends Error {
@@ -64,57 +50,21 @@ export function validateSf2(bytes) {
     }
 }
 
-// ── IDB helpers ───────────────────────────────────────────────────────────────
-const _openSf2DB = () => openDB(DB_NAME, DB_VERSION, [META_STORE, BYTES_STORE]);
+// Persist meta + bytes as the current soundfont, replacing any previous one.
+export const sf2StoreCurrent = (name, bytes) =>
+    withDB(DB, db => tx(db, ['sf2-meta', 'sf2-bytes'], 'readwrite', (m, b) => {
+        m.put({ name, size: bytes.length }, CURRENT);
+        b.put(bytes, CURRENT);
+    }));
 
-// ── sf2StoreCurrent ───────────────────────────────────────────────────────────
-// Persists meta + bytes for the current soundfont.  Replaces any previous entry.
-export async function sf2StoreCurrent(name, bytes) {
-    const db = await _openSf2DB();
-    await new Promise((resolve, reject) => {
-        const t = db.transaction([META_STORE, BYTES_STORE], 'readwrite');
-        t.objectStore(META_STORE).put({ name, size: bytes.length }, CURRENT_KEY);
-        t.objectStore(BYTES_STORE).put(bytes, CURRENT_KEY);
-        t.oncomplete = resolve;
-        t.onerror    = () => reject(t.error);
-    });
-    db.close();
-}
-
-// ── sf2GetCurrentBytes ────────────────────────────────────────────────────────
-// Returns Uint8Array of the current soundfont, or null on miss/error.
+// Uint8Array of the current soundfont, or null on miss/error.
 export async function sf2GetCurrentBytes() {
-    try {
-        const db  = await _openSf2DB();
-        const result = await new Promise((resolve, reject) => {
-            const t   = db.transaction(BYTES_STORE, 'readonly');
-            const req = t.objectStore(BYTES_STORE).get(CURRENT_KEY);
-            t.oncomplete = () => resolve(req.result ?? null);
-            t.onerror    = () => reject(t.error);
-        });
-        db.close();
-        return result;
-    } catch (err) {
-        console.warn('sf2-library: IDB bytes read error:', err);
-        return null;
-    }
+    try { return (await withDB(DB, db => tx(db, 'sf2-bytes', 'readonly', s => s.get(CURRENT)))) ?? null; }
+    catch (err) { console.warn('sf2-library: IDB bytes read error:', err); return null; }
 }
 
-// ── sf2GetCurrentMeta ─────────────────────────────────────────────────────────
-// Returns { name, size } of the current soundfont, or null on miss/error.
+// { name, size } of the current soundfont, or null on miss/error.
 export async function sf2GetCurrentMeta() {
-    try {
-        const db  = await _openSf2DB();
-        const result = await new Promise((resolve, reject) => {
-            const t   = db.transaction(META_STORE, 'readonly');
-            const req = t.objectStore(META_STORE).get(CURRENT_KEY);
-            t.oncomplete = () => resolve(req.result ?? null);
-            t.onerror    = () => reject(t.error);
-        });
-        db.close();
-        return result;
-    } catch (err) {
-        console.warn('sf2-library: IDB meta read error:', err);
-        return null;
-    }
+    try { return (await withDB(DB, db => tx(db, 'sf2-meta', 'readonly', s => s.get(CURRENT)))) ?? null; }
+    catch (err) { console.warn('sf2-library: IDB meta read error:', err); return null; }
 }
