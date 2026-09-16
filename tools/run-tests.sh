@@ -1,26 +1,12 @@
 #!/bin/bash
 # webdoom test suite — leg-isolating runner.
 #
-# WHY THIS SHAPE
-# --------------
-# The previous runner was 254 lines of `set -eo pipefail` with ~32 legs in a
-# straight line.  It aborted at the first red, so a failure at leg 3 left the
-# other 29 unverified AND UNMENTIONED: the operator saw one error and nothing
-# about the rest of the suite.  That is the project's own doctrine violated by
-# its top-level runner — "could not run" and "ran and passed" must not produce
-# the same word, and here they produced no word at all.
-#
-# Every leg now runs through tools/gate.sh, which executes the command outside
-# any pipeline so its exit code is exact (the six-times pipe-exit trap), keeps
-# the untrimmed log, and prints a trimmed view.  A failing leg is recorded and
-# the run continues.  The suite ends with a table naming every leg, its verdict,
-# its duration and the count it reported about itself.
-#
-# A leg whose prerequisites are absent is SKIPPED WITH A REASON rather than
-# failing confusingly or passing silently, and the final verdict always states
-# the skip count — so a run with skips can never read as a clean pass.
-# --require-complete turns any skip into a failure, for the host that is
-# supposed to be able to run everything.
+# Every leg runs through tools/gate.sh (exact exit code, outside any pipeline),
+# a red is recorded and the run continues, and the suite ends with a table
+# naming every leg, its verdict, its duration and what it reported.  A leg
+# whose prerequisites are absent SKIPs with a reason and is counted, so a run
+# with skips never reads as a clean pass; --require-complete makes a skip a
+# failure.
 #
 # usage:
 #   tools/run-tests.sh                 # full tier (everything)
@@ -31,12 +17,11 @@
 #
 # Copyright (C) 2026, GPL-2.0-or-later.
 
-# Deliberately NOT -e: this runner must survive a failing leg in order to
-# report it and everything after it.  Every command that can fail is either
-# guarded with `|| rc=$?` or is a leg.
+# Deliberately NOT -e: a failing leg must be reported, not abort the run.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 REPO="$PWD"
+SUITE_T0=$(date +%s)
 
 TIER=full
 PERF=0
@@ -47,28 +32,17 @@ LIST=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --quick)            TIER=quick; shift ;;
-        # The perf gate is opt-in because it reaches OTHER MACHINES, not
-        # because it is slow -- measured at ~26 s for all three hosts, against
-        # fleet-bench.sh's own stale comment claiming "bench itself can take
-        # 10 min on wbox". A default-tier leg that fails whenever a teammate's
-        # laptop is asleep is a leg people learn to ignore.
-        #
-        # It SKIPs with its reason NAMED AND COUNTED in the default run, which
-        # is the whole difference between a gate that is opt-in and a gate that
-        # does not exist.
+        # opt-in because it reaches other machines (~30 s), not because it is
+        # slow; it SKIPs, named and counted, in the default run
         --perf)             PERF=1; shift ;;
-        # n64-demos is 435 s of an 1,129 s suite -- 39% of the whole run in one
-        # leg, on a toolchain almost no host has.  --no-slow is for iterating;
-        # it is NOT a quieter default.  The leg still SKIPs with its reason
-        # named and counted, and --require-complete still fails on it, because
-        # a shorter run is exactly the thing that must not be mistaken for a
-        # complete one.
+        # n64-demos is ~7 min of the run; --no-slow is for iterating, and the
+        # leg still SKIPs named and counted (--require-complete still fails)
         --no-slow)          NO_SLOW=1; shift ;;
         --full)             TIER=full; shift ;;
         --only)             ONLY+=("$2"); shift 2 ;;
         --list)             LIST=1; shift ;;
         --require-complete) REQUIRE_COMPLETE=1; shift ;;
-        -h|--help)          sed -n '28,36p' "$0"; exit 0 ;;
+        -h|--help)          sed -n '/^# usage:/,/^#$/p' "$0"; exit 0 ;;
         *) echo "unknown argument '$1' (see --list, --help)" >&2; exit 2 ;;
     esac
 done
@@ -76,6 +50,9 @@ done
 LOGDIR="$(mktemp -d -t webdoom-suite-XXXXXX)"
 SUMMARY="$LOGDIR/summary.tsv"
 : > "$SUMMARY"
+# a full run starts with no stale failure logs, so a red in the directory is
+# from THIS run (the last table, last-run.tsv, is kept)
+[ "${#ONLY[@]}" -eq 0 ] && [ "$LIST" = "0" ] && rm -f "$REPO"/tools/.suite-logs/*.log
 
 # ── prerequisite probes ──────────────────────────────────────────────────────
 # Each returns 0 when satisfied; the reason string is what the table prints.
@@ -85,26 +62,17 @@ have_wad()     { local w; for w in "${IWADS[@]}"; do [ -f "wads/lib/$w" ] || ret
 have_native()  { [ -x tools/native-sanitize/nat-doom ]; }
 have_fs()      { [ -x tools/freestanding/fs-doom ]; }
 have_zig()     { command -v zig >/dev/null 2>&1; }
-# The PINNED major, not merely 'a clang-format': output differs across majors,
-# so a different one would report violations that are not violations.
+# the pinned major: output differs across majors
 have_clangfmt(){ command -v clang-format >/dev/null 2>&1 && \
                  [ "$(clang-format --version | grep -oE '[0-9]+' | head -1)" = "22" ]; }
 have_qemuarm() { command -v qemu-arm-static >/dev/null 2>&1; }
-# The N64 gate needs three separate things and none of them are common: the
-# mips64-elf cross compiler, the ares emulator, and an X server to run it
-# headless under.  Checked together because a partial toolchain would fail the
-# leg for a reason that has nothing to do with the engine.
+# the cross compiler, the ares emulator and an X server, together
 have_n64()     { [ -x "${N64_INST:-$HOME/toolchains/n64}/bin/mips64-elf-gcc" ] && \
                  command -v ares >/dev/null 2>&1 && \
                  command -v xvfb-run >/dev/null 2>&1; }
 have_gcc()     { command -v gcc >/dev/null 2>&1; }
-# An explicit CHROME_BIN is the ONLY answer when it is set.  This used to read
-# `command -v "${CHROME_BIN:-google-chrome-stable}" || [ -x /opt/... ]`, so a
-# CHROME_BIN pointing at nothing still satisfied the probe via the /opt fallback
-# while the legs spawned the missing binary -- observed: browser-sp and persist
-# PASSED (they hardcoded google-chrome-stable) while browser-qol and
-# browser-teardown died ENOENT, in one run.  tools/chrome-harness.mjs resolves
-# it in exactly this order, so the probe and the spawn cannot disagree.
+# the same resolution order as tools/chrome-harness.mjs, so the probe and the
+# spawn cannot disagree; an explicit CHROME_BIN is the only answer when set
 have_browser() {
     if [ -n "${CHROME_BIN:-}" ]; then
         command -v "$CHROME_BIN" >/dev/null 2>&1 || [ -x "$CHROME_BIN" ]
@@ -115,10 +83,7 @@ have_browser() {
 have_firefox() { [ -x /usr/bin/firefox ]; }
 have_emsdk()   { [ -x "${EMSDK_DIR:-$HOME/projects/bee-kettle-doom/emsdk}/upstream/emscripten/emcc" ]; }
 have_baseline(){ [ -f "tools/golden/browser-pipeline-$(hostname).json" ]; }
-# The 16 legs below share one server on 8668.  Making that a PREREQUISITE, rather
-# than an `if` wrapped around the whole block, is what lets each of them report
-# its own named SKIP -- see the browser-suite comment for what the aggregate skip
-# was hiding.
+# the browser legs share one server; as a prerequisite, each reports its own SKIP
 SHARED_UP=0
 have_shared()  { [ "$SHARED_UP" = "1" ]; }
 have_loadbudget(){ [ -f "tools/golden/load-budget-$(hostname).json" ]; }
@@ -126,65 +91,49 @@ have_xvfb()    { command -v xvfb-run >/dev/null 2>&1; }
 have_systemd() { command -v systemd-analyze >/dev/null 2>&1; }
 have_perf()    { [ "$PERF" = "1" ]; }
 have_notslow() { [ "$NO_SLOW" = "0" ]; }
-# PRESENT is not the same as CURRENT, and for the compile-time variants the
-# difference was load-bearing: `build-fakeflat` needs emsdk while
-# `render-fakeflat` needed only `wad`, so on a host without emsdk the build leg
-# SKIPped and the render leg ran against whatever was on disk -- printing a
-# full-count PASS from a tree built before the change under test.  The freshness
-# registry already knows what current means; ask it.
+# present is not current: a render leg must not run against a stale variant tree
 have_fresh()   { node tools/artifact-freshness.mjs "$1" >/dev/null 2>&1; }
 
-need_reason() {   # need_reason <tag> -> prints why it is unmet
+# One table: prerequisite tag → probe | reason (HOST is expanded when printed).
+declare -A NEED=(
+    [build]='have_build|build/doom.js absent (run: source tools/emsdk-env.sh && make -C engine)'
+    [wad]='have_wad|IWADs absent (run: tools/fetch-wads.sh)'
+    [native]='have_native|nat-doom absent (run: make -C tools/native-sanitize)'
+    [fs]='have_fs|fs-doom absent (run: make -C tools/freestanding)'
+    [zig]='have_zig|zig not on PATH (needed to cross-build for ARM)'
+    [clangfmt]='have_clangfmt|clang-format 22 not present'
+    [qemuarm]='have_qemuarm|qemu-arm-static not on PATH'
+    [n64]='have_n64|N64 toolchain incomplete (need mips64-elf-gcc under $N64_INST, ares and xvfb-run; run: source ~/toolchains/env.sh)'
+    [gcc]='have_gcc|gcc not on PATH'
+    [systemd]='have_systemd|systemd-analyze not on PATH (the unit file cannot be validated here)'
+    [xvfb]='have_xvfb|xvfb-run not on PATH (headless Firefox has NO WebGL here, so the frame gate needs a real X display)'
+    [loadbudget]='have_loadbudget|no load-budget baseline for host HOST (record: node tools/load-budget-test.mjs --record)'
+    [browser]='have_browser|Chrome not found (set CHROME_BIN)'
+    [firefox]='have_firefox|/usr/bin/firefox not found'
+    [emsdk]='have_emsdk|emsdk not found (run: tools/setup-emsdk.sh)'
+    [baseline]='have_baseline|no browser-pipeline baseline for host HOST'
+    [shared]='have_shared|shared browser server on 8668 not started'
+    [slow]='have_notslow|--no-slow given: this leg is ~7 min of the suite'
+    [perf]='have_perf|perf tier not requested (run: tools/run-tests.sh --perf; ~30 s measured, needs wbox and tank up)'
+)
+need_reason() {   # need_reason <tag> -> why it is unmet
     case "$1" in
-        build)    echo "build/doom.js absent (run: source tools/emsdk-env.sh && make -C engine)" ;;
-        wad)      echo "IWADs absent (run: tools/fetch-wads.sh)" ;;
-        native)   echo "nat-doom absent (run: make -C tools/native-sanitize)" ;;
-        fs)       echo "fs-doom absent (run: make -C tools/freestanding)" ;;
-        zig)      echo "zig not on PATH (needed to cross-build for ARM)" ;;
-        clangfmt) echo "clang-format 22 not present (have: $(command -v clang-format >/dev/null 2>&1 && clang-format --version | grep -oE '[0-9]+' | head -1 || echo none))" ;;
-        qemuarm)  echo "qemu-arm-static not on PATH" ;;
-        n64)      echo "N64 toolchain incomplete (need mips64-elf-gcc under \$N64_INST, ares and xvfb-run; run: source ~/toolchains/env.sh)" ;;
-        gcc)      echo "gcc not on PATH" ;;
-        systemd)  echo "systemd-analyze not on PATH (the unit file cannot be validated here)" ;;
-        xvfb)     echo "xvfb-run not on PATH (headless Firefox has NO WebGL here, so the frame gate needs a real X display)" ;;
-        loadbudget) echo "no load-budget baseline for host $(hostname) (record: node tools/load-budget-test.mjs --record)" ;;
-        browser)  echo "Chrome not found (set CHROME_BIN)" ;;
-        firefox)  echo "/usr/bin/firefox not found" ;;
-        emsdk)    echo "emsdk not found (run: tools/setup-emsdk.sh)" ;;
-        baseline) echo "no browser-pipeline baseline for host $(hostname)" ;;
-        shared)   echo "shared browser server on 8668 not started" ;;
-        slow)     echo "--no-slow given: this leg is 39% of the suite runtime (measured 435 s of 1,129 s)" ;;
-        perf)     echo "perf tier not requested (run: tools/run-tests.sh --perf; ~30 s measured, needs wbox and tank up)" ;;
-        fresh-*)  echo "build-${1#fresh-} absent or stale (node tools/artifact-freshness.mjs build-${1#fresh-})" ;;
-        *)        echo "unmet prerequisite '$1'" ;;
+        fresh-*) echo "build-${1#fresh-} absent or stale (node tools/artifact-freshness.mjs build-${1#fresh-})" ;;
+        *) local r="${NEED[$1]-}"; r="${r#*|}"; echo "${r//HOST/$(hostname)}"; [ -n "$r" ] || echo "unmet prerequisite '$1'" ;;
     esac
 }
 need_met() {
     case "$1" in
-        build) have_build ;; wad) have_wad ;; native) have_native ;; gcc) have_gcc ;; fs) have_fs ;;
-        systemd) have_systemd ;;
-        xvfb) have_xvfb ;;
-        loadbudget) have_loadbudget ;;
-        zig) have_zig ;; qemuarm) have_qemuarm ;; clangfmt) have_clangfmt ;;
-        n64) have_n64 ;;
-        browser) have_browser ;; firefox) have_firefox ;; emsdk) have_emsdk ;;
-        baseline) have_baseline ;; shared) have_shared ;; perf) have_perf ;; slow) have_notslow ;;
         fresh-*) have_fresh "build-${1#fresh-}" ;;
-        *) return 1 ;;
+        *) local p="${NEED[$1]-}"; p="${p%%|*}"; [ -n "$p" ] && "$p" ;;
     esac
 }
 
 # ── the headline a leg reported about itself ─────────────────────────────────
-# A FAILING LEG MUST NOT WEAR A PASSING HEADLINE, and a leg's own result line
-# beats its first PASS line — both lessons paid for elsewhere in this mesh.  So
-# a red prefers a FAIL/Error line and a green prefers a PASS/summary line;
-# gate.sh's own "GATE x rc=" line is never the headline.
+# A red prefers its FAIL/Error line and a green its PASS/summary line, so a
+# failing leg never wears a passing headline; gate.sh's own trailer is never it.
 headline() {
     local log="$1" rc="$2" h=""
-    # Exclude ONLY gate.sh's own trailer.  The first version excluded every line
-    # starting "GATE ", which also threw away a tool's own "GATE PASS: ..."
-    # verdict — so adversarial-map's headline became a trailing rule-of-thumb
-    # sentence instead of "0 clean + 30 I_Error, 0 sanitizer reports".
     local OWN='^GATE [A-Za-z0-9_-]+ rc='
     [ -s "$log" ] || { echo "(no output)"; return; }
     if [ "$rc" -ne 0 ]; then
@@ -241,24 +190,11 @@ leg() {
 }
 
 # ── throwaway servers ────────────────────────────────────────────────────────
-# Readiness is polled, never slept for: a fixed sleep means the test proceeds
-# against whatever is on that port, which is how a stale server once served an
-# uninstrumented client to the collector (the 12.2b lesson).  Ownership of the
-# port is asserted in task 21.7.
+# Readiness is polled with a timeout, never slept for, and the port's OWNER is
+# asserted: a stale server from an earlier run answers just as well and serves
+# a different build.  No `ss` is a counted note (cannot verify); `ss` seeing
+# no owner is a failure.
 SERVERS=()
-# Answering on the port is not the same as being OUR server: a stale process from
-# an earlier run answers just as well, and serves a different build.  So the port
-# is checked for OWNERSHIP, not just for a response (task 21.7).
-# Both non-verification paths used to `return 0` after printing a "note", and
-# nothing anywhere counted notes -- so on a container without iproute2 the
-# 12.2b stale-server protection was silently off for the whole browser suite
-# and the run still read as fully verified. The two cases are not the same and
-# no longer get the same treatment:
-#
-#   ss missing          -> genuinely cannot verify. Counted in NOTES and
-#                          reported in the summary, so it is visible.
-#   ss present, no owner -> we started a server and nothing is listening on its
-#                          port. That is a failure, not a note.
 NOTES=0
 NOTE_TEXT=()
 note() { NOTES=$((NOTES + 1)); NOTE_TEXT+=("$1"); echo "  note: $1"; }
@@ -287,12 +223,8 @@ serve_start() {   # serve_start <port>
     local pid=$!
     SERVERS+=("$pid")
     for i in $(seq 1 60); do
-        # --max-time is load-bearing, not belt-and-braces.  Without it curl waits
-        # forever for a response, so a process that ACCEPTS on this port and then
-        # says nothing -- a squatter, a wedged orphan from an earlier run -- hangs
-        # the readiness loop indefinitely instead of failing it.  Observed: the
-        # suite sat on this line past its own 300 s timeout with the leg neither
-        # running nor skipping.  A poll that cannot time out is not a poll.
+        # --max-time: a squatter that accepts and says nothing must fail the
+        # poll, not hang it
         if curl -fsS --max-time 3 -o /dev/null "http://127.0.0.1:$port/" 2>/dev/null; then
             assert_port_owned "$port" "$pid" || return 1
             return 0
@@ -307,9 +239,7 @@ serve_stop_all() {
     for p in ${SERVERS[@]+"${SERVERS[@]}"}; do kill "$p" 2>/dev/null; wait "$p" 2>/dev/null; done
     SERVERS=()
 }
-# ONE trap for every server this run starts — the old runner reassigned the EXIT
-# trap four times, each overwriting the last, and never trapped the firefox leg's
-# server at all.
+# one trap for every server this run starts
 cleanup() { serve_stop_all; rm -rf "$LOGDIR"; }
 trap cleanup EXIT INT TERM
 
@@ -322,10 +252,8 @@ trap cleanup EXIT INT TERM
 # commands under one heading, and the second was unreachable if the first failed.
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# --list reads the registry out of this file.  A discovery that finds almost
-# nothing is a red, not an empty list: the first version of this used a regex
-# that required exactly one space after the id, so column alignment hid 40 of
-# the 50 legs and it reported 10 with no error (the roster-discovery lesson).
+# --list reads the registry out of this file; a discovery that finds almost
+# nothing is a red, not an empty list
 list_legs() {
     awk '/^[[:space:]]*leg[[:space:]]+[a-z0-9-]+[[:space:]]/ {
              id = $2; needs = $3;
@@ -656,20 +584,18 @@ done < "$SUMMARY"
 echo "  ────────────────────────────────────────────────────────────────────────────"
 
 # ── persist the per-leg table ────────────────────────────────────────────────
-# $SUMMARY lives in the mktemp dir the EXIT trap deletes, so the SECS column --
-# the only per-leg timing this project produces -- died with every run. The one
-# timing table that exists in the repo is in a doc, because a human pasted it
-# there. Keep the last run's, next to the failing-leg logs.
+# the only per-leg timing this project produces; kept beside the failing logs
+ELAPSED=$(( $(date +%s) - SUITE_T0 ))
 mkdir -p "$REPO/tools/.suite-logs"
 {
-    printf '# webdoom suite — %s, tier %s, host %s\n' "$(date -Is)" "$TIER" "$(hostname)"
+    printf '# webdoom suite — %s, tier %s, host %s, %d s\n' "$(date -Is)" "$TIER" "$(hostname)" "$ELAPSED"
     printf '# leg\tverdict\tsecs\theadline\n'
     cat "$SUMMARY"
 } > "$REPO/tools/.suite-logs/last-run.tsv" 2>/dev/null || true
 
 TOTAL=$((PASSED + FAILED + SKIPPED))
-printf '  %d legs: %d passed, %d failed, %d skipped  (tier: %s)\n' \
-       "$TOTAL" "$PASSED" "$FAILED" "$SKIPPED" "$TIER"
+printf '  %d legs: %d passed, %d failed, %d skipped  (tier: %s, %d min %d s)\n' \
+       "$TOTAL" "$PASSED" "$FAILED" "$SKIPPED" "$TIER" "$((ELAPSED / 60))" "$((ELAPSED % 60))"
 if [ "$NOTES" -gt 0 ]; then
     printf '  %d note(s) — something could not be verified:\n' "$NOTES"
     printf '    %s\n' "${NOTE_TEXT[@]}"
@@ -684,17 +610,9 @@ if [ "$TOTAL" -eq 0 ]; then
 fi
 
 # ── coverage: does the total account for the whole registry? ─────────────────
-#
-# TOTAL is built by adding up what ran, so it could only ever answer "how many
-# legs did I reach", never "how many are there".  Nothing compared the two, and
-# the browser block's aggregate skip collapsed the whole block into one SKIPPED
-# increment — so a WAD-less or Chrome-less host printed a perfectly plausible
-# "64 legs: 63 passed, 0 failed, 1 skipped" against a registry of 81 and lost
-# seventeen without a word.
-#
-# demo-test.mjs has had exactly this control since task 21.2 (EXPECTED_DEMOS
-# from MATRIX, assertFullCoverage), one level down from where it was needed.
-# --only is the one case where a shortfall is the point, so it is exempt.
+# TOTAL only says how many legs were reached; the registry says how many there
+# are, and a leg that neither ran, failed nor skipped is a red.  --only is the
+# one case where a shortfall is the point.
 if [ "${#ONLY[@]}" -eq 0 ]; then
     REGISTRY=$(count_legs "$0" "$TIER")
     if [ "$REGISTRY" -lt 10 ]; then
