@@ -5,8 +5,9 @@ are what keep it small.
 
 ## The short version
 
-1. `bash tools/run-tests.sh` before you open anything. It is ~19 minutes
-   on a host with a WAD library, a built engine and Chrome.
+1. `bash tools/run-tests.sh` before you open anything. It is ~13 minutes
+   on a host with a WAD library, a built engine and Chrome, and it prints
+   its own time at the end.
 2. A change to the simulation must be **tic-identical**: 13/13 demo
    goldens, byte for byte. If it is not, it is wrong, however good it
    looks.

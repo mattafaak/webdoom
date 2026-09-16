@@ -60,12 +60,12 @@ the game/map/skill/mode; anyone hits START; 3-2-1, everyone's in.
 | `client/`      | vanilla-JS shell: lobby, WebGL2 renderer, input, audio, service worker |
 | `server/`      | Node ≥ 20, single process, single port; only dep `ws` |
 | `tools/`       | emsdk pin, WAD fetch/identify, test suites, bench harness, native sanitizer target |
-| `docs/`        | 26 reference documents — **[the index](docs/README.md)** lists every one. The ones most people want: [netcode](docs/netcode.md), [renderer](docs/renderer.md), [playsim](docs/playsim.md), [formats](docs/formats.md), [bare-metal](docs/bare-metal.md), [perf](docs/perf.md), [state-machine](docs/state-machine.md), [engine-archaeology](docs/engine-archaeology.md) |
+| `docs/`        | 32 documents — **[the index](docs/README.md)** lists every one. The ones most people want: [netcode](docs/netcode.md), [renderer](docs/renderer.md), [playsim](docs/playsim.md), [formats](docs/formats.md), [bare-metal](docs/bare-metal.md), [perf](docs/perf.md), [state-machine](docs/state-machine.md), [engine-archaeology](docs/engine-archaeology.md) |
 
 ## Tests
 
 ```sh
-tools/run-tests.sh            # everything: 91 legs, ~26 min
+tools/run-tests.sh            # everything: 91 legs, ~13 min without the N64 leg (~20 with it; the runner prints its time)
 tools/run-tests.sh --quick    # no WADs, no build, no browser — what CI runs
 tools/run-tests.sh --list     # the leg registry
 ```
@@ -82,53 +82,16 @@ needs a WAD, a built engine or a browser (the sim and render goldens, netplay,
 the ASan and cross-architecture legs, the 20 browser legs) runs locally and says
 so. The workflow prints the list it did not cover.
 
-- **lint**: clang-format over the web platform layer + `node --check` over
-  all JS files — fails on any format drift or syntax error. The JS half runs
-  in CI; the clang-format half needs the pinned major and is reported as a
-  named SKIP where that is absent
-- **engine smoke**: boots real IWADs headless in node, plays the attract
-  demo, renders OPL music, asserts life in framebuffer and audio
-- **demo compatibility**: all 13 built-in IWAD demos (Doom, Doom II, TNT,
-  Plutonia) replayed headless; per-tic gamestate fingerprints pinned
-  against golden traces — a single diverging P_Random call fails the suite at
-  the exact tic. Needs IWADs, so it runs locally, not in CI. The baseline is cross-validated tic-for-tic against an
-  instrumented Chocolate Doom (the vanilla reference):
-  `tools/build-choco-reference.sh`, then
-  `node tools/demo-test.mjs --cross <binary>` — 44,580 tics identical
-- **render goldens**: per-tic framebuffer hashes for all 13 demos — a
-  second gate that catches pixel-level render regressions (local; needs IWADs). Exposed the
-  Tutti-Frutti latent out-of-window texture read (fixed, `dc_texheight`);
-  render goldens are no longer heap-layout-sensitive after that fix
-- **netplay**: 2 and 4 real wasm clients through the real server; per-tic
-  gamestate hashes must match exactly; a client is killed mid-game and
-  the survivors must keep playing
-- **net fuzz**: malformed and hostile WebSocket frames thrown at the server
-  across many patterns; server must survive, close cleanly, and never
-  exceed the per-client message caps (`tools/net-fuzz-test.mjs`)
-- **client resilience**: fetch failures, service-worker cache errors,
-  visibility changes, gamepad removal, and storage unavailability handled
-  gracefully — no unhandled rejections (`tools/browser-resilience-test.mjs`)
-- **lobby state-machine**: enumerated JS lobby states exercised against
-  all specified transitions; impossible states guarded
-  (`tools/browser-lobby-test.mjs`. T07 menu-nav was a timing flake at ~1/3 pass
-  rate; fixed in 9ed9671 by a 3-attempt retry of the MP-open action with the
-  assertion unweakened, 20/20 on a fresh profile. The original cause was /tmp
-  exhaustion from orphaned Chrome processes, not this codebase.)
-- **native ASan/UBSan**: `tools/native-sanitize/` builds the engine for
-  the native host with AddressSanitizer and UndefinedBehaviorSanitizer;
-  runs the demo suite to surface OOB reads invisible in wasm
-- **cross-architecture**: the same 13 golden demos replayed on hardware the
-  browser build never sees. 32-bit ARM under `qemu-arm-static` (zig
-  cross-build), and — the strongest form of the argument — an emulated
-  **Nintendo 64**: 93.75 MHz big-endian MIPS R4300i, the 12.4 MB IWAD read in
-  place out of cartridge space, **44,580 tics with every per-tic simulation
-  hash bit-identical** to the wasm golden (`tools/n64/run-n64-demos.sh`, leg
-  `n64-demos`, ~8 min; needs the mips64 toolchain and ares, so it runs locally)
-- **browser**: CDP-driven Chrome — title → menu → new game → movement,
-  audio arms, service worker caches; plus two tabs through the lobby
-  into a co-op game. The sw-cache sub-check waits for the service
-  worker to take control, then asserts the WAD is cached (exits nonzero
-  on failure)
+Three legs deserve a sentence the registry cannot give them:
+
+- **sim goldens**: all 13 built-in IWAD demos replay headless with per-tic
+  gamestate fingerprints pinned against golden traces, cross-validated
+  tic-for-tic against an instrumented Chocolate Doom (44,580 tics;
+  `tools/build-choco-reference.sh`, then `node tools/demo-test.mjs --cross <binary>`).
+- **render goldens**: per-tic framebuffer hashes over the same 13 demos, so a
+  renderer change that moves a pixel fails at the exact tic.
+- **cross-architecture**: the freestanding core replays the same goldens on
+  32-bit ARM under qemu and on an emulated Nintendo 64, bit-identical.
 
 ## License
 

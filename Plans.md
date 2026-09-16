@@ -124,6 +124,7 @@ One line each. The tables, DoDs and landing hashes are in the commit history
 | 5 — gates that pass while the thing they name is broken | 2026-09-12 | endSession, GL dispose, demo-store eviction, hostile-lobby, CSP, status-drift, docs-index | 9f2bfce |
 | 6 — the program itself | 2026-09-12 | perf-fleet tier, history cap, settings SCHEMA, one reset path, one #status, keyboard-usable launcher, spec "What ships" | c2628ba |
 | 7 — strip to single player, deathmatch and WADs | 2026-09-12 | OPTIONS as a menu screen, widescreen and Panini removed, four QoL overlays deleted, attestation endpoint deleted | b6bf591 |
+| 9 — simplification | 2026-09-16 | menus that flow (one game list, value rows, RULES, CONNECTING, `full` handled), one boot funnel and one reset path, one IndexedDB path, comments cut to the why, one lobby loop on the server, seven dead engine getters, `tools/lib/` under every leg, Plans.md and the archives | 01b997b |
 | 8 — the gates that were never armed | 2026-09-12 | render-path invariance gates, stamp tier, four README promises gated (`service-file`, `smoke-pwad`, `load-budget`, `firefox-frame`), the ledgers' value columns | a63048a |
 
 Round 8 closed at **91 legs**, 19 quick, 20 browser, 32 documents; every count
