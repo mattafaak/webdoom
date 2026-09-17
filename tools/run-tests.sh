@@ -511,7 +511,9 @@ leg golden-provenance -        "every golden says where it came from"       -- n
 # handling, --all mode and size cap were ungated.
 leg native-asan     native,wad,alone "13 demos under ASan/UBSan (README's claim)"  -- bash tools/native-sanitize/run-all.sh wads/lib tools/native-sanitize/out sim
 leg freestanding-sim fs,wad    "fs-doom 13/13 == vanilla (rung 1 proof)"     -- bash tools/freestanding/run-check.sh
-leg ro-wad          fs,wad     "WAD blob stays read-only over 13 demos (XIP)" -- bash tools/freestanding/ro-wad-check.sh
+# its own out dir: under --jobs it ran beside freestanding-sim, both writing
+# per-demo JSON into freestanding/out/, and one read a file mid-write
+leg ro-wad          fs,wad     "WAD blob stays read-only over 13 demos (XIP)" -- bash tools/freestanding/ro-wad-check.sh wads/lib tools/freestanding/out-ro
 # The ARM reference, on alder (F4).  spec.md lists pi5 as "ARM reference", but
 # what pi5 ran was node bench.mjs against the WASM build -- a performance
 # sample, and wasm is architecture-independent, so the ARM row never tested ARM

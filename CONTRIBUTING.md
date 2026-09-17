@@ -5,9 +5,9 @@ are what keep it small.
 
 ## The short version
 
-1. `bash tools/run-tests.sh` before you open anything. It is ~13 minutes
-   on a host with a WAD library, a built engine and Chrome, and it prints
-   its own time at the end.
+1. `bash tools/run-tests.sh` before you open anything. It is ~12 minutes
+   on a host with a WAD library, a built engine and Chrome (~6 with
+   `--jobs 3`), and it prints its own time at the end.
 2. A change to the simulation must be **tic-identical**: 13/13 demo
    goldens, byte for byte. If it is not, it is wrong, however good it
    looks.
@@ -20,7 +20,7 @@ are what keep it small.
 WAD_SRC=host:~/doom-wads tools/fetch-wads.sh   # your own IWADs; none ship here
 source tools/emsdk-env.sh && make -C engine    # build the wasm engine
 node server/serve.js                           # http://127.0.0.1:8666/
-bash tools/run-tests.sh --quick                # 19 legs, no WAD or browser needed
+bash tools/run-tests.sh --quick                # 18 legs, no WAD or browser needed
 ```
 
 `tools/run-tests.sh --list` prints every leg and what it needs. A leg that

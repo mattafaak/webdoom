@@ -60,12 +60,13 @@ the game/map/skill/mode; anyone hits START; 3-2-1, everyone's in.
 | `client/`      | vanilla-JS shell: lobby, WebGL2 renderer, input, audio, service worker |
 | `server/`      | Node ≥ 20, single process, single port; only dep `ws` |
 | `tools/`       | emsdk pin, WAD fetch/identify, test suites, bench harness, native sanitizer target |
-| `docs/`        | 32 documents — **[the index](docs/README.md)** lists every one. The ones most people want: [netcode](docs/netcode.md), [renderer](docs/renderer.md), [playsim](docs/playsim.md), [formats](docs/formats.md), [bare-metal](docs/bare-metal.md), [perf](docs/perf.md), [state-machine](docs/state-machine.md), [engine-archaeology](docs/engine-archaeology.md) |
+| `docs/`        | 30 documents — **[the index](docs/README.md)** lists every one. The ones most people want: [netcode](docs/netcode.md), [renderer](docs/renderer.md), [playsim](docs/playsim.md), [formats](docs/formats.md), [bare-metal](docs/bare-metal.md), [perf](docs/perf.md), [state-machine](docs/state-machine.md), [engine-archaeology](docs/engine-archaeology.md) |
 
 ## Tests
 
 ```sh
-tools/run-tests.sh            # everything: 77 legs, ~13 min without the N64 leg (~20 with it; the runner prints its time)
+tools/run-tests.sh            # everything: 77 legs, ~12 min without the N64 leg (~20 with it; the runner prints its time)
+tools/run-tests.sh --jobs 3   # the same legs three at a time: ~6 min, identical verdicts
 tools/run-tests.sh --quick    # no WADs, no build, no browser — what CI runs
 tools/run-tests.sh --list     # the leg registry
 ```
