@@ -24,6 +24,8 @@
 #ifndef __R_DATA__
 #define __R_DATA__
 
+#include "w_wad.h"
+#include "z_zone.h"
 #include "r_defs.h"
 #include "r_state.h"
 
@@ -32,10 +34,27 @@
 #endif
 
 // Retrieve column data for span blitting.
-byte*
-R_GetColumn
-( int		tex,
-  int		col );
+//
+// NC3 (round 11): the single-patch case -- the common one -- is inlined here
+// so the per-column call in R_RenderSegLoop becomes three array loads and a
+// W_CacheLumpNum.  The multi-patch case stays out of line because
+// R_GenerateComposite is private to r_data.c.
+extern int*             texturewidthmask;
+extern short**          texturecolumnlump;
+extern unsigned short** texturecolumnofs;
+
+byte* R_GetColumnComposite (int tex, int ofs);
+
+static inline byte* R_GetColumn (int tex, int col)
+{
+    int lump, ofs;
+    col &= texturewidthmask[tex];
+    lump = texturecolumnlump[tex][col];
+    ofs  = texturecolumnofs[tex][col];
+    if (lump > 0)
+        return (byte*) W_CacheLumpNum (lump, PU_CACHE) + ofs;
+    return R_GetColumnComposite (tex, ofs);
+}
 
 
 // I/O, setting up the stuff.

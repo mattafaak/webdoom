@@ -190,7 +190,7 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 
 | File | Raw (bytes) | gzip-9 (bytes) | gzip-9 (KB) |
 |------|------------|---------------|------------|
-| `build/doom.wasm` | 299,521 | 133,291 | 130.2 |
+| `build/doom.wasm` | 299,874 | 133,447 | 130.3 |
 | `client/js/lobby.js` | 32,559 | 11,137 | 10.9 |
 | `build/synth.wasm` | 21,319 | 9,064 | 8.9 |
 | `client/js/input.js` | 18,037 | 6,628 | 6.5 |
@@ -215,8 +215,8 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/index.html` | 1,732 | 905 | 0.9 |
 | `client/js/wad-cache.js` | 1,517 | 716 | 0.7 |
 | `client/js/wad-library.js` | 1,159 | 565 | 0.6 |
-| **Total (all, raw)** | **531,104** | — | — |
-| **Total (all, gzip-9)** | — | **219,660** | **214.5** |
+| **Total (all, raw)** | **531,457** | — | — |
+| **Total (all, gzip-9)** | — | **219,816** | **214.7** |
 | **JS+CSS+HTML only (raw)** | 201,490 | — | — |
 | **JS+CSS+HTML only (gzip-9)** | — | 73,585 | **71.9** |
 
@@ -225,7 +225,7 @@ fetched separately on first play and cached in the browser; it is not part of
 the initial page-load transfer.
 
 **Finding**: the entire deliverable (wasm + JS glue + client JS + CSS +
-HTML) compresses to **214.5 KB gzip** on the wire, gated by
+HTML) compresses to **214.7 KB gzip** on the wire, gated by
 `payload-size` (perf-015/perf-016) since round 8. The wasm is
 61% of that. The JS+CSS+HTML surface is **71.9 KB gzip**
 — note that is **2.0x the 35.1 KB this table used to

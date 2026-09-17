@@ -170,8 +170,18 @@ for (const v of verdicts) {
         fail('status-drift: found no cc:完了 tasks in Plans.md — rule 5 is grading nothing');
     const ledgerSrc = read('docs/optimization-ledger.md');
     const pointers = [...ledgerSrc.matchAll(/SURVIVES\s*(?:→|->)\s*(?:task\s*)?([0-9]+\.[0-9]+[a-z]?|no live owner)/g)];
-    if (pointers.length === 0)
-        fail('status-drift: no "SURVIVES -> ..." verdicts found — rule 5 is grading nothing');
+    // "No pointers" means one of two opposite things, and the guard has to
+    // tell them apart: the verdict format drifted past this regex (grading
+    // nothing, a red), or the ledger genuinely has no survivors left (round 11
+    // measured the last three and decided them, which is the point of the
+    // column).  The TABLE says which -- rule 3 parses it a few lines below, and
+    // it is the same rows.  Asserting "at least one pointer" unconditionally
+    // would have made finishing the work a test failure.
+    const survivingRows =
+        [...ledgerSrc.matchAll(/^\|\s*(?:C|K|NC)\d+\s*\|.*\|\s*SURVIVES\b/gm)].length;
+    if (pointers.length === 0 && survivingRows > 0)
+        fail(`status-drift: the ledger table has ${survivingRows} SURVIVES row(s) but no ` +
+             '"SURVIVES -> ..." verdict matched — the verdict format changed and rule 5 is grading nothing');
     const stale = pointers.map(m => m[1]).filter(t => closed.has(t));
     if (stale.length)
         fail(`status-drift: ${stale.length} ledger verdict(s) point at a CLOSED task: ` +
@@ -271,7 +281,8 @@ if (bad) {
 console.log(`PASS status-drift: ${decisionDocs.length} decision record(s), ${handoffClaims} handoff item(s) `
           + 'claimed fixed by an addendum and marked as such in the list above it;');
 console.log(`PASS status-drift: ledger totals recomputed from ${rows.length} candidate rows `
-          + `(${tally.LANDED} landed, ${tally.KILLED} killed, ${tally.SURVIVES} surviving) and they match the Totals line; `);
+          + `(${tally.LANDED} landed, ${tally.KILLED} killed, ${tally.SURVIVES} surviving) and they match the Totals line`
+          + (tally.SURVIVES === 0 ? ' — no survivors left to own' : '') + '; ');
 console.log(`PASS status-drift: ${landed.length} landed ledger candidates (${landed.map(c => c.id).join(', ')}) `
           + `checked against ${scanned} open-state sentence(s) across ${docs.length - archives.length} documents `
           + `(${archives.length} self-declared archive(s) exempt: ${archives.join(', ') || 'none'}); `

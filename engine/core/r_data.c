@@ -380,20 +380,10 @@ void R_GenerateLookup (int texnum)
 // R_GetColumn
 //
 byte*
-R_GetColumn
+R_GetColumnComposite
 ( int		tex,
-  int		col )
+  int		ofs )
 {
-    int		lump;
-    int		ofs;
-	
-    col &= texturewidthmask[tex];
-    lump = texturecolumnlump[tex][col];
-    ofs = texturecolumnofs[tex][col];
-    
-    if (lump > 0)
-	return (byte *)W_CacheLumpNum(lump,PU_CACHE)+ofs;
-
     if (!texturecomposite[tex])
 	R_GenerateComposite (tex);
 

@@ -51,9 +51,20 @@ export const ARTIFACTS = {
     'build': {
         desc:    'shipping wasm engine (the artifact almost every gate loads)',
         path:    'build/doom.wasm',
-        also:    ['build/doom.js', 'build/synth.wasm'],   // one make builds both
+        also:    ['build/doom.js'],
         dirs:    [['engine/core', true], ['engine/web', false]],
         files:   ['engine/Makefile'],
+        rebuild: 'source tools/emsdk-env.sh && make -C engine',
+    },
+    // The worklet synth links only three objects, so its sources are those
+    // three files -- NOT all of engine/core.  Listed under `build`'s `also` it
+    // read STALE after any renderer edit, because make correctly did not relink
+    // it: an artifact is only as stale as the sources it is actually built from.
+    'synth': {
+        desc:    'OPL synth for the AudioWorklet (ledger NC6)',
+        path:    'build/synth.wasm',
+        files:   ['engine/web/mus_opl.c', 'engine/web/opl3.c', 'engine/web/opl3.h',
+                  'engine/web/synth_main.c', 'engine/web/web.h', 'engine/Makefile'],
         rebuild: 'source tools/emsdk-env.sh && make -C engine',
     },
     'nat-doom': {

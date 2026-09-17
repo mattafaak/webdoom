@@ -119,9 +119,9 @@ kill rule and the measurement, and is the record when the row closes.
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
 | NC6 | Run the OPL synth inside the AudioWorklet as a second wasm (`build/synth.wasm`) built from the same `mus_opl.o`/`opl3.o` the engine links, so `web_music_render` leaves the main thread; `BufferSink` stays for insecure origins | met, with one amendment: byte-identity is against the ENGINE over real music rather than `opl2-ref.f32` (that golden renders a chip that is not sequencing — see the note in `tools/opl-mode-test.mjs`), and the browser leg proves the wiring and an empty main-thread stage while `opl-mode` gate 7 proves the samples, because no audio device pulls the graph headless | - | cc:完了 [647e32b] |
-| NC2 | MAXSEGS 64→32 after the solidsegs census the ledger entry has always demanded (peak over 13 demos + 30 adversarial maps, as a runtime-stat claim) | census committed as a gated claim; land only if the peak leaves the entry's margin, else KILLED with the measured peak | - | cc:TODO |
-| NC3 | `R_GetColumn` single-patch fast path | measured icount on doom.wad demo3 p50; < 2,000 instr/tic = drop; 13/13 across five golden families | - | cc:TODO |
-| NC4 | `R_DrawColumn` 8-wide unroll written for the column-major framebuffer (the row-major `#if 0` block is deleted, not revived) | measured icount vs the 4-wide baseline; < 4,000 instr/tic = drop; red-proof: a poisoned unroll fails the render goldens | - | cc:TODO |
+| NC2 | MAXSEGS 64→32 after the solidsegs census the ledger entry has always demanded | census done (peak 17 of 64 over the 13 demos, 44,580 tics); KILLED on value, not margin — 256 bytes is noise against the footprint that motivated the BSS diets, and webdoom's overflow behaviour is a silently dropped wall | - | cc:完了 |
+| NC3 | `R_GetColumn` single-patch fast path | LANDED: −4,398 instr/tic p50 on doom.wad demo3 (−0.39%), clearing its 2,000 floor; inside the noise floor on the shipped wasm and +353 B there, which the entry says plainly; 13/13 across five golden families | - | cc:完了 |
+| NC4 | `R_DrawColumn` 8-wide unroll written for the column-major framebuffer | KILLED: +84,524 instr/tic p50 on doom.wad demo3 (+7.5% WORSE) and flat on the wasm — at -O3 with LTO the compiler already chooses its unrolling | - | cc:完了 |
 
 
 # Closed rounds
