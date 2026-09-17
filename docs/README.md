@@ -1,21 +1,18 @@
 # webdoom documentation index
 
-**32 documents** (18 top-level `.md` beside this index, 7 in `archive/`, 5 hardware bring-ups in
-subdirectories, and id Software's 2 originals), ~15,700 lines. The count names
-its SET on purpose: this line read "26 documents" while `docs-index-check`'s own
-PASS line, in the same breath, said "all 32 documents under docs/" — both true
-about different sets, and the document did not say which. The figure is now the
-one the checker computes, and rule 4 there fails if the two disagree.
+Every document in this project, with a line saying what it is for.
 
-`README.md` links eight of them, which left the rest — including both index
-documents, the published `magic-data.md` writeup, both atlases, the optimization
-ledger and every hardware bring-up — reachable only by knowing they exist.
+**32 documents**, about 15,700 lines. That is 18 top-level files beside this
+index, 7 in `archive/`, 5 hardware bring-ups in subdirectories, and id
+Software's 2 originals.
 
-Every file under `docs/` appears here, and `tools/archaeology/docs-index-check.mjs`
-fails if one does not, so a new document cannot be born orphaned.
+New here? Read in this order: the root `README.md`, then `CONTRIBUTING.md`,
+then `spec.md`'s tenets, then come back to this page. Keep
+[glossary.md](glossary.md) open — this project has a lot of vocabulary and
+most of it is not explained where it is used.
 
-Sizes are rounded; the four marked **long** are worth opening at a section
-heading rather than the top.
+Sizes are rounded, and the documents marked **long** are worth opening at a
+section heading rather than at the top.
 
 ---
 
@@ -88,6 +85,21 @@ These seven live under `archive/` (round 8, plus the round-11 retirement); the f
 task tables that made the front door look like a planning directory. They
 are the record of how each initiative actually went, and `Plans.md` links
 them from its first paragraph.
+
+## About this index
+
+Every file under `docs/` appears here, and
+`tools/archaeology/docs-index-check.mjs` fails if one does not, so a new
+document cannot be born orphaned. The checker also grades the document count
+above, the root README's copy of it, and the line figure on every **long**
+entry — all three had gone stale while every gate stayed green.
+
+Two things this page got wrong, kept because the shape recurs. The count line
+once read "26 documents" while the checker's own PASS line said "all 32
+documents under docs/" in the same breath: both true about different sets, with
+neither saying which set it meant. And six lines of that story used to stand
+between a reader and the first link on the page, which is the other failure —
+a document narrating its own repairs instead of doing its job.
 
 ## Not webdoom's
 
