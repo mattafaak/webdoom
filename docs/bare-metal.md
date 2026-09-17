@@ -417,11 +417,18 @@ buffers (`screens[0..3]`, 250 KiB total) are **not** in static BSS; they
 are allocated at runtime by `I_AllocLow` and point into whichever memory
 region the port selects (see §1.5).
 
-**Bare-metal implication**: 1.21 MiB of writable memory (SRAM or
-write-capable PSRAM) is the minimum for the static segment alone. This is
-the floor below which the engine cannot boot, independent of WAD and zone
-size. Add the 250 KiB screen buffers (from `I_AllocLow`) to arrive at the
-true minimum writable footprint: ~1.46 MiB.
+**Bare-metal implication**: **1.44 MiB** of writable memory (SRAM or
+write-capable PSRAM) is the minimum for the static segment alone — that is
+`__heap_base` above, the whole region below the heap: the 1 MiB shadow stack
+plus 453 KiB of DATA and BSS. This is the floor below which the engine cannot
+boot, independent of WAD and zone size. Add the 250 KiB screen buffers (from
+`I_AllocLow`) to arrive at the true minimum writable footprint: **~1.68 MiB**.
+
+This figure read 1.21 MiB here and in six budget tables below until round 13,
+against a `__heap_base` row three lines up that already said 1.44. 1.21 MiB was
+DATA+BSS *alone* before tasks 14.2d/14.2e/14.2f restored the vanilla renderer
+limits and took 785 KiB out of BSS; it was never the writable floor, because it
+does not include the stack. Every total derived from it was ~0.23 MiB light.
 
 ### 2.2 Zone (heap)
 
@@ -500,21 +507,22 @@ WAD sizes (binary MiB, verified against perf.md §3):
 | plutonia.wad (worst case) | **16.61 MiB** |
 
 Only doom.wad fits comfortably in a 16 MiB PSRAM budget alongside static +
-zone. doom2.wad exceeds 16 MiB when combined with the 1.21 MiB static
+zone. doom2.wad exceeds 16 MiB when combined with the 1.44 MiB static
 segment and 4 MiB zone; plutonia.wad clearly does not fit.
 
 **Memory budget (doom.wad, full IWAD in PSRAM)**:
 
 | Region | Size |
 |--------|------|
-| Static (DATA + BSS) | 1.21 MiB |
+| Static (stack + DATA + BSS, = `__heap_base`) | 1.44 MiB |
 | Screen buffers (I_AllocLow) | 0.24 MiB |
 | Zone | 4 MiB |
 | WAD in PSRAM | 11.8 MiB |
-| **Total** | **~17.3 MiB** |
+| **Total** | **~17.5 MiB** |
 
-Requires ~17.3 MiB PSRAM. ESP32-S3 with 16 MiB PSRAM is tight for doom.wad
-and does not fit doom2.wad or plutonia.wad without streaming.
+Requires ~17.5 MiB PSRAM. ESP32-S3 with 16 MiB PSRAM does **not** fit doom.wad
+— it is 1.5 MiB over, not the "tight" this row used to call it — and does not
+fit doom2.wad or plutonia.wad without streaming.
 
 #### (b) Shareware doom1.wad (~4 MiB class)
 
@@ -522,11 +530,11 @@ doom1.wad (shareware IWAD, episodes 1 only) is ~4.2 MiB. With this WAD:
 
 | Region | Size |
 |--------|------|
-| Static | 1.21 MiB |
+| Static (= `__heap_base`) | 1.44 MiB |
 | Screen buffers (I_AllocLow) | 0.24 MiB |
 | Zone | 4 MiB |
 | WAD in PSRAM | ~4.2 MiB |
-| **Total** | **~9.7 MiB** |
+| **Total** | **~9.9 MiB** |
 
 Fits in 16 MiB PSRAM with margin. The shareware WAD is free to redistribute.
 The 13 golden demos include doom.wad demos (not shareware), but for a port
@@ -1026,7 +1034,7 @@ ESP32-S3 class (as of 2026):
 
 ### 7.2 Memory fit
 
-DOOM's static segment requires 1.21 MiB of writable memory (§2.1), plus
+DOOM's static segment requires 1.44 MiB of writable memory (§2.1), plus
 250 KiB for screen buffers allocated by `I_AllocLow` (§1.5). The ESP32-S3's
 512 KiB internal SRAM is insufficient for the static segment alone; PSRAM is
 mandatory. The §1.5 hybrid strategy (screens[0] in internal SRAM) is the
@@ -1036,17 +1044,17 @@ recommended mitigation for the column-draw latency bottleneck (§7.3).
 
 | Region | Size | Location |
 |--------|------|----------|
-| Static (DATA + BSS) | 1.21 MiB | PSRAM |
+| Static (stack + DATA + BSS, = `__heap_base`) | 1.44 MiB | PSRAM |
 | screens[0] (render target) | 64 KiB | Internal SRAM (hybrid strategy, §1.5) |
 | screens[1..3] (wipe/status buffers) | 192 KiB | PSRAM |
 | Zone | 4 MiB | PSRAM |
 | WAD (doom1.wad full load) | ~4.2 MiB | PSRAM |
-| **Total PSRAM** | **~9.6 MiB** | Must fit in PSRAM capacity |
+| **Total PSRAM** | **~9.9 MiB** | Must fit in PSRAM capacity |
 | Code (TEXT + tables) | ~275 KiB (perf.md §1 CODE section) | Flash (XIP) |
 | Trig table corrections | ~11 KiB | Flash (XIP) |
 | rndtable + gammatable | ~1.5 KiB | Flash (XIP) |
 
-A 16 MiB PSRAM part leaves ~6.4 MiB margin above the 9.6 MiB requirement —
+A 16 MiB PSRAM part leaves ~6.1 MiB margin above the 9.9 MiB requirement —
 comfortable for purgeable texture cache growth beyond the attract-demo peak.
 
 **Rung-1 arena vs. this recommendation**: the freestanding bring-up (rung 1,

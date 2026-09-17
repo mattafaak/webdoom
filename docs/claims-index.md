@@ -175,7 +175,7 @@ carried a status the legend never defined.
 | perf-005 | perf.md:56 | doom.js gzip-9 compressed size | 3,514 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | dated-measurement |
 | perf-006 | perf.md:57 | wasm compression ratio (raw / gzip) | 2.45× | derived | 357,978 / 145,990 ≈ 2.45 | derived-from-gated |
 | perf-007 | perf.md:100 | peak zone HWM across all 13 golden demos | 1.36 MB (plutonia demo3) | measurement | tools/zone-measure.mjs | dated-measurement |
-| perf-008 | perf.md:69 | ZONESIZE (hardcoded zone pool) | 4,194,304 B (32 MB) | invariant | tools/archaeology/source-constant-verify.mjs | verified |
+| perf-008 | perf.md:69 | ZONESIZE (hardcoded zone pool) | 4,194,304 B (4 MB) | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | perf-009 | perf.md:131 | __heap_base (static data end, heap start) | 1,512,384 bytes | measurement | tools/archaeology/wasm-stamp.mjs | verified |
 | perf-010 | perf.md:173 | zone pool malloc size | 4,194,304 bytes | derived | 4 × 1024 × 1024 = 4,194,304 (32 MB pre-14.2c) | derived-from-gated |
 | perf-011 | perf.md:139 | plutonia.wad file size (worst single IWAD) | 17,420,824 bytes | measurement | tools/archaeology/stamp-check.mjs | verified |
@@ -228,7 +228,7 @@ carried a status the legend never defined.
 | perf-058 | perf.md:§v1-fps | pi5 v1 fps (pre-int64) | 79,377 tics/s | measurement | bench-baseline.json (v1.frameThroughput.pi5.before) | dated-measurement |
 | perf-059 | perf.md:1271 | worst PWAD combo peak heap (tnt.wad + tnt31.wad) | 23.06 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
 | perf-059b | perf.md:1291 | PWAD combo peak heap (doom2.wad + nerve.wad) | 23.01 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
-| perf-059c | perf.md:1280 | PWAD combo peak heap (doom.wad + sigil.wad) | 21.70 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
+| perf-059c | perf.md:1321 | PWAD combo peak heap (doom.wad + sigil.wad) | 21.70 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
 | perf-059d | perf.md:1280 | PWAD combo peak heap (plutonia.wad, no PWAD) | 22.06 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
 | perf-060 | perf.md:1296 | headroom vs 32 MB for worst PWAD combo | 8.94 MB | derived | 32 − 23.06 = 8.94 MB | derived-from-gated |
 | perf-061 | perf.md:1592 | doom.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,218,022 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |

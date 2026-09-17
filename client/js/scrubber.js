@@ -1,7 +1,11 @@
 // The replay scrubber ("demo as video"): a range input and an input timeline
 // strip under the canvas.  Seeking calls web_seek_demo(N), which re-sims from
-// tic 0 -- no keyframes -- so the worst case is the whole demo (measured
-// ~2.2 s for 44,580 tics on the slowest host; docs/perf.md §19.3).
+// tic 0 -- no keyframes -- so the worst case is the whole demo: the longest one
+// in the matrix is plutonia-demo1 at 7,403 tics, measured ~0.36 s on the
+// slowest fleet host (wbox; docs/perf.md §19.3).  This comment and the tooltip
+// below both said "~2.2 s for 44,580 tics" until round 13.  44,580 is the
+// thirteen-demo CORPUS total and nothing seeks across demos, so the figure a
+// user was reading was 6x the real worst case.
 // Demo tic format (vanilla .lmp, 4 bytes): forwardmove, sidemove, angleturn/8,
 // buttons (bit 0 fire, 1 use, 2 strafe, 3 speed, 4-7 weapon slots).
 // JS only: no engine writes, determinism safe.
@@ -63,7 +67,7 @@ export function createScrubberUI(doom, demoBytes, { container = document.body, s
     scrubber.setAttribute('aria-label', 'Demo scrubber');
     const latencyNote = el('span', 'note', {
         textContent: '↩ re-sim/tic',
-        title: 'Seek re-sims from tic 0. Worst-case 44,580-tic seek measured at ~2.2 s on the slowest fleet host (wbox). See docs/perf.md §19.3.',
+        title: 'Seek re-sims from tic 0. The longest demo is 7,403 tics, measured at ~0.36 s on the slowest fleet host (wbox). See docs/perf.md §19.3.',
     });
 
     scrubRow.appendChild(label);
@@ -78,9 +82,10 @@ export function createScrubberUI(doom, demoBytes, { container = document.body, s
     strip.setAttribute('role', 'presentation');
     strip.setAttribute('aria-hidden', 'true');
 
-    // One pixel per tic was unbounded.  The worst case this file's own header
-    // cites is a 44,580-tic demo, and the server accepts a 1 MiB .lmp, which is
-    // ~260,000 tics -- against Firefox's 32,767 px canvas limit, where an
+    // One pixel per tic was unbounded.  The longest demo in the matrix is 7,403
+    // tics, but the server accepts a 1 MiB .lmp, which is ~260,000 tics -- and
+    // it is the UPLOAD that sets this bound, not the matrix.  Against Firefox's
+    // 32,767 px canvas limit, where an
     // over-limit canvas yields a context that cannot be drawn into.  The throw
     // escapes createScrubberUI, out of bootDoom's `after` callback, into
     // enterGame's .catch.  Chrome's limits are higher, so this never showed

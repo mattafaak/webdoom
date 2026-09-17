@@ -916,11 +916,21 @@ doom.wad shows 0 purges at 8 MB (sim path) but still fails the render gate at 8 
 — confirming that the render path fills the texture cache far beyond the sim-only
 measurement.  The true cache floor for the render path is between 8 MB and 32 MB.
 
-**Conclusion (task 2.5)**: ZONESIZE stays at **32 MB** until a render-path measurement
-(with rendering enabled) characterises the actual peak.  The §2 non-purgeable HWM
-(1.36 MB) is a lower bound on zone usage, not the safe floor for a rendering build.
-The PSRAM economy (bare-metal) argument for a smaller zone is valid but requires
-measuring actual texture cache peak with `-nodraw` off before committing a reduction.
+**Conclusion (task 2.5) — SUPERSEDED.  The engine ships ZONESIZE 4 MiB
+(`perf-008` = 4,194,304 B).**  Read task 13.2a immediately below before acting on
+this paragraph: it re-ran the same gates after tasks 3.1/3.2 and falsified the
+purge-pressure hypothesis this conclusion rests on.  The paragraph is kept
+because the purge table above it is real data, and because the conclusion was
+correct given what was known in July; it is banner-marked because it sat here
+unmarked, twenty-two lines above its own refutation, saying "stays at 32 MB"
+about a build that ships 4.
+
+The reasoning of the day: ZONESIZE stays at **32 MB** until a render-path
+measurement (with rendering enabled) characterises the actual peak.  The §2
+non-purgeable HWM (1.36 MB) is a lower bound on zone usage, not the safe floor
+for a rendering build.  The PSRAM economy (bare-metal) argument for a smaller
+zone is valid but requires measuring actual texture cache peak with `-nodraw`
+off before committing a reduction.
 
 ##### Task 13.2a re-trial — ZONESIZE 4/8 MiB post-3.2 (measured 2026-07-18)
 
@@ -1287,7 +1297,7 @@ did not move**.  The layout dependency those goldens once had was a real
 read past the end of an array, fixed since; nothing in the shipping engine
 depends on where the heap starts.
 
-1. `__heap_base` 4,722,048 → 1,512,384 B (−3,209,712 B), all of it heap
+1. `__heap_base` 4,722,048 → 1,512,384 B (−3,209,664 B), all of it heap
    headroom: worst PWAD combo peak 26.13 → 23.06 MB under 32 MB.
 2. Wire-transfer size: none (stack is runtime layout, not CODE/DATA);
    `doom.wasm` 355,883 → 355,395 B from the buffer's removal.
@@ -1372,7 +1382,7 @@ All five axes measured. No flag change is justified:
 | -O3 vs -O2 | **keep -O3** | -O2: −2.7% gzip, no speed win; trivial size delta |
 | --closure 1 | **keep --closure 1** | -closure 0: +67.5% doom.js gzip, no benefit |
 | STACK_SIZE | **1MB** (round 10) | kept at 4MB for fear of a regold; the goldens did not move when it fell |
-| INITIAL_MEMORY=64MB | **keep 64MB** | 9.17 MB headroom at worst real PWAD combo |
+| INITIAL_MEMORY | **32MB since task 14.2c** | worst real PWAD combo peaks at 23.06 MB (`perf-059`), leaving 8.94 MB. The 64 MB this row carried, and its 9.17 MB headroom, were the pre-14.2c figures — in a table headed "shipped flags", three lines above the shipped `-sINITIAL_MEMORY=32MB` |
 | emmalloc | **keep emmalloc** | correct for DOOM's zone-dominant allocation pattern |
 
 The shipped flags (`-Oz` per object, `-O3` on the 17 hot files and at link, `-flto --closure 1 -sINITIAL_MEMORY=32MB
@@ -1973,8 +1983,17 @@ Zone invariant: `web_zone_hwm` is flat across repeated seeks (confirmed by
 | tic 30      | 0.2 ms  | ~4400× realtime |
 | tic 59      | 0.4 ms  | ~4000× realtime |
 
-Extrapolated worst case (44,580 tics, the longest attract demo in the test
-matrix — tnt-demo1): **~0.3 s on devbox** at ~0.007 ms/tic.
+Extrapolated worst case: a seek is bounded by ONE demo, and the longest in the
+matrix is **plutonia-demo1 at 7,403 tics** — so **~0.05 s on devbox** at
+~0.007 ms/tic.
+
+This line used to read "44,580 tics, the longest attract demo in the test matrix
+— tnt-demo1", which is wrong twice.  44,580 is the THIRTEEN-demo corpus total,
+used that way in six other documents; tnt-demo1 is 4,531 tics and is not even
+the longest.  Nothing seeks across demos, so the corpus total was never a seek
+bound, and every extrapolation from it — here and on wbox below — was 6.02×
+overstated.  Per-demo tic counts come from the goldens themselves
+(`tools/golden/<demo>.json`).
 
 ### Wbox measurement (AMD G-T56N, measured 2026-07-22)
 
@@ -1985,14 +2004,18 @@ doom.wad rsynced, Node v24):
 seek-to-1: 2.4 ms  (~12× realtime)
 seek-to-30: 2.5 ms  (~343× realtime)
 seek-to-59: 2.9 ms  (~591× realtime)
-extrapolated 44580-tic seek: 2.2 s (at 0.048 ms/tic)
 ```
 
-**Worst-case seek ≈ 2.2 s on wbox** — 6× better than the 15.5 estimate
-(~13 s), because 15.5's ~100× figure included rendering while `web_seek_demo`
-runs sim-only (`nodrawers=1`).  Seek equivalence also PASSes on wbox
-(cross-host confirmation of the DoD hash equality).  The scrubber UI cites
-"a few seconds on the slowest hardware".
+The three measurements are wbox's; the extrapolation from them is not.  At
+0.048 ms/tic the longest single demo (plutonia-demo1, 7,403 tics) is
+**≈ 0.36 s on wbox** — the slowest host in the fleet, seeking to the end of the
+longest demo it can seek within.  The figure this section carried for a year was
+2.2 s, which is 44,580 × 0.048: the whole corpus, not a seek.
+
+Still 36× better than the 15.5 estimate (~13 s), because 15.5's ~100× figure
+included rendering while `web_seek_demo` runs sim-only (`nodrawers=1`).  Seek
+equivalence also PASSes on wbox (cross-host confirmation of the DoD hash
+equality).
 
 ### Equivalence guarantee
 
