@@ -198,8 +198,8 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/js/net.js` | 11,713 | 4,462 | 4.4 |
 | `client/js/wad-import.js` | 11,300 | 4,249 | 4.1 |
 | `client/css/webdoom.css` | 10,370 | 3,885 | 3.8 |
+| `client/js/audio.js` | 11,040 | 3,825 | 3.7 |
 | `build/doom.js` | 8,761 | 3,719 | 3.6 |
-| `client/js/audio.js` | 10,669 | 3,692 | 3.6 |
 | `client/js/doomfont.js` | 9,575 | 3,663 | 3.6 |
 | `client/js/fire.js` | 9,371 | 3,481 | 3.4 |
 | `client/js/demo.js` | 7,291 | 2,733 | 2.7 |
@@ -209,24 +209,24 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/js/persist.js` | 4,786 | 1,774 | 1.7 |
 | `client/js/ui.js` | 2,211 | 966 | 0.9 |
 | `client/js/idb.js` | 2,214 | 964 | 0.9 |
+| `client/js/perf-marks.js` | 2,252 | 959 | 0.9 |
 | `client/index.html` | 1,732 | 905 | 0.9 |
-| `client/js/perf-marks.js` | 2,008 | 855 | 0.8 |
 | `client/js/music-worklet.js` | 1,970 | 843 | 0.8 |
 | `client/js/wad-cache.js` | 1,517 | 716 | 0.7 |
 | `client/js/wad-library.js` | 1,159 | 565 | 0.6 |
-| **Total (all, raw)** | **494,929** | — | — |
-| **Total (all, gzip-9)** | — | **205,635** | **200.8** |
-| **JS+CSS+HTML only (raw)** | 186,820 | — | — |
-| **JS+CSS+HTML only (gzip-9)** | — | 68,677 | **67.1** |
+| **Total (all, raw)** | **495,544** | — | — |
+| **Total (all, gzip-9)** | — | **205,872** | **201.0** |
+| **JS+CSS+HTML only (raw)** | 187,435 | — | — |
+| **JS+CSS+HTML only (gzip-9)** | — | 68,914 | **67.3** |
 
 The WAD file itself (doom.wad ≈ 11.8 MB, doom2.wad ≈ 13.9 MB, etc.) is
 fetched separately on first play and cached in the browser; it is not part of
 the initial page-load transfer.
 
 **Finding**: the entire deliverable (wasm + JS glue + client JS + CSS +
-HTML) compresses to **200.8 KB gzip** on the wire, gated by
+HTML) compresses to **201.0 KB gzip** on the wire, gated by
 `payload-size` (perf-015/perf-016) since round 8. The wasm is
-65% of that. The JS+CSS+HTML surface is **67.1 KB gzip**
+65% of that. The JS+CSS+HTML surface is **67.3 KB gzip**
 — note that is **1.9x the 35.1 KB this table used to
 claim**, which went stale unnoticed precisely because both figures were
 marked *not machine-verified*: the old table still listed
@@ -1423,6 +1423,43 @@ to draw 80×60 thumbnails; it now names the games that have art (35,484 B,
 Gated by `http-fuzz` ("the wire" cases: encoded content-length, decode-back,
 `Vary`, per-representation ETag, 304, HTTP/1.0 identity; the thumb route,
 its 404s, its traversal refusal and its invalidation).
+
+
+### The OPL synth on the main thread (round 10 measurement, 2026-09-16)
+
+`audio.js` renders music by calling `_web_music_render` from a 100 ms
+`setInterval` on the main thread, refilling up to 250 ms of audio per call.
+No stage measured it: the pipeline's `worklet` stage reads the AudioWorklet's
+own `process()`, which only copies samples. Stage **(f) opl** now brackets the
+call (`perf-marks.js`, `browser-pipeline.mjs`, `--headed` added).
+
+**What the browser stage can and cannot read unattended.** Headless Chrome,
+and headed Chrome under `xvfb-run`, arm the AudioContext on the harness's key
+event but never drain it — no output device — so the pump renders once
+(12,000 frames, 6.0 ms headed / 9.6 ms headless on alder, first call, JIT
+included) and never again. The steady state needs a real audio device: run
+`node tools/browser-pipeline.mjs --headed` on a desktop session. The number
+the verdict needs was measured in node instead, same wasm, same song
+(`mus_intro`), 300 calls of 4,800 frames at 48 kHz after 10 discarded:
+
+| host | per 100 ms call, p50 / p99 (ms) | ms of synth per second of audio | share of wall time |
+|------|----------------------------------|----------------------------------|--------------------|
+| alder (i9-12900K) | 1.76 / 1.84 | 17.6 | 1.8% |
+| tank (i5-8350U) | 3.98 / 4.09 | 39.9 | 4.0% |
+| wbox (AMD G-T56N) | 18.5 / 19.7 | 186 | 18.6% |
+
+OPL3 is within 3% of OPL2 on every host. The cost is not the share, it is
+the SHAPE: one synchronous 4 ms (tank) or 19 ms (wbox) call on the main
+thread every 100 ms, which at 60 Hz is a dropped frame every sixth frame on
+wbox and a quarter of a frame on tank, in a burst the rAF budget cannot
+absorb. The plan's threshold was 5% of a 16.7 ms frame at p99 on tank
+(0.83 ms); tank reads 4.09.
+
+**Verdict: phase 2 is warranted and scheduled for the next pass** — a
+second wasm built from `mus_opl.c` + `opl3.c` running inside the
+AudioWorklet (GENMIDI and song bytes posted over the port; volume, pause and
+stop as messages), the main-thread `BufferSink` path kept for insecure
+origins, `opl-mode` extended to the second wasm against `opl2-ref.f32`.
 
 
 ## PSX fire launcher background — perf note

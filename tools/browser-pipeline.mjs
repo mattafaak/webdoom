@@ -18,9 +18,17 @@
 //                  in headless Chrome without user gesture.
 //   (e) inputLat — keydown event.timeStamp → renderer.draw() returns.
 //                  Measures: event firing → GPU upload (compositing not waited).
+//   (f) opl      — _web_music_render() wall time per pump call, on the MAIN
+//                  thread (audio.js pump, ~10 Hz).  Round 10: this was the one
+//                  hot loop no stage measured.  Reported per call and as ms of
+//                  synth per second of audio.
 //
 // Usage:
-//   node tools/browser-pipeline.mjs [--url <url>] [--json] [--frames <n>]
+//   node tools/browser-pipeline.mjs [--url <url>] [--json] [--frames <n>] [--headed]
+//
+// --headed  A visible Chrome (needs a display; under xvfb-run it is a real
+//           compositor without vsync).  Headless is the gate's arm; headed is
+//           for reading the audio stages, which headless Chrome may not run.
 //
 // --url     Running webdoom server URL (default: http://127.0.0.1:8666/).
 //           Script auto-spawns a server if the default URL is not reachable.
@@ -54,6 +62,7 @@ const root  = join(__dir, '..');
 // ── CLI args ───────────────────────────────────────────────────────────────────
 const args       = process.argv.slice(2);
 const jsonMode   = args.includes('--json');
+const headed     = args.includes('--headed');
 const urlIdx     = args.indexOf('--url');
 const framesIdx  = args.indexOf('--frames');
 const EXPLICIT_URL   = urlIdx    >= 0 ? args[urlIdx    + 1] : null;
@@ -64,12 +73,12 @@ const MIN_FRAMES     = framesIdx >= 0 ? Number(args[framesIdx + 1]) : 200;
 // with an uninstrumented client boots fine and fails confusingly later
 // (the run-fuzz.mjs lesson: unknown args must fail loudly, not look green).
 {
-    const known = new Set(['--json', '--url', '--frames']);
+    const known = new Set(['--json', '--url', '--frames', '--headed']);
     const valueSlots = new Set([urlIdx + 1, framesIdx + 1].filter(i => i > 0));
     const unknown = args.filter((a, i) => !known.has(a) && !valueSlots.has(i));
     if (unknown.length) {
         console.error(`FATAL: unknown argument(s): ${unknown.join(' ')}`);
-        console.error('usage: browser-pipeline.mjs [--url URL] [--frames N] [--json]');
+        console.error('usage: browser-pipeline.mjs [--url URL] [--frames N] [--json] [--headed]');
         process.exit(2);
     }
 }
@@ -138,7 +147,7 @@ const PERF_URL = BASE_URL.includes('?')
     ? BASE_URL + '&perfmarks=1'
     : BASE_URL + '?perfmarks=1';
 
-chrome = await launchChrome();
+chrome = await launchChrome({ headless: !headed });
 const tab = await chrome.tab(PERF_URL);
 const { cdp, ev: evaluate } = tab;
 
@@ -259,6 +268,11 @@ const paletteStats  = stats(perf.palette);
 const uploadStats   = stats(perf.upload);
 const inputLatStats = stats(perf.inputLat);
 const workletStats  = stats(perf.worklet);
+const oplStats      = stats(perf.opl);
+// ms of synth per second of audio produced: sum(ms) / (sum(frames) / rate)
+const oplFrames     = (perf.oplFrames ?? []).reduce((a, b) => a + b, 0);
+const oplMs         = (perf.opl ?? []).reduce((a, b) => a + b, 0);
+const oplPerSecond  = perf.sampleRate && oplFrames ? +(oplMs / (oplFrames / perf.sampleRate)).toFixed(3) : null;
 
 // Chrome version for record
 let chromeVer = 'unknown';
@@ -296,7 +310,10 @@ const result = {
             note: 'Total rAF callback wall time: input.frame() + doom._web_frame() + renderer.draw().' },
         // (d) AudioWorklet
         worklet: { ...workletStats,
-            note: 'AudioWorklet process() wall time measured inside the audio thread and posted to main thread via port. n=0 means AudioContext did not arm (no user gesture in headless Chrome). Headless limitation: audio worklet may be silent.' },
+            note: 'AudioWorklet process() wall time measured inside the audio thread and posted to main thread via port. n=0 means the worklet posted nothing: the harness arms the AudioContext with a trusted key event, but headless Chrome may not schedule the worklet. --headed reads it.' },
+        // (f) the OPL synth on the main thread
+        opl: { ...oplStats, frames: oplFrames, sampleRate: perf.sampleRate ?? 0, ms_per_second_of_audio: oplPerSecond,
+            note: 'audio.js pump(): _web_music_render() wall time per call on the main thread (~10 Hz, up to 16,384 frames a call). n=0 means the AudioContext never armed. Not regression-checked (round 10 measurement).' },
         // (e) input latency
         input_latency: { ...inputLatStats,
             note: 'Measurement: keydown event.timeStamp → renderer.draw() returns (GPU upload submitted, not compositing). Exact tic-consumption attribution omitted (no engine changes); this is event→next-rAF-draw latency.' },
@@ -325,6 +342,7 @@ if (jsonMode) {
     console.log(`(c) rAF-duration p50=${rafDurations.p50}  p90=${rafDurations.p90}  p99=${rafDurations.p99}  max=${rafDurations.max}  ms`);
     console.log(`(d) worklet     p50=${workletStats.p50}  n=${workletStats.n}  ms  (0 = not armed in headless)`);
     console.log(`(e) input-lat   p50=${inputLatStats.p50}  p90=${inputLatStats.p90}  p99=${inputLatStats.p99}  n=${inputLatStats.n} ms`);
+    console.log(`(f) opl         p50=${oplStats.p50}  p90=${oplStats.p90}  p99=${oplStats.p99}  max=${oplStats.max}  n=${oplStats.n} ms/call; ${oplPerSecond ?? '?'} ms per s of audio @ ${perf.sampleRate ?? 0} Hz`);
     console.log('PASS');
 }
 

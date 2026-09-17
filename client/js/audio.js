@@ -103,6 +103,7 @@ export function createAudio(doom) {
         }
         if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
         doom._web_music_init(ctx.sampleRate);
+        if (window.__wd_perf) window.__wd_perf.sampleRate = ctx.sampleRate;
 
         musicScratch = doom._malloc(4 * 2 * 16384);
         // 0 means the allocation failed; web_music_render would then write its
@@ -164,8 +165,12 @@ export function createAudio(doom) {
         const frames = Math.min(16384, Math.max(0, deficit));
         if (!frames) return;
 
-        // OPL path (default)
+        // the synth runs here, on the main thread, ~10 times a second; the
+        // pipeline profiler reads how long that takes (stage (f) opl)
+        const perf = window.__wd_perf;
+        const t0 = perf ? performance.now() : 0;
         doom._web_music_render(musicScratch, frames);
+        if (perf) { perf.opl.push(performance.now() - t0); perf.oplFrames.push(frames); }
         const view = doom.HEAPF32 ??
             new Float32Array(doom.HEAPU8.buffer);
         const chunk = view.slice(musicScratch / 4, musicScratch / 4 + frames * 2);

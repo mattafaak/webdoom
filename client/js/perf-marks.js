@@ -12,6 +12,9 @@ if (typeof location !== 'undefined' && new URLSearchParams(location.search).has(
         upload: [],         // framebuffer texSubImage2D / putImageData duration (ms)
         inputLat: [],       // keydown.timeStamp → renderer.draw() returns (ms)
         worklet: [],        // AudioWorklet process() duration (ms), posted via port
+        opl: [],            // _web_music_render wall time per pump call (ms), main thread
+        oplFrames: [],      // frames rendered by that call (sampleRate below)
+        sampleRate: 0,      // AudioContext rate once armed; 0 until then
         _lastRafTime: 0,
         _frameCallStart: 0,
         _pendingInputTime: undefined,

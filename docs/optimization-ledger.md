@@ -437,6 +437,21 @@ sanctioned by policy).**
 
 ---
 
+### NC6 — OPL synth off the main thread (round 10: measured, scheduled)
+
+| field | value |
+|-------|-------|
+| **mechanism** | Run `mus_opl.c` + `opl3.c` as a second wasm inside the AudioWorklet so `_web_music_render` leaves the main thread; GENMIDI and song bytes over the worklet port, volume/pause/stop as messages; `BufferSink` stays for insecure origins. |
+| **predicted Δinstr/tic** | 0 in the engine; the cost moves threads. |
+| **axis** | browser frame budget |
+| **magic-data policy** | None. |
+| **measured (round 10, node, 48 kHz, 4,800-frame calls, 300 after 10 warm-up)** | per 100 ms call p50/p99: alder 1.76/1.84 ms, tank 3.98/4.09 ms, wbox 18.5/19.7 ms; ms of synth per second of audio 17.6 / 39.9 / 186. OPL3 within 3% of OPL2 everywhere. Browser stage (f) `opl` added to `browser-pipeline.mjs`; headless and xvfb Chrome render one pump call only (no audio device drains the context), so the steady state is the node figure. See perf.md "The OPL synth on the main thread". |
+| **kill rule** | `opl-mode` byte-identity against `opl2-ref.f32` on the second wasm; `browser-music-fallback` and `browser-insecure` keep the main-thread path. |
+
+**Verdict: SURVIVES — measured above the plan's threshold (tank p99 4.09 ms per call against 0.83); built in the next pass.**
+
+---
+
 ## Summary
 
 | id | mechanism | axis | Δinstr/tic | verdict |
@@ -463,11 +478,12 @@ sanctioned by policy).**
 | NC3 | R_GetColumn composite fast-path inlining | cycle-floor | predicted −3K…−4K instr/tic (0.6–0.9% of bsp; anchor: perf-034 = 714.8 calls/tic × 5 instr/call = 3,574 instr/tic); UNMEASURED | SURVIVES → no live owner |
 | NC4 | R_DrawColumn 8-wide unroll (extend existing 4-wide) | cycle-floor | predicted −5K…−10K instr/tic (1–2% of bsp); UNMEASURED | SURVIVES → no live owner |
 | NC5 | R_DrawSpan 4-wide loop unroll | cycle-floor | MEASURED: −47,707 instr/tic p50 doom.wad demo3 (−4.2% whole, −11.9% planes); scalar xfrac/yfrac, no packing | LANDED (20.2b) |
+| NC6 | OPL synth off the main thread (AudioWorklet wasm) | browser frame budget | 0 in the engine; measured main-thread cost per 100 ms call p99 alder 1.84 / tank 4.09 / wbox 19.7 ms, above the 0.83 ms threshold | SURVIVES → next pass |
 
-**Totals: 22 candidates, 12 survivors (9 landed, 3 surviving), 10 killed.**
+**Totals: 23 candidates, 13 survivors (9 landed, 4 surviving), 10 killed.**
 
 <!-- Counted from the verdict column of the table above, not written by hand:
-     LANDED C1-C8 + NC5 = 9; KILLED K1-K9 + NC1 = 10; SURVIVES NC2, NC3, NC4 = 3.
+     LANDED C1-C8 + NC5 = 9; KILLED K1-K9 + NC1 = 10; SURVIVES NC2, NC3, NC4, NC6 = 4.
      NC2/NC3/NC4 pointed at task 20.2b until round 8.  20.2b was round
      3's LANDING TEMPLATE ("instantiate per ledger entry") and it closed at
      90250e8 with one candidate landed, so those three had been pointed at a
