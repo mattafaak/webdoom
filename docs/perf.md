@@ -209,7 +209,7 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 
 | File | Raw (bytes) | gzip-9 (bytes) | gzip-9 (KB) |
 |------|------------|---------------|------------|
-| `build/doom.wasm` | 299,952 | 133,485 | 130.4 |
+| `build/doom.wasm` | 299,962 | 133,492 | 130.4 |
 | `client/js/lobby.js` | 33,917 | 11,648 | 11.4 |
 | `build/synth.wasm` | 21,319 | 9,064 | 8.9 |
 | `client/js/input.js` | 18,037 | 6,628 | 6.5 |
@@ -234,8 +234,8 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/index.html` | 1,732 | 905 | 0.9 |
 | `client/js/wad-cache.js` | 1,517 | 716 | 0.7 |
 | `client/js/wad-library.js` | 1,159 | 565 | 0.6 |
-| **Total (all, raw)** | **546,960** | — | — |
-| **Total (all, gzip-9)** | — | **225,924** | **220.6** |
+| **Total (all, raw)** | **546,970** | — | — |
+| **Total (all, gzip-9)** | — | **225,931** | **220.6** |
 | **JS+CSS+HTML only (raw)** | 216,915 | — | — |
 | **JS+CSS+HTML only (gzip-9)** | — | 79,655 | **77.8** |
 

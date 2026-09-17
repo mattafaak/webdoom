@@ -87,7 +87,14 @@ $(BUILD)/obj/%.o: %.c Makefile
 	@mkdir -p $(dir $@)
 	emcc $(OPT) $(CFLAGS) $(EXTRA_CFLAGS) -MMD -MP -c $< -o $@
 
--include $(OBJ:.o=.d)
+# SYNTH_OBJ too, not just OBJ.  synth_main.c is filter-out'd from WEB_SRC (it
+# defines W_* stubs that would collide with w_wad.c in doom.wasm), so its object
+# is not in $(OBJ) -- and this line listed only $(OBJ), so build/synth.wasm has
+# never tracked a header dependency.  Editing web.h, which synth_main.c
+# includes, left synth.wasm stale and `make` said "Nothing to be done".
+# artifact-freshness caught it; make could not.  Same shape as the missing
+# -MMD -MP in the n64 and rp2040 Makefiles that round 11 fixed.
+-include $(OBJ:.o=.d) $(SYNTH_OBJ:.o=.d)
 
 $(SYNTH): $(SYNTH_OBJ) Makefile
 	emcc -O3 $(CFLAGS) $(EXTRA_CFLAGS) $(SYNTH_LDFLAGS) $(SYNTH_OBJ) -o $(SYNTH)

@@ -87,7 +87,10 @@ void mus_setvolume (int vol127);
 int web_music_debug (
     int what); /* 0 playing, 1 events, 2 noteons, 3 bank, 4 voices */
 void web_set_opl_mode (int mode); /* 0 OPL2, 1 OPL3; call before mus_init */
-void web_music_render (float* out, int nframes); /* out: nframes * 2 floats */
+/* web_music_render is declared once, above, with its bound contract.  A second
+   declaration lived here and web-contract-check could not see it: that tool
+   builds its declaration set as a Map, so a duplicate key collapses silently.
+ */
 
 // --- build/synth.wasm contract (engine/web/synth_main.c) ------------------
 //

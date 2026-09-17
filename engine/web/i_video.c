@@ -24,8 +24,26 @@ void I_ShutdownGraphics (void) {}
 void I_SetPalette (byte* palette)
 {
     int i;
+    /* usegamma indexes gammatable[5][256] and arrives UNBOUNDED.  It is a
+       plain entry in m_misc.c's defaults table, and M_LoadDefaults assigns
+       `*defaults[i].location = parm` with no range check on any entry -- so a
+       .doomrc carrying `usegamma 99` reads about 24 KB past the table, here,
+       on every palette update.  On this port .doomrc is not a file on the
+       user's own disk: it round-trips through IndexedDB (client/js/persist.js),
+       which browser-options already treats as hostile input and tests as such.
+
+       spec.md tenet 4: no input from the network, the WAD, or the user may
+       corrupt memory.  This is that.
+
+       Clamped HERE rather than in m_misc.c because engine/core is vendored
+       close to id's source on purpose, and the platform layer already owns the
+       palette.  The menu path self-heals (m_menu.c wraps to 0 on F11), so this
+       is the only unguarded reader. */
+    int g = usegamma;
+    if (g < 0 || g >= 5)
+        g = 0;
     for (i = 0; i < 256 * 3; i++)
-        webpalette[i] = gammatable[usegamma][palette[i]];
+        webpalette[i] = gammatable[g][palette[i]];
     paletteversion++;
 }
 

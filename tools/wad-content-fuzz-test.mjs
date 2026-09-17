@@ -248,8 +248,59 @@ for (const kind of THUMB_CASES) {
     verdict.good ? passes++ : failures++;
 }
 
-const EXPECTED = Object.keys(CASES).length + SERVER_CASES.length + THUMB_CASES.length;
+// ── hostile .doomrc: the OTHER bytes the player supplies ─────────────────────
+//
+// Everything above is lump content.  The config is the sibling case and had no
+// cover at all: M_LoadDefaults (engine/core/m_misc.c) parses .doomrc and does
+// `*defaults[i].location = parm` with NO range check on any entry, and .doomrc
+// does not come from a file on the user's disk here -- it round-trips through
+// IndexedDB and reaches the engine as Module.fileMap (files.c's js_file_len
+// bridge), which browser-options already treats as hostile input.
+//
+// `usegamma` indexes gammatable[5][256] in engine/web/i_video.c on every
+// palette update.  `usegamma 99` read about 24 KB past it until round 13
+// clamped it at the index site.  spec.md tenet 4: no input from the network,
+// the WAD, or the user may corrupt memory.
+//
+// The CONTROL is the load-bearing part.  A clamp that made every gamma
+// identical would pass a "99 looks like 0" assertion trivially, so a LEGAL
+// gamma must still change the palette or this case proves nothing.
+const CONFIG_CASES = ['gamma-clamped', 'gamma-control'];
+{
+    const createDoom = (await import(join(root, buildDir, 'doom.js'))).default;
+    const wadBytes = readFileSync(join(root, 'wads/lib/doom.wad'));
+    const paletteFor = async rc => {
+        const d = await createDoom({ noInitialRun: true, print() {}, printErr() {},
+            fileMap: new Map([['.doomrc', new Uint8Array(Buffer.from(rc, 'ascii'))]]) });
+        const wp = d._malloc(wadBytes.length);
+        d.HEAPU8.set(wadBytes, wp);
+        d.ccall('web_register_file', 'null', ['string', 'number', 'number'],
+                ['doomu.wad', wp, wadBytes.length]);
+        d.callMain(['-iwad', 'doomu.wad', '-warp', '1', '1', '-skill', '1', '-nodraw']);
+        d._web_set_singletics(1);
+        for (let i = 0; i < 12; i++) d._web_frame();
+        const p = d._web_palette();
+        return Buffer.from(d.HEAPU8.subarray(p, p + 768));
+    };
+    const g0 = await paletteFor('usegamma 0\n');
+    const g99 = await paletteFor('usegamma 99\n');
+    const g2 = await paletteFor('usegamma 2\n');
+    const live = g0.some(b => b !== 0);
+
+    const a = live && g0.equals(g99);
+    console.log(`  ${a ? 'ok  ' : 'FAIL'} config usegamma 99 is clamped - `
+        + `${live ? (a ? 'palette identical to gamma 0' : 'palette DIFFERS from gamma 0 (out-of-range read)')
+                 : 'palette never populated, this case checked nothing'}`);
+    a ? passes++ : failures++;
+
+    const c = live && !g0.equals(g2);
+    console.log(`  ${c ? 'ok  ' : 'FAIL'} config CONTROL: a legal gamma still changes the palette - `
+        + `${c ? 'gamma 2 differs from gamma 0' : 'gamma 2 == gamma 0, so the case above sees nothing'}`);
+    c ? passes++ : failures++;
+}
+
+const EXPECTED = Object.keys(CASES).length + SERVER_CASES.length + THUMB_CASES.length + CONFIG_CASES.length;
 console.log(`\n  ${passes} passed, ${failures} failed`);
 if (failures) { console.log(`FAIL wad-content-fuzz-test: ${failures} case(s)`); process.exit(1); }
 if (passes !== EXPECTED) { console.log(`FAIL wad-content-fuzz-test: ran ${passes} of ${EXPECTED} cases`); process.exit(1); }
-console.log(`PASS - wad-content-fuzz-test: ${passes} hostile lump payloads, engine survived all`);
+console.log(`PASS - wad-content-fuzz-test: ${passes} hostile payloads (lumps, server-side, thumbs, and a hostile .doomrc), engine survived all`);
