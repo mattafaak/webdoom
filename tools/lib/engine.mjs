@@ -16,6 +16,15 @@ export async function bootEngine(buildDir, wads, { print = () => {}, printErr = 
         if (!p) throw new Error(`out of memory registering ${name}`);
         doom.HEAPU8.set(bytes, p);
         doom.ccall('web_register_file', null, ['string', 'number', 'number'], [name, p, bytes.length]);
+        // The pointer is deliberately not returned, and must not be freed.
+        // web_register_file RETAINS it -- engine/web/files.c does
+        // `webfiles[n].data = data`, it does not copy -- so the registry points
+        // at this block for the module's whole life and every W_WebFile() hit
+        // reads through it.  A harness that frees it has handed the engine a
+        // dangling pointer.  opl-mode-test.mjs did exactly that for three
+        // instances (round 13); it happened to be the last use of each module
+        // every time, so nothing read freed memory, which is the kind of luck
+        // that stops holding the moment someone adds a line.
     }
     return doom;
 }

@@ -29,24 +29,22 @@
 //
 // usage: node tools/demo-seek-test.mjs [--build-dir <dir>]
 
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { root } from './lib/util.mjs';
+import { root, buildDirArg } from './lib/util.mjs';
+import { bootEngine, loadWad } from './lib/engine.mjs';
 
-const buildDirIdx = process.argv.indexOf('--build-dir');
-const buildDir = buildDirIdx >= 0 ? process.argv[buildDirIdx + 1] : 'build';
-
-const createDoom = (await import(join(root, buildDir, 'doom.js'))).default;
+const buildDir = buildDirArg();
 
 const WAD_FILE   = 'doom.wad';
 const WAD_ENGINE = 'doomu.wad';
-const wadPath = join(root, 'wads/lib', WAD_FILE);
-if (!existsSync(wadPath)) {
+if (!existsSync(join(root, 'wads/lib', WAD_FILE))) {
     console.log(`skip: ${WAD_FILE} not fetched`);
     process.exit(0);
 }
-const wadBytes = readFileSync(wadPath);
+const wadBytes = loadWad(WAD_FILE);
+const boot = () => bootEngine(buildDir, [[WAD_ENGINE, wadBytes]], { onDoomError: () => {} });
 
 // Seek targets to test: tic 1, 30 (mid), 59 (near-end = RECORD_TICKS-1).
 const RECORD_TICKS   = 60;
@@ -54,19 +52,11 @@ const TEST_SEEK_POINTS = [1, 30, 59];
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function registerWad(doom) {
-    const p = doom._malloc(wadBytes.length);
-    doom.HEAPU8.set(wadBytes, p);
-    doom.ccall('web_register_file', null, ['string', 'number', 'number'],
-        [WAD_ENGINE, p, wadBytes.length]);
-}
-
 function bootAndRecord(demoBytes_out) {
     // Returns per-tic hash array for RECORD_TICKS.
     // Fills demoBytes_out[0] with the recorded .lmp bytes.
-    return createDoom({ print: () => {}, printErr: () => {}, onDoomError: () => {} })
+    return boot()
         .then(doom => {
-            registerWad(doom);
             doom.callMain(['-warp', '1', '1', '-skill', '1', '-nodraw', '-record', 'webdemo']);
             doom._web_set_singletics(1);
             const hashes = [];
@@ -86,9 +76,8 @@ function bootAndRecord(demoBytes_out) {
 
 function linearPlay(demoBytes) {
     // Replays .lmp linearly; returns per-tic hash array.
-    return createDoom({ print: () => {}, printErr: () => {}, onDoomError: () => {} })
+    return boot()
         .then(doom => {
-            registerWad(doom);
             doom.callMain(['-warp', '1', '1', '-skill', '1', '-nodraw']);
             doom._web_set_singletics(1);
             const ptr = doom._malloc(demoBytes.length);
@@ -117,8 +106,7 @@ function linearPlay(demoBytes) {
 // is still called for correct browser-UI semantics (renders gametic=N visually),
 // but the sim-hash comparison must happen before it.
 async function seekTo(demoBytes, targetTic, fakeOff = 0) {
-    const doom = await createDoom({ print: () => {}, printErr: () => {}, onDoomError: () => {} });
-    registerWad(doom);
+    const doom = await boot();
     doom.callMain(['-warp', '1', '1', '-skill', '1', '-nodraw']);
     doom._web_set_singletics(1);
     const ptr = doom._malloc(demoBytes.length);
@@ -143,8 +131,7 @@ async function seekTo(demoBytes, targetTic, fakeOff = 0) {
 
 // Zone HWM flat test: run multiple seeks on one instance and assert HWM flat.
 async function zoneHwmFlatTest(demoBytes, seekPoints) {
-    const doom = await createDoom({ print: () => {}, printErr: () => {}, onDoomError: () => {} });
-    registerWad(doom);
+    const doom = await boot();
     doom.callMain(['-warp', '1', '1', '-skill', '1', '-nodraw']);
     doom._web_set_singletics(1);
     const ptr = doom._malloc(demoBytes.length);

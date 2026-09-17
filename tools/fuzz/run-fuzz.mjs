@@ -43,6 +43,7 @@ import { spawnSync, spawn } from 'node:child_process';
 import { tmpdir, cpus } from 'node:os';
 import { createHash } from 'node:crypto';
 import { root } from '../lib/util.mjs';
+import { bootEngine } from '../lib/engine.mjs';
 
 
 // ── args ─────────────────────────────────────────────────────────────────────
@@ -69,7 +70,6 @@ for (let i = 2; i < process.argv.length; i++) {
 }
 
 const { genDemo } = await import('./gen-demo.mjs');
-const createDoom = (await import(join(root, buildDir, 'doom.js'))).default;
 
 // ── paths ────────────────────────────────────────────────────────────────────
 const NAT_DOOM = join(root, 'tools/native-sanitize/nat-doom');
@@ -133,7 +133,7 @@ async function runWasm(pwadBytes) {
     const iwadBytes = readFileSync(IWAD_PATH);
     let done = null;
 
-    const doom = await createDoom({
+    const doom = await bootEngine(buildDir, [[IWAD_NAME, iwadBytes], [PWAD_NAME, pwadBytes]], {
         print: () => {},
         printErr: (t) => {
             const m = /timed (\d+) gametics/.exec(t);
@@ -143,24 +143,6 @@ async function runWasm(pwadBytes) {
             if (!/timed \d+ gametics/.test(msg)) done = `error: ${msg}`;
         },
     });
-
-    // Register IWAD
-    {
-        const p = doom._malloc(iwadBytes.length);
-        doom.HEAPU8.set(iwadBytes, p);
-        doom.ccall('web_register_file', null, ['string', 'number', 'number'], [
-            IWAD_NAME, p, iwadBytes.length,
-        ]);
-    }
-
-    // Register PWAD
-    {
-        const p = doom._malloc(pwadBytes.length);
-        doom.HEAPU8.set(pwadBytes, p);
-        doom.ccall('web_register_file', null, ['string', 'number', 'number'], [
-            PWAD_NAME, p, pwadBytes.length,
-        ]);
-    }
 
     const trace = [];
     try {

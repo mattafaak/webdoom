@@ -48,27 +48,23 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { root } from './lib/util.mjs';
+import { bootEngine, loadWad } from './lib/engine.mjs';
 
 const wad  = process.argv[2] ?? 'doom.wad';
 
-const createDoom = (await import(join(root, 'build/doom.js'))).default;
+const buildDir = 'build';
 const engineName = wad === 'doom.wad' ? 'doomu.wad' : wad;
-const wadBytes   = readFileSync(join(root, 'wads/lib', wad));
+const wadBytes   = loadWad(wad);
 
 // Helper: create and boot a fresh doom instance at song position 0.
 // Each call gives an isolated wasm module with its own linear memory,
 // so both OPL2 and OPL3 gates sample from the same song position.
 async function bootInstance (oplMode) {
     let fatal = null;
-    const d = await createDoom({
-        print:        () => {},
+    const d = await bootEngine(buildDir, [[engineName, wadBytes]], {
         printErr:     t  => process.stderr.write(`  ! ${t}\n`),
         onDoomError:  msg => { fatal = msg; },
     });
-    const p = d._malloc(wadBytes.length);
-    d.HEAPU8.set(wadBytes, p);
-    d.ccall('web_register_file', null, ['string', 'number', 'number'],
-            [engineName, p, wadBytes.length]);
     d.callMain([]);
     if (fatal) throw new Error(`FAIL init (opl_mode=${oplMode}): ${fatal}`);
 
@@ -78,13 +74,13 @@ async function bootInstance (oplMode) {
     // Apply mode BEFORE init so mus_init runs with the correct NEW bit.
     d._web_set_opl_mode(oplMode);
     d._web_music_init(44100);   // OPL chip reset from song position 0
-    return { d, p };
+    return d;
 }
 
 // ── Gate 1: web_set_opl_mode must be exported ─────────────────────────────
 // Verified inside bootInstance; boot a single instance to check up front.
 {
-    const tmp = await createDoom({ print:()=>{}, printErr:()=>{}, onDoomError:()=>{} });
+    const tmp = await bootEngine(buildDir, [], { onDoomError: () => {} });
     if (typeof tmp._web_set_opl_mode !== 'function') {
         console.error('FAIL: _web_set_opl_mode not exported (implementation missing)');
         process.exit(1);
@@ -104,7 +100,7 @@ if (!existsSync(refPath)) {
 }
 const refBuf = readFileSync(refPath);
 
-const { d: doom2, p: p2 } = await bootInstance(0);
+const doom2 = await bootInstance(0);
 const scratch2 = doom2._malloc(SZ);
 doom2._web_music_render(scratch2, NFRAMES);
 const opl2Buf = Buffer.from(doom2.HEAPU8.buffer, scratch2, SZ);
@@ -120,19 +116,19 @@ if (!opl2Buf.equals(refBuf)) {
 
 const opl2f32 = new Float32Array(doom2.HEAPU8.buffer, scratch2, NFRAMES * 2);
 const opl2rms = Math.sqrt(opl2f32.reduce((s, v) => s + v * v, 0) / opl2f32.length);
-doom2._free(scratch2); doom2._free(p2);
+doom2._free(scratch2);
 console.log(`gate 2 PASS: OPL2 byte-identical (${SZ} bytes), rms=${opl2rms.toFixed(5)}`);
 
 // ── Gate 3: OPL3 mode has audible output ─────────────────────────────────
 // Instance 2 boots in OPL3 mode; renders 2 seconds from song position 0.
 // Using a separate instance (not web_music_restart) avoids adding a test-
 // only export to the wasm and guarantees both gates sample the same passage.
-const { d: doom3, p: p3 } = await bootInstance(1);
+const doom3 = await bootInstance(1);
 const scratch3 = doom3._malloc(SZ);
 doom3._web_music_render(scratch3, NFRAMES);
 const opl3f32 = new Float32Array(doom3.HEAPU8.buffer, scratch3, NFRAMES * 2);
 const opl3rms = Math.sqrt(opl3f32.reduce((s, v) => s + v * v, 0) / opl3f32.length);
-doom3._free(scratch3); doom3._free(p3);
+doom3._free(scratch3);
 console.log(`gate 3: opl2_rms=${opl2rms.toFixed(5)}, opl3_rms=${opl3rms.toFixed(5)}`);
 
 // Threshold: OPL3 at song position 0 must produce at least 50% of OPL2 RMS.
@@ -171,7 +167,7 @@ if (!existsSync(SYNTH_WASM)) {
 
 // The engine, one frame in, with the title song playing.
 async function engineWithMusic (oplMode) {
-    const { d, p } = await bootInstance(oplMode);   // boot + set mode + music_init
+    const d = await bootInstance(oplMode);          // boot + set mode + music_init
     d._web_set_singletics(1);
     d._web_wipe_skip();
     d._web_frame();                                 // D_INTRO is registered here
@@ -190,7 +186,7 @@ async function engineWithMusic (oplMode) {
     const out = Buffer.from(d.HEAPU8.buffer, sc, SZ);
     const copy = Buffer.from(out);                  // before the instance dies
     const noteons = d._web_music_debug(2);
-    d._free(sc); d._free(p);
+    d._free(sc);
     return { buf: copy, genmidi, song, looping: st[4], paused: st[5], vol: st[6], noteons };
 }
 

@@ -3,33 +3,21 @@
 // title-demo loop for N frames, and prove the framebuffer is alive.
 // This grows into the determinism CI (demo playback + gamestate checksums).
 // usage: node tools/smoke-test.mjs [wad] [frames]
-import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { join } from 'node:path';
-import { root } from './lib/util.mjs';
+import { bootEngine, loadWad } from './lib/engine.mjs';
 
 const wad = process.argv[2] ?? 'doom.wad';
 const frames = Number(process.argv[3] ?? 175);   // 5 seconds of demo
 
-const createDoom = (await import(join(root, 'build/doom.js'))).default;
-
 // The engine detects Ultimate Doom by the doomu.wad filename.
 const engineName = wad === 'doom.wad' ? 'doomu.wad' : wad;
-const wadBytes = readFileSync(join(root, 'wads/lib', wad));
-
-const reg = (doom, name, bytes) => {
-    const p = doom._malloc(bytes.length);
-    doom.HEAPU8.set(bytes, p);
-    doom.ccall('web_register_file', null, ['string', 'number', 'number'], [name, p, bytes.length]);
-};
 
 let fatal = null;
-const doom = await createDoom({
+const doom = await bootEngine('build', [[engineName, loadWad(wad)]], {
     print: t => process.stdout.write(`  | ${t}\n`),
     printErr: t => process.stderr.write(`  ! ${t}\n`),
     onDoomError: msg => { fatal = msg; },
 });
-reg(doom, engineName, wadBytes);
 
 doom.callMain([]);
 if (fatal) { console.error(`FAIL: I_Error during init: ${fatal}`); process.exit(1); }
