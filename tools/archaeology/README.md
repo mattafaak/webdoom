@@ -45,12 +45,16 @@ three sources per claim.
 
 ## Measurement tools elsewhere in `tools/`, outside the suite by design
 
-These produce numbers or artifacts rather than verdicts, so `gate-census`
-does not count them and no leg runs them: `bench.mjs` (run remotely by
-`fleet-bench.sh`, the `perf-fleet` leg), `browser-pipeline.mjs`, `gen-tables.mjs`
-(writes `golden/tables-canon.json`), `hol-measure.mjs`, `plane-measure.mjs`,
-`zone-measure.mjs`, `build-choco-reference.sh` (needs SDL2),
-`freestanding/{cycle-attrib,cycle-floor,gen-imports,zone-stats}.sh`,
-`native-sanitize/compare.py`, `coverage/parse-gcov.py`, `386/fetch-roms.sh`,
-`rp2040/prep-whd.sh`. The three that are gate-shaped but cannot run are in
-`tools/gates-not-in-suite.json` with their reasons.
+Some tools produce numbers or artifacts rather than verdicts, so there is
+nothing for a leg to assert about them. **The list is
+`tools/gates-not-in-suite.json`, under `measurement_tools`**, one entry each
+saying what the tool produces and when a person runs it. The gate-shaped tools
+that cannot run at all are in the same file under `not_in_suite`, with reasons.
+
+`gate-census` grades both rosters, and grades this one for completeness: every
+tracked `tools/**.{mjs,sh,py}` outside `tools/lib/` must be gate-shaped, or
+reachable from the suite, or listed. That assertion is why the list is in JSON
+and not in this paragraph. The paragraph that used to be here named fifteen
+tools, omitted `deploy.sh`, and said "no leg runs them" about two that legs do
+run — which is what an unchecked list does, and it is the same rot as an
+unchecked count.

@@ -1,8 +1,14 @@
 {
-  "_comment": "Gate-shaped tools deliberately NOT run by tools/run-tests.sh. Enforced by tools/gate-census.mjs: a gate that is neither reachable from the suite nor listed here fails the census, and an entry naming a file that no longer exists fails it too. A reason must say why the tool CANNOT be green in the suite \u2014 'nobody got round to it' is not one; wire it instead.",
+  "_comment": "Two rosters, both enforced by tools/gate-census.mjs.  `not_in_suite`: gate-shaped tools deliberately NOT run by tools/run-tests.sh — a gate that is neither reachable from the suite nor listed here fails the census, and an entry naming a file that no longer exists fails it too.  A reason must say why the tool CANNOT be green in the suite — 'nobody got round to it' is not one; wire it instead.  `measurement_tools`: tools that produce numbers or artifacts rather than verdicts, so there is nothing for a leg to assert.  That roster is COMPLETE by assertion: every tracked tools/**.{mjs,sh,py} outside tools/lib/ must be gate-shaped, or reachable from the suite, or listed here.  It lived in tools/archaeology/README.md as prose until round 13, where nothing graded it — which is how deploy.sh came to be in neither list, and how the prose came to say 'no leg runs them' about two tools that legs do run.",
   "_schema": {
-    "reason": "why this cannot be a suite leg",
-    "owner": "the task that would change that, if any"
+    "not_in_suite": {
+      "reason": "why this cannot be a suite leg",
+      "owner": "the task that would change that, if any"
+    },
+    "measurement_tools": {
+      "produces": "what it emits, and for whom",
+      "run": "when a person runs it"
+    }
   },
   "not_in_suite": {
     "tools/386/run-386box.sh": {
@@ -16,6 +22,64 @@
     "tools/coverage/run-coverage.sh": {
       "reason": "Produces a coverage REPORT, not a verdict: there is no committed floor to regress against, so wiring it would add runtime and assert nothing. Give it a floor and it becomes a leg.",
       "owner": null
+    }
+  },
+  "measurement_tools": {
+    "tools/386/fetch-roms.sh": {
+      "produces": "downloads 86Box BIOS ROMs for the 386DX-40 harness; they are licence-varied and not committed",
+      "run": "once, before the 386 harness, which is itself registered above as BLOCKED"
+    },
+    "tools/build-choco-reference.sh": {
+      "produces": "builds an instrumented Chocolate Doom that prints webdoom's per-tic fingerprint",
+      "run": "on demand, to re-take the 44,580-tic cross-validation; needs SDL2, so it cannot be a leg"
+    },
+    "tools/coverage/parse-gcov.py": {
+      "produces": "turns gcov --json-format output into tools/coverage/report-*.json",
+      "run": "by the coverage runner, which is registered above: a report, not a verdict"
+    },
+    "tools/deploy.sh": {
+      "produces": "puts the working tree on the running webdoom.service and restarts it, refusing mid-game",
+      "run": "after a server/ or client/ change; it acts on a live host, which is the opposite of what a leg may do"
+    },
+    "tools/freestanding/cycle-attrib.sh": {
+      "produces": "per-subsystem instruction attribution over the 13 demos into tools/golden/cycle-attribution.json",
+      "run": "when the perf split is being re-derived; minutes of qemu, and the output is a table, not a pass"
+    },
+    "tools/freestanding/cycle-floor.sh": {
+      "produces": "per-tic instruction-count floor per demo into tools/golden/cycle-floor.json, with run-to-run variance",
+      "run": "same; the committed json is the baseline other documents quote"
+    },
+    "tools/freestanding/gen-imports.sh": {
+      "produces": "regenerates tools/freestanding/IMPORTS.md from the built fs-doom binary (make imports)",
+      "run": "after a libc-surface change; the committed file is the artifact"
+    },
+    "tools/freestanding/zone-stats.sh": {
+      "produces": "render-ON zone HWM and purge pressure at ZONESIZE 32 and 4 MiB into tools/golden/zone-stats.json",
+      "run": "when ZONESIZE is re-argued; it builds two extra fs-doom variants"
+    },
+    "tools/gen-tables.mjs": {
+      "produces": "regenerates engine/core/tables_fix.h, the packed correction stream to 1993-canon trig, plus its boot CRC",
+      "run": "after a toolchain or libm change -- and the boot CRC is what tells you one happened"
+    },
+    "tools/hol-measure.mjs": {
+      "produces": "head-of-line blocking distribution for netplay: bundle inter-arrival gaps against the 28.57 ms tic",
+      "run": "on demand; docs/netcode-numbers.md is its output, and it needs two live clients for 15 s"
+    },
+    "tools/native-sanitize/compare.py": {
+      "produces": "diffs native ASan/UBSan JSON traces against tools/golden/",
+      "run": "by the native-sanitize runner, which the native-asan leg runs; this half only reports the diff"
+    },
+    "tools/plane-measure.mjs": {
+      "produces": "R_FindPlane probe depth (task 2.3)",
+      "run": "needs a build compiled with -DWEB_PERF_PLANE_STATS; in a normal build its three exports return 0"
+    },
+    "tools/rp2040/prep-whd.sh": {
+      "produces": "WHD asset pipeline: lump sizes by category, compression ratios, the RP2040 flash budget",
+      "run": "when the RP2040 arithmetic is revisited; docs/rp2040/BRING-UP.md quotes it"
+    },
+    "tools/zone-measure.mjs": {
+      "produces": "peak zone usage per IWAD plus __heap_base, the headroom figures in docs/perf.md",
+      "run": "on demand; it is where perf-007 and the zone HWM numbers come from"
     }
   }
 }

@@ -76,6 +76,19 @@ const refsIn = file => {
     const dir = dirname(file);
     for (const m of text.matchAll(/\$\{?SCRIPT_DIR\}?\/([A-Za-z0-9_.-]+\.(?:mjs|sh))/g))
         out.push(join(dir, m[1]).replaceAll('\\', '/'));
+
+    // An ES import is a reference too, and it is spelled RELATIVELY.
+    //
+    // This file's own header said "the fuzz runners import gen-map.mjs" while
+    // the census counted gen-map.mjs as an orphan, because the pattern above
+    // only sees a literal `tools/...` path and an import is `./gen-map.mjs`.
+    // Three tools were being called unreachable while suite legs ran them
+    // every time: png-stats.mjs (firefox-frame-test and browser-fire decode
+    // their capture with it), gen-map.mjs (adversarial-map) and gen-demo.mjs
+    // (fuzz-diff).  Registering those three as "outside the suite by design"
+    // would have written down the opposite of what happens.
+    for (const m of text.matchAll(/(?:from|import)\s*\(?\s*['"](\.[A-Za-z0-9_./-]+\.(?:mjs|js))['"]/g))
+        out.push(join(dir, m[1]).replaceAll('\\', '/'));
     return out;
 };
 const reachable = new Set();
@@ -88,8 +101,37 @@ while (queue.length) {
 }
 
 // ── the registry of deliberate exclusions ────────────────────────────────────
-let registry = {};
-if (existsSync(REGISTRY)) registry = JSON.parse(readFileSync(REGISTRY, 'utf8')).not_in_suite ?? {};
+let registry = {}, measurement = {};
+if (existsSync(REGISTRY)) {
+    const parsed = JSON.parse(readFileSync(REGISTRY, 'utf8'));
+    registry = parsed.not_in_suite ?? {};
+    measurement = parsed.measurement_tools ?? {};
+}
+
+// ── the OTHER roster: tools that produce numbers, not verdicts ───────────────
+//
+// `not_in_suite` covers gate-shaped tools nothing runs.  This covers the rest:
+// a tool that emits a table or an artifact has nothing for a leg to assert, so
+// the census cannot grade it by reachability -- but it can insist the set is
+// WRITTEN DOWN, and that the writing matches the tree both ways.
+//
+// It lived in tools/archaeology/README.md as a prose sentence with no checker,
+// which is why deploy.sh was in neither list, and why that sentence said "no leg
+// runs them" about bench.mjs and browser-pipeline.mjs -- both of which legs do
+// run.  Prose about which tools exist rots exactly like a count does.
+//
+// MIND THE PATH SPELLING IN THESE COMMENTS.  Reachability is a text grep, so it
+// cannot tell an invocation from a mention: writing the full `tools/<name>.sh`
+// of a tool inside any suite-reachable file marks that tool as run by the suite.
+// This very paragraph did it while being written -- deploy.sh, named in full one
+// line up, was instantly "reachable" and the new assertion below failed on it.
+// Name a tool by its basename in prose here, and keep full paths for real calls.
+const measurementCandidates = tracked.filter(
+    f => /\.(mjs|sh|py)$/.test(f) && !f.startsWith('tools/lib/'));
+const unlisted = measurementCandidates.filter(
+    f => !GATEISH.test(f) && !reachable.has(f) && !(f in measurement));
+const staleMeasurement = Object.keys(measurement).filter(f => !existsSync(join(root, f)));
+const measurementReachable = Object.keys(measurement).filter(f => reachable.has(f));
 
 const orphans = gates.filter(g => !reachable.has(g) && !(g in registry));
 const staleEntries = Object.keys(registry).filter(f => !existsSync(join(root, f)));
@@ -129,8 +171,27 @@ if (registeredButReachable.length) {
     for (const f of registeredButReachable) console.log(`    ${f}`);
     bad++;
 }
+if (unlisted.length) {
+    console.log(`FAIL gate-census: ${unlisted.length} tool(s) are neither gate-shaped, nor run by the suite, nor listed as measurement tools:`);
+    for (const f of unlisted) console.log(`    ${f}`);
+    console.log(`  Say what each one produces in ${REGISTRY.replace(root + '/', '')} under measurement_tools, or wire it into a leg.`);
+    bad++;
+}
+if (staleMeasurement.length) {
+    console.log(`FAIL gate-census: measurement_tools names ${staleMeasurement.length} file(s) that no longer exist:`);
+    for (const f of staleMeasurement) console.log(`    ${f}`);
+    bad++;
+}
+if (measurementReachable.length) {
+    console.log(`FAIL gate-census: ${measurementReachable.length} file(s) are listed as measurement tools but the suite runs them:`);
+    for (const f of measurementReachable) console.log(`    ${f}`);
+    console.log('  A tool a leg runs is not outside the suite; drop the entry.');
+    bad++;
+}
 if (bad) process.exit(1);
 
 const inSuite = gates.filter(g => reachable.has(g)).length;
 console.log(`PASS gate-census: ${gates.length} gate-shaped tools — ${inSuite} run by the suite, ` +
-            `${Object.keys(registry).length} registered out-of-suite with a reason, 0 orphaned`);
+            `${Object.keys(registry).length} registered out-of-suite with a reason, 0 orphaned; ` +
+            `${Object.keys(measurement).length} measurement tools listed, 0 unaccounted ` +
+            `(of ${measurementCandidates.length} non-library tools)`);
