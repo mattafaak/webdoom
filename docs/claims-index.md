@@ -175,15 +175,15 @@ carried a status the legend never defined.
 | perf-005 | perf.md:56 | doom.js gzip-9 compressed size | 3,514 bytes | measurement | tools/archaeology/stamp-check.mjs (commit-pinned; reports current) | dated-measurement |
 | perf-006 | perf.md:57 | wasm compression ratio (raw / gzip) | 2.45× | derived | 357,978 / 145,990 ≈ 2.45 | derived-from-gated |
 | perf-007 | perf.md:100 | peak zone HWM across all 13 golden demos | 1.36 MB (plutonia demo3) | measurement | tools/zone-measure.mjs | dated-measurement |
-| perf-008 | perf.md:69 | ZONESIZE (hardcoded zone pool) | 4,194,304 B (4 MB) | invariant | tools/archaeology/source-constant-verify.mjs | verified |
+| perf-008 | perf.md:92 | ZONESIZE (hardcoded zone pool) | 4,194,304 B (4 MB) | invariant | tools/archaeology/source-constant-verify.mjs | verified |
 | perf-009 | perf.md:131 | __heap_base (static data end, heap start) | 1,512,384 bytes | measurement | tools/archaeology/wasm-stamp.mjs | verified |
 | perf-010 | perf.md:173 | zone pool malloc size | 4,194,304 bytes | derived | 4 × 1024 × 1024 = 4,194,304 (32 MB pre-14.2c) | derived-from-gated |
-| perf-011 | perf.md:139 | plutonia.wad file size (worst single IWAD) | 17,420,824 bytes | measurement | tools/archaeology/stamp-check.mjs | verified |
+| perf-011 | perf.md:179 | plutonia.wad file size (worst single IWAD) | 17,420,824 bytes | measurement | tools/archaeology/stamp-check.mjs | verified |
 | perf-012 | perf.md:134 | peak heap address worst-case single IWAD | ~22.06 MB | derived | 1,512,384 + 4,194,304 + 17,420,824 = 23,127,512 B ≈ 22.06 MB | derived-from-gated |
 | perf-013 | perf.md:135 | headroom vs 32 MB (single IWAD) | ~9.94 MB | derived | 33,554,432 − 23,127,512 = 10,426,920 B ≈ 9.94 MB | derived-from-gated |
 | perf-014 | perf.md:148 | INITIAL_MEMORY floor (tested pass/fail boundary) | 56 MB | measurement | requires emcc INITIAL_MEMORY sweep build; no current script | unverifiable |
 | perf-015 | perf.md:212 | all deliverables total gzip-9 wire size | 221.7 KB | measurement | tools/payload-size.mjs (derived from sw.js SHELL_FILES) | verified |
-| perf-016 | perf.md:213 | JS + CSS + HTML gzip-9 total (no wasm, no glue) | 78.1 KB | measurement | tools/payload-size.mjs (derived from sw.js SHELL_FILES) | verified |
+| perf-016 | perf.md:249 | JS + CSS + HTML gzip-9 total (no wasm, no glue) | 78.1 KB | measurement | tools/payload-size.mjs (derived from sw.js SHELL_FILES) | verified |
 | perf-017 | perf.md:269 | bsp+segs avg ms/frame — wbox (3-demo avg) | 0.2625 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
 | perf-018 | perf.md:269 | bsp+segs avg ms/frame — tank | 0.0549 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
 | perf-019 | perf.md:269 | bsp+segs avg ms/frame — pi5 | 0.0715 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
@@ -219,8 +219,8 @@ carried a status the legend never defined.
 | perf-049 | perf.md:1045 | visplane R_FindPlane iters/frame — tnt demo2 avg | 451.5 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, ±2% tol) | verified |
 | perf-050 | perf.md:742 | visplane peak count — tnt demo2 (worst recorded) | 68 | measurement | tools/archaeology/runtime-stat-verify.mjs (WEB_PERF_PLANE_STATS build, exact) | verified |
 | perf-051 | perf.md:1520 | PSX fire ms/tick — wbox (G-T56N) | 0.072 ms | measurement | fire.js timing requires browser/JS benchmark harness; no current script | unverifiable |
-| perf-052 | perf.md:1518 | PSX fire ms/tick — alder | 0.0078 ms | measurement | fire.js timing requires browser/JS benchmark harness; no current script | unverifiable |
-| perf-053 | perf.md:1519 | PSX fire ms/tick — pi5 | 0.0222 ms | measurement | fire.js timing requires browser/JS benchmark harness; no current script | unverifiable |
+| perf-052 | perf.md:1482 | PSX fire ms/tick — alder | 0.0078 ms | measurement | fire.js timing requires browser/JS benchmark harness; no current script | unverifiable |
+| perf-053 | perf.md:1483 | PSX fire ms/tick — pi5 | 0.0222 ms | measurement | fire.js timing requires browser/JS benchmark harness; no current script | unverifiable |
 | perf-054 | perf.md:1074 | PSX fire headroom vs 1 ms budget (wbox) | ~14× | derived | 1.0 / 0.072 ≈ 13.9 ≈ 14 | derived-from-gated |
 | perf-055 | perf.md:§v1-fps | wbox v1 fps after int64 change | 21,107 tics/s | measurement | bench-baseline.json (v1.frameThroughput.wbox-amd-g-t56n.after) | dated-measurement |
 | perf-056 | perf.md:§v1-fps | alder v1 fps (pre-int64, f92fc05) | 204,937 tics/s | measurement | bench-baseline.json (v1.frameThroughput.alder.before) | dated-measurement |
@@ -228,13 +228,13 @@ carried a status the legend never defined.
 | perf-058 | perf.md:§v1-fps | pi5 v1 fps (pre-int64) | 79,377 tics/s | measurement | bench-baseline.json (v1.frameThroughput.pi5.before) | dated-measurement |
 | perf-059 | perf.md:1271 | worst PWAD combo peak heap (tnt.wad + tnt31.wad) | 23.06 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
 | perf-059b | perf.md:1291 | PWAD combo peak heap (doom2.wad + nerve.wad) | 23.01 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
-| perf-059c | perf.md:1321 | PWAD combo peak heap (doom.wad + sigil.wad) | 21.70 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
+| perf-059c | perf.md:1274 | PWAD combo peak heap (doom.wad + sigil.wad) | 21.70 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
 | perf-059d | perf.md:1280 | PWAD combo peak heap (plutonia.wad, no PWAD) | 22.06 MB | measurement | tools/archaeology/stamp-check.mjs (arithmetic from wad file sizes + perf-009 + perf-008) | verified |
 | perf-060 | perf.md:1296 | headroom vs 32 MB for worst PWAD combo | 8.94 MB | derived | 32 − 23.06 = 8.94 MB | derived-from-gated |
-| perf-061 | perf.md:1592 | doom.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,218,022 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
-| perf-062 | perf.md:1593 | doom2.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,305,794 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
-| perf-063 | perf.md:1594 | tnt.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,307,707 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
-| perf-064 | perf.md:1595 | plutonia.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,353,868 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
+| perf-061 | perf.md:1556 | doom.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,218,022 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
+| perf-062 | perf.md:1557 | doom2.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,305,794 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
+| perf-063 | perf.md:1558 | tnt.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,307,707 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
+| perf-064 | perf.md:1559 | plutonia.wad mean instr/tic (cycle floor, alder, 13.1a) | 1,353,868 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
 | perf-065 | perf.md:1592 | worst-case demo p99 instr/tic (doom-demo4, alder, 13.1a) | 2,693,222 | measurement | tools/freestanding/cycle-floor.sh → tools/golden/cycle-floor.json | dated-measurement |
 
 ---

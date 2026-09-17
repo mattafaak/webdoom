@@ -97,7 +97,13 @@ Command: `node tools/zone-measure.mjs`
 
 ### Per-demo peaks
 
-| IWAD          | Demo   | Zone HWM (MB) | % of 32 MB |
+The HWM column is the measurement. The percentage column is **against the
+32 MB zone of the day, which is not what ships** — `ZONESIZE` has been 4 MiB
+since task 14.2c, so multiply each percentage by 8 for the current figure. The
+worst demo, plutonia demo3 at 1.36 MB, is 4.3% of the zone that was and **34%
+of the zone that is**.
+
+| IWAD          | Demo   | Zone HWM (MB) | % of the 32 MB zone (pre-14.2c) |
 |---------------|--------|--------------|-----------|
 | doom.wad      | demo1  |         0.81 |       2.5 |
 | doom.wad      | demo2  |         0.89 |       2.8 |
@@ -115,7 +121,7 @@ Command: `node tools/zone-measure.mjs`
 
 ### Per-IWAD peak (worst demo)
 
-| IWAD         | Peak zone used | % of 32 MB zone | Verdict |
+| IWAD         | Peak zone used | % of the 32 MB zone (pre-14.2c) | Verdict |
 |--------------|---------------|-----------------|---------|
 | doom.wad     |      0.91 MB  |            2.8% | |
 | doom2.wad    |      1.00 MB  |            3.1% | |
@@ -191,12 +197,15 @@ emcc INITIAL_MEMORY sweep build; no current CI script)* (2.18 MB margin
 above measured peak; rounded to a convenient 4 MB boundary). This is the
 headline number for bare-metal targets (task 1.5).
 
-**Recommendation for task 2.6**: Reduce `ZONESIZE` from 32 MB to 4 MB first
-(15× reduction in zone over-allocation with room to spare), then re-measure to
-see if the floor drops below 32 MB. At 4 MB zone + 16.61 MB WAD + 5.21 MB
-static = 25.82 MB peak, leaving ample room for a 32 MB `INITIAL_MEMORY` target
-— potentially halving the current 64 MB floor. Keep `INITIAL_MEMORY=64MB` in
-the shipped default until task 2.6 verifies the reduction end-to-end.
+**Recommendation for task 2.6 — LANDED, and this is what happened.** The
+recommendation was to take `ZONESIZE` from 32 MB to 4 MB, re-measure, and see
+whether the `INITIAL_MEMORY` floor dropped below 32 MB. Both shipped in task
+14.2c: the zone is 4 MiB and `INITIAL_MEMORY` is 32 MB. The projection here
+(4 MB zone + 16.61 MB WAD + 5.21 MB static = 25.82 MB peak) was close and
+pessimistic; the gated figure today is `perf-059` = 23.06 MB for the worst real
+PWAD combo, 8.94 MB under what ships. The sentence that used to end this
+paragraph — keep `INITIAL_MEMORY=64MB` until 2.6 verifies it — was correct
+advice in July and has been untrue since.
 
 ---
 
@@ -667,13 +676,19 @@ or PSRAM capacity.
 
 Findings from perf.md §2 and §3:
 
+These were written against the pre-14.2c build (64 MB linear memory, 32 MB
+zone). Both reductions have since landed, so read the first three as the
+argument that produced today's 32 MB / 4 MiB rather than as open proposals.
+
 - Peak non-purgeable zone usage across all 13 demo playthroughs:
-  **1.36 MB** (plutonia.wad demo3). The 32 MB zone is **23× oversized**.
-- INITIAL_MEMORY floor: **56 MB** (tested; 52 MB aborts at WAD malloc).
+  **1.36 MB** (plutonia.wad demo3). The 32 MB zone of the day was **23×
+  oversized**; against the 4 MiB that ships it is 34%.
+- INITIAL_MEMORY floor: **56 MB** (tested; 52 MB aborts at WAD malloc) — on the
+  64 MB-era layout, before the three BSS diets and the 4 MiB zone.
 - Reducing ZONESIZE to **4 MB** would put peak usage at 34% of zone —
   comfortable headroom for purgeable cache. Projected INITIAL_MEMORY
-  with 4 MB zone + 16.61 MB WAD + 5.21 MB static = **25.82 MB** —
-  potentially halving the current 64 MB target.
+  with 4 MB zone + 16.61 MB WAD + 5.21 MB static = **25.82 MB**. **Landed:**
+  32 MB ships, and the gated worst PWAD combo is 23.06 MB.
 - `WEB_ZONE_POOL_SIZE` in `engine/web/perf.c` duplicated `ZONESIZE` in
   `engine/web/i_system.c`. **Resolved in task 2.5**: both now read
   `ZONESIZE` from `engine/web/web.h` (single define, no compile-time guard
@@ -699,26 +714,11 @@ L > 3 days.
 
 #### Q0 — Measure the browser pipeline (prerequisite)
 
-| field | value |
-|-------|-------|
-| **what** | Instrument `client/js/video.js` blit path (`I_FinishUpdate`: palette expand + texSubImage2D) and rAF frame budget with `performance.mark`/`performance.measure`; collect via CDP or DevTools trace across 100+ frames of E1M1 gameplay |
-| **expected win** | Not a win — a prerequisite. Without this data, all claims about browser-fps improvement from tasks 2.2–2.4 are unverifiable. |
-| **gates that protect it** | No gate needed — browser-only instrumentation, reverted before commit. |
-| **effort** | S |
-| **verdict** | **DO FIRST** before claiming any browser-fps improvement from wasm changes. |
-| **maps to** | Prerequisite for 2.2/2.3/2.4 browser-fps claims |
+**closed by task 12.2b.** Measure the browser pipeline before claiming any browser-fps win from wasm changes. Answered: §C below. The JS pipeline is ≤ 0.9 ms p99 per frame on alder, rAF callback median 0.2 ms.
 
 #### Q1 — Column/span inner loops (task 2.2)
 
-| field | value |
-|-------|-------|
-| **what** | Tighten `R_DrawColumn` inner loop: reduce the 320-byte column-stride write pressure (consider transposed framebuffer approach or row-major rendering order for wasm targets); profile `R_DrawSpan` for comparison. Optionally prototype wasm SIMD (`v128` load/store) behind a compile flag. |
-| **expected win (bare-metal)** | bsp+segs = 53.6% of wbox render = 0.2625 ms/frame. If the R_DrawColumn inner loop accounts for ~70% of bsp+segs (plausible given wall-dominant scenes), that is 0.184 ms/frame attributable to column draw. A 30% improvement → 0.055 ms/frame savings on wbox = 11% total render reduction. On LX7 with `screens[0]` in SRAM, column-stride cache misses vanish; the win may be larger. |
-| **expected win (browser)** | **Q0 CLOSED (task 12.2b)**: JS pipeline (palette+upload+rAF callback) is ≤ 0.9 ms p99 per frame on alder; rAF callback median 0.2 ms. A 30% wasm render improvement saves ~0.51% of the 3% ScriptDuration total — sub-ms and user-invisible. The win is CI throughput and bare-metal fps, not browser fps. Browser claim framing confirmed: see §C results (12.2b). |
-| **gates** | Render gate (13/13 pixel-identical) + sim gate (unchanged, render-only) |
-| **effort** | M (SIMD prototype = L, behind build flag, optional) |
-| **verdict** | **DO** on bare-metal axis. For browser: do it but frame the claim correctly — the win is CI throughput and bare-metal fps, not user-visible browser fps. |
-| **maps to** | Task 2.2 |
+**landed, and smaller than hoped.** Column/span inner loops (task 2.2). Unroll-4 landed at −3.5% render on wbox; hoisting alone was +0.6%, inside noise. The results, with the A/B/C interleave they came from, are immediately below.
 
 ##### Task 2.2 results (measured 2026-07-15, commit after 99f9e28)
 
@@ -813,15 +813,7 @@ improvement is in headless CI throughput and bare-metal fps, not user-visible br
 
 #### Q2 — Memory footprint reduction (tasks 2.5 + 2.6)
 
-| field | value |
-|-------|-------|
-| **what** | (a) Reduce ZONESIZE 32 MB → smallest safe; (b) Reduce INITIAL_MEMORY 64 MB → 56 MB (proven safe floor); (c) Consolidate WEB_ZONE_POOL_SIZE / ZONESIZE into one shared define; (d) emcc knob sweep: -O3 vs. -Os for size×speed frontier. |
-| **expected win (browser)** | No fps change. Reduced wasm heap footprint (faster initial memory allocation in V8; potential JS heap GC pressure reduction — minor). Primary value is documentation of the knob space. |
-| **expected win (bare-metal)** | Smaller ZONESIZE → smaller INITIAL_MEMORY target. Critical for smaller ESP32 configurations. |
-| **gates** | Sim gate (13/13 demos) + render gate + 4-client net hash (zone backs thinker allocations; net test required) |
-| **effort** | 2.5 = S; 2.6 emcc sweep = M |
-| **verdict** | **DO** — zone consolidate done in task 2.5; ZONESIZE kept 32 MB (see below). Do 2.6 separately (knob sweep). |
-| **maps to** | Tasks 2.5 (zone), 2.6 (knobs) |
+**landed (2.5 zone SSOT, 2.6 knob sweep).** Memory footprint. ZONESIZE is 4 MiB and INITIAL_MEMORY 32 MB today; the flags sweep is §Q2 further down and concluded no flag change was justified. The task-2.5 conclusion that kept 32 MB is banner-marked below, superseded by the 13.2a re-trial.
 
 ##### Task 2.5 results — ZONESIZE reduction attempt (measured 2026-07-15)
 
@@ -1042,15 +1034,7 @@ sustains 248–1,397 PU_CACHE purges/demo with zero golden divergence across all
 
 #### Q3 — Visplane management (task 2.3)
 
-| field | value |
-|-------|-------|
-| **what** | Replace `R_FindPlane` O(n) linear search with a small hash (key = height×picnum×lightlevel, table size ≤ 64 buckets covers typical DOOM maps). Evaluate `R_CheckPlane` split frequency to bound copy overhead. |
-| **expected win (bare-metal)** | planes = 32% of wbox render = 0.1566 ms/frame. `R_FindPlane` is O(n) over live visplane count; in open maps with many distinct (height, picnum, lightlevel) triples this is non-trivial. However, in the attract demos (corridors, tight geometry) the live count is small (~10–20 planes/frame), making the linear scan fast. Win is scene-dependent. Estimate 5–15% of planes stage = 0.008–0.023 ms/frame on wbox — modest. |
-| **expected win (browser)** | **Q0 CLOSED (task 12.2b)**: same data as Q1 adjudication. JS pipeline ≤ 0.9 ms p99 per frame; rAF callback median 0.2 ms. Visplane hash benefit (if any) is a bare-metal fps / CI throughput win only — not browser fps. |
-| **gates** | Render gate (visplane management is render-only; sim unaffected) |
-| **effort** | M |
-| **verdict** | **MEASURE-FIRST**: instrument visplane count and R_FindPlane probe depth before sizing the win. The hash is straightforward but the gain on real DOOM maps may be small. Do after Q1 (larger guaranteed win). |
-| **maps to** | Task 2.3 |
+**killed on the measurement.** Visplane hash for R_FindPlane (task 2.3). NO-GO: the probe-depth census showed the ceiling is too small to be worth it. Engine reverted to pristine; the numbers are below.
 
 ##### Task 2.3 results (measured 2026-07-15, commit after task 2.2)
 
@@ -1120,66 +1104,35 @@ concern. No further action in task 2.3. → Defer to task 3.2 (bounds hardening)
 
 #### Q4 — Sim hot paths (task 2.4)
 
-| field | value |
-|-------|-------|
-| **what** | Profile blockmap iterators (`P_BlockLinesIterator`, `P_BlockThingsIterator`), `P_CheckSight`, `P_ApproxDistance` for sim speedup. |
-| **expected win** | wbox sim = 0.0706 ms/tic = 0.25% of 35 Hz budget. Any speedup is invisible at the system level. Headless CI throughput may improve (timedemo runs faster), but that is a developer convenience, not a user win. |
-| **risk** | The frozen surface (playsim.md §16) covers all P_Random call ordering, thinker traversal, blockmap iteration order. Any change to iteration order, however minor, will desync golden demos. The correctness gate (13 sim goldens + 44,580-tic Chocolate cross-validation) will catch any divergence, but the investigation cost is high. |
-| **verdict** | **MEASURE-FIRST / LIKELY-SKIP**. Pursue only if Q0 reveals that the JS-side sim invocation overhead (not wasm sim time) is the bottleneck, or if a specific bare-metal target profile shows sim dominates. The frozen-surface risk is disproportionate to the 0.25% budget figure. |
-| **resolution (task 2.4 closed)** | **SKIPPED BY MEASUREMENT** — no sim change made; 13/13 golden gate trivially intact. Reopen only under the two conditions above (Q0 finding or a bare-metal profile where sim dominates); the future ESP32 project inherits this queue entry via bare-metal.md §7. |
-| **maps to** | Task 2.4 |
+**skipped by measurement.** Sim hot paths (task 2.4). Sim is 0.25% of the budget, so profiling dictates nothing. Reopen only on a bare-metal profile that shows sim dominating.
 
 #### Q5 — tank deep-dive (task 2.7)
 
-| field | value |
-|-------|-------|
-| **what** | Investigate why tank (i5-8350U, Kaby Lake) was "least optimized" per Plans.md. The v1 microbench showed FixedDiv int64 is 2.86× slower than double on tank (2725 ms vs. 964 ms for 2×10⁸ iters). |
-| **what the data actually shows** | v2 perStage: tank render = 0.1123 ms/frame, alder = 0.0979 ms/frame, ratio = **1.15×**. Tank is only 15% slower than alder on render — very close. Tank sim = 0.0158 ms/tic vs. alder 0.0135 ms/tic = 1.17×. Neither is concerning at the 35 Hz scale. The headless gap: v2 simFpsNodraw averages are alder 180,370 tics/s vs. tank 95,463 tics/s = **1.89×** — consistent with general i9 vs. i5 CPU throughput, not a FixedDiv artifact. FixedDiv int64 is at most a minor contributor: the same ~2× gap existed pre-int64 (v1 before: alder 204,937 vs. tank 105,868 = 1.94×), so FixedDiv is not the cause. Note: v1 fps (f92fc05, pre-int64) and v2 simFpsNodraw (16c3354, post-int64) span the FixedDiv implementation change — same -nodraw method but different code; the stable ratio confirms the gap is architectural, not algorithmic. |
-| **expected win** | tank render is 0.4% of budget. Any speedup is imperceptible. |
-| **verdict** | **DOCUMENT, DON'T OPTIMIZE**. The 2.7 investigation reveals: tank render is not abnormally slow; the "least improved" observation from the v1 era was a headless-fps artifact from general i5-vs-i9 throughput difference, not a fixable algorithmic issue. With wasm render at 0.4% of budget on tank, there is nothing to fix. Update the task verdict: the tank bottleneck (for browser) is the JS/browser side (same as every host), which Q0 characterized in 12.2b. |
-| **maps to** | Task 2.7 |
+**document-only.** tank deep-dive (task 2.7). There is no anomaly: tank render is 1.15x alder, and the v1-era “least improved” reading was general i5-vs-i9 headless throughput, not an algorithmic fault.
 
 ---
 
-### H. Plans.md task premise check
+### H. What the data did to three task premises
 
-Tasks whose premise the data now contradicts or sharpens:
+Kept because each is a premise a reader might still hold, and the number that
+killed it. All three tasks are closed.
 
-**2.2 (column/span tightening)**: Plans.md frames this as a browser-fps
-win. The data shows wasm render is 1.7% of budget on wbox; a 50%
-speedup saves 0.85% CPU — unmeasurable by users at 35 Hz. The correct
-framing is: **bare-metal fps** (PSRAM-latency reduction via
-column-stride mitigation) + **node-headless CI throughput** (timedemo
-runs faster). The work remains the right work; the claimed benefit
-needs reframing. The render gate ensures no regression.
+- **2.2 was framed as a browser-fps win.** wasm render is 1.7% of the budget on
+  wbox, so a 50% speedup saves 0.85% of CPU — nothing a player can see at
+  35 Hz. The work was right and the claim was not: the win is bare-metal fps
+  and headless CI throughput.
+- **2.4 said "sim hot paths as profiling dictates".** Profiling dictates
+  nothing. Sim is 0.25% of the budget, so the conditional was never met.
+- **2.7 called tank "least improved".** Per-stage data resolved it: tank render
+  is 1.15× alder, essentially equivalent. The ~2× figure was general
+  i9-vs-i5 headless throughput (alder 180,370 vs tank 95,463 simFpsNodraw at
+  16c3354 = 1.89×), stable across the FixedDiv change and not an algorithmic
+  fault.
 
-**2.4 (sim hot paths "as profiling dictates")**: profiling dictates
-nothing — sim is 0.25% of budget. The conditional premise is not met
-by the current data. Task 2.4 should be demoted to measure-first / likely-skip
-and only reopened if Q0 or a bare-metal profile reveals unexpected sim overhead.
-
-**2.7 (tank "least improved")**: the v2 perStage data resolves this.
-Tank render is 1.15× alder — essentially equivalent. The v1 fps ratio
-(~2×) reflects general i9-vs-i5 CPU throughput (alder 204,937 vs. tank
-105,868 at f92fc05; alder 180,370 vs. tank 95,463 simFpsNodraw at 16c3354
-= 1.89×); it is stable across the FixedDiv implementation change and is
-not a fixable algorithmic issue. With render-stage isolation, tank has no
-anomaly to investigate. The remaining question is whether tank's
-browser-side overhead (JS engine version, WebGL driver latency) is
-atypical — that requires Q0.
-
----
-
-### I. Queue summary (ordered)
-
-| # | queue entry | effort | verdict | maps to |
-|---|-------------|--------|---------|---------|
-| Q0 | Browser pipeline measurement | S | **DO FIRST** | prereq |
-| Q1 | R_DrawColumn/Span inner loops (cache-stride) | M | **DO** (bare-metal axis) | 2.2 |
-| Q2 | Memory: ZONESIZE→4MB, INITIAL_MEMORY→56MB, knob sweep | S+M | **DONE** (2.5: zone SSOT; 2.6: flags confirmed optimal) | 2.5+2.6 |
-| Q3 | Visplane hash (R_FindPlane O(n)→hash) | M | measure-first | 2.3 |
-| Q4 | Sim hot paths | M | likely-skip | 2.4 |
-| Q5 | tank deep-dive | S | document-only | 2.7 |
+The queue summary that stood here — six rows of effort estimates and DO/SKIP
+verdicts — is gone. Every entry is closed, each Q heading above now states its
+own disposition in a sentence, and a table of S/M/L guesses about finished work
+is the kind of apparatus that makes a document look current when it is not.
 
 ---
 
@@ -1809,146 +1762,36 @@ verbatim Plans.md kill-list).  Wins are claimed in 13.1 units (instructions/tic)
 and CI/bare-metal throughput, NEVER browser fps (render = 1.71% of budget on wbox,
 per 12.2b; the framing error is documented in retrospective.md).
 
-## §14.4 Phase-14 release gate (2026-07-18)
+## Phase 14: what the memory diets moved (2026-07-18)
 
-Named commit: the 14.4 landing commit (docs/tools/goldens only; engine content
-byte-identical to `4ff6407` — doom.wasm md5 `1931aa623bd0e90e408d1ddd9c9b3c28`,
-356,216 B, rebuilt and re-verified identical after the lint-only reformat of
-engine/web/perf.{c,h}).
+> **Dated. Every figure here is superseded** — `__heap_base` is 1,512,384 B
+> today, not 4,721,456 — and the release gate's own table of results has been
+> dropped, because every row of it (fuzz, invariants, the three golden sets,
+> net lockstep, verify-all, size-ledger, lint, freestanding, the fleet bench) is
+> a live suite leg that reports its own verdict on every run. A frozen copy of
+> what those legs said on one afternoon in July is not evidence anybody can use.
+> What is kept is the arithmetic of the transition itself, because several
+> passages above and below refer to "pre-14.2c" figures and this is where the
+> before and after are written down.
 
-### Gates (all lead-run at the named content)
-
-| gate | result |
-|------|--------|
-| fuzz FULL (1000 seeds, --require-native) | 1000/1000 bit-identical, rc=0 |
-| invariant build (-DWEBDOOM_INVARIANTS) | 13/13 bit-identical, rc=0 |
-| sim / render / render-low goldens | 13/13 each, pixel-identical, rc=0 |
-| net lockstep 2p / 4p (drop+rejoin) | PASS / PASS (4p: 1,387 tics, 0 mismatches) |
-| verify-all fast tier | rc=0 ALL PASS |
-| verify-all --full tier | rc=0 ALL PASS (first full-tier green of phase 14) |
-| size-ledger (budget 360,448 B) | 356,216 B, rc=0 |
-| lint (clang-format + node --check) | rc=0 (perf.c/h reformatted, wasm md5-identical) |
-| freestanding stack gate (1 MiB) | 13/13, rc=0 |
-| fleet bench 4 hosts × 3 reps | alder / wbox / tank / pi5 all measured |
-
-### Phase-14 memory before/after
-
-| metric | phase start (14.2c-era measurement) | release | Δ |
-|--------|-------------------------------------|---------|---|
+| metric | phase start (14.2c-era) | phase 14 release | Δ |
+|--------|-------------------------|------------------|---|
 | `__heap_base` | 5,525,296 B | 4,721,456 B | −803,840 B |
 | BSS diets (14.2d/e/f) | — | — | −594,944 − 86,016 − 122,880 = −803,840 B |
-| wasm linear memory | 64 MiB (pre-14.2c) | 32 MiB | −50% |
-| zone pool | 32 MiB (pre-14.2c) | 4 MiB | −87.5% |
-| worst single-IWAD peak | 53.82 MB (64 MiB era) | 25.12 MB | fits 32 MiB, 6.88 MB headroom |
-| worst PWAD-combo peak (tnt+tnt31) | 54.83 MB | 26.12 MB | fits 32 MiB, 5.88 MB headroom |
+| wasm linear memory | 64 MiB | 32 MiB | −50% |
+| zone pool | 32 MiB | 4 MiB | −87.5% |
+| worst single-IWAD peak | 53.82 MB | 25.12 MB | fit 32 MiB with 6.88 MB spare |
+| worst PWAD-combo peak (tnt+tnt31) | 54.83 MB | 26.12 MB | fit 32 MiB with 5.88 MB spare |
 
-(The −803,840 B heap_base delta equals the three BSS diets exactly; the phase's
-+64 KiB additions — `web_rowmajor_buf` untranspose buffer et al. — predate the
-14.2c-era 5,525,296 measurement.)
+The `__heap_base` delta equals the three BSS diets exactly. The phase's own
++64 KiB of additions — `web_rowmajor_buf` and friends — predate the 5,525,296
+measurement, so they are already inside the "phase start" column rather than
+missing from the reconciliation.
 
-### Regenerated baselines (this commit)
-
-- `tools/golden/cycle-floor.json` — whole-program p50 floors down 7–9% vs the
-  13.1a record (e.g. 1,305,576 → 1,210,153).
-- `tools/golden/cycle-attribution.json` — all-13 bsp mean-of-p50s 602,197 →
-  551,615 (−8.4%); doom.wad bsp 558,834 → 503,704 (−9.9%). Reconciliation
-  delta 0.0000% across both passes.
-- `tools/golden/bench-baseline.json` — 4-host fleet, 3-rep interleaved. Weakest
-  host (wbox-amd-g-t56n) worst demo render SUM = 0.556 ms/frame ≈ 1.9% of the
-  28.57 ms tic budget; pi5 0.170 ms/frame; alder 0.073 ms/frame.
-
-### Stamp re-verification
-
-perf-009 (`__heap_base`) restamped 5,461,072 → 4,721,456. perf-011 doc figure
-restored (`plutonia.wad (17,420,824 bytes)` in §3). perf-059 recomputed under
-the post-diet layout (54.83 → 26.12 MB) and its doc-drift hint re-anchored to
-the sentence it verifies (the old whole-file dot-all regex had matched the
-layout table's first "N MB" cell since that table gained MB rows). perf-001..005
-remain 6de6256-pinned history: doc-drift now carries a `pinned` flag so their
-expected drift is SOFT, while current-size truth is owned by the live
-size-ledger gate (14.3).
-
----
-
-## §18.4 Wide-mode (854 px Hor+) render cost
-
-> **SUPERSEDED 2026-09-12 — widescreen was removed** (spec.md §"Widescreen view
-> — REVERSED"). The measurements below are real and stay as dated evidence, but
-> they describe a mode that no longer exists: `bench.mjs` has no `--wide` pass
-> and the engine has no `web_set_wide`. Nothing here is reproducible on the
-> current tree.
-
-*Task 18.4 — measured 2026-07-22 on harness-work/18.4, base commit f402d5c.*
-*Reproduce (on a tree before 2026-09-12): `node tools/bench.mjs doom.wad 3 --wide` on each host.*
-*bench.mjs Pass 3 (`--wide`) runs doom.wad demo1/demo2/demo3 at 854 px*
-*(Hor+) and reports per-stage µs/frame; delta vs. the 320-px Pass 1 baseline*
-*is printed inline. Three reps; best-of-3 by rendered-frame count.*
-
-### Per-demo results (ms/frame)
-
-#### alder (i9-12900K)
-
-| demo | 320 px sum | 854 px sum | Δ (ms) |
-|------|-----------|-----------|--------|
-| demo1 | 0.062 | 0.140 | +0.078 |
-| demo2 | 0.049 | 0.120 | +0.071 |
-| demo3 | 0.049 | 0.122 | +0.074 |
-| **avg** | **0.053** | **0.127** | **+0.074** |
-
-#### wbox (AMD G-T56N Bobcat, 1.65 GHz)
-
-| demo | 320 px sum | 854 px sum | Δ (ms) |
-|------|-----------|-----------|--------|
-| demo1 | 0.568 | 1.876 | +1.308 |
-| demo2 | 0.500 | 1.505 | +1.005 |
-| demo3 | 0.487 | 1.504 | +1.018 |
-| **avg** | **0.518** | **1.628** | **+1.110** |
-
-#### pi5 (Raspberry Pi 5, ARM Cortex-A76)
-
-| demo | 320 px sum | 854 px sum | Δ (ms) |
-|------|-----------|-----------|--------|
-| demo1 | 0.164 | 0.379 | +0.216 |
-| demo2 | 0.147 | 0.346 | +0.199 |
-| demo3 | 0.135 | 0.342 | +0.207 |
-| **avg** | **0.149** | **0.356** | **+0.207** |
-
-### Fleet summary
-
-| host | 320 px avg (ms) | 854 px avg (ms) | Δ (ms) | wide/narrow | % of 28.57 ms budget (wide) |
-|------|----------------|----------------|--------|-------------|------------------------------|
-| alder | 0.053 | 0.127 | +0.074 | 2.40× | 0.44% |
-| pi5 | 0.149 | 0.356 | +0.207 | 2.39× | 1.25% |
-| wbox | 0.518 | 1.628 | +1.110 | 3.14× | 5.70% |
-
-**Wide/narrow ratio** is 2.4× on alder and pi5 (typical for
-~2.67× pixel-column count increase at same scene density) and 3.1× on wbox
-(Bobcat in-order core sees more cache pressure from the wider
-BSP+planes traversal than the column-draw math alone would predict).
-
-**Wide mode is still within the 35 Hz budget on all measured hosts**:
-the worst case (wbox) sits at 5.70% of the 28.57 ms tic budget —
-well clear of the 100% ceiling even before accounting for the
-JS/browser pipeline that dominates wall time.
-
-**Stage breakdown at 854 px (wbox, demo1):**
-bsp+segs 0.626 ms, planes 1.110 ms, masked 0.131 ms, frame-setup 0.009 ms.
-Planes becomes the dominant stage at wide (1.110 ms vs 0.192 ms at 320),
-overtaking bsp+segs (0.626 ms vs 0.282 ms at 320). This is expected:
-`R_DrawSpan` covers more floor/ceiling columns at wider FOV while the
-BSP walk cost grows more modestly (same depth, more visible spans).
-
-**Sim cost is unaffected**: wide mode is purely a render concern.
-`node tools/mixed-width-net-test.mjs` (task 18.4) confirmed 366 tics,
-0 mismatches between a 320-px client and an 854-px client in the same
-2-player lockstep session.
-
-**Both halves of that sentence are history.** Widescreen was removed on
-2026-09-12, so there is no 854-px client, and `tools/mixed-width-net-test.mjs`
-was deleted with it. It is also one of two records of the same run that
-disagree: `docs/optimization-ledger.md` says 368 tics where this says 366.
-Neither can be re-derived, so neither is corrected — and the disagreement is
-worth more as a marker than a silently chosen winner would be.
+Two later movements, for anyone reading the column above as current: round 10
+took `STACK_SIZE` from 4 MiB to 1 MiB, and round 11's work took `__heap_base`
+to its present 1,512,384 B. The worst PWAD-combo peak is `perf-059` = 23.06 MB,
+gated, leaving 8.94 MB under the 32 MiB that ships.
 
 ---
 

@@ -2,8 +2,8 @@
 
 Every document in this project, with a line saying what it is for.
 
-**32 documents**, about 15,700 lines. That is 18 top-level files beside this
-index, 7 in `archive/`, 5 hardware bring-ups in subdirectories, and id
+**33 documents**, about 15,700 lines. That is 18 top-level files beside this
+index, 8 in `archive/`, 5 hardware bring-ups in subdirectories, and id
 Software's 2 originals.
 
 New here? Read in this order: the root `README.md`, then `CONTRIBUTING.md`,
@@ -42,7 +42,7 @@ section heading rather than at the top.
 
 | document | what it is |
 |---|---|
-| [perf.md](perf.md) | **long** (2,003). The memory, size and per-stage baseline. Note: still describes a four-host fleet in places; `spec.md`'s 2026-09-11 amendment retired pi5 |
+| [perf.md](perf.md) | **long** (1,869). The memory, size and per-stage baseline. Note: still describes a four-host fleet in places; `spec.md`'s 2026-09-11 amendment retired pi5 |
 | [optimization-ledger.md](optimization-ledger.md) | every candidate considered, measured, and landed or killed — with the kill rule it was judged against |
 | [divergence-atlas.md](divergence-atlas.md) | where this port diverges from vanilla, and why each one is sanctioned |
 | [feasibility-atlas.md](feasibility-atlas.md) | the retro-hardware arithmetic: what could run this, and what provably cannot. Has its own table of contents |
@@ -74,6 +74,7 @@ Read the banner first — all three carry a dated status.
 | document | what it is |
 |---|---|
 | [archive/decision-18.1-wide-limits.md](archive/decision-18.1-wide-limits.md) | widescreen: the BSS arithmetic and the limits it forced. **Archived 2026-09-12** — widescreen was removed; kept because its §5 arithmetic is what the revert was checked against |
+| [archive/perf-18.4-wide-mode.md](archive/perf-18.4-wide-mode.md) | the 854 px Hor+ render cost, task 18.4. **Archived 2026-09-17** — it was `perf.md §18.4`, already banner-marked superseded; widescreen was removed in round 12, so nothing in it is reproducible on the current tree |
 | [archive/retrospective.md](archive/retrospective.md) | the 2026-07-16 refinement-pass retrospective. Self-declared archive: its body describes that date, not this one |
 | [archive/Plans-refinement-complete.md](archive/Plans-refinement-complete.md) | the refinement initiative's task table, 26/26. Holds the regold lesson `tools/golden-provenance.mjs` cites by line |
 | [archive/Plans-understanding-complete.md](archive/Plans-understanding-complete.md) | phases 6–11, understanding-on-trial |
@@ -81,7 +82,8 @@ Read the banner first — all three carry a dated status.
 | [archive/Plans-round3-retired.md](archive/Plans-round3-retired.md) | the nine round-3 rows retired in round 11: the four FastDoom toggles (deleted from the engine in round 10) and the five N64 rows past the emulator gate, each under the verdict that retired it |
 | [archive/Plans-field-fixes-complete.md](archive/Plans-field-fixes-complete.md) | round 3, phases 16–19, 22/22 at `1f9f1e5`. The tasks `Plans.md`'s round-3 planning sections rank and sequence |
 
-These seven live under `archive/` (round 8, plus the round-11 retirement); the five `Plans-*` files are closed
+These eight live under `archive/` (round 8, plus the round-11 retirement and the
+round-13 move); the five `Plans-*` files are closed
 task tables that made the front door look like a planning directory. They
 are the record of how each initiative actually went, and `Plans.md` links
 them from its first paragraph.

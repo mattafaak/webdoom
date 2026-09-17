@@ -67,7 +67,7 @@ re-probes. `tools/deploy.sh --check` reports drift and changes nothing.
 | `client/`      | vanilla-JS shell: lobby, WebGL2 renderer, input, audio, service worker |
 | `server/`      | Node ≥ 20, single process, single port; only dep `ws` |
 | `tools/`       | emsdk pin, WAD fetch/identify, test suites, bench harness, native sanitizer target |
-| `docs/`        | 32 documents — **[the index](docs/README.md)** lists every one. Start with the [glossary](docs/glossary.md) if a term is doing work you cannot see. The ones most people want: [netcode](docs/netcode.md), [renderer](docs/renderer.md), [playsim](docs/playsim.md), [formats](docs/formats.md), [bare-metal](docs/bare-metal.md), [perf](docs/perf.md), [state-machine](docs/state-machine.md), [engine-archaeology](docs/engine-archaeology.md) |
+| `docs/`        | 33 documents — **[the index](docs/README.md)** lists every one. Start with the [glossary](docs/glossary.md) if a term is doing work you cannot see. The ones most people want: [netcode](docs/netcode.md), [renderer](docs/renderer.md), [playsim](docs/playsim.md), [formats](docs/formats.md), [bare-metal](docs/bare-metal.md), [perf](docs/perf.md), [state-machine](docs/state-machine.md), [engine-archaeology](docs/engine-archaeology.md) |
 
 ## Tests
 

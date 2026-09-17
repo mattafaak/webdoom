@@ -296,6 +296,29 @@ function valueVariants(cell) {
         if (!vs.length) { weak++; continue; }                        // "8", "33": everywhere, grades nothing
         graded++;
         if (needles.length) byNeedle++;
+
+        // NEEDLE AND VALUE ARE POOLED ON PURPOSE.  A round-13 attempt to anchor
+        // on the VALUE first, falling back to the needle, was WRONG and is
+        // recorded here so it is not tried again.
+        //
+        // The case that motivated it is real: perf-011's needle is
+        // "plutonia.wad", which appears in half the tables in perf.md, so its
+        // locator survived a restructure pointing 40 lines from the only place
+        // "17,420,824" occurs -- this check said fine while doc-drift, which
+        // needs the needle AND the figure inside one +-35 window, went red with
+        // DOC_NOT_FOUND.
+        //
+        // But value-first immediately mis-anchored perf-008.  Its value is
+        // 4,194,304 and the document spells the claim "Zone pool: **4 MB**",
+        // which doc-drift's transform converts -- so the only literal
+        // "4,194,304" in the file is a DERIVED restatement inside an arithmetic
+        // sentence 88 lines away, and value-first moved the locator onto it.
+        // A claim whose doc spelling differs from its manifest value has a
+        // value string that is a false friend.
+        //
+        // Net: doc-drift is the tool that decides whether a figure can be found
+        // from its locator, and it fails loudly when it cannot.  This check is
+        // locator hygiene, and pooling is the right looseness for it.
         let at = [];
         for (const lines of candidates) {
             const hits = [];

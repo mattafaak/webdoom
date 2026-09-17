@@ -99,7 +99,7 @@ does not exist.
 - **Perf gate**: `bench.mjs` per-stage numbers on the three live hosts;
   regressions on any host block, wins are recorded in
   `tools/golden/bench-baseline.json`.
-  **How it runs (amended 2026-09-12):** as the `perf-fleet` suite leg, in an
+  **How it runs.** **Amended 2026-09-12 (round 6).** As the `perf-fleet` suite leg, in an
   OPT-IN tier — `tools/run-tests.sh --perf`. It is opt-in because it reaches
   other machines, not because it is slow (~26 s measured for all three hosts);
   a default-tier leg that fails whenever wbox or tank is asleep is a leg people
@@ -237,8 +237,8 @@ The primary player environment is plain-HTTP on a LAN/tailnet address
   2026-07-21 field reports: silent music, WAD redownloads). It asserts an
   IDB WAD cache hit and the BufferSink music fallback on a genuinely
   insecure origin.
-  **Amended 2026-09-12 (round 6): this clause said "CI gains" and CI does
-  not run it.** It cannot: game data is not distributable, so the public
+  **Amended 2026-09-12 (round 6).** This clause said "CI gains", and CI does
+  not run it. It cannot: game data is not distributable, so the public
   `ubuntu-latest` runner has no IWADs, and without IWADs NO browser leg
   runs there — `ci.yml` says so itself and runs the `--quick` tier. The
   leg runs in the full suite on a host with the WAD library, a built
@@ -260,7 +260,7 @@ The primary player environment is plain-HTTP on a LAN/tailnet address
   Both are gone; the in-engine OPL sequencer is the whole music contract.
 - **Never bundled**: Microsoft GS wavetable, Roland ROMs/Nuked-SC55,
   provenance-unclear soundfonts. User-supplied files are fine.
-- **Where the samples are generated (amended 2026-09-17, round 11).** On a
+- **Where the samples are generated.** **Amended 2026-09-17 (round 11).** On a
   secure origin the AudioWorklet runs its own copy of the sequencer —
   `build/synth.wasm`, linked from the same `mus_opl.c` and `opl3.c` objects
   the engine links — and renders each 128-frame quantum itself; the engine
@@ -380,19 +380,22 @@ Safari coverage is documented policy, not oversight.
 - Rewriting the core in another language.
 - Gameplay-visible "enhancements" beyond vanilla (freelook/interpolation
   stay render-side only; vanilla mode toggle preserved).
-- ~~Actual retro-console ports~~ **Amended 2026-07-21 (floor campaign)**:
-  the atlas remains the doctrine — no hardware target is attempted
-  before its atlas row exists with arithmetic — but real-hardware
-  **test beds are now sanctioned** where the row supports them:
-  N64/VR4300 (owned hardware: SummerCart64 + Analogue 3D; emulator leg
-  is the repeatable gate, hardware runs are committed evidence),
-  386-class (86Box/real hardware), and a sub-100 MHz MCU floor
-  measurement (RP2040-class, underclocked — deliverable is the measured
-  minimum clock at which 13/13 demos stay tic-exact, not a promised
-  record). Genesis+Sega CD stays **parked**: its atlas row concludes
-  infeasible for tic-exact 35 Hz at native res by ~10× (external anchor:
-  krikzz doom-68k, 1–2 fps FPGA-assisted); any future bring-up is a
-  named-cuts stunt, not a promise of this project. SNES/GBA-class
-  verdicts unchanged (infeasible, atlas rows closed).
+- ~~Actual retro-console ports~~ **Amended 2026-07-21 (round 4).** Test beds
+  are sanctioned where the atlas supports them; see **Hardware targets** below.
 - Safari/iOS and mobile/touch support — explicit non-goal; see
   browser matrix decision above.
+
+### Hardware targets
+
+**Amended 2026-07-21 (round 4, the floor campaign).** The atlas is the doctrine,
+and it has not changed: no hardware target is attempted before its row in
+[docs/feasibility-atlas.md](docs/feasibility-atlas.md) exists, with arithmetic.
+What changed is that a row may now sanction a real-hardware test bed.
+
+| target | status | what that means here |
+|--------|--------|----------------------|
+| N64 / VR4300 | **sanctioned test bed** | Hardware is owned: SummerCart64 and Analogue 3D. The emulator leg `n64-demos` is the repeatable gate. Hardware runs are committed evidence, not the gate. |
+| 386-class | **sanctioned test bed** | 86Box, or real hardware. |
+| sub-100 MHz MCU floor | **sanctioned measurement** | RP2040-class, underclocked. The deliverable is the measured minimum clock at which 13/13 demos stay tic-exact. It is not a promised record. |
+| Genesis + Sega CD | **parked** | The atlas row concludes infeasible for tic-exact 35 Hz at native resolution, by about 10×. The external anchor is krikzz's doom-68k at 1–2 fps, FPGA-assisted. A future bring-up would be a named-cuts stunt, not a promise of this project. |
+| SNES, GBA-class | **infeasible** | Verdicts unchanged. The atlas rows are closed. |
