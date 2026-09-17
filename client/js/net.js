@@ -83,6 +83,26 @@ export function connectLobby(baseUrl, WS = WebSocket) {
         try { m = JSON.parse(ev.data); }
         catch { return; }                       // not JSON: not a message
         if (!m || typeof m !== 'object' || typeof m.t !== 'string') return;
+        // A `roster` or `inprogress` frame reaches lobby.js's screen builders,
+        // and those guarded the CONTAINER and not the MEMBER:
+        // `roster?.players.find(...)` throws on `{"t":"roster"}`, because `?.`
+        // only covers `roster` being nullish -- while the two lines under it
+        // correctly used `?? []` and `?? {}`.  The throw propagates out of this
+        // very handler, so the UI wedges on CONNECTING with an empty status
+        // line and the socket stops being useful, which is the failure shape
+        // CLAUDE.md records under "one case can disarm the next".
+        //
+        // Normalised HERE rather than at each read, for the same reason
+        // checkNetShape sits here: this is where the value crosses out of the
+        // wire, and a new screen builder cannot reintroduce the hole.  After
+        // this, `players` and `freeSlots` are arrays and `params` is an object,
+        // whatever arrived.  Shape only -- the contents stay the server's.
+        if (m.t === 'roster' || m.t === 'inprogress') {
+            m = { ...m,
+                players:   Array.isArray(m.players)   ? m.players.filter(p => p && typeof p === 'object') : [],
+                freeSlots: Array.isArray(m.freeSlots) ? m.freeSlots.filter(Number.isInteger) : [],
+                params:    (m.params && typeof m.params === 'object') ? m.params : {} };
+        }
         if (m.t === 'welcome') {
             // slot indexes COLORS[] and the player arrays in lobby.js.
             if (Number.isInteger(m.slot) && m.slot >= 0 && m.slot < MAXPLAYERS) api.slot = m.slot;

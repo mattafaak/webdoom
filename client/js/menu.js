@@ -139,9 +139,18 @@ export function createMenu(font, host, opts = {}) {
             if (i === sel && skulls[+skullFlip]) sk.appendChild(skulls[+skullFlip]);
             row.appendChild(sk);
             let label;
-            if (entry && entry.item === item)
+            // Matched by LABEL, not by object identity.  refresh() rebuilds
+            // every item object from scratch, so after the first roster update
+            // `entry.item === item` was never true again: the caret and the
+            // characters you had typed vanished, the row reverted to the
+            // committed value, and `entry` was still live -- so keystrokes kept
+            // accumulating into a buffer nobody could see and Enter committed
+            // it.  Typing your name while another player joined did it.
+            // `entry.item` is still the original object, because that is what
+            // carries the commit callback.
+            if (entry && entry.label === item.label)
                 label = `${item.label}${entry.value}_`;
-            else if (capture && capture.item === item)
+            else if (capture && capture.label === item.label)
                 label = `${item.label}< PRESS A KEY >`;
             else {
                 const val = item.value !== undefined ? String(item.value) : '';
@@ -199,7 +208,7 @@ export function createMenu(font, host, opts = {}) {
         const item = screen()?.items[sel];
         if (!item) return;
         if (item.entry) {
-            entry = { item, value: item.entry.initial ?? '' };
+            entry = { item, label: item.label, value: item.entry.initial ?? '' };
             render();
             return;
         }
@@ -215,7 +224,7 @@ export function createMenu(font, host, opts = {}) {
     function armCapture(item, viaKeydown) {
         if (capture) return;
         const arm = () => {
-            capture = { item, cancel: item.capture(() => { capture = null; render(); }) };
+            capture = { item, label: item.label, cancel: item.capture(() => { capture = null; render(); }) };
             render();
         };
         if (viaKeydown) window.addEventListener('keyup', function once() {
@@ -300,7 +309,24 @@ export function createMenu(font, host, opts = {}) {
         pop: back,
         // re-render current screen after data changes (roster updates — NOT a
         // screen transition; no flare, no onTransition)
-        refresh(s) { if (s) stack[stack.length - 1] = s; if (sel >= screen().items.length) sel = 0; render(); },
+        // A roster update must not move the cursor onto a different ACTION.
+        // This clamped an out-of-range `sel` to 0, and index 0 is the most
+        // destructive row on both lobby screens -- START GAME, and DROP IN on
+        // the in-progress screen.  The lobby's COLOR row exists only while a
+        // slot is free, so the fourth player joining shortened the list and
+        // silently moved a cursor parked on COLOR to START GAME; the next
+        // Enter launched the game, or joined one you were only browsing.
+        // So: keep the row the user was actually on, by label, and fall back
+        // to the LAST row rather than the first when it is gone.
+        refresh(s) {
+            const wasOn = screen()?.items[sel]?.label;
+            if (s) stack[stack.length - 1] = s;
+            const items = screen().items;
+            const again = wasOn === undefined ? -1 : items.findIndex(it => it.label === wasOn);
+            if (again >= 0) sel = again;
+            else if (sel >= items.length) sel = Math.max(0, items.length - 1);
+            render();
+        },
         hide() { hidden = true; stopBlink(); render(); },
         show() { hidden = false; startBlink(); render(); },
         // pop n screens without onBack side effects (picker flows)

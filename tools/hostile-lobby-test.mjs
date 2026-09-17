@@ -195,14 +195,88 @@ ok('send after close returns false instead of throwing',
 ok('send after close raised no unhandled error', uncaught.length === beforeClose,
     uncaught.slice(beforeClose).join('; '));
 
+console.log('\n── roster / inprogress frames, read the way lobby.js reads them ──');
+
+// THE GAP THIS CLOSES.  Everything above hardens net.js and stops there, so
+// this file could report a clean bill of health while lobby.js's screen
+// builders threw on the very next line.  They guarded the CONTAINER and not
+// the MEMBER -- `roster?.players.find(...)` throws on `{"t":"roster"}` -- and
+// that throw comes out of ws.onmessage, wedging the UI on CONNECTING with an
+// empty status line.  Hardening one layer and testing that layer is how a
+// dedicated hostile-input gate passes over a hostile-input bug.
+//
+// lobby.js cannot be imported here: it has no exports and runs a DOM IIFE at
+// import.  So this replays its ACCESS PATTERNS against whatever net.js
+// actually delivered -- which is the thing that has to hold.
+//
+// RED-PROOF: remove the roster/inprogress normalisation from net.js's
+// onmessage and every case below reports the TypeError it threw.
+const SHAPES = [
+    ['no fields at all',        { t: 'roster' }],
+    ['players missing',         { t: 'roster', freeSlots: [1], params: {} }],
+    ['players is a string',     { t: 'roster', players: 'nope' }],
+    ['players is an object',    { t: 'roster', players: { 0: { slot: 0 } } }],
+    ['players holds nulls',     { t: 'roster', players: [null, 3, 'x'] }],
+    ['params missing',          { t: 'roster', players: [] }],
+    ['params is a string',      { t: 'roster', players: [], params: 'wad' }],
+    ['freeSlots is a number',   { t: 'roster', players: [], freeSlots: 4 }],
+    ['inprogress, no fields',   { t: 'inprogress' }],
+    ['inprogress, params null', { t: 'inprogress', players: [], params: null }],
+];
+for (const [label, frame] of SHAPES) {
+    const before = uncaught.length;
+    let threwInBuilder = null;
+    const got = await withClient(async (api, server) => {
+        let seen = null;
+        api.on('roster', m => { seen = m; }).on('inprogress', m => { seen = m; });
+        server.send(JSON.stringify(frame));
+        await sleep(60);
+        if (!seen) return null;
+        // Exactly what lobbyScreen() and inProgressScreen() do with it.
+        try {
+            void seen.players.find(pl => pl.slot === 0);
+            void seen.players.map(pl => pl.name ?? pl.color);
+            void seen.freeSlots.length;
+            void [['coop', 'COOPERATIVE']].find(x => x[0] === seen.params.mode)?.[1];
+            void seen.params.wad;
+        } catch (e) { threwInBuilder = e; }
+        return seen;
+    });
+    const threw = uncaught.slice(before);
+    ok(`${label}: lobby.js's own reads do not throw`,
+       got !== null && !threwInBuilder && threw.length === 0,
+       got === null ? 'the frame was never delivered'
+       : threwInBuilder ? `builder threw: ${threwInBuilder.message}`
+       : `unhandled: ${threw.join('; ')}`);
+}
+
+// Anti-vacuity: a normaliser that dropped every frame would pass all ten above
+// by never delivering one, and one that emptied every field would pass them by
+// delivering nothing useful.  A well-formed frame must arrive intact.
+{
+    const good = { t: 'roster', players: [{ slot: 2, color: 'Brown', name: 'ZED' }],
+                   freeSlots: [0, 1, 3], params: { wad: 'doom2.wad', mode: 'coop' } };
+    const seen = await withClient(async (api, server) => {
+        let got = null;
+        api.on('roster', m => { got = m; });
+        server.send(JSON.stringify(good));
+        await sleep(60);
+        return got;
+    });
+    ok('a well-formed roster survives normalisation intact',
+       seen?.players?.[0]?.name === 'ZED' && seen.players.length === 1
+       && seen.freeSlots.length === 3 && seen.params.wad === 'doom2.wad',
+       `got ${JSON.stringify(seen)?.slice(0, 120)}`);
+}
+
 try { wss.close(); } catch { /* sockets already torn down */ }
 
 // The two loops, plus the eight named assertions after them: a valid welcome, a
 // non-string colour, three about the unanswered ping, an answered ping, and two
 // about send-after-close. A floor, so a section that stops running is a red
 // rather than a shorter list.
-const NAMED_AFTER_LOOPS = 8;
-const EXPECTED = GARBAGE.length + BAD_SLOTS.length + NAMED_AFTER_LOOPS;
+const NAMED_AFTER_LOOPS = 8 + 1;   // +1: the well-formed-roster anti-vacuity case
+const EXPECTED = GARBAGE.length + BAD_SLOTS.length + SHAPES.length + NAMED_AFTER_LOOPS;
 summaryPrinted = true;
 console.log(`\n  ${passes} passed, ${failures} failed`);
 if (passes + failures !== EXPECTED) {
@@ -211,5 +285,6 @@ if (passes + failures !== EXPECTED) {
 }
 if (failures) { console.log(`hostile-lobby-test: ${failures} failure(s)`); process.exit(1); }
 console.log(`PASS — hostile-lobby-test: ${passes} assertions — ${GARBAGE.length} malformed frames, ` +
-            `${BAD_SLOTS.length} hostile welcome slots, the unanswered-ping wedge, and send-after-close`);
+            `${BAD_SLOTS.length} hostile welcome slots, ${SHAPES.length} malformed rosters read as lobby.js reads them, ` +
+            `the unanswered-ping wedge, and send-after-close`);
 process.exit(0);
