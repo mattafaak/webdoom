@@ -224,21 +224,36 @@ function makeBundlePump(doom, numplayers, fabOverride) {
     };
 }
 
+// The setup both attach* functions do, in the order they must do it.
+//
+// They had this as two copies: validate the shape BEFORE anything sizes on it,
+// open the socket, set binaryType, fold the slots into a player mask, call
+// _web_net_setup, then push the names.  Two copies of a sequence whose ORDER is
+// load-bearing is a drift waiting to happen -- the names loop in particular is
+// a ccall per player that has to land after _web_net_setup and before any tic
+// arrives.  The callers differ in exactly two things, which are the arguments:
+// the URL, and which slot becomes consoleplayer.
+function attachCommon(doom, url, { numplayers, slots, names }, WS, consoleSlotOf) {
+    slots = checkNetShape(numplayers, slots);   // before anything sizes on it
+    const ws = new WS(url);
+    ws.binaryType = 'arraybuffer';
+
+    const ingameSlots = slots ?? [...Array(numplayers).keys()];
+    const mask = ingameSlots.reduce((m, s) => m | (1 << s), 0);
+    doom._web_net_setup(consoleSlotOf(ingameSlots), numplayers, mask);
+    names?.forEach((n, i) => {
+        if (n) doom.ccall('web_set_player_name', null, ['number', 'string'], [i, n]);
+    });
+    return { ws, slots, ingameSlots, mask };
+}
+
 // Call before doom.callMain(): configures the engine for the session and
 // installs the send/receive hooks. rttMs sizes the input delay. slots =
 // occupied lobby slots (sparse: color choice = slot choice); the bundle
 // is always numplayers wide with phantoms marked not-ingame.
 export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, names = null, jitterMs = 5 }, WS = WebSocket) {
-    slots = checkNetShape(numplayers, slots);   // before anything sizes on it
-    const ws = new WS(`${baseUrl}/ws/game?slot=${slot}`);
-    ws.binaryType = 'arraybuffer';
-
-    const mask = (slots ?? [...Array(numplayers).keys()])
-        .reduce((m, s) => m | (1 << s), 0);
-    doom._web_net_setup(slot, numplayers, mask);
-    names?.forEach((n, i) => {
-        if (n) doom.ccall('web_set_player_name', null, ['number', 'string'], [i, n]);
-    });
+    const { ws } = attachCommon(doom, `${baseUrl}/ws/game?slot=${slot}`,
+                                { numplayers, slots, names }, WS, () => slot);
     // Jitter buffer depth (tics behind the sealed frontier, one tic =
     // 28.6ms). Size it to network JITTER, never to mean RTT: in lockstep
     // your cmd must round-trip before it applies, so the mean latency is
@@ -280,20 +295,12 @@ export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, nam
 // discarded by the no-op netSend; netcmds[] is written only by web_net_bundle
 // (sealed bundles), so the simulation is authoritative and deterministic.
 export function attachSpectate(doom, baseUrl, { numplayers, slots = null, names = null }, WS = WebSocket) {
-    slots = checkNetShape(numplayers, slots);   // before anything sizes on it
-    const ws = new WS(`${baseUrl}/ws/spectate`);
-    ws.binaryType = 'arraybuffer';
-
-    const ingameSlots = (slots ?? [...Array(numplayers).keys()]);
-    const mask = ingameSlots.reduce((m, s) => m | (1 << s), 0);
     // Use the first ingame slot as consoleplayer. A phantom (not-ingame) slot
     // leaves players[consoleplayer].mo NULL, which corrupts sound-listener
     // arithmetic and diverges consistancy[] from the veteran simulation.
-    const observerSlot = ingameSlots[0] ?? 0;
-    doom._web_net_setup(observerSlot, numplayers, mask);
-    names?.forEach((n, i) => {
-        if (n) doom.ccall('web_set_player_name', null, ['number', 'string'], [i, n]);
-    });
+    const { ws, ingameSlots } = attachCommon(doom, `${baseUrl}/ws/spectate`,
+                                             { numplayers, slots, names }, WS,
+                                             ing => ing[0] ?? 0);
     doom._web_net_set_delay(2);
     // Structural enforcement: netSend is a no-op. The /ws/spectate server
     // handler has no inbound message listener either, so ticcmds cannot be

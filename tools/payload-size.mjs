@@ -80,6 +80,37 @@ if (record) {
     }
     writeFileSync(MANIFEST, JSON.stringify(doc, null, 2) + '\n');
     console.log(`recorded perf-015=${totalKB} perf-016=${surfaceKB} into claims.json`);
+
+    // claims.json is one of THREE places these two figures live, and recording
+    // only the first is how the other two go stale.  A scratch script did the
+    // rest for two rounds; its patterns were anchored to `perf.md:213`, so it
+    // silently substituted nothing the moment a docs restructure moved the
+    // locator -- and claims-index.md sat at 78.1 while the manifest and the
+    // document both said 78.4.  Row-anchored on the claim id, which does not
+    // move, and it REFUSES rather than reporting success on zero edits.
+    const rewrite = (file, edits) => {
+        let text = readFileSync(file, 'utf8');
+        for (const [re, to, what] of edits) {
+            if (!re.test(text)) {
+                console.log(`FAIL payload-size --record: no match for ${what} in ${file}`);
+                process.exit(1);
+            }
+            text = text.replace(re, to);
+        }
+        writeFileSync(file, text);
+        console.log(`  restamped ${file}`);
+    };
+
+    rewrite(join(root, 'docs/claims-index.md'), [
+        [/^(\| perf-015 \|[^|]*\|[^|]*\| )[\d.]+( KB \|)/m, `$1${totalKB}$2`,   'perf-015 row'],
+        [/^(\| perf-016 \|[^|]*\|[^|]*\| )[\d.]+( KB \|)/m, `$1${surfaceKB}$2`, 'perf-016 row'],
+    ]);
+    rewrite(join(root, 'docs/perf.md'), [
+        [/^(\| \*\*Total \(all, gzip-9\)\*\* \| — \| \*\*)[\d,]+(\*\* \| \*\*)[\d.]+(\*\* \|)/m,
+         `$1${totalGz.toLocaleString('en-US')}$2${totalKB}$3`, 'perf.md total row'],
+        [/^(\| \*\*JS\+CSS\+HTML only \(gzip-9\)\*\* \| — \| )[\d,]+( \| \*\*)[\d.]+(\*\* \|)/m,
+         `$1${surfaceGz.toLocaleString('en-US')}$2${surfaceKB}$3`, 'perf.md surface row'],
+    ]);
     process.exit(0);
 }
 

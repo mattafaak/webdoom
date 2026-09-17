@@ -221,8 +221,8 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `build/doom.wasm` | 299,962 | 134,260 | 131.1 |
 | `client/js/lobby.js` | 33,917 | 11,590 | 11.3 |
 | `build/synth.wasm` | 21,359 | 9,063 | 8.9 |
+| `client/js/net.js` | 17,743 | 6,787 | 6.6 |
 | `client/js/input.js` | 18,037 | 6,652 | 6.5 |
-| `client/js/net.js` | 17,142 | 6,476 | 6.3 |
 | `client/js/menu.js` | 17,952 | 6,363 | 6.2 |
 | `client/js/main.js` | 16,472 | 6,193 | 6.0 |
 | `client/js/audio.js` | 17,922 | 6,065 | 5.9 |
@@ -243,19 +243,19 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/index.html` | 1,732 | 916 | 0.9 |
 | `client/js/wad-cache.js` | 1,517 | 729 | 0.7 |
 | `client/js/wad-library.js` | 1,159 | 580 | 0.6 |
-| **Total (all, raw)** | **547,357** | — | — |
-| **Total (all, gzip-9)** | — | **227,039** | **221.7** |
-| **JS+CSS+HTML only (raw)** | 217,262 | — | — |
-| **JS+CSS+HTML only (gzip-9)** | — | 79,996 | **78.1** |
+| **Total (all, raw)** | **547,958** | — | — |
+| **Total (all, gzip-9)** | — | **227,350** | **222** |
+| **JS+CSS+HTML only (raw)** | 217,863 | — | — |
+| **JS+CSS+HTML only (gzip-9)** | — | 80,307 | **78.4** |
 
 The WAD file itself (doom.wad ≈ 11.8 MB, doom2.wad ≈ 13.9 MB, etc.) is
 fetched separately on first play and cached in the browser; it is not part of
 the initial page-load transfer.
 
 **Finding**: the entire deliverable (wasm + JS glue + client JS + CSS +
-HTML) compresses to **221.7 KB gzip** on the wire, gated by
+HTML) compresses to **222 KB gzip** on the wire, gated by
 `payload-size` (perf-015/perf-016) since round 8. The wasm is
-59% of that. The JS+CSS+HTML surface is **78.1 KB gzip**
+59% of that. The JS+CSS+HTML surface is **78.4 KB gzip**
 — note that is **2.1x the 35.1 KB this table used to
 claim**, which went stale unnoticed precisely because both figures were
 marked *not machine-verified*: the old table still listed
