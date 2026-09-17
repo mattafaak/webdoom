@@ -608,6 +608,11 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
         # that -- which is why it survived.
     leg browser-options       browser,build,wad,shared "hostile localStorage + the OPTIONS screen" -- node tools/browser-options-test.mjs "$U"
     leg browser-resilience    browser,build,wad,shared "fetch/sw/visibility/gamepad failures" -- node tools/browser-resilience-test.mjs "$U"
+        # rme-004's analog half.  browser-resilience covers hotplug only; this
+        # drives a synthetic pad through the deadzone curve and the axis mapping
+        # and reads what the ENGINE's own web_gamepad entry point receives --
+        # the same boundary browser-options uses for a rebound key.
+    leg browser-gamepad       browser,build,wad,shared "analog twin-stick reaches the engine (rme-004)" -- node tools/browser-gamepad-test.mjs "$U"
     leg browser-lobby         browser,build,wad,shared "lobby state machine, 25 edges"         -- node tools/browser-lobby-test.mjs "$U"
     leg browser-fire          browser,build,wad,shared "PSX fire background + reduced-motion"  -- node tools/browser-fire-test.mjs "$U" /tmp
     leg browser-ierror        browser,build,wad,shared "I_Error surfaces, no wedge"            -- node tools/browser-ierror-test.mjs "$U"

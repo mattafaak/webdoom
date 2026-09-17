@@ -25,7 +25,7 @@
 # number nothing computed and nobody could check from a dev box.  The runner
 # prints its own totals and every SKIP carries its reason; read those.
 #
-# The full suite (78 legs at the time of writing -- `tools/run-tests.sh --list`
+# The full suite (79 legs at the time of writing -- `tools/run-tests.sh --list`
 # prints the current number, and the runner now asserts its own total against
 # that registry) still runs on a host with the WAD library, a built engine and
 # Chrome:  bash tools/run-tests.sh --require-complete
@@ -124,7 +124,7 @@ jobs:
             echo '- netplay 2p/4p, drop-in, spectator, churn, mixed-width'
             echo '- the differential fuzzer and the adversarial ASan map gate'
             echo '- the freestanding and 32-bit-ARM cross-architecture legs'
-            echo '- the 20 browser legs and the browser-pipeline baseline'
+            echo '- the 21 browser legs and the browser-pipeline baseline'
             echo '- three colormap verifier families inside doc-drift (it reports this itself)'
             echo '- the two build-output paths in sw-precache (/engine/doom.js, doom.wasm)'
             echo

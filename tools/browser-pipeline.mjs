@@ -224,6 +224,23 @@ while (waited < MAX_WAIT_S) {
     if (frames >= MIN_FRAMES && inputSamples >= MIN_INPUT_SAMPLES) break;
 }
 
+// ── 8b. Uncapped framerate (promise rme-003) ─────────────────────────────────
+//
+// README promises "uncapped framerate with 35 Hz-exact game logic".  The
+// 35 Hz-exact half is gated everywhere (13 sim goldens); the UNCAPPED half was
+// unassertable by any demo-driven leg, because `-timedemo` steps one tic per
+// frame by construction, so frames and tics are equal there BY DESIGN.  This
+// run is not a timedemo: it is real gameplay, so the two counts are
+// independent and their ratio is the claim.
+const ticsSeen = await evaluate(`window.webdoom?.doom?._web_gametic?.() ?? 0`);
+const framesSeen = await evaluate(`window.__wd_perf?.frames ?? 0`);
+const renderRatio = ticsSeen > 0 ? framesSeen / ticsSeen : 0;
+if (!(renderRatio > 1.1))
+    fail(`uncapped framerate not demonstrated: ${framesSeen} rAF frames over ${ticsSeen} gametics ` +
+         `(ratio ${renderRatio.toFixed(2)}); the renderer is running at or below the tic rate`);
+if (!jsonMode)
+    process.stderr.write(`  uncapped: ${framesSeen} frames / ${ticsSeen} tics = ${renderRatio.toFixed(2)}x\n`);
+
 // ── 9. Collect stats ──────────────────────────────────────────────────────────
 const perfData = await evaluate(`JSON.stringify(window.__wd_perf)`);
 if (!perfData) fail('could not read window.__wd_perf');
@@ -309,6 +326,14 @@ const result = {
         // Not in browser-pipeline-compare.mjs CHECKS; baseline has no run1/run2
         // so compare SKIPS it.  Records canvas dimensions + renderer kind at
         // end of the collection run.  320×200 is the only size there is.
+        // promise rme-003's uncapped half: rendered frames vs simulated tics over
+        // the same window.  Not a timing distribution, so not in
+        // browser-pipeline-compare.mjs's CHECKS -- the assertion is in the
+        // collector, where the two counts are in scope.
+        render_ratio: {
+            frames: framesSeen, gametics: ticsSeen, ratio: +renderRatio.toFixed(3),
+            note: 'rAF frames / gametics during real gameplay (NOT a timedemo, which steps one tic per frame by construction). > 1 is the uncapped-framerate promise.',
+        },
         canvas_info: {
             width:        canvasWidth,
             height:       canvasHeight,
