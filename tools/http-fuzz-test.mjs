@@ -8,27 +8,21 @@
 // All cases derived from ws-005 on-paper analysis in docs/web-scrutiny.md.
 // usage: node tools/http-fuzz-test.mjs
 // Also the wire: negotiated br/gzip, ETag/304, on the real server (round 10).
-import { spawn } from 'node:child_process';
 import { createConnection } from 'node:net';
+import { startServer } from './lib/server.mjs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-let PORT_BASE = 9100;
-function spawnServer() {
-    const port = PORT_BASE++;
-    const srv = spawn('node', [join(root, 'server/serve.js')], {
-        env: { ...process.env, DOOM_PORT: port, DOOM_HOST: '127.0.0.1' },
-        stdio: ['ignore', 'ignore', 'pipe'],
-    });
+// a server on a free port, ready when it answers (tools/lib/server.mjs)
+async function spawnServer(servePath = undefined) {
     let crashed = false;
-    srv.stderr.on('data', d => {
-        const t = d.toString();
+    const s = await startServer({ servePath, onStderr: t => {
         if (/Error:|at Object\.|at Module\.|UnhandledPromise/.test(t)) crashed = true;
-    });
-    return { srv, port, host: '127.0.0.1', kill: () => srv.kill(), didCrash: () => crashed };
+    } });
+    return { srv: s.proc, port: s.port, host: '127.0.0.1', kill: s.stop, didCrash: () => crashed };
 }
 
 // Send a raw HTTP request over TCP and collect the response.
@@ -79,8 +73,7 @@ const check = (name, ok, detail) => {
 // ── Main fuzz suite ───────────────────────────────────────────────────────────
 
 async function fuzzStaticHTTP() {
-    const s = spawnServer();
-    await sleep(600);
+    const s = await spawnServer();
 
     const cases = [
         // Case 1: percent-encoded traversal %2e%2e
@@ -204,17 +197,14 @@ async function fuzzHostileDataDir() {
             if (body === null) { try { rmSync(mf); } catch { /* already gone */ } }
             else writeFileSync(mf, body);
 
-            const port = PORT_BASE++;
-            const srv = spawn('node', [join(tree, 'server/serve.js')], {
-                env: { ...process.env, DOOM_PORT: String(port), DOOM_HOST: '127.0.0.1' },
-                stdio: ['ignore', 'ignore', 'ignore'],
-            });
-            let exited = false;
-            srv.on('exit', () => { exited = true; });
-            for (let i = 0; i < 40 && !exited; i++) {
-                await sleep(100);
-                if (await healthCheck('127.0.0.1', port)) break;
-            }
+            // a server that dies during startup is exactly what this arm
+            // looks for, so a refused start is recorded, not thrown
+            let exited = false, srv = null, port = 0;
+            try {
+                const s = await startServer({ servePath: join(tree, 'server/serve.js'), readyMs: 5000 });
+                srv = s; port = s.port;
+                s.proc.on('exit', () => { exited = true; });
+            } catch { exited = true; }
             // The request itself may legitimately decline (503/404). What must
             // not happen is the server going away.
             try {
@@ -224,7 +214,7 @@ async function fuzzHostileDataDir() {
             const alive = !exited && await healthCheck('127.0.0.1', port);
             check(`${label}: GET ${path} leaves the server up`, alive,
                   `process exited=${exited}, still answering=${alive}`);
-            srv.kill();
+            srv?.stop();
         }
     } finally {
         rmSync(tree, { recursive: true, force: true });
@@ -243,8 +233,7 @@ await fuzzHostileDataDir();
 // because send() and the static-file branch build their headers separately and
 // only one of them would be obvious to check.
 async function checkSecurityHeaders() {
-    const s = spawnServer();
-    for (let i = 0; i < 40; i++) { await sleep(100); if (await healthCheck(s.host, s.port)) break; }
+    const s = await spawnServer();
     for (const [label, path] of [['an API response', '/api/wads'], ['a static file', '/']]) {
         const res = await fetch(`http://127.0.0.1:${s.port}${path}`, { signal: AbortSignal.timeout(4000) });
         const csp = res.headers.get('content-security-policy') ?? '';
@@ -348,12 +337,8 @@ async function checkUiAssetCache() {
         writeFileSync(join(tree, 'wads/lib/doom.wad'), wad(32, 0x11));
         setLibrary(['doom.wad']);
 
-        const port = PORT_BASE++;
-        srv = spawn('node', [join(tree, 'server/serve.js')], {
-            env: { ...process.env, DOOM_PORT: String(port), DOOM_HOST: '127.0.0.1' },
-            stdio: ['ignore', 'ignore', 'ignore'],
-        });
-        for (let i = 0; i < 40; i++) { await sleep(100); if (await healthCheck('127.0.0.1', port)) break; }
+        srv = await startServer({ servePath: join(tree, 'server/serve.js') });
+        const port = srv.port;
         const get = async () => {
             const r = await fetch(`http://127.0.0.1:${port}/api/ui-assets`, { signal: AbortSignal.timeout(5000) });
             return r.ok ? await r.text() : `HTTP ${r.status}`;
@@ -403,7 +388,7 @@ async function checkUiAssetCache() {
               t2.status === 200 && t2.bytes[0] === 0x33 && t2.bytes[768] === 0x33 && t2.etag !== t1.etag,
               `palette byte ${t2.bytes[0]?.toString(16)} etag ${t2.etag}`);
     } finally {
-        srv?.kill();
+        srv?.stop();
         rmSync(tree, { recursive: true, force: true });
     }
 }
@@ -421,8 +406,7 @@ await checkUiAssetCache();
 async function checkWire() {
     const { brotliDecompressSync, gunzipSync } = await import('node:zlib');
     const { Buffer } = globalThis;
-    const s = spawnServer();
-    for (let i = 0; i < 40; i++) { await sleep(100); if (await healthCheck(s.host, s.port)) break; }
+    const s = await spawnServer();
     const get = (path, extra = '') => rawHttp(s.host, s.port,
         `GET ${path} HTTP/1.1\r\nHost: ${s.host}:${s.port}\r\nConnection: close\r\n${extra}\r\n`);
     const hdr = (r, name) => (r.headers.match(new RegExp(`^${name}: (.*)$`, 'mi')) ?? [])[1]?.trim() ?? null;

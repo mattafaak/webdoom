@@ -2,7 +2,7 @@
 // HTTP fuzz + abuse test for the demo store endpoint.
 // Verifies: caps enforcement, id path-traversal rejection, malformed inputs.
 // usage: node tools/demo-store-fuzz-test.mjs
-import { spawn } from 'node:child_process';
+import { startServer } from './lib/server.mjs';
 import { createConnection } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -15,33 +15,13 @@ const { PER_DEMO_CAP, TOTAL_QUOTA, TTL_MS, FRAGMENT_MAX } =
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-let PORT_BASE = 8880;
-function spawnServer(extraEnv = {}) {
-    const port = PORT_BASE++;
-    const srv = spawn('node', [join(root, 'server/serve.js')], {
-        env: { ...process.env, DOOM_PORT: port, DOOM_HOST: '127.0.0.1', ...extraEnv },
-        stdio: ['ignore', 'ignore', 'pipe'],
-    });
+// a server on a free port, ready when it answers (tools/lib/server.mjs)
+async function spawnServer(extraEnv = {}) {
     let crashed = false;
-    srv.stderr.on('data', d => {
-        const t = d.toString();
+    const s = await startServer({ env: extraEnv, onStderr: t => {
         if (/Error:|at Object\.|at Module\.|UnhandledPromise/.test(t)) crashed = true;
-    });
-    const base = `http://127.0.0.1:${port}`;
-    return { srv, port, base, kill: () => srv.kill(), didCrash: () => crashed };
-}
-
-async function waitReady(port, tries = 20) {
-    for (let i = 0; i < tries; i++) {
-        await sleep(100);
-        const ok = await new Promise(res => {
-            const s = createConnection(port, '127.0.0.1');
-            s.on('connect', () => { s.destroy(); res(true); });
-            s.on('error', () => res(false));
-        });
-        if (ok) return;
-    }
-    throw new Error(`server not ready on port ${port}`);
+    } });
+    return { srv: s.proc, port: s.port, base: `http://127.0.0.1:${s.port}`, kill: s.stop, didCrash: () => crashed };
 }
 
 // Minimal fetch-like helper using node:http to avoid external deps.
@@ -95,8 +75,7 @@ console.log('\n── demo-store-fuzz-test: demo store endpoint ─────�
 console.log(`  caps: per-demo=${PER_DEMO_CAP} bytes, total=${TOTAL_QUOTA} bytes, ttl=${TTL_MS}ms`);
 console.log(`  fragment-max: ${FRAGMENT_MAX} bytes\n`);
 
-const { srv, base, kill, didCrash } = spawnServer();
-await waitReady(PORT_BASE - 1);
+const { srv, base, kill, didCrash } = await spawnServer();
 
 try {
 
@@ -217,12 +196,11 @@ ok('server did not crash', !didCrash());
 // asserted by inspection.
 {
     const QUOTA = 24_000;                 // bytes of demo; ~3 x 8 KB demos
-    const s2 = spawnServer({
+    const s2 = await spawnServer({
         WEBDOOM_DEMO_QUOTA: String(QUOTA),
         WEBDOOM_DEMO_TTL_MS: '1000',
     });
     try {
-        await waitReady(s2.port);
         const stats = async () => JSON.parse((await request('GET', `${s2.base}/api/demos/stats`)).body);
         const upload = async (n) => {
             const r = await request('POST', `${s2.base}/api/demos?wad=doom.wad`, minimalDemo(n),
