@@ -57,14 +57,26 @@ async function flushDirect(doom, iwad) {
     }
 }
 
-// mirror fileMap changes out every few seconds (+ on tab hide + on file write)
+// mirror fileMap changes out every few seconds (+ on tab hide + on file write).
+// Savegames change only through the engine's own write, which flags them
+// dirty and writes through at once; the interval writes whatever is still
+// dirty (a write-through that failed is retried, which it never was before).
+// .doomrc is rewritten by M_SaveDefaults on every sync, so it is compared
+// byte for byte to the last copy stored instead of hashed with the six
+// savegames every three seconds (round 10).
 export function startSync(doom, iwad, intervalMs = 3000) {
-    const lastFp = new Map();
+    const dirty = new Set();
+    let lastConfig = null;
 
-    const fingerprint = b => {
-        let sum = 0;
-        for (let i = 0; i < b.length; i++) sum = (sum * 31 + b[i]) | 0;
-        return `${b.length}:${sum}`;
+    const same = (a, b) => {
+        if (!b || a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+        return true;
+    };
+    const putFile = async (d, name, bytes) => {
+        await tx(d, 'readwrite', s => s.put(bytes, keyFor(iwad, name)));
+        dirty.delete(name);
+        if (name === CONFIG) lastConfig = bytes.slice();
     };
 
     async function sync() {
@@ -73,20 +85,19 @@ export function startSync(doom, iwad, intervalMs = 3000) {
         } catch { /* wasm aborted after quit — fileMap still readable, continue */ }
         const m = doom['fileMap'];
         if (!m) return;
+        const cfg = m.get(CONFIG);
+        if (cfg instanceof Uint8Array && !same(cfg, lastConfig)) dirty.add(CONFIG);
+        if (!dirty.size) return;
         let d = null;
-        for (const name of ALL_FILES) {
-            const bytes = m.get(name);
-            if (!bytes) continue;
-            const fp = fingerprint(bytes);
-            if (lastFp.get(name) === fp) continue;
-            try {
+        try {
+            for (const name of [...dirty]) {
+                const bytes = m.get(name);
+                if (!(bytes instanceof Uint8Array)) { dirty.delete(name); continue; }
                 d ??= await db();
-                await tx(d, 'readwrite', s => s.put(bytes, keyFor(iwad, name)));
-                lastFp.set(name, fp);
-            } catch (err) {
-                console.warn('save sync failed:', err);
-                break;
+                await putFile(d, name, bytes);
             }
+        } catch (err) {
+            console.warn('save sync failed:', err);
         }
         d?.close();
     }
@@ -100,10 +111,9 @@ export function startSync(doom, iwad, intervalMs = 3000) {
         if (!m) return;
         const bytes = m.get(name);
         if (!(bytes instanceof Uint8Array)) return;
-        // Update fingerprint so the interval skips this entry (already persisted).
-        lastFp.set(name, fingerprint(bytes));
+        dirty.add(name);
         db().then(d =>
-            tx(d, 'readwrite', s => s.put(bytes, keyFor(iwad, name)))
+            putFile(d, name, bytes)
             .then(() => d.close())
             .catch(err => { console.warn('onFileWrite IDB write failed:', err); try { d.close(); } catch {} })
         ).catch(err => console.warn('onFileWrite db open failed:', err));

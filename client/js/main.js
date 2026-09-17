@@ -29,37 +29,60 @@ const swActive = () => typeof navigator !== 'undefined' &&
 // service worker caches itself on secure origins, so IDB is written only
 // without one (one store per WAD, never two).  onProgress(got, total|0): the
 // caller owns the display, since a stack is fetched in parallel.
-async function fetchWad(file, sha, onProgress = () => {}) {
+//
+// The bytes land in the wasm heap and nowhere else (round 10): with a known
+// content-length each chunk is written straight into a heap block, so a
+// 12-18 MB WAD is never held as a JS array for the session.  Returns
+// {ptr, len} in `doom`'s heap.
+async function fetchWad(doom, file, sha, onProgress = () => {}) {
     const sw = swActive();
+    const intoHeap = bytes => {
+        const ptr = doom._malloc(bytes.length);
+        // a 0 from _malloc would put the whole WAD over address 0 with no error
+        if (!ptr) throw new Error(`out of memory for ${file} (${bytes.length} bytes)`);
+        doom.HEAPU8.set(bytes, ptr);
+        return { ptr, len: bytes.length };
+    };
     if (sha) {
         const local = await libraryGetBytes(sha).catch(() => null);
-        if (local) { onProgress(local.length, local.length); return local; }
+        if (local) { onProgress(local.length, local.length); return intoHeap(local); }
     }
     if (!sw && sha) {
         const cached = await wadCacheGet(sha);
-        if (cached) { onProgress(cached.length, cached.length); return cached; }
+        if (cached) { onProgress(cached.length, cached.length); return intoHeap(cached); }
     }
 
     const res = await fetch(`/wads/${file}?v=${(sha ?? '').slice(0, 8)}`);
     if (!res.ok) throw new Error(`wad fetch failed: ${file} (${res.status})`);
     const total = +res.headers.get('content-length') || 0;
-    const parts = [];
-    let got = 0;
     const reader = res.body.getReader();
+    let got = 0, ptr = 0;
+    const parts = [];                       // only without a content-length
+    if (total) {
+        ptr = doom._malloc(total);
+        if (!ptr) throw new Error(`out of memory for ${file} (${total} bytes)`);
+    }
     for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        parts.push(value);
+        if (total) {
+            if (got + value.length > total) throw new Error(`wad fetch overran content-length: ${file}`);
+            doom.HEAPU8.set(value, ptr + got);
+        } else parts.push(value);
         got += value.length;
         onProgress(got, total);
     }
+    if (total && got !== total) throw new Error(`wad fetch short: ${file} (${got} of ${total} bytes)`);
     onProgress(got, total || got);
-    const buf = new Uint8Array(got);
-    let o = 0;
-    for (const p of parts) { buf.set(p, o); o += p.length; }
-
-    if (!sw && sha) wadCachePut(sha, buf).catch(() => {});   // best-effort
-    return buf;
+    if (!total) {
+        const buf = new Uint8Array(got);
+        let o = 0;
+        for (const p of parts) { buf.set(p, o); o += p.length; }
+        ({ ptr } = intoHeap(buf));
+    }
+    // best-effort, and a transient copy: IDB needs its own bytes
+    if (!sw && sha) wadCachePut(sha, doom.HEAPU8.slice(ptr, ptr + got)).catch(() => {});
+    return { ptr, len: got };
 }
 
 function restoreOnFailure(canvas) {
@@ -84,32 +107,6 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
 
     loading.show('LOADING ENGINE…');
 
-    // fetch: the engine module and every WAD in parallel, one aggregate bar.
-    // A response without content-length makes the whole bar indeterminate
-    // rather than a false 0%.
-    let createDoom, bytes, persisted;
-    try {
-        ({ default: createDoom } = await import('/engine/doom.js'));
-        const got = new Array(wads.length).fill(0);
-        const tot = new Array(wads.length).fill(0);
-        const mb = n => (n / 1048576).toFixed(1);
-        const report = () => {
-            const g = got.reduce((a, b) => a + b, 0);
-            const known = tot.every(t => t > 0);
-            const t = tot.reduce((a, b) => a + b, 0);
-            const what = wads.length > 1 ? `${wads.length} FILES` : wads[0].file;
-            if (known) loading.set(`FETCHING ${what} — ${mb(g)} / ${mb(t)} MB`, t ? g / t : 0);
-            else loading.indeterminate(`FETCHING ${what} — ${mb(g)} MB`);
-        };
-        bytes = await Promise.all(wads.map((w, i) =>
-            fetchWad(w.file, w.sha, (g, t) => { got[i] = g; tot[i] = t; report(); })));
-        persisted = await loadPersisted(wads[0].file);
-    } catch (err) {
-        restoreOnFailure(canvas);
-        throw err;
-    }
-
-    loading.set('BOOTING…', 1);
     // declared before createDoom: onDoomError can fire before the loop starts
     let running = false;
     let syncHandle = null;
@@ -132,22 +129,44 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
         if (reason) { try { status(reason); } catch { /* DOM unavailable */ } }
     };
 
-    const doom = await createDoom({
-        print: t => console.log(t),
-        printErr: t => console.warn(t),
-        onDoomError: msg => endSession(`engine error: ${msg}`),   // I_Error → abort()
-    });
+    // the engine first, so the WADs can stream into its heap; then every WAD
+    // in parallel, one aggregate bar.  A response without content-length
+    // makes the whole bar indeterminate rather than a false 0%.
+    let doom, blocks, persisted;
+    try {
+        const { default: createDoom } = await import('/engine/doom.js');
+        doom = await createDoom({
+            print: t => console.log(t),
+            printErr: t => console.warn(t),
+            onDoomError: msg => endSession(`engine error: ${msg}`),   // I_Error → abort()
+        });
+        const got = new Array(wads.length).fill(0);
+        const tot = new Array(wads.length).fill(0);
+        const mb = n => (n / 1048576).toFixed(1);
+        const report = () => {
+            const g = got.reduce((a, b) => a + b, 0);
+            const known = tot.every(t => t > 0);
+            const t = tot.reduce((a, b) => a + b, 0);
+            const what = wads.length > 1 ? `${wads.length} FILES` : wads[0].file;
+            if (known) loading.set(`FETCHING ${what} — ${mb(g)} / ${mb(t)} MB`, t ? g / t : 0);
+            else loading.indeterminate(`FETCHING ${what} — ${mb(g)} MB`);
+        };
+        blocks = await Promise.all(wads.map((w, i) =>
+            fetchWad(doom, w.file, w.sha, (g, t) => { got[i] = g; tot[i] = t; report(); })));
+        persisted = await loadPersisted(wads[0].file);
+    } catch (err) {
+        restoreOnFailure(canvas);
+        throw err;
+    }
+
+    loading.set('BOOTING…', 1);
 
     // no filesystem: WADs live once in the heap, small files in a JS Map
     doom['fileMap'] = persisted;
     wads.forEach((w, i) => {
         const name = i === 0 ? (ENGINE_NAME[w.file] ?? w.file) : w.file;
-        const p = doom._malloc(bytes[i].length);
-        // a 0 from _malloc would put the whole WAD over address 0 with no error
-        if (!p) throw new Error(`out of memory registering ${name} (${bytes[i].length} bytes)`);
-        doom.HEAPU8.set(bytes[i], p);
         doom.ccall('web_register_file', null,
-            ['string', 'number', 'number'], [name, p, bytes[i].length]);
+            ['string', 'number', 'number'], [name, blocks[i].ptr, blocks[i].len]);
     });
 
     const pwads = wads.slice(1).flatMap(w => ['-file', w.file]);

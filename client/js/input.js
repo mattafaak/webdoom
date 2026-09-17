@@ -283,9 +283,28 @@ export function createInput(doom, canvas, settings) {
 
     // --- gamepad ------------------------------------------------------------
     let padPrev = 0;
+    // getGamepads() allocates a fresh array every call, and every browser
+    // announces a pad (on connect, or on its first button press) before it
+    // reports one -- so until then the poll is not made at all (round 10).
     // Reset edge-detection state when the gamepad is disconnected so that
     // held buttons re-trigger correctly on reconnect.
-    on(window, 'gamepaddisconnected', () => { padPrev = 0; });
+    let padSeen = false;
+    on(window, 'gamepadconnected', () => { padSeen = true; });
+    on(window, 'gamepaddisconnected', () => { padPrev = 0; padSeen = false; });
+    let uiMode = 0;                                      // read by the edge handlers
+    const EDGES_GAME = [
+        [9, () => tapKey(DK.ESCAPE)],                        // start
+        [8, () => tapKey(DK.TAB)],                           // select: automap
+        [4, () => uiMode || cycleWeapon(-1)],                // LB
+        [5, () => uiMode || cycleWeapon(1)],                 // RB
+    ];
+    const EDGES_UI = [
+        ...EDGES_GAME,
+        [12, () => tapKey(DK.UP)], [13, () => tapKey(DK.DOWN)],
+        [14, () => tapKey(DK.LEFT)], [15, () => tapKey(DK.RIGHT)],
+        [0, () => tapKey(DK.ENTER)], [1, () => tapKey(DK.BACKSPACE)],
+        [2, () => tapKey(DK.ENTER)],
+    ];
     const curve = v => {
         const dz = settings.padDeadzone;
         const m = Math.abs(v);
@@ -295,27 +314,15 @@ export function createInput(doom, canvas, settings) {
     };
 
     function pollGamepad() {
+        if (!padSeen) return;
         const gpads = navigator.getGamepads?.();
         const gp = gpads?.[0];
         if (!gp) return;
         const b = i => gp.buttons[i]?.pressed ?? false;
-        const uiMode = doom._web_ui_mode();
+        uiMode = doom._web_ui_mode();
 
         // edge-triggered buttons
-        const edges = [
-            [9, () => tapKey(DK.ESCAPE)],                        // start
-            [8, () => tapKey(DK.TAB)],                           // select: automap
-            [4, () => uiMode || cycleWeapon(-1)],                // LB
-            [5, () => uiMode || cycleWeapon(1)],                 // RB
-        ];
-        if (uiMode) {
-            edges.push(
-                [12, () => tapKey(DK.UP)], [13, () => tapKey(DK.DOWN)],
-                [14, () => tapKey(DK.LEFT)], [15, () => tapKey(DK.RIGHT)],
-                [0, () => tapKey(DK.ENTER)], [1, () => tapKey(DK.BACKSPACE)],
-                [2, () => tapKey(DK.ENTER)],
-            );
-        }
+        const edges = uiMode ? EDGES_UI : EDGES_GAME;
         let now = 0;
         for (const [i] of edges) now |= b(i) << i;
         for (const [i, fn] of edges)

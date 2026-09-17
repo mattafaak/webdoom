@@ -192,9 +192,9 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 |------|------------|---------------|------------|
 | `build/doom.wasm` | 299,348 | 133,239 | 130.1 |
 | `client/js/lobby.js` | 32,498 | 11,114 | 10.9 |
-| `client/js/input.js` | 17,073 | 6,194 | 6.0 |
+| `client/js/input.js` | 17,500 | 6,370 | 6.2 |
 | `client/js/menu.js` | 15,543 | 5,401 | 5.3 |
-| `client/js/main.js` | 12,169 | 4,595 | 4.5 |
+| `client/js/main.js` | 13,235 | 4,894 | 4.8 |
 | `client/js/net.js` | 11,713 | 4,462 | 4.4 |
 | `client/js/wad-import.js` | 11,300 | 4,249 | 4.1 |
 | `client/css/webdoom.css` | 10,370 | 3,885 | 3.8 |
@@ -206,7 +206,7 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/js/scrubber.js` | 7,958 | 2,701 | 2.6 |
 | `client/js/video.js` | 6,625 | 2,523 | 2.5 |
 | `client/js/countdown.js` | 7,068 | 2,396 | 2.3 |
-| `client/js/persist.js` | 4,786 | 1,774 | 1.7 |
+| `client/js/persist.js` | 5,338 | 1,997 | 2.0 |
 | `client/js/ui.js` | 2,211 | 966 | 0.9 |
 | `client/js/idb.js` | 2,214 | 964 | 0.9 |
 | `client/js/perf-marks.js` | 2,252 | 959 | 0.9 |
@@ -214,19 +214,19 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/js/music-worklet.js` | 1,970 | 843 | 0.8 |
 | `client/js/wad-cache.js` | 1,517 | 716 | 0.7 |
 | `client/js/wad-library.js` | 1,159 | 565 | 0.6 |
-| **Total (all, raw)** | **495,544** | — | — |
-| **Total (all, gzip-9)** | — | **205,872** | **201.0** |
-| **JS+CSS+HTML only (raw)** | 187,435 | — | — |
-| **JS+CSS+HTML only (gzip-9)** | — | 68,914 | **67.3** |
+| **Total (all, raw)** | **497,589** | — | — |
+| **Total (all, gzip-9)** | — | **206,570** | **201.7** |
+| **JS+CSS+HTML only (raw)** | 189,480 | — | — |
+| **JS+CSS+HTML only (gzip-9)** | — | 69,612 | **68.0** |
 
 The WAD file itself (doom.wad ≈ 11.8 MB, doom2.wad ≈ 13.9 MB, etc.) is
 fetched separately on first play and cached in the browser; it is not part of
 the initial page-load transfer.
 
 **Finding**: the entire deliverable (wasm + JS glue + client JS + CSS +
-HTML) compresses to **201.0 KB gzip** on the wire, gated by
+HTML) compresses to **201.7 KB gzip** on the wire, gated by
 `payload-size` (perf-015/perf-016) since round 8. The wasm is
-65% of that. The JS+CSS+HTML surface is **67.3 KB gzip**
+65% of that. The JS+CSS+HTML surface is **68.0 KB gzip**
 — note that is **1.9x the 35.1 KB this table used to
 claim**, which went stale unnoticed precisely because both figures were
 marked *not machine-verified*: the old table still listed
