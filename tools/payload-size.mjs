@@ -6,7 +6,8 @@
 // perf-015/perf-016 sat "unverifiable" in claims.json. Nothing recomputed them
 // for months and the app grew: the per-file table still listed
 // client/js/settings.js, which round 7 DELETED, and omitted wad-import, demo,
-// scrubber, mus2mid, sf2-library, idb, wad-library, ui and wad-cache. Measured
+// scrubber, idb, wad-library, ui and wad-cache (plus mus2mid and sf2-library,
+// which round 10 deleted).  Measured
 // here, the surface is ~2.6x the published figure.
 //
 // The file set is DERIVED from sw.js's SHELL_FILES -- the same list

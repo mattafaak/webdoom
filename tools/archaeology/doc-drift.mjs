@@ -56,9 +56,16 @@ const indexPath = join(docsDir, 'claims-index.md');
 const indexText = readFileSync(indexPath, 'utf8');
 
 // Parse table rows: | id | doc:line | claim | value | type | reproducer | status |
+//
+// The id pattern is claims-index-check.mjs's, deliberately: `\w` does not match
+// `-`, so `(\w+-\d+)` silently dropped every id carrying a second hyphen or a
+// letter suffix -- `md-tic-001`, `perf-059b`, `perf-059c`, `perf-059d`. A
+// dropped id gets NO locator here, falls through to the soft
+// "claim not in claims-index.md" path, and is never graded against its
+// document again. Four of 157 ids were in that hole with nothing saying so.
 const docIndex = {};
 for (const line of indexText.split('\n')) {
-    const m = line.match(/^\|\s*(\w+-\d+)\s*\|\s*(\S+):(\d+)\s*\|/);
+    const m = line.match(/^\|\s*([a-z][a-z0-9-]*-\d+[a-z]?)\s*\|\s*(\S+):(\d+)\s*\|/);
     if (m) {
         const [, id, docFile, lineStr] = m;
         docIndex[id] = { doc_file: docFile, doc_line: parseInt(lineStr, 10) };

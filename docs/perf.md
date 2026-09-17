@@ -231,9 +231,9 @@ HTML) compresses to **201.7 KB gzip** on the wire, gated by
 claim**, which went stale unnoticed precisely because both figures were
 marked *not machine-verified*: the old table still listed
 `client/js/settings.js`, deleted in round 7, and omitted `wad-import`,
-`demo`, `scrubber`, `mus2mid`, `sf2-library`, `idb`, `wad-library`, `ui`
-and `wad-cache`. The set is now DERIVED from `sw.js`'s `SHELL_FILES`, so
-a file added to the app shell joins this measurement with no edit here.
+`demo`, `scrubber`, `idb`, `wad-library`, `ui` and `wad-cache`. (It also
+listed `mus2mid` and `sf2-library`, which round 10 deleted.) The set is
+DERIVED from `sw.js`'s `SHELL_FILES`, so a new shell file needs no edit here.
 
 ---
 
@@ -321,14 +321,14 @@ Sim is even less: wbox 0.0706 ms/tic / 28.57 ms = 0.25% of budget.
 **What this means for browser play**: the wasm inner loops are not the
 user-visible bottleneck. The JS/browser pipeline — palette conversion and
 WebGL texture upload in `client/js/video.js`, rAF scheduling jitter,
-AudioWorklet mixing — is **UNMEASURED** by the wasm bench harness.
-These paths run on every frame and involve GPU synchronization, but
-their contribution to frame latency is unknown.
+AudioWorklet mixing — is invisible to the wasm bench harness. MEASURED
+since task 12.2b by `tools/browser-pipeline.mjs` (leg `browser-pipeline`),
+which gates per-stage p99s against a committed per-host baseline.
 
 A 50% speedup in wasm bsp+segs on wbox saves
 0.2625 ms × 50% = 0.13 ms/frame = 0.46% of budget.
 This is unmeasurable by the user at 35 Hz. The browser play
-experience is dominated by whatever the UNMEASURED JS/GPU side costs.
+experience is dominated by the JS/GPU side, which §C below now measures.
 
 **What this means for the bare-metal future (ESP32/Cortex-M)**:
 A 240 MHz LX7 without PSRAM optimization is projected to spend
@@ -452,7 +452,7 @@ during gameplay):
 | palette expand (`I_FinishUpdate`) | Subsumed in 3% ScriptDuration total. Total is too small for palette expand alone to be material. | **NEGLIGIBLE** — skip 12.2b for this stage |
 | `texSubImage2D` WebGL upload | Same: total ScriptDuration < 3%, cannot dominate. | **NEGLIGIBLE** — skip 12.2b for this stage |
 | rAF jitter | `Performance.getMetrics` gives no per-frame timing. Cannot assess from aggregate. rAF jitter may still cause audio/video sync issues even with low CPU usage. | **MERITS 12.2b** — aggregate data blind to frame-level jitter |
-| AudioWorklet (OPL + PCM) | Separate thread; zero contribution to measured ScriptDuration. Completely unmeasured. | **MERITS 12.2b** — need AudioWorklet-specific timing (e.g. `currentTime` drift or worklet `port.postMessage` round-trip) |
+| AudioWorklet (OPL + PCM) | Zero contribution to measured ScriptDuration, and NOT because it is off-thread: round 10 found the OPL synth runs on the MAIN thread in a 100 ms timer and measured it as stage (f) `opl`; the worklet only copies samples. | **MERITS 12.2b** — need AudioWorklet-specific instrumentation |
 | input latency | Not assessable from aggregate metrics — `Performance.getMetrics` carries no event-to-present timing; CPU headroom bounds throughput, not queueing delay (event → ticcmd → 35 Hz tic boundary → render → present). | **MERITS 12.2b** |
 
 **Conclusion**: the cheap-pass data closes the budget sanity-check: webdoom's
@@ -571,11 +571,11 @@ each pixel write is 320 bytes past the previous, one new cache line
 (64 bytes) per pixel on typical hardware. For a 200-row column at 1:1
 scale: 200 cache-line misses per column draw.
 
-**UNMEASURED: R_DrawColumn and R_DrawSpan call counts per frame**.
-The measurement procedure (to be run for task 2.2):
-1. Add `long web_perf_col_calls, web_perf_span_calls` counters to
-   `engine/web/perf.h` / `engine/web/perf.c` (with EMSCRIPTEN_KEEPALIVE
-   getters and reset in `web_perf_reset()`).
+**MEASURED (task 2.2): R_DrawColumn and R_DrawSpan call counts per frame**
+— see the results below (714.8 and 147.8 calls/frame, gated as `perf-034`
+and `perf-035`). The procedure that produced them, for re-running it:
+1. `long web_perf_col_calls, web_perf_span_calls` in `engine/web/perf.c`
+   with KEEPALIVE getters, reset in `web_perf_reset()` (shipped).
 2. Increment `web_perf_col_calls` at the top of `R_DrawColumn`;
    increment `web_perf_span_calls` at the top of `R_DrawSpan`.
 3. Rebuild wasm; run `node tools/bench.mjs doom.wad 1` on each host.
@@ -596,9 +596,9 @@ measure per the §D procedure above before citing these numbers):
   **~250–2,000** calls.
 - Sky (renderer.md §9): one R_DrawColumn per column of the sky
   visplane, up to 320 columns = **~100–300** calls.
-- Total realistic estimate: **~1,000–3,000 R_DrawColumn calls/frame**;
-  previously stated 15,000–25,000 was an arithmetic error (~10× high)
-  from conflating pixels-per-column with calls-per-column.
+- Estimate at the time: ~1,000–3,000 R_DrawColumn calls/frame. SUPERSEDED
+  by the measurement below: **714.8**. (An earlier 15,000–25,000 figure was
+  an arithmetic error, conflating pixels-per-column with calls-per-column.)
 
 **R_DrawSpan** (floor/ceiling spans) is cheaper per call than
 R_DrawColumn because its `dest++` writes are sequential (horizontal
@@ -626,8 +626,8 @@ Any change to:
 - `P_TraverseIntercepts` sort order
 
 ...would desync all 13 golden demos. The cross-validation against 44,580
-Chocolate Doom tics *(not machine-verified: external Chocolate Doom
-instrumented run; no current script in repo)* provides zero tolerance
+Chocolate Doom tics *(the reference build is `tools/build-choco-reference.sh`;
+re-run with `demo-test.mjs --cross <binary>`)* provides zero tolerance
 for any behavioral divergence.
 
 **Verdict for task 2.4**: measure-first / likely-skip. The 0.25%
@@ -1106,7 +1106,7 @@ concern. No further action in task 2.3. → Defer to task 3.2 (bounds hardening)
 | **what** | Investigate why tank (i5-8350U, Kaby Lake) was "least optimized" per Plans.md. The v1 microbench showed FixedDiv int64 is 2.86× slower than double on tank (2725 ms vs. 964 ms for 2×10⁸ iters). |
 | **what the data actually shows** | v2 perStage: tank render = 0.1123 ms/frame, alder = 0.0979 ms/frame, ratio = **1.15×**. Tank is only 15% slower than alder on render — very close. Tank sim = 0.0158 ms/tic vs. alder 0.0135 ms/tic = 1.17×. Neither is concerning at the 35 Hz scale. The headless gap: v2 simFpsNodraw averages are alder 180,370 tics/s vs. tank 95,463 tics/s = **1.89×** — consistent with general i9 vs. i5 CPU throughput, not a FixedDiv artifact. FixedDiv int64 is at most a minor contributor: the same ~2× gap existed pre-int64 (v1 before: alder 204,937 vs. tank 105,868 = 1.94×), so FixedDiv is not the cause. Note: v1 fps (f92fc05, pre-int64) and v2 simFpsNodraw (16c3354, post-int64) span the FixedDiv implementation change — same -nodraw method but different code; the stable ratio confirms the gap is architectural, not algorithmic. |
 | **expected win** | tank render is 0.4% of budget. Any speedup is imperceptible. |
-| **verdict** | **DOCUMENT, DON'T OPTIMIZE**. The 2.7 investigation reveals: tank render is not abnormally slow; the "least improved" observation from the v1 era was a headless-fps artifact from general i5-vs-i9 throughput difference, not a fixable algorithmic issue. With wasm render at 0.4% of budget on tank, there is nothing to fix. Update the task verdict: the tank bottleneck (for browser) is the UNMEASURED JS/browser side (same as every host), which Q0 will characterize. |
+| **verdict** | **DOCUMENT, DON'T OPTIMIZE**. The 2.7 investigation reveals: tank render is not abnormally slow; the "least improved" observation from the v1 era was a headless-fps artifact from general i5-vs-i9 throughput difference, not a fixable algorithmic issue. With wasm render at 0.4% of budget on tank, there is nothing to fix. Update the task verdict: the tank bottleneck (for browser) is the JS/browser side (same as every host), which Q0 characterized in 12.2b. |
 | **maps to** | Task 2.7 |
 
 ---
@@ -1499,8 +1499,8 @@ implementation.
 
 **Why this matters for perf tracking**: the fire effect is the first
 intentionally expensive client-side JS background task added to webdoom. Its
-cost is JS-side (not wasm) and is the kind of load the UNMEASURED browser
-pipeline section (§C above) is meant to characterise. It stays well under the
+cost is JS-side (not wasm) and is the kind of load the browser-pipeline
+section (§C above) measures. It stays well under the
 1 ms/tick ceiling; it provides a concrete data point on JS background overhead.
 
 ---

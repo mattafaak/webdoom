@@ -262,7 +262,8 @@ not move.** All six families of the day were byte- or pixel-identical across
 Independently, `__heap_base` fell 5,042,464 → 4,722,048, and
 `claims.json` `perf-009` had recorded 4,722,016 as the measured value for a
 320-wide build: 32 bytes apart, so what came out was widescreen and nothing
-else. `doom.wasm` shrank 357,060 → 355,893 bytes (README 349 → 348 KB).
+else. `doom.wasm` shrank 357,060 → 355,893 bytes (README 349 → 348 KB at the
+time; it reads 292 KB since the round-10 hybrid build).
 
 Retired with it: legs `render-wide`, `sim-wide`, `browser-wide`,
 `mixed-width-net` and `sprite-witness`, 14 golden files,

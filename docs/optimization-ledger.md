@@ -84,7 +84,7 @@ kill rule. Final column: verdict (SURVIVES → follow-up task | KILLED → reaso
 | **magic-data policy** | None required. No precomputed tables introduced. **COMPLIES.** |
 | **kill rule** | Any sim golden mismatch (13/13 hash diff) = kill. Any render golden pixel delta before explicit regold = kill. wasm byte-identity regression without justification = kill. |
 
-**Verdict: SURVIVES → task 14.2a**
+**Verdict: LANDED — task 14.2a**
 
 Notes: perf.md §Q1 explicitly flagged this as the architectural prerequisite for wasm SIMD
 v128 (currently killed for lack of this). The deferred item from 2.2 (perf.md:730) states:
@@ -104,7 +104,7 @@ transposition the SIMD row also stays killed. The x86-64 icount benefit is likel
 | **magic-data policy** | None. Uses vanilla code paths (`detaillevel` is a vanilla variable; `R_DrawColumnLow` and `R_DrawSpanLow` are vanilla functions). **COMPLIES.** |
 | **kill rule** | High-detail sim golden mismatch on 13 demos = kill (low-detail is opt-in for bare-metal only; vanilla behavior must not be perturbed). |
 
-**Verdict: SURVIVES → task 14.2b**
+**Verdict: LANDED — task 14.2b**
 
 Notes: bare-metal.md §7.3 already lists low-detail as solution (c) for PSRAM bandwidth:
 "lower resolution via the engine's existing low-detail mode (detaillevel = 1 halves
@@ -243,7 +243,7 @@ strictly safer than vanilla's shipping behavior (no guard at all).
 
 | field | value |
 |-------|-------|
-| **mechanism** | Prove and gate that 1 MiB of process stack is sufficient for the freestanding (i386 ELF) build. The wasm artifact (`-sSTACK_SIZE=4MB` in engine/Makefile) is **unchanged** — any reduction there shifts `__heap_base` and requires a conscious regold step (perf.md §Q2/Axis 3). For tools/baremetal/doom.ld, no explicit 4 MiB reservation exists; the ARM stack is implicitly top-of-26 MiB RAM minus heap, with a comment estimating ~64 KB actual use. The 4→1 MiB saving is a statement about portability: a future bare-metal target that reserved 4 MiB could safely cap at 1 MiB. |
+| **mechanism** | Prove and gate that 1 MiB of process stack is sufficient for the freestanding (i386 ELF) build. The wasm artifact was left at `-sSTACK_SIZE=4MB` here and followed in round 10 (it is `1MB` in engine/Makefile now): the fear was that moving `__heap_base` would force a regold, and when it moved by 3.2 MB the goldens did not (see the Notes below and perf.md Axis 3). For tools/baremetal/doom.ld, no explicit 4 MiB reservation exists; the ARM stack is implicitly top-of-26 MiB RAM minus heap, with a comment estimating ~64 KB actual use. The 4→1 MiB saving is a statement about portability: a future bare-metal target that reserved 4 MiB could safely cap at 1 MiB. |
 | **predicted Δinstr/tic** | 0. No runtime compute change. |
 | **axis** | RAM / portability |
 | **magic-data policy** | None. **COMPLIES.** |

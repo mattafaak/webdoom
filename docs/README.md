@@ -1,7 +1,7 @@
 # webdoom documentation index
 
-**30 documents** (17 top-level `.md` beside this index, 6 in `archive/`, 5 hardware bring-ups in
-subdirectories, and id Software's 2 originals), ~15,250 lines. The count names
+**31 documents** (17 top-level `.md` beside this index, 7 in `archive/`, 5 hardware bring-ups in
+subdirectories, and id Software's 2 originals), ~15620 lines. The count names
 its SET on purpose: this line read "26 documents" while `docs-index-check`'s own
 PASS line, in the same breath, said "all 32 documents under docs/" — both true
 about different sets, and the document did not say which. The figure is now the
@@ -33,7 +33,7 @@ heading rather than the top.
 |---|---|
 | [playsim.md](playsim.md) | **long** (1,800). The simulation: thinkers, P_Random, the frozen surface the demo goldens depend on |
 | [renderer.md](renderer.md) | **long** (1,154). BSP, segs, planes, sprites, the low-detail variant and the retired toggles |
-| [formats.md](formats.md) | **long** (1,130). WAD, lump and asset formats as this engine reads them |
+| [formats.md](formats.md) | **long** (1,146). WAD, lump and asset formats as this engine reads them |
 | [engine-archaeology.md](engine-archaeology.md) | where every magic constant and table came from, each with a committed reproducer |
 | [magic-data.md](magic-data.md) | the published, readable version of the above — 16 figures, 14 gated through PUBLIC_HINTS |
 | [netcode.md](netcode.md) | the protocol SSOT: deterministic lockstep over a server tic relay |
@@ -44,7 +44,7 @@ heading rather than the top.
 
 | document | what it is |
 |---|---|
-| [perf.md](perf.md) | **long** (1,820). The memory, size and per-stage baseline. Note: still describes a four-host fleet in places; `spec.md`'s 2026-09-11 amendment retired pi5 |
+| [perf.md](perf.md) | **long** (1,958). The memory, size and per-stage baseline. Note: still describes a four-host fleet in places; `spec.md`'s 2026-09-11 amendment retired pi5 |
 | [optimization-ledger.md](optimization-ledger.md) | every candidate considered, measured, and landed or killed — with the kill rule it was judged against |
 | [divergence-atlas.md](divergence-atlas.md) | where this port diverges from vanilla, and why each one is sanctioned |
 | [feasibility-atlas.md](feasibility-atlas.md) | the retro-hardware arithmetic: what could run this, and what provably cannot. Has its own table of contents |
@@ -80,9 +80,10 @@ Read the banner first — all three carry a dated status.
 | [archive/Plans-refinement-complete.md](archive/Plans-refinement-complete.md) | the refinement initiative's task table, 26/26. Holds the regold lesson `tools/golden-provenance.mjs` cites by line |
 | [archive/Plans-understanding-complete.md](archive/Plans-understanding-complete.md) | phases 6–11, understanding-on-trial |
 | [archive/Plans-floor-initiative-complete.md](archive/Plans-floor-initiative-complete.md) | phases 12–15, 32/32 at `8305c4a` |
+| [archive/Plans-round3-retired.md](archive/Plans-round3-retired.md) | the nine round-3 rows retired in round 11: the four FastDoom toggles (deleted from the engine in round 10) and the five N64 rows past the emulator gate, each under the verdict that retired it |
 | [archive/Plans-field-fixes-complete.md](archive/Plans-field-fixes-complete.md) | round 3, phases 16–19, 22/22 at `1f9f1e5`. The tasks `Plans.md`'s round-3 planning sections rank and sequence |
 
-These six live under `archive/` (round 8); the four `Plans-*` files are 486 lines of closed
+These seven live under `archive/` (round 8, plus the round-11 retirement); the five `Plans-*` files are closed
 task tables that made the front door look like a planning directory. They
 are the record of how each initiative actually went, and `Plans.md` links
 them from its first paragraph.
