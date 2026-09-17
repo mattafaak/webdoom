@@ -5,10 +5,11 @@ are what keep it small.
 
 ## The short version
 
-1. `bash tools/run-tests.sh` before you open anything. It is ~12 minutes
-   on a host with a WAD library, a built engine and Chrome (~6 with
-   `--jobs 3`; ~14 with the N64 leg and `--perf` as well), and it prints
-   its own time at the end.
+1. `bash tools/run-tests.sh` before you open anything. It needs a WAD
+   library, a built engine and Chrome. Measured on alder (i9-12900K):
+   12 min 13 s serial, 6 min 6 s with `--jobs 3`, 14 min 6 s with the N64
+   leg and `--perf` as well. It prints its own time at the end, which is
+   the number that applies to your host.
 2. A change to the simulation must be **tic-identical**: 13/13 demo
    goldens, byte for byte. If it is not, it is wrong, however good it
    looks.

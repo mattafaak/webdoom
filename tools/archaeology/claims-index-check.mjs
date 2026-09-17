@@ -333,7 +333,7 @@ function valueVariants(cell) {
     locatorReport = `${anchored} of ${graded} locators within ${WINDOW} lines of their anchor ` +
         `(${byNeedle} of them also carry a doc-drift needle) ` +
         `(${weak} values too short to locate, ${noline} section-style, ${nofile} outside docs/` +
-        (unanchored.length ? `, ${unanchored.length} not found in their document: ${unanchored.map(u => u.split(' ')[0]).join(', ')}` : '') + ')';
+        (unanchored.length ? `, ${unanchored.length} not mechanically locatable (the value is present but too common to pin, so the locator is verified by hand): ${unanchored.map(u => u.split(' ')[0]).join(', ')}` : '') + ')';
 }
 
 // 9. A derived row's arithmetic must compute what the row claims.

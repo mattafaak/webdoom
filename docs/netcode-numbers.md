@@ -95,8 +95,12 @@ measured:
 (83.88 ms ≈ 2.9 tics) reflects wbox's slower `sleep(14)` execution and the server's
 `sealSweep` interval (up to 50 ms), not TCP retransmit events. No multi-second stalls
 were observed in either path, and packet loss on Tailscale was 0% across all runs.
-TCP head-of-line blocking (triggered by segment loss + retransmit, typically adding
-200–400 ms per event) was not observed, consistent with near-zero loss on LAN/Tailscale.
+TCP head-of-line blocking (triggered by segment loss and retransmit) was not
+observed, consistent with near-zero loss on LAN and Tailscale. An earlier draft
+put "typically adding 200–400 ms per event" here. That figure had no source, no
+measurement and no citation, in the file with the best provenance in the repo,
+and describing the cost of an event this same sentence says was never seen. The
+magnitude is not needed for the verdict below: zero events at any cost is zero.
 
 **Verdict**: HOL blocking **does not threaten the no-WebRTC scope decision**. The
 observed p99 variance (≤ 84 ms, ≈ 3 tics) is bounded by `sealSweep` (50 ms) and

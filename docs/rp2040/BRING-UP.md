@@ -327,6 +327,9 @@ cmake -S tools/rp2040 -B tools/rp2040/build-pico \
 cmake --build tools/rp2040/build-pico
 
 # 2. rp2040js emulation boot test (requires .bin at 0x10000000 + bootrom)
+# NOTE: tools/rp2040/emu-boot-test.mjs is NOT in the tree.  This step is the
+# shape the boot test took, kept because the invocation is the useful part;
+# writing it is part of un-parking this target.
 RP2040JS=~/toolchains/emu/node_modules/rp2040js \
   node tools/rp2040/emu-boot-test.mjs tools/rp2040/build-pico/rp2040-doom.bin
 # Expected failure until SRAM deficit is resolved.

@@ -568,6 +568,15 @@ Notes (measurement transparency):
 
 ### Gate results (all with real WADs, non-vacuous)
 
+> **Four rows below describe a feature that no longer exists.** `render-wide`,
+> `sim-wide`, `sprite-witness` and `mixed-width-net` were the WIDESCREEN gates.
+> Widescreen was removed on 2026-09-12, and `tools/sprite-witness-test.mjs`,
+> `tools/mixed-width-net-test.mjs` and the `--render-wide` / `--sim-wide` flags
+> went with it. The rows stay because this is a record of what was run at the
+> time; they are not commands anyone can run now. See also the 366-against-368
+> disagreement noted at `docs/perf.md` §18.4 — the tool that could settle it is
+> one of the deleted ones.
+
 | gate | command | result |
 |------|---------|--------|
 | sim | `node tools/demo-test.mjs` | PASS — all demos bit-identical to golden **(13 demos)** |

@@ -40,7 +40,7 @@ while [ $# -gt 0 ]; do
         # opt-in because it reaches other machines (~30 s), not because it is
         # slow; it SKIPs, named and counted, in the default run
         --perf)             PERF=1; shift ;;
-        # n64-demos is ~7 min of the run; --no-slow is for iterating, and the
+        # n64-demos is ~8 min of the run; --no-slow is for iterating, and the
         # leg still SKIPs named and counted (--require-complete still fails)
         --no-slow)          NO_SLOW=1; shift ;;
         --full)             TIER=full; shift ;;
@@ -118,7 +118,7 @@ declare -A NEED=(
     [emsdk]='have_emsdk|emsdk not found (run: tools/setup-emsdk.sh)'
     [baseline]='have_baseline|no browser-pipeline baseline for host HOST'
     [shared]='have_shared|shared browser server on 8668 not started'
-    [slow]='have_notslow|--no-slow given: this leg is ~7 min of the suite'
+    [slow]='have_notslow|--no-slow given: this leg is ~8 min of the suite'
     [perf]='have_perf|perf tier not requested (run: tools/run-tests.sh --perf; ~30 s measured, needs wbox and tank up)'
     # not a prerequisite: under --jobs the leg runs with the pool drained
     [alone]='true|'
@@ -570,7 +570,7 @@ leg hostile-lobby   -          "hostile server frames vs the lobby client"  -- n
 leg wad-content-fuzz build,wad "hostile GENMIDI/MUS lump payloads (23.2)" -- node tools/wad-content-fuzz-test.mjs
 
 # ── browser suite ────────────────────────────────────────────────────────────
-# One shared server for the 16 legs that only need a page to load.  Started
+# One shared server for the 19 legs that only need a page to load.  Started
 # once, torn down by the single EXIT trap, readiness polled rather than slept.
 #
 # THE AGGREGATE SKIP THIS REPLACED
@@ -593,7 +593,7 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
             # on one lobby would see each other's games
             U=__SHARED_URL__; SHARED_UP=1
         elif serve_start 8668; then SHARED_UP=1; else
-            echo "  note: shared browser server on 8668 did not start — the 16 legs below will each SKIP"
+            echo "  note: shared browser server on 8668 did not start — the 19 legs below will each SKIP"
         fi
     fi
     leg browser-sp            browser,build,wad,shared "title -> menu -> new game -> movement" -- node tools/browser-test.mjs "$U"

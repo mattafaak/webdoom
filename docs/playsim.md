@@ -1008,6 +1008,20 @@ chase state.
 - Air control: the `onground` guard means the player cannot strafe in the air. This
   is vanilla behaviour and is demo-visible.
 
+The speed bytes themselves come from three tables in `g_game.c`, indexed by
+whether the run key is held. They are what the demo goldens replay, so they are
+stated here rather than left to the source:
+
+| table | values (walk, run) | units |
+|-------|--------------------|-------|
+| `forwardmove` | `{25,50}` map-units/tic | forward and back |
+| `sidemove` | `{24,40}` map-units/tic | strafe; note strafing is SLOWER than walking |
+| `angleturn` | `{640,1280,320}` | turn units; the third is the slow-turn value used on the first two tics of a turn |
+
+`ps-013`, `ps-014` and `ps-015` gate these against the source. Their locators
+pointed at §10's light specials for months, because the values appeared nowhere
+in this document for a locator to find.
+
 ### 14.3 View bob
 
 `P_CalcHeight` (p_user.c:77):

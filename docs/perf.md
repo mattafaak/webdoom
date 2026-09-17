@@ -57,13 +57,27 @@ and `node tools/archaeology/stamp-check.mjs` (total size, gzip size)
 | — | headers   |          244 |      0.2  | wasm magic + section framing |
 | — | **Total** |  **357,978** |  **349.6**| gzip-9: 145,990 bytes (142.6 KB) |
 
-The CODE section at 274.7 KB is the dominant cost; DATA at 73.5 KB covers
-initialized static storage (tables, strings, fixed arrays). The remaining
-sections together are < 1.4 KB.
+**Every number in that table is pinned to commit 6de6256 (2026-07-15), and the
+engine has shrunk by about a sixth since.** The per-section breakdown is why it
+is kept, and the pinned figures are internally consistent with each other, so
+they are not edited row by row — but they are history, not the current build,
+and this paragraph used to state them in the present tense.
 
-**Closure compiler** (`--closure 1`) + **LTO** (`-flto -O3`) are both active;
-`doom.js` (the ES6 module wrapper) compresses to 3.5 KB gzip. The wasm itself
-compresses 2.45× (349.6 KB → 142.6 KB), typical for compiled C via brotli/gzip.
+Read the live figures from the tools, which print them on every run:
+`wasm-stamp.mjs` for the sections and `size-ledger.mjs` for the totals. At the
+time of writing they read CODE **217.3 KB** against the pinned 274.7, DATA
+**74.1 KB** against 73.5, raw total **292.9 KB** against 349.6, and gzip-9
+**131.1 KB** against 142.6 — a compression ratio of **2.23×** where the pinned
+table computes 2.45×.
+
+What has not changed is the shape: the CODE section is the dominant cost, DATA
+covers initialized static storage (tables, strings, fixed arrays), and the
+remaining sections together are under 1.4 KB.
+
+**Closure compiler** (`--closure 1`) and **LTO** (`-flto -O3`) are both active.
+`doom.js`, the ES6 module wrapper, compresses to about 3.6 KB gzip (3,720 bytes
+at the time of writing; `payload-size.mjs` prints it). The pinned figure at
+6de6256 was 3,514 bytes.
 
 *Task-0.5 engine change note*: five zone-stat exports added
 (`web_zone_sample`, `web_zone_hwm`, `web_zone_size`, `web_zone_hwm_reset`,
@@ -1918,6 +1932,13 @@ BSP walk cost grows more modestly (same depth, more visible spans).
 `node tools/mixed-width-net-test.mjs` (task 18.4) confirmed 366 tics,
 0 mismatches between a 320-px client and an 854-px client in the same
 2-player lockstep session.
+
+**Both halves of that sentence are history.** Widescreen was removed on
+2026-09-12, so there is no 854-px client, and `tools/mixed-width-net-test.mjs`
+was deleted with it. It is also one of two records of the same run that
+disagree: `docs/optimization-ledger.md` says 368 tics where this says 366.
+Neither can be re-derived, so neither is corrected — and the disagreement is
+worth more as a marker than a silently chosen winner would be.
 
 ---
 

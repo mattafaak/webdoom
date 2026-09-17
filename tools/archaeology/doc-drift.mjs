@@ -197,8 +197,13 @@ const DOC_HINTS = {
     // actual (1208) is still checked against the manifest two-way; only the doc
     // parse is skipped. Tightening the doc to an exact number would over-claim
     // precision the original sentence deliberately didn't assert.
-    'ea-021': { soft: true,
-                reason: "doc states '1,200+' (a lower bound), not an exact figure" },
+    // Was soft, with the reason "doc states '1,200+' (a lower bound), not an
+    // exact figure".  True, and it meant the exact figure this claim exists to
+    // pin was checked against the manifest and never against the document.
+    // Round 12 put the number in the prose, so it is a hard check now.
+    'ea-021': { doc_file: 'engine-archaeology.md',
+                needle: 'luma-weighted metrics miss by',
+                extract_re: /luma-weighted metrics miss by ([\d,]+)/ },
 
     // ea-023: anchored on "matching **N/256**" so it can't accidentally bind to
     // another N/256 figure in the window (e.g. the "15/256 mismatches" clause
@@ -406,9 +411,19 @@ const DOC_HINTS = {
                 extract_re: /FLOATSPEED\s*=\s*(\d+)\*FRACUNIT/,
                 transform: v => String(parseInt(v, 10) * 65536) },
 
-    'ps-013': { soft: true, reason: 'forwardmove array literal not in playsim.md prose' },
-    'ps-014': { soft: true, reason: 'sidemove array literal not in playsim.md prose' },
-    'ps-015': { soft: true, reason: 'angleturn array literal not in playsim.md prose' },
+    // All three were soft because the arrays "are not in playsim.md prose",
+    // which was accurate and left the three movement constants the demo
+    // goldens replay checked only against the source.  §14.2 states them in a
+    // table now, so they are graded against the document like everything else.
+    'ps-013': { doc_file: 'playsim.md',
+                needle: '`forwardmove` | `{25,50}`',
+                extract_re: /`forwardmove` \| `(\{[\d,]+\})` map-units\/tic/ },
+    'ps-014': { doc_file: 'playsim.md',
+                needle: '`sidemove` | `{24,40}`',
+                extract_re: /`sidemove` \| `(\{[\d,]+\})` map-units\/tic/ },
+    'ps-015': { doc_file: 'playsim.md',
+                needle: '`angleturn` | `{640,1280,320}`',
+                extract_re: /`angleturn` \| `(\{[\d,]+\})`/ },
 
     'ps-016': { doc_file: 'playsim.md',
                 needle: '#define STOPSPEED   0x1000',

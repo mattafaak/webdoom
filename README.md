@@ -4,7 +4,9 @@ A slim, modern DOOM port for the browser, built directly from the
 [id-Software/DOOM](https://github.com/id-Software/DOOM) `linuxdoom-1.10`
 source. 293 KB of wasm, zero client install, zero-config multiplayer.
 
-- Runs in stock Chrome / Edge / Firefox (WASM + WebGL2 + WebAudio)
+- Runs in stock Chrome and Firefox (WASM + WebGL2 + WebAudio), and in Edge,
+  which is Chromium and is therefore not separately tested — see
+  `docs/promises-index.md` rme-002
 - Uncapped framerate with 35 Hz-exact game logic (Crispy-style
   interpolation; "vanilla mode" toggle under OPTIONS on the launcher menu)
 - Modern controls: pointer-lock mouse, WASD, rebindable keys, analog
@@ -70,9 +72,11 @@ re-probes. `tools/deploy.sh --check` reports drift and changes nothing.
 ## Tests
 
 ```sh
-tools/run-tests.sh            # everything: 80 legs, ~12 min without the N64 leg (the runner prints its time)
-tools/run-tests.sh --jobs 3   # the same legs three at a time: ~6 min, identical verdicts
-                              # (~14 min with the N64 leg and the perf tier)
+tools/run-tests.sh            # everything: 80 legs.  Measured on alder (i9-12900K):
+                              # 12 min 13 s serial, 79 legs, 2 skipped
+tools/run-tests.sh --jobs 3   # the same legs three at a time: 6 min 6 s, identical verdicts
+                              # (14 min 6 s with the N64 leg and the perf tier)
+                              # The runner prints its own time; your host is not alder.
 tools/run-tests.sh --quick    # no WADs, no build, no browser — what CI runs
 tools/run-tests.sh --list     # the leg registry
 ```

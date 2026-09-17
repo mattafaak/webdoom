@@ -287,7 +287,7 @@ i.e. darken each palette colour by the linear factor `(32−L)/32`, round
 to nearest, and take the **Euclidean**-nearest palette index. Against
 `doom.wad` this reproduces COLORMAP **exactly: 0 / 8,192 mismatches, all
 32 levels exact**. It is tightly determined for that palette: Manhattan
-and luma-weighted metrics miss by 1,200+; truncation instead of rounding
+and luma-weighted metrics miss by 1,208; truncation instead of rounding
 misses by 313; the `(31−L)/31` scale misses by 2,373.
 
 ⚠️ **This doc previously claimed the recipe was "proven universal,"
