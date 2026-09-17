@@ -4,6 +4,8 @@
 import { createServer } from 'node:http';
 import { createReadStream, readFileSync, statSync } from 'node:fs';
 import { join, normalize, extname } from 'node:path';
+import { brotliCompressSync, gzipSync, constants as zc } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createGame } from './game.js';
 import { uiAssets } from './ui-assets.js';
@@ -74,12 +76,71 @@ const SECURITY_HEADERS = {
     ].join('; '),
 };
 
+// ── representations: negotiated encoding and ETags ──────────────────────────
+// Text, JSON and wasm bodies of 1 KB or more are compressed once per distinct
+// body (br > gzip > identity, by Accept-Encoding) and served from memory: the
+// shell is a few dozen files and the engine 300 KB, so the cache is bounded by
+// the tree, not by traffic.  The ETag is the body's hash, suffixed per
+// encoding, and a matching If-None-Match answers 304 with no body.  Hashed
+// immutable URLs would do nothing here: the service worker is network-first
+// for the shell, so every load revalidates anyway -- revalidation is the lever,
+// and a 304 moves headers only.  `key` names the bytes (path + mtime + size
+// for a file); a generated body is keyed by its own hash.
+const COMPRESSIBLE = /^(text\/|application\/(json|wasm|javascript))/;
+const MIN_COMPRESS = 1024;
+const REPS_MAX = 64;
+const reps = new Map();               // key -> { raw, etag, br?, gz? }
+
+const sha = buf => createHash('sha1').update(buf).digest('base64url').slice(0, 16);
+function representation(key, raw) {
+    const hash = key ? null : sha(raw);
+    const k = key ?? `h:${hash}`;
+    let r = reps.get(k);
+    if (!r) {
+        if (reps.size >= REPS_MAX) reps.delete(reps.keys().next().value);   // oldest
+        r = { raw, etag: `"${hash ?? sha(raw)}"` };
+        reps.set(k, r);
+    }
+    return r;
+}
+const encode = (r, enc) =>
+    enc === 'br'   ? (r.br ??= brotliCompressSync(r.raw, { params: {
+                          [zc.BROTLI_PARAM_QUALITY]: 6, [zc.BROTLI_PARAM_SIZE_HINT]: r.raw.length } }))
+  : enc === 'gzip' ? (r.gz ??= gzipSync(r.raw, { level: 9 }))
+  : r.raw;
+function pickEncoding(req) {
+    const ae = String(req.headers['accept-encoding'] ?? '');
+    if (/(^|,)\s*br\s*(;\s*q=(?!0(\.0*)?\s*(,|$)))?\s*(,|$)/.test(ae)) return 'br';
+    if (/(^|,)\s*gzip\s*(;\s*q=(?!0(\.0*)?\s*(,|$)))?\s*(,|$)/.test(ae)) return 'gzip';
+    return null;
+}
+const etagMatches = (inm, etag) =>
+    !!inm && inm.split(',').some(t => t.trim().replace(/^W\//, '') === etag);
+
 // one guard for every path that could answer a request twice (a body timer
 // racing 'error', 'error' racing 'end'): a second writeHead would throw
-function send(res, code, body, headers = {}) {
+function send(req, res, code, body, headers = {}, key = null) {
     if (res.headersSent || res.writableEnded) return;
-    res.writeHead(code, { 'cache-control': 'no-store', ...SECURITY_HEADERS, ...headers });
-    res.end(body);
+    const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body ?? ''));
+    const type = headers['content-type'] ?? 'text/plain; charset=utf-8';
+    const base = { 'cache-control': 'no-cache', ...SECURITY_HEADERS, 'content-type': type, ...headers };
+    if (code !== 200 || buf.length < MIN_COMPRESS || !COMPRESSIBLE.test(type)) {
+        res.writeHead(code, { ...base, 'content-length': buf.length });
+        return res.end(buf);
+    }
+    const r = representation(key, buf);
+    const enc = pickEncoding(req);
+    const etag = enc ? r.etag.replace(/"$/, `-${enc}"`) : r.etag;
+    const out = { ...base, etag, vary: 'accept-encoding' };
+    if (etagMatches(req.headers['if-none-match'], etag)) {
+        res.writeHead(304, out);
+        return res.end();
+    }
+    const data = encode(r, enc);
+    if (enc) out['content-encoding'] = enc;
+    out['content-length'] = data.length;
+    res.writeHead(code, out);
+    res.end(data);
 }
 
 const LOG_REQ = !!process.env.LOG_REQUESTS;   // per-request log to stderr, for smoke tests
@@ -88,10 +149,13 @@ const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
     let path = normalize(url.pathname);
     if (LOG_REQ) process.stderr.write(`${req.method} ${path} ${req.headers['user-agent'] ?? '-'}\n`);
-    if (path.includes('..')) return send(res, 400, 'bad path');
+    if (path.includes('..')) return send(req, res, 400, 'bad path');
 
-    if (path === '/api/wads')
-        return send(res, 200, manifest().body, { 'content-type': 'application/json' });
+    if (path === '/api/wads') {
+        const m = manifest();
+        return send(req, res, 200, m.body, { 'content-type': 'application/json' },
+                    m.mtimeMs ? `wads:${m.mtimeMs}:${m.body.length}` : null);
+    }
 
     // ── demo store ────────────────────────────────────────────────────────────
     // POST /api/demos?wad=<file>   raw .lmp body up to PER_DEMO_CAP → 201 {id, size}
@@ -106,28 +170,28 @@ const server = createServer((req, res) => {
             size += chunk.length;
             if (size <= PER_DEMO_CAP) chunks.push(chunk);
         });
-        req.on('error', () => send(res, 400, 'read error'));
+        req.on('error', () => send(req, res, 400, 'read error'));
         req.on('end', () => {
             if (size > PER_DEMO_CAP)
-                return send(res, 413, `demo exceeds ${PER_DEMO_CAP} byte cap`);
+                return send(req, res, 413, `demo exceeds ${PER_DEMO_CAP} byte cap`);
             const bytes = Buffer.concat(chunks);
             let id;
             try { id = putDemo(bytes, wad); }
-            catch (e) { return send(res, e.status ?? 500, e.message ?? 'store error'); }
-            send(res, 201, JSON.stringify({ id, size: bytes.length }),
+            catch (e) { return send(req, res, e.status ?? 500, e.message ?? 'store error'); }
+            send(req, res, 201, JSON.stringify({ id, size: bytes.length }),
                 { 'content-type': 'application/json' });
         });
         return;
     }
     if (path === '/api/demos/stats') {
-        if (req.method !== 'GET') return send(res, 405, 'method not allowed');
-        return send(res, 200, JSON.stringify(storeStats()), { 'content-type': 'application/json' });
+        if (req.method !== 'GET') return send(req, res, 405, 'method not allowed');
+        return send(req, res, 200, JSON.stringify(storeStats()), { 'content-type': 'application/json' });
     }
     const demoMatch = path.match(/^\/api\/demos\/([0-9a-f]{64})$/);
     if (demoMatch) {
-        if (req.method !== 'GET') return send(res, 405, 'method not allowed');
+        if (req.method !== 'GET') return send(req, res, 405, 'method not allowed');
         const rec = getDemo(demoMatch[1]);
-        if (!rec) return send(res, 404, 'demo not found');
+        if (!rec) return send(req, res, 404, 'demo not found');
         res.writeHead(200, {
             'content-type': 'application/octet-stream',
             'content-length': rec.bytes.length,
@@ -137,15 +201,15 @@ const server = createServer((req, res) => {
         res.end(rec.bytes);
         return;
     }
-    if (path.startsWith('/api/demos/')) return send(res, 400, 'invalid demo id');
+    if (path.startsWith('/api/demos/')) return send(req, res, 400, 'invalid demo id');
 
     if (path === '/api/ui-assets') {
         const { parsed } = manifest();
-        if (!parsed) return send(res, 503, 'wads/manifest.json is unreadable or not valid JSON — run tools/fetch-wads.sh');
+        if (!parsed) return send(req, res, 503, 'wads/manifest.json is unreadable or not valid JSON — run tools/fetch-wads.sh');
         const assets = uiAssets(join(root, 'wads/lib'), parsed);
         return assets
-            ? send(res, 200, assets, { 'content-type': 'application/json' })
-            : send(res, 404, 'no IWAD available');
+            ? send(req, res, 200, assets, { 'content-type': 'application/json' })
+            : send(req, res, 404, 'no IWAD available');
     }
     if (path === '/') path = '/index.html';
 
@@ -155,13 +219,26 @@ const server = createServer((req, res) => {
         let st;
         try { st = statSync(file); } catch { continue; }
         if (!st.isFile()) continue;
+        const type = MIME[extname(file)] ?? 'application/octet-stream';
+
+        // the shell and the engine: negotiated, ETagged, revalidated
+        if (prefix !== '/wads/' && COMPRESSIBLE.test(type)) {
+            let bytes;
+            try { bytes = readFileSync(file); }
+            catch (err) {
+                console.error(`webdoom: read failed for ${file} — ${err?.code ?? err?.message}`);
+                return send(req, res, 404, 'not found');
+            }
+            return send(req, res, 200, bytes, { 'content-type': type },
+                        `${file}:${st.mtimeMs}:${st.size}`);
+        }
 
         // WADs are immutable by content; the client caches by manifest hash
         res.writeHead(200, {
             ...SECURITY_HEADERS,
-            'content-type': MIME[extname(file)] ?? 'application/octet-stream',
+            'content-type': type,
             'content-length': st.size,
-            'cache-control': prefix === '/wads/' ? 'public, max-age=31536000, immutable' : 'no-store',
+            'cache-control': prefix === '/wads/' ? 'public, max-age=31536000, immutable' : 'no-cache',
         });
         // a file that vanishes between stat and open errors the stream;
         // headers are out, so the honest recovery is a truncated body
@@ -173,7 +250,7 @@ const server = createServer((req, res) => {
         stream.pipe(res);
         return;
     }
-    send(res, 404, 'not found');
+    send(req, res, 404, 'not found');
 });
 
 // the lobby's `wad` is cast to every client, so the server names what it

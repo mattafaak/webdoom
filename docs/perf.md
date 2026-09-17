@@ -1267,7 +1267,7 @@ did not move**.  The layout dependency those goldens once had was a real
 read past the end of an array, fixed since; nothing in the shipping engine
 depends on where the heap starts.
 
-1. `__heap_base` 4,722,048 → 1,512,336 B (−3,209,744 B), all of it heap
+1. `__heap_base` 4,722,048 → 1,512,336 B (−3,209,712 B), all of it heap
    headroom: worst PWAD combo peak 26.13 → 23.06 MB under 32 MB.
 2. Wire-transfer size: none (stack is runtime layout, not CODE/DATA);
    `doom.wasm` 355,883 → 355,395 B from the buffer's removal.
@@ -1389,6 +1389,30 @@ The noise floor was measured in the same sitting: relinking the unchanged
 `node tools/bench.mjs doom.wad 3 --json` on alder, same wad, same reps,
 same host, before and after; the 13 sim, render and low-detail goldens are
 byte-identical. `perf-fleet --check` (wbox, tank) gates the fleet.
+
+
+### The wire: negotiated encoding and revalidation (round 10, 2026-09-16)
+
+Until round 10 the server sent every shell file, the engine and the UI-asset
+payload uncompressed and `no-store`, so every launcher load paid the whole
+tree again. `server/serve.js` now negotiates `br` > `gzip` > identity for
+text, JSON and wasm bodies of 1 KB or more, compressed once per distinct body
+and served from memory, with a content-hash ETag per representation and a
+304 on a matching `If-None-Match`. The service worker is network-first for
+the shell, so revalidation, not hashed immutable URLs, is the lever: a repeat
+load moves headers only.
+
+Measured on alder with `curl -w %{size_download}` over the 24 `SHELL_FILES`
+plus `/api/ui-assets`, same tree, same server:
+
+| load | bytes on the wire |
+|------|-------------------|
+| identity (before) | 1,259,266 |
+| `Accept-Encoding: br` (after) | **444,440 (−65%)** |
+| repeat load with ETags | headers only (304 per file) |
+
+Gated by `http-fuzz` ("the wire" cases: encoded content-length, decode-back,
+`Vary`, per-representation ETag, 304, HTTP/1.0 identity).
 
 
 ## PSX fire launcher background — perf note

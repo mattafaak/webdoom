@@ -7,6 +7,7 @@
 //
 // All cases derived from ws-005 on-paper analysis in docs/web-scrutiny.md.
 // usage: node tools/http-fuzz-test.mjs
+// Also the wire: negotiated br/gzip, ETag/304, on the real server (round 10).
 import { spawn } from 'node:child_process';
 import { createConnection } from 'node:net';
 import { join, dirname } from 'node:path';
@@ -376,6 +377,86 @@ async function checkUiAssetCache() {
 
 console.log('\nui-asset cache — an operator adds a WAD, with no restart:');
 await checkUiAssetCache();
+
+// ── the wire: negotiated encoding, ETags, 304 ────────────────────────────────
+//
+// Every shell file, the engine and the UI-asset payload went out uncompressed
+// and no-store on every load: ~1.3 MB per cold launcher against ~0.4 MB
+// negotiated.  The cases below drive the real server over raw sockets so the
+// content-length is the ENCODED length actually on the wire, and decode the
+// body themselves -- fetch() would decompress and hide both.
+async function checkWire() {
+    const { brotliDecompressSync, gunzipSync } = await import('node:zlib');
+    const { Buffer } = globalThis;
+    const s = spawnServer();
+    for (let i = 0; i < 40; i++) { await sleep(100); if (await healthCheck(s.host, s.port)) break; }
+    const get = (path, extra = '') => rawHttp(s.host, s.port,
+        `GET ${path} HTTP/1.1\r\nHost: ${s.host}:${s.port}\r\nConnection: close\r\n${extra}\r\n`);
+    const hdr = (r, name) => (r.headers.match(new RegExp(`^${name}: (.*)$`, 'mi')) ?? [])[1]?.trim() ?? null;
+    const bodyBuf = r => Buffer.from(r.body, 'binary');
+
+    // identity, HTTP/1.0 with no Accept-Encoding (the thirteen cases above)
+    const plain = await rawHttp(s.host, s.port, makeGet('/', s.host, s.port));
+    check('wire: no Accept-Encoding gets identity', plain.status === 200 && !hdr(plain, 'content-encoding')
+          && /<!doctype/i.test(plain.body), `status=${plain.status} enc=${hdr(plain, 'content-encoding') ?? 'none'}`);
+    check('wire: identity content-length is the body length',
+          +hdr(plain, 'content-length') === bodyBuf(plain).length, `${hdr(plain, 'content-length')} vs ${bodyBuf(plain).length}`);
+
+    // br, then gzip, each with the content-length of the ENCODED body
+    const br = await get('/', 'Accept-Encoding: br, gzip\r\n');
+    let brOk = false;
+    try { brOk = brotliDecompressSync(bodyBuf(br)).equals(bodyBuf(plain)); } catch { /* not brotli */ }
+    check('wire: br negotiated for /', br.status === 200 && hdr(br, 'content-encoding') === 'br' && brOk,
+          `status=${br.status} enc=${hdr(br, 'content-encoding')} decodes-to-identity=${brOk}`);
+    check('wire: br content-length is the encoded length',
+          +hdr(br, 'content-length') === bodyBuf(br).length && bodyBuf(br).length < bodyBuf(plain).length,
+          `${hdr(br, 'content-length')} on the wire vs ${bodyBuf(plain).length} identity`);
+    check('wire: Vary: Accept-Encoding on a negotiated response',
+          /accept-encoding/i.test(hdr(br, 'vary') ?? ''), hdr(br, 'vary') ?? '(absent)');
+
+    const gz = await get('/js/lobby.js', 'Accept-Encoding: gzip\r\n');
+    let gzOk = false;
+    try { gzOk = /export|import/.test(gunzipSync(bodyBuf(gz)).toString()); } catch { /* not gzip */ }
+    check('wire: gzip negotiated for a script', gz.status === 200 && hdr(gz, 'content-encoding') === 'gzip' && gzOk
+          && +hdr(gz, 'content-length') === bodyBuf(gz).length,
+          `status=${gz.status} enc=${hdr(gz, 'content-encoding')} len=${hdr(gz, 'content-length')}/${bodyBuf(gz).length}`);
+
+    // the big one: the UI-asset payload
+    const ui = await get('/api/ui-assets', 'Accept-Encoding: br\r\n');
+    if (ui.status === 200) {
+        let parsed = false;
+        try { parsed = !!JSON.parse(brotliDecompressSync(bodyBuf(ui)).toString()).lumps; } catch { /* no */ }
+        check('wire: /api/ui-assets goes out br and parses back', hdr(ui, 'content-encoding') === 'br' && parsed,
+              `${bodyBuf(ui).length} B on the wire, enc=${hdr(ui, 'content-encoding')}`);
+    } else {
+        check('wire: /api/ui-assets declined (no IWAD here), which is not the thing under test', true, `status=${ui.status}`);
+    }
+
+    // ETag: a 304 with no body, per representation
+    const etag = hdr(plain, 'etag');
+    const rev = await get('/', `If-None-Match: ${etag}\r\n`);
+    check('wire: ETag revalidation answers 304 with no body', !!etag && rev.status === 304 && rev.body.length === 0
+          && hdr(rev, 'etag') === etag, `etag=${etag} status=${rev.status} body=${rev.body.length}`);
+    const cross = await get('/', `If-None-Match: ${etag}\r\nAccept-Encoding: br\r\n`);
+    check('wire: the identity ETag does not validate the br representation', cross.status === 200
+          && hdr(cross, 'etag') !== etag, `status=${cross.status} etag=${hdr(cross, 'etag')}`);
+    const revBr = await get('/', `If-None-Match: ${hdr(br, 'etag')}\r\nAccept-Encoding: br\r\n`);
+    check('wire: the br ETag validates the br representation', revBr.status === 304, `status=${revBr.status}`);
+    check('wire: shell is no-cache, not no-store, so the 304 can be used',
+          /no-cache/.test(hdr(plain, 'cache-control') ?? '') && !/no-store/.test(hdr(plain, 'cache-control') ?? ''),
+          hdr(plain, 'cache-control') ?? '(absent)');
+    // security headers survive the negotiated path too (they are asserted on the
+    // identity path above)
+    check('wire: security headers on a negotiated response',
+          hdr(br, 'x-content-type-options') === 'nosniff' && !!hdr(br, 'content-security-policy'),
+          hdr(br, 'x-content-type-options') ?? '(absent)');
+    const alive = await healthCheck(s.host, s.port);
+    check('wire: server still up', alive && !s.didCrash(), `alive=${alive}`);
+    s.kill();
+}
+
+console.log('\nthe wire — negotiated encoding and revalidation:');
+await checkWire();
 
 const failed = results.filter(r => !r.ok);
 const total = results.length;
