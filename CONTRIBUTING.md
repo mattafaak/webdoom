@@ -9,7 +9,8 @@ are what keep it small.
    library, a built engine and Chrome. The whole thing, with the N64 leg,
    the perf tier and `--require-complete`, took **9 min 37 s** on alder
    (i9-12900K, 24 threads) on 2026-09-17 at `--jobs 6`: 82 of 82 legs,
-   nothing skipped. Use `--jobs 6` — the same run is 10 min 42 s at 3 and
+   nothing skipped. (The registry is 83 now; that run predates the
+   `vacuity-census` leg, and a measurement keeps the count it measured.) Use `--jobs 6` — the same run is 10 min 42 s at 3 and
    9 min 24 s at 10, so 6 is where the curve flattens, and all three arms
    returned the same 82 verdicts. On a host with fewer cores, try 3. It
    prints its own time at the end, and that is the number that applies to

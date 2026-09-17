@@ -72,10 +72,11 @@ re-probes. `tools/deploy.sh --check` reports drift and changes nothing.
 ## Tests
 
 ```sh
-tools/run-tests.sh            # everything: 82 legs, one at a time
+tools/run-tests.sh            # everything: 83 legs, one at a time
 tools/run-tests.sh --jobs 6   # the same legs six at a time, identical verdicts
                               # Measured on alder (i9-12900K, 24 threads),
-                              # 2026-09-17, --perf --require-complete, 82 of 82
+                              # 2026-09-17, --perf --require-complete, over the
+                              # 82 legs that existed that morning — 82 of 82
                               # passed and nothing skipped in every arm:
                               #   --jobs 3   10 min 42 s
                               #   --jobs 6    9 min 37 s   <- the recommendation

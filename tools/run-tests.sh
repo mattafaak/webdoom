@@ -460,6 +460,11 @@ leg web-registry    build "file-registry cap + the MAXWEBFILES mirror"  -- node 
 # Nothing compared them until round 6.
 leg wire-constants  -     "cross-wire constants agree on both sides"    -- node tools/check-wire-constants.mjs
 leg gate-census     -    "every gate is wired or registered with a reason" -- node tools/gate-census.mjs
+# gate-census asks whether a gate RUNS.  This asks whether a gate that runs can
+# lie -- the three shapes CLAUDE.md names, checked across every leg's tool.  It
+# was task 26.4, owed since round 12 because all four known instances were found
+# by tracing one bug and nobody had ever swept for the rest.
+leg vacuity-census  -    "no leg tool can exit 0 after giving up, or disarm its own later cases" -- node tools/vacuity-census.mjs
 # A document may not contradict the project's own record of what is done.  The
 # claims machinery checks NUMBERS against code and nothing checked STATUS prose:
 # task 24.4's own stale-doc banner said "ZONESIZE is still open" about a change
