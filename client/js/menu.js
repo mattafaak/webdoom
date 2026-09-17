@@ -186,7 +186,17 @@ export function createMenu(font, host, opts = {}) {
         // constrain columns to the menu's fixed width so they never run off
         // the screen. Measure the widest row, then cap the height so it
         // wraps into only as many columns as fit.
-        if (!hasThumb && list.children.length > 8) {
+        // `wrapped`, not a second guess at it.  This read
+        // `!hasThumb && list.children.length > 8` -- the same shape as the
+        // scale decision at the top of render() but WITHOUT its `!s.nowrap`
+        // term, so the two disagreed for exactly the screens that opt out of
+        // columns.  CONTROLS is twelve rows with nowrap: true; on a short
+        // viewport the scale loop drops to 2, the measured row width shrinks,
+        // `cols` comes out 2 or 3, and CONTROLS renders in columns against its
+        // own contract.  browser-options drives it at 1280x960, where it does
+        // not reproduce.  One variable, computed once, cannot drift from
+        // itself.
+        if (wrapped) {
             const rows = [...list.children];
             const rowH = rows[0].offsetHeight, gapV = 6, gapH = 56;
             const rowW = Math.max(...rows.map(r => r.offsetWidth));

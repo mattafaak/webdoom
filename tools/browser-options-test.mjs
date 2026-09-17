@@ -398,9 +398,43 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
     check('and back to OPL2 -- there is no third backend', /OPL2/.test(String(m2 ?? '')), `row reads ${JSON.stringify(m2)}`);
 }
 
+// ── CONTROLS must stay one column on a short viewport ────────────────────────
+//
+// render() decided columns TWICE: once for the scale, with
+// `!s.nowrap && !hasThumb && items.length > 8`, and once again for maxHeight
+// with the same shape MINUS the `!s.nowrap` term.  So the two disagreed for
+// exactly the screens that opt out of columns.  CONTROLS is twelve rows with
+// nowrap: true, and on a short viewport the scale loop drops to 2, the measured
+// row width shrinks, cols comes out 2 or 3, and CONTROLS wrapped against its
+// own contract.
+//
+// This suite never saw it because it drives Chrome at 1280x960, where the
+// scale never drops far enough.  So the assertion has to resize.
+{
+    await cdp('Page.reload');
+    await sleep(1800);
+    await cdp('Emulation.setDeviceMetricsOverride',
+              { width: 900, height: 540, deviceScaleFactor: 1, mobile: false });
+    await sleep(400);
+    if (!await openOptions())  hardFail('OPTIONS would not open at 900x540');
+    if (!await openControls()) hardFail('CONTROLS would not open at 900x540');
+    const geom = await ev(`(() => {
+        const list = document.querySelector('#dmenu .items');
+        const rs = [...list.children];
+        return { n: rs.length,
+                 cols: [...new Set(rs.map(r => Math.round(r.offsetLeft)))].length,
+                 maxHeight: list.style.maxHeight || '' };
+    })()`);
+    check('CONTROLS stays ONE column at 900x540 (nowrap honoured by both decisions)',
+          geom.n > 8 && geom.cols === 1 && geom.maxHeight === '',
+          `${geom.n} rows in ${geom.cols} column(s), maxHeight="${geom.maxHeight}"`);
+    await cdp('Emulation.clearDeviceMetricsOverride');
+    await sleep(200);
+}
+
 // A run that asserted nothing must not pass.  The old F8 test held 28; this
 // screen has more surface, so the floor goes up rather than down.
-if (results.length < 29) hardFail(`only ${results.length} assertions ran — the suite did not complete`);
+if (results.length < 30) hardFail(`only ${results.length} assertions ran — the suite did not complete`);
 const uncaught = excs.filter(e => !/ResizeObserver/.test(e));
 check('no uncaught exception while abusing the OPTIONS surface',
     uncaught.length === 0, uncaught.slice(0, 3).join(' | ') || 'none');
