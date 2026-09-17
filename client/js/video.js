@@ -2,6 +2,12 @@
 // an R8 texture and palettized in the fragment shader (palette flashes
 // cost a 256x1 texture upload, nothing more). Canvas2D fallback included.
 //
+// The framebuffer is column-major (screens[0][x*200 + y], since 14.2a) and
+// is uploaded exactly as the engine holds it: a 200-wide, 320-tall texture
+// whose row x is screen column x.  The shader samples it with the axes
+// swapped, so the transpose costs nothing anywhere (round 10; the engine
+// used to untranspose 64,000 bytes per displayed frame into a second buffer).
+//
 // Per-frame timing is collected when window.__wd_perf is set (enabled by the
 // ?perfmarks=1 query flag in main.js).  The perf object must be initialised
 // before createRenderer() is called, but the draw() hot-path only pays for a
@@ -22,7 +28,7 @@ precision mediump float;
 uniform sampler2D fb, pal;
 in vec2 uv; out vec4 color;
 void main() {
-    float idx = texture(fb, uv).r * 255.0;
+    float idx = texture(fb, uv.yx).r * 255.0;
     color = texture(pal, vec2((idx + .5) / 256.0, .5));
 }`;
 
@@ -68,19 +74,10 @@ export function createRenderer(canvas) {
     mkTex(1);
     gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB8, 256, 1);
 
-    // Framebuffer texture — R8, 320x200, immutable.
-    let fbTex = null;
-    let currentW = 0, currentH = 0;
-
-    function allocFbTex(w, h) {
-        if (fbTex) gl.deleteTexture(fbTex);
-        fbTex = mkTex(0);            // activeTexture(TEXTURE0), create+bind
-        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8, w, h);
-        currentW = w;
-        currentH = h;
-    }
-
-    allocFbTex(320, 200); // initial allocation
+    // Framebuffer texture — R8, 200 wide x 320 tall (column-major), immutable.
+    const FB_W = 200, FB_H = 320;
+    mkTex(0);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8, FB_W, FB_H);
 
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.uniform1i(gl.getUniformLocation(prog, 'fb'), 0);
@@ -115,7 +112,7 @@ export function createRenderer(canvas) {
             // (b) framebuffer texture upload + GPU draw
             const t1 = perf ? performance.now() : 0;
             gl.activeTexture(gl.TEXTURE0);
-            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, currentW, currentH, gl.RED, gl.UNSIGNED_BYTE, framebuffer);
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, FB_W, FB_H, gl.RED, gl.UNSIGNED_BYTE, framebuffer);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
             if (perf) perf.upload.push(performance.now() - t1);
         },
@@ -128,7 +125,6 @@ function createRenderer2D(canvas) {
     const ctx = canvas.getContext('2d');
     let img = ctx.createImageData(320, 200);
     let rgba = new Uint32Array(img.data.buffer);
-    let currentW = 320, currentH = 200;
     const lut = new Uint32Array(256);
 
 
@@ -152,11 +148,11 @@ function createRenderer2D(canvas) {
                     lut[i] = 0xff000000 | (palette[i*3+2] << 16) | (palette[i*3+1] << 8) | palette[i*3];
                 if (perf) perf.palette.push(performance.now() - t0);
             }
-            // (b) pixel expansion + putImageData upload
+            // (b) pixel expansion (column-major in, row-major out) + putImageData
             const t1 = perf ? performance.now() : 0;
-            const n = currentW * currentH;
-            for (let i = 0; i < n; i++)
-                rgba[i] = lut[framebuffer[i]];
+            for (let y = 0; y < 200; y++)
+                for (let x = 0, o = y * 320; x < 320; x++)
+                    rgba[o + x] = lut[framebuffer[x * 200 + y]];
             ctx.putImageData(img, 0, 0);
             if (perf) perf.upload.push(performance.now() - t1);
         },

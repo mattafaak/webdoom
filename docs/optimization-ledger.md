@@ -254,7 +254,10 @@ strictly safer than vanilla's shipping behavior (no guard at all).
 
 **Verdict: LANDED (14.2g)**
 
-Notes: The wasm `STACK_SIZE=4MB` is NOT changed — perf.md §Q2/Axis 3 verdict "keep 4 MB" stands.
+Notes: The wasm `STACK_SIZE` followed in round 10 (2026-09-16): 4 MB → 1 MB, together with the removal of the
+64,000-byte untranspose buffer in `engine/web/i_video.c` (JS reads `screens[0]` in place; the GPU swaps the axes).
+`__heap_base` 4,722,048 → 1,512,304 B, `doom.wasm` 355,883 → 355,395 B, 13/13 sim, render and low-detail
+goldens unmoved — the regold perf.md Axis 3 feared did not happen. Until then the wasm was NOT changed.
 The tools/baremetal linker (doom.ld) has no explicit 4 MiB stack block; stack is whatever RAM
 remains above .bss (implicitly ~several MiB of headroom in QEMU, practically ≪1 MiB used).
 The task lands as a **proof-and-gate** step: 1 MiB is proven sufficient for all 13 golden demos
@@ -424,7 +427,7 @@ sanctioned by policy).**
 | C4 | MAXVISPLANES 1024→128 | RAM / portability | 0 instr/tic; 581 KiB BSS savings (896 × 664 bytes) | LANDED (14.2d) |
 | C5 | MAXDRAWSEGS 2048→256 | RAM / portability | 0 instr/tic; 84 KiB BSS savings (1792 × 48 B); peak 205/256 ⚠️ thin 1.25× | LANDED — 14.2e |
 | C6 | MAXOPENINGS 320×256→320×64 | RAM / portability | 0 instr/tic; 120 KiB BSS savings (61,440 × 2 bytes); peak 2,527/20,480 = 8.1× margin | LANDED — 14.2f |
-| C7 | STACK_SIZE 4→1 MiB (bare-metal builds) | RAM / portability | 0 instr/tic; measured peak ≈14 KiB (fs-doom) / ≈128 KiB (harness); 1 MiB = 70×/8× margin; wasm unchanged | LANDED (14.2g) |
+| C7 | STACK_SIZE 4→1 MiB (bare-metal builds) | RAM / portability | 0 instr/tic; measured peak ≈14 KiB (fs-doom) / ≈128 KiB (harness); 1 MiB = 70×/8× margin; wasm followed in round 10 (2026-09-16), goldens unmoved | LANDED (14.2g) |
 | K1 | R_DrawSpan u32 packing | cycle-floor | wbox +7.9% planes REGRESSION | KILLED |
 | K2 | wasm SIMD | cycle-floor | no gather in v128 | KILLED |
 | K3 | Visplane hash | cycle-floor | ceiling 2.9% of planes, probe depth 6.6 | KILLED |

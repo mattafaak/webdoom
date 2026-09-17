@@ -1,10 +1,9 @@
-// webdoom i_video: the engine composes into screens[0] (column-major after
-// 14.2a); JS reads a row-major untransposed copy via web_framebuffer().
-//
-// Layout after 14.2a: screens[0][x*SCREENHEIGHT + y] = pixel(x,y).
-// I_FinishUpdate untransposes into web_rowmajor_buf[] which JS hashes and
-// palettizes; the pointer returned by web_framebuffer() is stable across
-// frames (same static buffer address every call).
+// webdoom i_video: the engine composes into screens[0] (column-major since
+// 14.2a: screens[0][x*SCREENHEIGHT + y] = pixel(x,y)) and JS reads it in
+// place through web_framebuffer().  There is no presentation copy: the
+// column-major bytes go up as a 200x320 R8 texture and the fragment shader
+// swaps the axes (client/js/video.js).  Until round 10 I_FinishUpdate
+// untransposed 64,000 bytes into a second buffer on every displayed frame.
 //
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <emscripten.h>
@@ -17,10 +16,6 @@
 
 static byte webpalette[256 * 3];
 static int paletteversion; // bumped on every I_SetPalette
-
-// Row-major presentation buffer: JS reads this.  Populated by I_FinishUpdate.
-// Sized to SCREENWIDTH; only the first SCREENWIDTH columns are populated.
-static byte web_rowmajor_buf[SCREENWIDTH * SCREENHEIGHT];
 
 void I_InitGraphics (void) {}
 
@@ -36,19 +31,8 @@ void I_SetPalette (byte* palette)
 
 void I_UpdateNoBlit (void) {}
 
-// Untranspose screens[0] (column-major) → web_rowmajor_buf (row-major).
-// JS reads the row-major buffer for palette-indexed rendering and hashing.
-void I_FinishUpdate (void)
-{
-    const byte* src = screens[0];
-    int x, y;
-    for (x = 0; x < SCREENWIDTH; x++)
-    {
-        const byte* col = src + x * SCREENHEIGHT;
-        for (y = 0; y < SCREENHEIGHT; y++)
-            web_rowmajor_buf[y * SCREENWIDTH + x] = col[y];
-    }
-}
+// nothing to do: the frame is complete in screens[0] when D_DoomFrame returns
+void I_FinishUpdate (void) {}
 
 void I_ReadScreen (byte* scr)
 {
@@ -58,12 +42,13 @@ void I_ReadScreen (byte* scr)
 
 // --- JS bridge ---------------------------------------------------------
 
+// screens[0] itself, column-major.  The address is stable for the session:
+// V_Init allocates it once with I_AllocLow.  fnv1aRender() in demo-test.mjs
+// visits it in row-major order, so the render goldens did not move when the
+// untranspose copy went.
 EMSCRIPTEN_KEEPALIVE byte* web_framebuffer (void)
 {
-    // Return the stable row-major buffer populated by I_FinishUpdate.
-    // fnv1aRender() in demo-test.mjs hashes this buffer linearly (row-major
-    // order = visual row-major order) so golden hashes are preserved.
-    return web_rowmajor_buf;
+    return screens[0];
 }
 EMSCRIPTEN_KEEPALIVE byte* web_palette (void)
 {

@@ -135,17 +135,17 @@ Command: `node tools/zone-measure.mjs` (reports `__heap_base` + peak formula)
 
 | Region | Size | Notes |
 |--------|------|-------|
-| C shadow stack | 4 MB | `STACK_SIZE=4MB` in `engine/Makefile`; lives at start of linear memory |
-| Static data (DATA + BSS) | 515 KB | initialized tables + zero-init; measured via `__heap_base − 4 MB`; was 1,237 KB before the phase-14 BSS diets (14.2d/e/f), then 515 KB, then 828 KB while the 18.2a widescreen dimension separation held MAXSCREENWIDTH at 854 — back to 515 KB now widescreen is removed |
-| **Stack + static total (`__heap_base`)** | **4.50 MB** | = 4,722,048 bytes; heap begins here |
+| C shadow stack | 1 MB | `STACK_SIZE=1MB` in `engine/Makefile` (4 MB until round 10, 2026-09-16; Axis 3 below); lives at start of linear memory |
+| Static data (DATA + BSS) | 453 KB | initialized tables + zero-init; measured via `__heap_base − 1 MB`; was 1,237 KB before the phase-14 BSS diets (14.2d/e/f), then 515 KB until round 10 removed the 64,000-byte untranspose buffer (`web_rowmajor_buf`) |
+| **Stack + static total (`__heap_base`)** | **1.44 MB** | = 1,512,304 bytes; heap begins here |
 | Zone pool (one `malloc(ZONESIZE)`) | 4 MB | `ZONESIZE` in `engine/web/web.h` (32 MB pre-14.2c); `I_ZoneBase()` in `engine/web/i_system.c` |
 | WAD copy (one `malloc(wad.length)`) | up to 16.61 MB | plutonia.wad, worst case |
-| **Peak heap address** | **~25.12 MB** | = heap_base + zone + worst WAD |
-| **Headroom vs 32 MB** | **~6.88 MB** | slack above worst-case single-IWAD load |
+| **Peak heap address** | **~22.06 MB** | = heap_base + zone + worst WAD |
+| **Headroom vs 32 MB** | **~9.94 MB** | slack above worst-case single-IWAD load |
 
 ### INITIAL_MEMORY floor experiment
 
-Measured `__heap_base` = 4,722,048 B (2026-09-12, widescreen removed).  It read
+Measured `__heap_base` = 1,512,304 B (2026-09-16, round 10: stack 4 → 1 MB, untranspose buffer gone; 4,722,048 B on 2026-09-12 when widescreen was removed).  It had read
 5,042,464 B while MAXSCREENWIDTH was 854; the 320,416 B it gave back is the
 18.2a widescreen dimension separation unwinding — visplanes, openings and the
 per-column arrays.  The 2026-09-11 stamp had predicted 4,722,016 B for a
@@ -190,11 +190,11 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 
 | File | Raw (bytes) | gzip-9 (bytes) | gzip-9 (KB) |
 |------|------------|---------------|------------|
-| `build/doom.wasm` | 355,883 | 146,551 | 143.1 |
+| `build/doom.wasm` | 355,395 | 146,403 | 143.0 |
 | `client/js/lobby.js` | 32,498 | 11,114 | 10.9 |
 | `client/js/input.js` | 17,073 | 6,194 | 6.0 |
 | `client/js/menu.js` | 15,543 | 5,401 | 5.3 |
-| `client/js/main.js` | 12,138 | 4,564 | 4.5 |
+| `client/js/main.js` | 12,169 | 4,595 | 4.5 |
 | `client/js/net.js` | 11,713 | 4,462 | 4.4 |
 | `client/js/wad-import.js` | 11,300 | 4,249 | 4.1 |
 | `client/css/webdoom.css` | 10,370 | 3,885 | 3.8 |
@@ -204,7 +204,7 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/js/doomfont.js` | 8,524 | 3,321 | 3.2 |
 | `client/js/demo.js` | 7,291 | 2,733 | 2.7 |
 | `client/js/scrubber.js` | 7,958 | 2,701 | 2.6 |
-| `client/js/video.js` | 6,462 | 2,396 | 2.3 |
+| `client/js/video.js` | 6,625 | 2,523 | 2.5 |
 | `client/js/countdown.js` | 7,068 | 2,396 | 2.3 |
 | `client/js/persist.js` | 4,786 | 1,774 | 1.7 |
 | `client/js/ui.js` | 2,211 | 966 | 0.9 |
@@ -214,10 +214,10 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/js/music-worklet.js` | 1,970 | 843 | 0.8 |
 | `client/js/wad-cache.js` | 1,517 | 716 | 0.7 |
 | `client/js/wad-library.js` | 1,159 | 565 | 0.6 |
-| **Total (all, raw)** | **550,219** | — | — |
-| **Total (all, gzip-9)** | — | **218,447** | **213.3** |
-| **JS+CSS+HTML only (raw)** | 185,575 | — | — |
-| **JS+CSS+HTML only (gzip-9)** | — | 68,177 | **66.6** |
+| **Total (all, raw)** | **549,925** | — | — |
+| **Total (all, gzip-9)** | — | **218,457** | **213.3** |
+| **JS+CSS+HTML only (raw)** | 185,769 | — | — |
+| **JS+CSS+HTML only (gzip-9)** | — | 68,335 | **66.7** |
 
 The WAD file itself (doom.wad ≈ 11.8 MB, doom2.wad ≈ 13.9 MB, etc.) is
 fetched separately on first play and cached in the browser; it is not part of
@@ -226,7 +226,7 @@ the initial page-load transfer.
 **Finding**: the entire deliverable (wasm + JS glue + client JS + CSS +
 HTML) compresses to **213.3 KB gzip** on the wire, gated by
 `payload-size` (perf-015/perf-016) since round 8. The wasm is
-67% of that. The JS+CSS+HTML surface is **66.6 KB gzip**
+67% of that. The JS+CSS+HTML surface is **66.7 KB gzip**
 — note that is **1.9x the 35.1 KB this table used to
 claim**, which went stale unnoticed precisely because both figures were
 marked *not machine-verified*: the old table still listed
@@ -1239,12 +1239,12 @@ absolute saving is small (~2.4 KB gzip). No speed effect on wasm.
 
 ---
 
-### Axis 3: STACK_SIZE=4MB
+### Axis 3: STACK_SIZE — 4 MB → 1 MB (landed round 10, 2026-09-16)
 
-The 4 MB C shadow stack (at the start of linear memory) is very conservative
-for DOOM + emscripten.
+The C shadow stack sits at the start of linear memory.  4 MB was very
+conservative for DOOM + emscripten, and this axis said so in 2026-08.
 
-**Static analysis of worst-case call depth:**
+**Static analysis of worst-case call depth (unchanged):**
 
 - **BSP recursion** (`R_RenderBSPNode`): the deepest recursive path in
   DOOM. Each frame is ~32–64 bytes (node pointer, child bounds checks, a few
@@ -1252,48 +1252,48 @@ for DOOM + emscripten.
   cost: 15 × 64 = ~960 bytes.
 - **P_LoadLevel / P_GroupLines**: iterative, not recursive. Local arrays are
   modest (pointers + indices).
-- **Emscripten runtime overhead**: setjmp/longjmp frames, POSIX thread entry
-  frames (not applicable in -sENVIRONMENT=web,worker,node without threads).
-  Realistically ~16–32 KB of overhead.
+- **Measured** (ledger C7, 14.2g): the freestanding build's peak is ≈14 KiB
+  across all 13 demos; the whole harness fits in 128 KiB.  1 MiB leaves a
+  70× margin on the engine alone.
 
-Conclusion: **1 MB is almost certainly sufficient** (960 bytes BSP + 32 KB
-emscripten ≪ 1 MB). Emscripten's default stack for C code without large
-stack allocations is 64 KB; 1 MB leaves 15× margin.
+**What kept it at 4 MB, and why that no longer holds:** the fear was that
+moving `__heap_base` would trip three "layout-pinned" render goldens
+(tnt-demo1, plutonia-demo1, plutonia-demo3), which would mean a regold.
 
-**Why 4 MB is not changed:**
+Round 10 moved it by 3.2 MB (stack) plus 64,000 B (the untranspose buffer
+`web_rowmajor_buf` went in the same commit; JS reads `screens[0]` in place
+and the GPU swaps the axes) and **13/13 sim, render and low-detail goldens
+did not move**.  The layout dependency those goldens once had was a real
+read past the end of an array, fixed since; nothing in the shipping engine
+depends on where the heap starts.
 
-1. Any reduction would shrink BSS layout → alter `__heap_base` → trip the
-   three layout-pinned render goldens (tnt-demo1, plutonia-demo1,
-   plutonia-demo3). Changing this flag requires a conscious regold step.
-2. The 4 MB stack does not contribute to wire-transfer size (it's runtime
-   heap layout, not wasm CODE/DATA).
-3. The only gain from reducing it is a lower `INITIAL_MEMORY` floor. At the
-   current 64 MB default this is irrelevant; at bare-metal targets the
-   reduction would be meaningful but requires full test coverage at that
-   target first.
+1. `__heap_base` 4,722,048 → 1,512,304 B (−3,209,744 B), all of it heap
+   headroom: worst PWAD combo peak 26.13 → 23.06 MB under 32 MB.
+2. Wire-transfer size: none (stack is runtime layout, not CODE/DATA);
+   `doom.wasm` 355,883 → 355,395 B from the buffer's removal.
 
-**Verdict: keep STACK_SIZE=4MB.** Document only; no change.
+**Verdict: STACK_SIZE=1MB, landed.** Bare-metal targets were already there (C7).
 
 ---
 
 ### Axis 4: INITIAL_MEMORY — worst PWAD combo analysis
 
-Single-IWAD peak was established in §3: 25.12 MB (6.88 MB headroom under
-the 32 MB linear memory: plutonia.wad + 4 MB zone + 4.50 MB static).
+Single-IWAD peak was established in §3: 22.06 MB (9.94 MB headroom under
+the 32 MB linear memory: plutonia.wad + 4 MB zone + 1.44 MB static).
 
 **PWAD combos** (both IWAD + PWAD malloc'd simultaneously, from
 `wads/manifest.json`):
 
 | combo | IWAD (bytes) | PWAD (bytes) | combined | total peak (+ zone + static) |
 |-------|-------------|-------------|---------|------------------------------|
-| tnt.wad + tnt31.wad | 18,195,736 | 282,000 | 18,477,736 (17.62 MB) | 4.50 + 4 + 17.62 = **26.13 MB** |
-| doom2.wad + nerve.wad | 14,604,584 | 3,819,855 | 18,424,439 (17.57 MB) | 4.50 + 4 + 17.57 = **26.07 MB** |
-| doom.wad + sigil.wad | 12,408,292 | 4,640,210 | 17,048,502 (16.27 MB) | 4.50 + 4 + 16.27 = **24.76 MB** |
-| plutonia.wad (no PWAD) | 17,420,824 | — | 17,420,824 (16.61 MB) | **25.12 MB** (§3 baseline) |
+| tnt.wad + tnt31.wad | 18,195,736 | 282,000 | 18,477,736 (17.62 MB) | 1.44 + 4 + 17.62 = **23.06 MB** |
+| doom2.wad + nerve.wad | 14,604,584 | 3,819,855 | 18,424,439 (17.57 MB) | 1.44 + 4 + 17.57 = **23.01 MB** |
+| doom.wad + sigil.wad | 12,408,292 | 4,640,210 | 17,048,502 (16.27 MB) | 1.44 + 4 + 16.27 = **21.70 MB** |
+| plutonia.wad (no PWAD) | 17,420,824 | — | 17,420,824 (16.61 MB) | **22.06 MB** (§3 baseline) |
 
-Worst real combo: **tnt.wad + tnt31.wad** at 26.13 MB peak — fits the 32 MB
-linear memory with 5.87 MB headroom.
-Reproduce (26.13 MB peak): `node tools/archaeology/stamp-check.mjs`
+Worst real combo: **tnt.wad + tnt31.wad** at 23.06 MB peak — fits the 32 MB
+linear memory with 8.94 MB headroom.
+Reproduce (23.06 MB peak): `node tools/archaeology/stamp-check.mjs`
 
 All four rows are gated as of round 8: perf-059 (tnt), perf-059b (doom2+nerve),
 perf-059c (doom+sigil), perf-059d (plutonia). Before that only the first was, and
@@ -1351,12 +1351,12 @@ All five axes measured. No flag change is justified:
 | -O3 vs -Os | **keep -O3** | -Os: −15% gzip, but −9.3% sim fps on wbox (kill) |
 | -O3 vs -O2 | **keep -O3** | -O2: −2.7% gzip, no speed win; trivial size delta |
 | --closure 1 | **keep --closure 1** | -closure 0: +67.5% doom.js gzip, no benefit |
-| STACK_SIZE=4MB | **keep 4MB** | reducing requires regold; no wire-size impact |
+| STACK_SIZE | **1MB** (round 10) | kept at 4MB for fear of a regold; the goldens did not move when it fell |
 | INITIAL_MEMORY=64MB | **keep 64MB** | 9.17 MB headroom at worst real PWAD combo |
 | emmalloc | **keep emmalloc** | correct for DOOM's zone-dominant allocation pattern |
 
 The shipped flags (`-O3 -flto --closure 1 -sINITIAL_MEMORY=64MB
--sSTACK_SIZE=4MB -sMALLOC=emmalloc`) are the optimal point on the
+-sSTACK_SIZE=1MB -sMALLOC=emmalloc`) are the optimal point on the
 size×speed frontier for browser and bare-metal targets given the current
 constraints. The only actionable future path to a smaller payload is
 reducing ZONESIZE (deferred to task 3.x), which would lower the INITIAL_MEMORY

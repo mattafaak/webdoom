@@ -169,9 +169,10 @@ the platform is assumed to be initialised before `D_DoomMain` is called.
   indices whose backing store is allocated by `I_AllocLow` (see §1.5). The
   platform converts indices to RGB via the palette set by the most recent
   `I_SetPalette`.
-- The web implementation is empty (`engine/web/i_video.c:30`): JS reads
-  `web_framebuffer()` and `web_palette()` directly from wasm memory after
-  `D_DoomFrame` returns.
+- The web implementation is empty (`engine/web/i_video.c`): JS reads
+  `web_framebuffer()` — `screens[0]` itself, column-major — and
+  `web_palette()` directly from wasm memory after `D_DoomFrame` returns and
+  the GPU swaps the axes (round 10 removed the untranspose copy).
 - Bare-metal: do the palette-indexed → display-format blit here. For SPI
   displays, this is where you push 64,000 pixel lookups (or DMA the
   result). Double-buffering is optional; the core does not swap `screens[0]`
@@ -400,10 +401,10 @@ From `docs/perf.md §3` (wasm linear memory layout):
 
 | Region | Size |
 |--------|------|
-| C shadow stack | 4 MiB (`STACK_SIZE=4MB`, engine/Makefile) |
-| Initialized data (DATA) | 73.5 KiB (perf.md §1 wasm DATA section) |
-| Zero-initialized BSS | ~1,163 KiB (static + BSS total = 1,237 KiB, perf.md §3) |
-| **`__heap_base`** | **5.21 MiB** |
+| C shadow stack | 1 MiB (`STACK_SIZE=1MB`, engine/Makefile; 4 MiB until round 10) |
+| Initialized data (DATA) | ~74 KiB (perf.md §1 wasm DATA section) |
+| Zero-initialized BSS | ~379 KiB (static + BSS total = 453 KiB, perf.md §3, 2026-09-16) |
+| **`__heap_base`** | **1.44 MiB** (1,512,304 B, 2026-09-16) |
 
 The large BSS is dominated by renderer scratch arrays: `visplanes[128]`
 (~83 KiB at sizeof = 664 B; task 14.2d restored vanilla 128 from 1024,
@@ -953,7 +954,7 @@ no HACX/SIGIL support). The core is clean: 91 annotated divergences out of
 ### 6.2 The headless path proves video/audio/input are optional
 
 `tools/demo-test.mjs` runs the engine with `I_InitGraphics` and
-`I_FinishUpdate` as no-ops (`engine/web/i_video.c:16,30`) and all JS sound
+`I_FinishUpdate` as no-ops (`engine/web/i_video.c`) and all JS sound
 hooks uninstalled. The game runs 44,580 simulation tics across 13 demos
 without display or audio. This directly proves: **the simulation is
 independent of the display and audio layer**. A bare-metal port can bring

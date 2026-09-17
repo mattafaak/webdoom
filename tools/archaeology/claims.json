@@ -601,9 +601,9 @@
     "perf-009": {
       "family": "measurement-stamp",
       "command": "node tools/archaeology/wasm-stamp.mjs",
-      "expected": "4722048",
+      "expected": "1512304",
       "status": "verified",
-      "notes": "restamped 2026-09-12: 5,042,464 -> 4,722,048, widescreen removed.  The 2026-09-11 stamp (4,721,456 -> 5,042,416) had ATTRIBUTED the growth to the 18.2a widescreen dimension separation by rebuilding at MAXSCREENWIDTH=320 and measuring 4,722,016; the real revert landed 32 B from that prediction, which is the evidence it removed widescreen and nothing else.  Note the pre-revert value had itself drifted 48 B from its stamp unnoticed: perf-009 is a --full-tier claim and no suite leg runs it."
+      "notes": "restamped 2026-09-16 (round 10): 4,722,048 -> 1,512,304, STACK_SIZE 4 MB -> 1 MB and the 64,000-byte untranspose buffer removed (JS reads screens[0] in place); 13/13 render goldens unmoved. restamped 2026-09-12: 5,042,464 -> 4,722,048, widescreen removed.  The 2026-09-11 stamp (4,721,456 -> 5,042,416) had ATTRIBUTED the growth to the 18.2a widescreen dimension separation by rebuilding at MAXSCREENWIDTH=320 and measuring 4,722,016; the real revert landed 32 B from that prediction, which is the evidence it removed widescreen and nothing else.  Note the pre-revert value had itself drifted 48 B from its stamp unnoticed: perf-009 is a --full-tier claim and no suite leg runs it."
     },
     "perf-011": {
       "family": "measurement-stamp",
@@ -628,7 +628,7 @@
     "perf-016": {
       "family": "size-ledger",
       "command": "node tools/payload-size.mjs",
-      "expected": "66.6",
+      "expected": "66.7",
       "status": "verified",
       "notes": "JS+CSS+HTML surface only (no wasm, no glue), KB gzip -9. Derived from sw.js SHELL_FILES, so the app shell defines the set. Was \"unverifiable\" until round 8 (prf-002/003); the published figures had gone badly stale -- the surface was 2.6x its documented 35.1 KB."
     },
@@ -782,30 +782,30 @@
     "perf-059": {
       "family": "measurement-stamp",
       "command": "node tools/archaeology/stamp-check.mjs",
-      "expected": "26.13",
+      "expected": "23.06",
       "status": "verified",
-      "notes": "derived from perf-009; moved again with the 2026-09-12 heap_base restamp (widescreen removed, 4.81 -> 4.50 MB). Headroom vs 32 MiB is now 5.87 MB."
+      "notes": "Moved with the 2026-09-16 heap_base restamp (4.50 -> 1.44 MB). derived from perf-009; moved again with the 2026-09-12 heap_base restamp (widescreen removed, 4.81 -> 4.50 MB). Headroom vs 32 MiB is now 5.87 MB."
     },
     "perf-059b": {
       "family": "measurement-stamp",
       "command": "node tools/archaeology/stamp-check.mjs",
-      "expected": "26.07",
+      "expected": "23.01",
       "status": "verified",
-      "notes": "perf.md Axis 4 PWAD combo table, row \"doom2.wad + nerve.wad\"; derived from perf-009 + ZONESIZE + the two wad file sizes, exactly as perf-059 is. Added round 8 (U5): only the first row of that four-row table was gated, and the doom.wad + sigil.wad row was WRONG (24.77 typed, 24.76 computed) — the three ungated rows had also read 4.50 while __heap_base was 4.81, and the widescreen revert made them correct by accident."
+      "notes": "Moved with the 2026-09-16 heap_base restamp (4.50 -> 1.44 MB). perf.md Axis 4 PWAD combo table, row \"doom2.wad + nerve.wad\"; derived from perf-009 + ZONESIZE + the two wad file sizes, exactly as perf-059 is. Added round 8 (U5): only the first row of that four-row table was gated, and the doom.wad + sigil.wad row was WRONG (24.77 typed, 24.76 computed) — the three ungated rows had also read 4.50 while __heap_base was 4.81, and the widescreen revert made them correct by accident."
     },
     "perf-059c": {
       "family": "measurement-stamp",
       "command": "node tools/archaeology/stamp-check.mjs",
-      "expected": "24.76",
+      "expected": "21.70",
       "status": "verified",
-      "notes": "perf.md Axis 4 PWAD combo table, row \"doom.wad + sigil.wad\"; derived from perf-009 + ZONESIZE + the two wad file sizes, exactly as perf-059 is. Added round 8 (U5): only the first row of that four-row table was gated, and the doom.wad + sigil.wad row was WRONG (24.77 typed, 24.76 computed) — the three ungated rows had also read 4.50 while __heap_base was 4.81, and the widescreen revert made them correct by accident."
+      "notes": "Moved with the 2026-09-16 heap_base restamp (4.50 -> 1.44 MB). perf.md Axis 4 PWAD combo table, row \"doom.wad + sigil.wad\"; derived from perf-009 + ZONESIZE + the two wad file sizes, exactly as perf-059 is. Added round 8 (U5): only the first row of that four-row table was gated, and the doom.wad + sigil.wad row was WRONG (24.77 typed, 24.76 computed) — the three ungated rows had also read 4.50 while __heap_base was 4.81, and the widescreen revert made them correct by accident."
     },
     "perf-059d": {
       "family": "measurement-stamp",
       "command": "node tools/archaeology/stamp-check.mjs",
-      "expected": "25.12",
+      "expected": "22.06",
       "status": "verified",
-      "notes": "perf.md Axis 4 PWAD combo table, row \"plutonia.wad (no PWAD)\"; derived from perf-009 + ZONESIZE + the two wad file sizes, exactly as perf-059 is. Added round 8 (U5): only the first row of that four-row table was gated, and the doom.wad + sigil.wad row was WRONG (24.77 typed, 24.76 computed) — the three ungated rows had also read 4.50 while __heap_base was 4.81, and the widescreen revert made them correct by accident."
+      "notes": "Moved with the 2026-09-16 heap_base restamp (4.50 -> 1.44 MB). perf.md Axis 4 PWAD combo table, row \"plutonia.wad (no PWAD)\"; derived from perf-009 + ZONESIZE + the two wad file sizes, exactly as perf-059 is. Added round 8 (U5): only the first row of that four-row table was gated, and the doom.wad + sigil.wad row was WRONG (24.77 typed, 24.76 computed) — the three ungated rows had also read 4.50 while __heap_base was 4.81, and the widescreen revert made them correct by accident."
     },
     "ea-018": {
       "family": "recipe-crack",
@@ -954,9 +954,9 @@
     "readme-001": {
       "family": "measurement-stamp",
       "command": "node tools/archaeology/size-ledger.mjs",
-      "expected": "348",
+      "expected": "347",
       "status": "verified",
-      "notes": "Wasm binary size in README.md, in KB (round(raw_bytes/1024)). Source: build/doom.wasm at task 14.2d base (31e436a); 356,206 B → round/1024 = 348 KB. NOT derived from perf.md §1 commit-pinned table (perf-001=357,978 is pinned to 6de6256 and legitimately drifts). Machine-verified by size-ledger.mjs (task 14.3): checks README.md KB == round(actual_build_bytes/1024) and claims.json expected == same value; hard fail on any divergence. doc-drift.mjs README_HINTS also hard-fails if README diverges from this expected value. Update command: (cd engine && make) && node tools/archaeology/size-ledger.mjs — FAIL output shows the correct KB value; update README.md and this expected field to match."
+      "notes": "2026-09-16 (round 10): 355,395 B -> 347 KB after the untranspose buffer left i_video.c. Wasm binary size in README.md, in KB (round(raw_bytes/1024)). Source: build/doom.wasm at task 14.2d base (31e436a); 356,206 B → round/1024 = 348 KB. NOT derived from perf.md §1 commit-pinned table (perf-001=357,978 is pinned to 6de6256 and legitimately drifts). Machine-verified by size-ledger.mjs (task 14.3): checks README.md KB == round(actual_build_bytes/1024) and claims.json expected == same value; hard fail on any divergence. doc-drift.mjs README_HINTS also hard-fails if README diverges from this expected value. Update command: (cd engine && make) && node tools/archaeology/size-ledger.mjs — FAIL output shows the correct KB value; update README.md and this expected field to match."
     },
     "spec-001": {
       "family": "unverifiable",
@@ -1010,7 +1010,7 @@
     "size-004": {
       "family": "size-ledger",
       "command": "node tools/archaeology/size-ledger.mjs",
-      "expected": "348",
+      "expected": "347",
       "status": "verified",
       "notes": "README.md KB figure as verified by size-ledger.mjs.  This is the SAME FACT as readme-001 and the two had drifted apart (348 vs 349) with nothing comparing them; claims-index-check.mjs now asserts they agree (task 24.2)."
     }

@@ -163,7 +163,8 @@ function assertFullCoverage(label, verified) {
 //     ensuring the sim always advances and we capture rendered game frames only.
 //
 // What is hashed:
-//   screens[0] — 64000 indexed bytes capturing all renderer output including
+//   screens[0] — 64000 indexed bytes (column-major storage, visited in visual
+//   row-major order) capturing all renderer output including
 //   colormap effects: light levels, berserk green tint (fixedcolormap),
 //   invulnerability sphere — any change in which color-indices the renderer
 //   writes is detected here.
@@ -177,12 +178,13 @@ function assertFullCoverage(label, verified) {
 
 if (renderMode) {
     // FNV-1a 32-bit: offset_basis=0x811c9dc5, prime=0x01000193
+    // screens[0] is column-major (x*200 + y); the goldens were recorded from
+    // a row-major copy, so visit it row-major: same bytes, same sequence.
     function fnv1aRender(heapu8, fbPtr, palVer) {
         let h = 0x811c9dc5;
-        const end = fbPtr + 320 * 200;
-        for (let i = fbPtr; i < end; i++) {
-            h = Math.imul(h ^ heapu8[i], 0x01000193);
-        }
+        for (let y = 0; y < 200; y++)
+            for (let x = 0; x < 320; x++)
+                h = Math.imul(h ^ heapu8[fbPtr + x * 200 + y], 0x01000193);
         // Fold palette version as 4 little-endian bytes.
         h = Math.imul(h ^ ( palVer        & 0xff), 0x01000193);
         h = Math.imul(h ^ ((palVer >>> 8)  & 0xff), 0x01000193);
@@ -366,10 +368,11 @@ if (renderMode) {
 
 if (simDrawn) {
     // Same hash as the render family, so A3 can compare against -render.json.
-    function fnv1aRender(heapu8, fbPtr, palVer) {
+    function fnv1aRender(heapu8, fbPtr, palVer) {   // row-major visit of column-major screens[0]
         let h = 0x811c9dc5;
-        const end = fbPtr + 320 * 200;
-        for (let i = fbPtr; i < end; i++) h = Math.imul(h ^ heapu8[i], 0x01000193);
+        for (let y = 0; y < 200; y++)
+            for (let x = 0; x < 320; x++)
+                h = Math.imul(h ^ heapu8[fbPtr + x * 200 + y], 0x01000193);
         h = Math.imul(h ^ ( palVer         & 0xff), 0x01000193);
         h = Math.imul(h ^ ((palVer >>> 8)  & 0xff), 0x01000193);
         h = Math.imul(h ^ ((palVer >>> 16) & 0xff), 0x01000193);

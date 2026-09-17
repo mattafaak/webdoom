@@ -37,7 +37,7 @@ CFLAGS := -O3 -flto -Dalloca=__builtin_alloca -std=gnu89 -DNORMALUNIX -Icore -Iw
 # KEEPALIVE of their own -- drop those three and the client loses ccall's
 # allocation path.  A symbol needed from JS gets EMSCRIPTEN_KEEPALIVE at its
 # definition; it does not get a second mention here.
-LDFLAGS := -flto -sMALLOC=emmalloc -sASSERTIONS=0 --closure 1 -sINITIAL_MEMORY=32MB -sSTACK_SIZE=4MB \
+LDFLAGS := -flto -sMALLOC=emmalloc -sASSERTIONS=0 --closure 1 -sINITIAL_MEMORY=32MB -sSTACK_SIZE=1MB \
            -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createDoom \
            -sINVOKE_RUN=0 \
            -sFILESYSTEM=0 -sEXPORTED_RUNTIME_METHODS=callMain,ccall,HEAPU8,HEAP32,HEAPF32 \

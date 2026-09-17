@@ -191,8 +191,11 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
 
     const renderer = createRenderer(canvas);
     window.webdoom._renderer = renderer;   // browser-pipeline reads .kind
+    // memory never grows (ALLOW_MEMORY_GROWTH=0), so the views are stable
     const fb = doom._web_framebuffer();
     const pal = doom._web_palette();
+    const fbView = doom.HEAPU8.subarray(fb, fb + 320 * 200);
+    const palView = doom.HEAPU8.subarray(pal, pal + 768);
     let palVersion = -1;
 
     loading.hide();
@@ -200,8 +203,6 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     canvas.focus();
     const input = createInput(doom, canvas, loadSettings());
     doom._web_set_smooth(input.settings.smooth ? 1 : 0);
-
-    const SCREEN_W = 320, SCREEN_H = 200;
 
     // musicBackend supersedes the legacy opl3 bool
     const musicBackend = input.settings.musicBackend ?? (input.settings.opl3 ? 'opl3' : 'opl2');
@@ -254,11 +255,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
         }
         window._doomFrameHook?.();          // test seam: per-frame hash collection
         const v = doom._web_palette_version();
-        renderer.draw(
-            doom.HEAPU8.subarray(fb, fb + SCREEN_W * SCREEN_H),
-            doom.HEAPU8.subarray(pal, pal + 768),
-            v !== palVersion,
-        );
+        renderer.draw(fbView, palView, v !== palVersion);
         palVersion = v;
         perfMarks.end();
         if (running) requestAnimationFrame(frame);

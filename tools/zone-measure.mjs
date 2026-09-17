@@ -136,8 +136,8 @@ if (heapBaseOnce !== null) {
 
     console.log('\n=== Heap headroom (INITIAL_MEMORY=64 MB, ALLOW_MEMORY_GROWTH=0) ===');
     console.log(`  __heap_base       : ${hb} B  (${(hb / 1048576).toFixed(2)} MB)`);
-    console.log(`    of which stack  : 4 MB  (STACK_SIZE in engine/Makefile)`);
-    console.log(`    of which static : ${((hb - 4 * 1048576) / 1024).toFixed(0)} KB  (DATA + BSS)`);
+    console.log(`    of which stack  : 1 MB  (STACK_SIZE in engine/Makefile)`);
+    console.log(`    of which static : ${((hb - 1 * 1048576) / 1024).toFixed(0)} KB  (DATA + BSS)`);
     console.log(`  Zone pool         : ${ZONE_MB} MB  (ZONESIZE in engine/web/web.h)`);
     console.log(`  Worst WAD malloc  : ${(worst.wadBytes / 1048576).toFixed(2)} MB  (${worst.wad})`);
     console.log(`  Peak heap address : ~${(peakAddr / 1048576).toFixed(2)} MB`);
