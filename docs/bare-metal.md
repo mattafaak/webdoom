@@ -418,16 +418,16 @@ are allocated at runtime by `I_AllocLow` and point into whichever memory
 region the port selects (see §1.5).
 
 **Bare-metal implication**: **1.44 MiB** of writable memory (SRAM or
-write-capable PSRAM) is the minimum for the static segment alone — that is
-`__heap_base` above, the whole region below the heap: the 1 MiB shadow stack
-plus 453 KiB of DATA and BSS. This is the floor below which the engine cannot
-boot, independent of WAD and zone size. Add the 250 KiB screen buffers (from
+write-capable PSRAM) is the minimum for the static segment alone. That is
+`__heap_base` above: the whole region below the heap, being the 1 MiB shadow
+stack plus 453 KiB of DATA and BSS. It is the floor below which the engine
+cannot boot, independent of WAD and zone size. Add the 250 KiB screen buffers (from
 `I_AllocLow`) to arrive at the true minimum writable footprint: **~1.68 MiB**.
 
-This figure read 1.21 MiB here and in six budget tables below until round 13,
-against a `__heap_base` row three lines up that already said 1.44. 1.21 MiB was
-DATA+BSS *alone* before tasks 14.2d/14.2e/14.2f restored the vanilla renderer
-limits and took 785 KiB out of BSS; it was never the writable floor, because it
+This figure read 1.21 MiB here and in six budget tables below until round 13.
+The `__heap_base` row three lines up already said 1.44. 1.21 MiB was DATA+BSS
+*alone*, from before tasks 14.2d/14.2e/14.2f restored the vanilla renderer
+limits and took 785 KiB out of BSS. It was never the writable floor, because it
 does not include the stack. Every total derived from it was ~0.23 MiB light.
 
 ### 2.2 Zone (heap)

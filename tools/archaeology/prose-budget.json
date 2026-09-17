@@ -7,14 +7,14 @@
       "rate": 14.8
     },
     "CONTRIBUTING.md": {
-      "words": 365,
+      "words": 421,
       "long": 0,
-      "emdash": 3
+      "rate": 7.1
     },
     "Plans.md": {
-      "words": 946,
+      "words": 955,
       "long": 3,
-      "rate": 8.5
+      "rate": 8.4
     },
     "README.md": {
       "words": 505,
@@ -37,14 +37,14 @@
       "rate": 2.1
     },
     "docs/README.md": {
-      "words": 314,
+      "words": 318,
       "long": 0,
       "emdash": 4
     },
     "docs/bare-metal.md": {
-      "words": 5555,
+      "words": 5661,
       "long": 5,
-      "rate": 4.9
+      "rate": 5.1
     },
     "docs/claims-index.md": {
       "words": 1115,
@@ -112,8 +112,8 @@
       "rate": 14.4
     },
     "docs/perf.md": {
-      "words": 9262,
-      "long": 19,
+      "words": 9418,
+      "long": 18,
       "rate": 9.8
     },
     "docs/playsim.md": {
@@ -147,14 +147,14 @@
       "rate": 10.9
     },
     "spec.md": {
-      "words": 2684,
-      "long": 12,
-      "rate": 15.6
+      "words": 2617,
+      "long": 10,
+      "rate": 14.9
     },
     "tools/archaeology/README.md": {
-      "words": 186,
+      "words": 268,
       "long": 2,
-      "emdash": 0
+      "emdash": 1
     },
     "tools/baremetal/README.md": {
       "words": 1130,
