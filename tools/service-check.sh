@@ -18,15 +18,34 @@ cd "$(dirname "$0")/.."
 UNIT=webdoom.service
 fails=0
 checks=0
+skips=0
 ok ()   { checks=$((checks+1)); }
 bad ()  { checks=$((checks+1)); fails=$((fails+1)); echo "FAIL service-check: $1"; }
+# A property of the HOST this runs on, not of the unit.  Counted and named, so
+# "could not check here" never reads as "checked and passed" -- and so a host
+# where everything skips cannot reach the assertion floor below.
+note () { checks=$((checks+1)); skips=$((skips+1)); echo "SKIP service-check: $1"; }
 
 [ -f "$UNIT" ] || { echo "FAIL service-check: $UNIT not found"; exit 1; }
 
 # 1. systemd's own parser.  Warnings go to stderr and still exit 0, so the
 #    OUTPUT is graded, not just the status.
+#
+#    systemd-analyze RESOLVES ExecStart against the machine it runs on, so on
+#    any host that is not the deployment host it reports the unit's absolute
+#    interpreter as missing and exits 1.  That is a fact about the host, not
+#    about the unit -- the same reason check 4 below refuses to assert
+#    WorkingDirectory's absolute path.  CI proved it: actions/setup-node puts
+#    node under /opt/hostedtoolcache, so /usr/bin/node does not exist there and
+#    a correct unit failed all three Node versions on every runner.  Filter
+#    exactly that complaint and grade whatever is left, so a real parse error
+#    still fails.
 out=$(systemd-analyze verify "./$UNIT" 2>&1); rc=$?
-if [ $rc -ne 0 ]; then bad "systemd-analyze verify exited $rc: $out"
+residue=$(printf '%s\n' "$out" | grep -v 'is not executable: No such file or directory' || true)
+residue=$(printf '%s' "$residue" | tr -d '[:space:]')
+if [ -n "$out" ] && [ -z "$residue" ]; then
+    note "systemd-analyze resolved ExecStart against THIS host and did not find it; the unit itself parses clean"
+elif [ $rc -ne 0 ]; then bad "systemd-analyze verify exited $rc: $out"
 elif [ -n "$out" ]; then bad "systemd-analyze verify warned: $out"
 else ok; fi
 
@@ -40,7 +59,15 @@ done
 exec_line=$(grep -E '^ExecStart=' "$UNIT" | head -1 | cut -d= -f2-)
 prog=$(echo "$exec_line" | awk '{print $1}')
 script=$(echo "$exec_line" | awk '{print $2}')
-if [ -x "$prog" ]; then ok; else bad "ExecStart program not executable here: $prog"; fi
+# systemd requires an ABSOLUTE ExecStart path, and that IS a property of the
+# unit, so it is asserted.  Whether that binary exists on whatever machine runs
+# this check is not, and asserting it made a correct unit fail on CI.
+case "$prog" in
+    /*) ok ;;
+    *)  bad "ExecStart program is not an absolute path: $prog" ;;
+esac
+if [ -x "$prog" ]; then ok
+else note "ExecStart program is not on THIS host: $prog (expected on the deployment host)"; fi
 if [ -n "$script" ] && [ -f "$script" ]; then ok; else bad "ExecStart script not in this repo: ${script:-<none>}"; fi
 
 # 4. WorkingDirectory must name a directory whose basename is this repo's, so a
@@ -71,4 +98,9 @@ if [ "$fails" -gt 0 ]; then
     echo "FAIL service-check: $fails of $checks assertions failed on $UNIT"
     exit 1
 fi
-echo "PASS service-check: $UNIT is a ready unit ($checks assertions: parser clean, 9 directives, ExecStart resolves, WorkingDirectory + DOOM_HOST/DOOM_PORT agree with server/serve.js)"
+# Every assertion skipped would still clear the floor above, so say the number.
+if [ "$skips" -gt 0 ]; then
+    echo "PASS service-check: $UNIT is a ready unit ($((checks - skips)) of $checks assertions; $skips skipped as host-local, named above)"
+    exit 0
+fi
+echo "PASS service-check: $UNIT is a ready unit ($checks assertions: parser clean, 9 directives, ExecStart absolute and present, WorkingDirectory + DOOM_HOST/DOOM_PORT agree with server/serve.js)"
