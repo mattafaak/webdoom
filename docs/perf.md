@@ -1306,19 +1306,19 @@ Note: `tnt.wad` at 18.20 MB is slightly larger than `plutonia.wad` at
 The §3 floor experiment (56 MB) was run with plutonia.wad; tnt.wad would give
 the same PASS/FAIL pattern (56 MB ≥ 54.83 MB with 1.17 MB margin).
 
-**Margin at 64 MB:** 64 − 54.83 = **9.17 MB headroom** for worst PWAD combo.
-**Margin at 56 MB:** 56 − 54.83 = **1.17 MB** — acceptable but tight.
+**Margin at 64 MB, as analysed then:** 64 − 54.83 = **9.17 MB headroom**
+for the worst PWAD combo; at 56 MB, 56 − 54.83 = **1.17 MB**, tight.
 
-**Verdict: INITIAL_MEMORY stays at 64 MB.**
+**Verdict then: INITIAL_MEMORY stays at 64 MB. SUPERSEDED — task 14.2c ships 32 MB.**
 
-Rationale: 9.17 MB headroom at 64 MB is comfortable for product defaults.
-Reducing to 56 MB would leave only 1.17 MB margin above the worst tested
-combo, with no margin for future PWAD additions or other heap growth. The
-value of 64 MB as the shipped default is to give room for uncharacterised
-allocations (stack-allocated C buffers, emscripten ABI overhead, etc.) without
-OOM surprises. The bare-metal case (where every MB counts) is better served
-by first reducing ZONESIZE (after the render-path cache floor measurement
-deferred to task 3.x), which would drop the floor by ~28 MB.
+C3 cut ZONESIZE 32 → 4 MiB and took 28 MB of the floor with it — the very move
+the rationale below defers to "task 3.x". The figures in this subsection are
+therefore historical; the live ones are in §3 and in the PWAD table above
+(worst combo 23.06 MB, 8.94 MB headroom under 32 MB).
+
+The reasoning of the day, for the record: 64 MB gave room for uncharacterised
+allocations without OOM surprises, and the bare-metal case was better served
+by reducing ZONESIZE first — which is exactly what happened.
 
 ---
 

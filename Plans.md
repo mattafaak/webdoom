@@ -169,6 +169,9 @@ Each verdict is written WITH its status cell, never beside a `cc:TODO`
   `n64-demos` runs (13/13 bit-identical on emulated N64).
 - **20.6b, the 386 icount scoreboard** — `cc:決定 [25.5 PURSUABLE]` above; it
   measures id's DOS binary, never this codebase, so it can never gate a change.
-- **`docs/perf.md` locator drift** — 37 of 129 locators sit beyond 60% of
-  doc-drift's window; the rest are ambiguous matches the sweep leaves alone.
+- ~~**`docs/perf.md` locator drift**~~ — CLOSED (round 11). The figure came
+  from a one-off script nobody committed, so it could not be recomputed.
+  `claims-index-check` rule 8 grades every locator against doc-drift's own
+  needle (or the claim's value) and prints the count on every run — 152 of 158
+  within the window, the other 6 named. `--reanchor` fixes drift mechanically.
 - **F3** — `browser-pipeline` has a baseline only for alder, by policy (Phase Z).

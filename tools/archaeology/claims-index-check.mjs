@@ -26,7 +26,7 @@
 //
 // usage: node tools/archaeology/claims-index-check.mjs
 // Copyright (C) 2026, GPL-2.0-or-later.
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -51,6 +51,7 @@ for (const line of readFileSync(INDEX, 'utf8').split('\n')) {
 }
 
 let bad = 0;
+let locatorReport = '', derivedReport = '';
 const fail = (what, detail) => { console.log(`FAIL ${what}`); if (detail) console.log(detail); bad++; };
 
 // A parse that found almost nothing is broken, not clean.
@@ -178,6 +179,201 @@ for (const [label, re, want] of [
         fail(`claims-index: header says ${m[1]} ${label} claims, the manifest has ${want}`);
 }
 
+
+// 8. The doc:line locator must point at the claim's value.
+//
+// The locator column is not decoration: doc-drift.mjs builds a +/-35-line
+// SEARCH WINDOW from it, and when a figure drifts out of that window the only
+// consequence is that doc-drift falls back to scanning the whole document --
+// so the claim still passes while its locator points at unrelated prose.
+// Nothing graded the column itself.  Plans.md carried "37 of 129 locators sit
+// beyond 60% of the window" as a known-open item for weeks: a number produced
+// by a one-off script that was never committed, so nobody could recompute it.
+// This recomputes it on every run.
+//
+// Two outcomes, deliberately different:
+//   DRIFTED     the value IS in the document, just far from the locator.
+//               Unambiguous, mechanically fixable -- `--reanchor` -- so it FAILS.
+//   UNANCHORED  the value is nowhere in the document.  Reported by name and
+//               counted, never silently skipped, but NOT failed: a source-constant
+//               claim ({640,1280,320}, 4 x FRACUNIT) is verified against the C
+//               source and may appear in prose only symbolically, and a
+//               commit-pinned size legitimately differs from what the doc shows
+//               for the current build.  This list is worth reading anyway -- it
+//               is how perf-012 and perf-013 were found carrying a heap base two
+//               revisions stale, and perf-060 a headroom against a 64 MB
+//               INITIAL_MEMORY that task 14.2c changed to 32 MB in July.
+const REANCHOR = process.argv.includes('--reanchor');
+// doc-drift declares, for most of these claims, the NEEDLE its extractor looks
+// for -- and the needle is usually not the value.  perf-008's value is the byte
+// count 4,194,304 while its needle is the prose "Zone pool" 76 lines away;
+// anchoring that locator on the value moved doc-drift's window off its own
+// needle and broke the check.  So a locator is good when the window holds ANY
+// declared needle for that claim OR the value itself.
+//
+// "Any" is load-bearing: doc-drift keeps four hint tables (DOC_HINTS,
+// PUBLIC_HINTS, README_HINTS, SPEC_HINTS) keyed by the same ids, so one claim
+// legitimately has several needles in several documents -- readme-001 is
+// "KB of wasm" in the root README and something else under docs/.  A first cut
+// that kept one needle per id silently took whichever table came last and
+// reported eighteen present anchors as missing.  The hints are read out of
+// doc-drift.mjs rather than copied here: one definition, and a parse that
+// finds too few fails instead of passing quietly.
+function docDriftNeedles() {
+    const src = readFileSync(join(root, 'tools/archaeology/doc-drift.mjs'), 'utf8').split('\n');
+    const out = new Map();
+    let id = null, block = [];
+    const flush = () => {
+        if (id) {
+            const text = block.join('\n');
+            const set = out.get(id) ?? out.set(id, new Set()).get(id);
+            for (const m of text.matchAll(/needle:\s*'((?:[^'\\]|\\.)*)'/g))
+                set.add(m[1].replace(/\\'/g, "'"));
+        }
+        id = null; block = [];
+    };
+    for (const line of src) {
+        const m = /^\s*'([a-z][a-z0-9-]*-\d+[a-z]?)':\s*\{/.exec(line);
+        if (m) { flush(); id = m[1]; }
+        if (id) block.push(line);
+    }
+    flush();
+    return out;
+}
+const NEEDLES = docDriftNeedles();
+{
+    const withNeedle = [...NEEDLES.values()].filter(v => v.size).length;
+    if (withNeedle < 50)
+        fail(`claims-index: parsed only ${withNeedle} doc-drift needle(s) — the DOC_HINTS shape changed and rule 8 would anchor on the wrong thing`);
+}
+const docCache = new Map();
+// `README.md` in the locator column means the ROOT readme; `docs/README.md` is
+// a different document and both exist.  Rather than guess from the name, load
+// every candidate and let the caller take the one the anchor is actually in --
+// guessing docs/ first reported present anchors as missing.
+const docCandidates = f => {
+    if (!docCache.has(f)) {
+        const tries = f.startsWith('../') ? [join(root, f.slice(3))]
+                                          : [join(root, 'docs', f), join(root, f)];
+        docCache.set(f, tries.filter(existsSync).map(a => readFileSync(a, 'utf8').split('\n')));
+    }
+    return docCache.get(f);
+};
+// Every spelling a document might use for the value the index prints: with and
+// without thousands separators, ASCII hyphen-minus and U+2212, and the trailing
+// unit when it is part of the figure ("-3.5%", "5.46x").  The first version of
+// this check used the raw cell and reported 29 values as missing that were all
+// present, spelled differently -- a broken instrument telling a defect story
+// about the documents.
+function valueVariants(cell) {
+    let t = cell.replace(/\([^)]*\)/g, ' ').trim();
+    t = t.split(/\s+(?:\/|or|vs)\s+/)[0].trim();
+    t = t.replace(/^[{~≈]+/, '').replace(/[.,;:]$/, '').trim();
+    const out = new Set();
+    const add = v => { if (v && v.length >= 4) out.add(v); };
+    const m = /^[−-]?\d[\d,]*(?:\.\d+)?/.exec(t);
+    if (m) {
+        const n = m[0];
+        for (const form of [n, n.replace(/,/g, '')])
+            for (const sign of [form, form.replace('−', '-'), form.replace('-', '−')]) {
+                add(sign);
+                const unit = t.slice(n.length).match(/^[%×x]/);
+                if (unit) add(sign + unit[0]);
+            }
+    }
+    return [...out];
+}
+{
+    let graded = 0, anchored = 0, weak = 0, noline = 0, nofile = 0, byNeedle = 0;
+    const drifted = [], unanchored = [], rewrites = [];
+    const WINDOW = 35;
+    for (const r of rows) {
+        const [file, lineStr] = r.docline.split(':');
+        if (!/^\d+$/.test(lineStr ?? '')) { noline++; continue; }   // "§2"-style locators
+        const candidates = docCandidates(file);
+        if (!candidates.length) { nofile++; continue; }
+        const needles = [...(NEEDLES.get(r.id) ?? [])].filter(n => n.length >= 4);
+        const vs = [...new Set([...needles, ...valueVariants(r.value)])];
+        if (!vs.length) { weak++; continue; }                        // "8", "33": everywhere, grades nothing
+        graded++;
+        if (needles.length) byNeedle++;
+        let at = [];
+        for (const lines of candidates) {
+            const hits = [];
+            lines.forEach((L, i) => { if (vs.some(v => L.includes(v))) hits.push(i + 1); });
+            if (hits.length) { at = hits; break; }        // the file the anchor is in
+        }
+        if (!at.length) { unanchored.push(`${r.id} -> ${r.docline} (tried ${vs.map(v => JSON.stringify(v)).join(', ')})`); continue; }
+        const target = Number(lineStr);
+        const near = at.reduce((a, b) => (Math.abs(b - target) < Math.abs(a - target) ? b : a));
+        if (Math.abs(near - target) <= WINDOW) { anchored++; continue; }
+        drifted.push(`${r.id} ${r.docline} -> nearest occurrence line ${near} (off by ${Math.abs(near - target)}` +
+                     `${at.length > 1 ? `, ${at.length} occurrences` : ''})`);
+        rewrites.push({ id: r.id, from: r.docline, to: `${file}:${near}`, occ: at.length });
+    }
+    if (graded < 50)
+        fail(`claims-index: only ${graded} locator(s) could be graded — the value or locator column changed shape`);
+    if (REANCHOR) {
+        let text = readFileSync(INDEX, 'utf8');
+        for (const w of rewrites) {
+            const re = new RegExp(`^(\\|\\s*${w.id}\\s*\\|\\s*)${w.from.replace('.', '\\.')}(\\s*\\|)`, 'm');
+            if (!re.test(text)) { console.log(`  SKIP ${w.id}: row not matched for rewrite`); continue; }
+            text = text.replace(re, `$1${w.to}$2`);
+            console.log(`  ${w.id}: ${w.from} -> ${w.to}${w.occ > 1 ? `   (${w.occ} occurrences; nearest chosen — check this one)` : ''}`);
+        }
+        writeFileSync(INDEX, text);
+        console.log(`\n--reanchor: rewrote ${rewrites.length} locator(s). ${rewrites.filter(w => w.occ > 1).length} had ` +
+                    'more than one occurrence and took the nearest — read those lines before committing.');
+        process.exit(0);
+    }
+    if (drifted.length)
+        fail(`claims-index: ${drifted.length} of ${graded} locator(s) point more than ${WINDOW} lines from their value`,
+             drifted.map(d => `    ${d}`).join('\n') +
+             '\n    Fix: node tools/archaeology/claims-index-check.mjs --reanchor');
+    locatorReport = `${anchored} of ${graded} locators within ${WINDOW} lines of their anchor ` +
+        `(${byNeedle} of them also carry a doc-drift needle) ` +
+        `(${weak} values too short to locate, ${noline} section-style, ${nofile} outside docs/` +
+        (unanchored.length ? `, ${unanchored.length} not found in their document: ${unanchored.map(u => u.split(' ')[0]).join(', ')}` : '') + ')';
+}
+
+// 9. A derived row's arithmetic must compute what the row claims.
+//
+// 24 rows carry status `derived-from-gated`, and NONE of them is in
+// claims.json -- so verify-all never computes them and doc-drift never sees
+// them.  The arithmetic is written out in the reproducer cell; this evaluates
+// it.  Not every row can be: eight state the derivation in prose ("sum of
+// perf-017/021/022/023"), and those are counted and named rather than passed
+// over.  A rule that INPUTS must each be some gated claim's current value was
+// tried and dropped: it fires on round constants (33,554,432 for 32 MiB) and
+// on chained derivations, so it would have cost more in false alarms than the
+// one real hit it found.
+{
+    let parsed = 0; const prose = [], wrong = [];
+    for (const r of rows) {
+        if (r.status !== 'derived-from-gated') continue;
+        const m = /(.+?)\s*(?:=|≈)\s*([\d,]+(?:\.\d+)?)/.exec(r.repro.replace(/^arithmetic:\s*/, ''));
+        if (!m) { prose.push(r.id); continue; }
+        const expr = m[1].replace(/,/g, '').replace(/[×x]/g, '*').replace(/÷/g, '/')
+                         .replace(/−/g, '-').replace(/\^/g, '**')
+                         .replace(/\s*(?:MB|KB|B|bytes|tics|ms|Hz|s)\b/g, '');
+        if (!/^[\d\s.+\-*/()]+$/.test(expr)) { prose.push(r.id); continue; }
+        let got = null;
+        try { got = Function('"use strict";return (' + expr + ')')(); } catch { /* prose after all */ }
+        if (got === null || !Number.isFinite(got)) { prose.push(r.id); continue; }
+        parsed++;
+        const want = Number(m[2].replace(/,/g, ''));
+        if (Math.abs(got - want) > Math.max(Math.abs(want) * 0.005, 0.005))
+            wrong.push(`${r.id}: ${m[1].trim()} computes ${got}, the row says ${m[2]}`);
+    }
+    if (parsed < 10)
+        fail(`claims-index: only ${parsed} derived row(s) had evaluable arithmetic — rule 9 is grading nothing`);
+    if (wrong.length)
+        fail(`claims-index: ${wrong.length} derived row(s) state arithmetic that does not compute their own value`,
+             wrong.map(w => `    ${w}`).join('\n'));
+    derivedReport = `${parsed} derived row(s) recomputed from their stated arithmetic` +
+        (prose.length ? `, ${prose.length} stated in prose (${prose.join(', ')})` : '');
+}
+
 if (bad) { console.log(`\nclaims-index-check: ${bad} problem(s)`); process.exit(1); }
 
 const by = {};
@@ -187,4 +383,6 @@ console.log(`PASS claims-index-check: ${rows.length} rows — ` +
             `; all ${Object.keys(claims).length} manifest ids listed, all reproducer paths resolve, ` +
             `header counts (${nFast} fast, ${nUnverifiable} unverifiable) computed, ` +
             `${valueCompared} values agree with the manifest` +
+            (locatorReport ? `;\n  ${locatorReport}` : '') +
+            (derivedReport ? `;\n  ${derivedReport}` : '') +
             (valueSkipped.length ? ` (${valueSkipped.length} boolean: ${valueSkipped.join(', ')})` : ''));
