@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 // Gate: demo verification + divergence tool (task 19.4).
 //
-// Three sub-gates (all must pass):
+// Four sub-gates (all must pass):
 //
 //   A. 13 golden demos — each WAD demo lump is extracted and verified against
-//      the existing sim golden trace via demo-verify.mjs's --all mode.
+//      the existing sim golden trace.  NOT via demo-verify.mjs: the extractor
+//      and the verify function below are COPIES of that file's (see the two
+//      section headers saying so), so nothing here exercises the shipped CLI's
+//      argv handling, its --all mode or its size cap.  The leg that does is
+//      `demo-verify-cli`, which runs `demo-verify.mjs --all` itself.  This
+//      comment used to name --all mode, which read as cover this gate has
+//      never provided.
 //
 //   B. Doctored demo red-proof — take doom-demo1's lmp bytes, flip one tic's
 //      input byte, run verify, assert that the FIRST divergent tic is reported
@@ -12,6 +18,10 @@
 //
 //   C. Hostile corpus — feed adversarial LMP payloads directly to the verify
 //      logic; all must be rejected gracefully (no crash, appropriate error).
+//
+//   D. A rejected header leaves no trace — one module, headers that fail the
+//      LATE checks, graded on web_state_hash and live zone bytes.  See its own
+//      section for why C could not see the defect D exists for.
 //
 // usage: node tools/demo-verify-test.mjs [--build-dir <dir>]
 

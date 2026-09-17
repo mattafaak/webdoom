@@ -762,38 +762,52 @@ const SPEC_HINTS = {
                   doc_file: '../spec.md' },
 };
 
-// Generic guard for any hints-map pointing at a single doc.
+// The one guard behind all three published-document checks.
+//
+// There used to be two of these: this one, and a `checkPublicDoc` that was the
+// same eleven lines with `PUBLIC_DOC` written in where the parameter goes.  The
+// hints maps differ only in whether each entry names its own file (README_HINTS
+// and SPEC_HINTS do, via `doc_file`) or they all share one (PUBLIC_HINTS), so
+// `fallbackDoc` is the whole difference.
+//
 // Returns null when the claim has no entry in hintsMap; otherwise {ok, got, want}.
-function checkHintsDoc(claimId, manifestExpected, hintsMap) {
+function checkHintsDoc(claimId, manifestExpected, hintsMap, fallbackDoc) {
     const hint = hintsMap[claimId];
     if (!hint) return null;
-    const lines = loadDoc(hint.doc_file);
+    const docFile = hint.doc_file ?? fallbackDoc;
+    const lines = loadDoc(docFile);
     if (!lines) return { ok: false, got: null, want: normalize(manifestExpected),
-                         err: `doc not found: ${hint.doc_file}` };
+                         err: `doc not found: ${docFile}` };
     const text = lines.join('\n');
     const m = text.match(hint.extract_re);
     if (!m) return { ok: false, got: null, want: normalize(manifestExpected),
-                     err: `figure not found in ${hint.doc_file} (needle: "${hint.needle}")` };
+                     err: hint.needle
+                         ? `figure not found in ${docFile} (needle: "${hint.needle}")`
+                         : `figure not found in ${docFile} (pattern drifted — re-anchor it)` };
     const got = normalize(m[1]);
     const want = normalize(manifestExpected);
-    return { ok: got === want, got, want, docFile: hint.doc_file };
+    return { ok: got === want, got, want, docFile };
 }
 
-// Returns null when the claim has no public figure; otherwise {ok, got, want}.
-function checkPublicDoc(claimId, manifestExpected) {
-    const hint = PUBLIC_HINTS[claimId];
-    if (!hint) return null;
-    const lines = loadDoc(PUBLIC_DOC);
-    if (!lines) return { ok: false, got: null, want: normalize(manifestExpected),
-                         err: `public doc not found: ${PUBLIC_DOC}` };
-    const text = lines.join('\n');
-    const m = text.match(hint.extract_re);
-    if (!m) return { ok: false, got: null, want: normalize(manifestExpected),
-                     err: `figure not found in ${PUBLIC_DOC} (pattern drifted — re-anchor it)` };
-    const got = normalize(m[1]);
-    const want = normalize(manifestExpected);
-    return { ok: got === want, got, want };
-}
+// One descriptor per published document.  Adding a fourth guard is a row here
+// and a hints map, not a counter set, a loop and a summary block.
+const DOC_GUARDS = [
+    { key: 'public', hints: PUBLIC_HINTS, doc: PUBLIC_DOC, fallbackDoc: PUBLIC_DOC,
+      tag: `public: ${PUBLIC_DOC}`, errType: 'PUBLIC_DOC_ERROR',
+      summary: `public-doc (${PUBLIC_DOC})`,
+      failMsg: (r) => `PUBLISHED doc says '${r.got}', manifest/script say '${r.want}'`,
+      failBanner: 'PUBLISHED doc is WRONG — these figures are live on GitHub:' },
+    { key: 'readme', hints: README_HINTS, doc: 'README.md',
+      tag: 'README.md', errType: 'README_ERROR',
+      summary: 'readme-guard (README.md)',
+      failMsg: (r) => `README.md says '${r.got}', manifest says '${r.want}'`,
+      failBanner: 'README.md is WRONG — published figures differ from committed expected values:' },
+    { key: 'spec', hints: SPEC_HINTS, doc: '../spec.md',
+      tag: 'spec.md', errType: 'SPEC_ERROR',
+      summary: 'spec-guard (spec.md)',
+      failMsg: (r) => `spec.md says '${r.got}', manifest says '${r.want}'`,
+      failBanner: 'spec.md is WRONG — published figures differ from committed expected values:' },
+];
 
 function extractDocFigure(claimId, expected) {
     const hint = DOC_HINTS[claimId] || {};
@@ -925,17 +939,11 @@ let pass = 0, fail = 0, soft = 0;
 const failDetails = [];
 const softDetails = [];
 
-// Public-doc guard (task 6.5 / FINDING-9). Kept in its own counters so the
-// three-way summary's "(of N checked)" total stays consistent; both `fail`
-// and `publicFail` gate the exit code below.
-let publicChecked = 0, publicPass = 0, publicFail = 0;
-const publicFailDetails = [];
-
-// README + spec guards (task 12.1)
-let readmeChecked = 0, readmePass = 0, readmeFail = 0;
-const readmeFailDetails = [];
-let specChecked = 0, specPass = 0, specFail = 0;
-const specFailDetails = [];
+// Published-document guards: magic-data.md (task 6.5 / FINDING-9), README.md
+// and spec.md (task 12.1).  Counted apart from `pass`/`fail` so the three-way
+// summary's "(of N checked)" total stays consistent; every one of them gates
+// the exit code below.
+const guardState = new Map(DOC_GUARDS.map(g => [g.key, { checked: 0, pass: 0, fail: 0, details: [] }]));
 
 for (const [id, entry] of Object.entries(manifest.claims)) {
     // Published-promise claims (readme-001, spec-001..003) are checked via
@@ -977,68 +985,39 @@ for (const [id, entry] of Object.entries(manifest.claims)) {
         failDetails.push({ id, type: result.type, msg: result.message });
         console.log(`FAIL  ${id}  [${result.type}] ${result.message}`);
     }
+}
 
-    // Public-doc guard (task 6.5): the same manifest value must also hold in
-    // the PUBLISHED writeup. Independent of the verdict above — a claim can be
-    // soft internally and still have a hard, checkable figure in public.
-    const pub = checkPublicDoc(id, expected);
-    if (pub !== null) {
-        publicChecked++;
-        if (pub.ok) {
-            publicPass++;
-            if (!jsonOnly) console.log(`PASS  ${id}  [public: ${PUBLIC_DOC}]`);
+// ── published-document checks (tasks 6.5 and 12.1) ───────────────────────────
+//
+// The same manifest value must hold in the published document.  Independent of
+// the three-way verdict above: a claim can be soft internally and still have a
+// hard, checkable figure in public.
+//
+// The public guard used to run INSIDE the three-way loop, which skipped
+// `unverifiable` claims, inactive families and the four published-promise ids.
+// A magic-data.md figure therefore stopped being checked the moment its claim's
+// family went inactive — silently, and exactly when a stale published number is
+// most likely.  Running it here checks it whenever a hint exists, which is what
+// README and spec already did.  Today the count is unchanged at 14; the
+// difference is that it cannot now be disarmed by an unrelated status edit.
+for (const g of DOC_GUARDS) {
+    const st = guardState.get(g.key);
+    for (const [id, entry] of Object.entries(manifest.claims)) {
+        if (!g.hints[id]) continue;
+        const expected = entry.expected;
+        if (expected === null || expected === undefined) continue;
+        const r = checkHintsDoc(id, expected, g.hints, g.fallbackDoc);
+        if (r === null) continue;
+        st.checked++;
+        if (r.ok) {
+            st.pass++;
+            if (!jsonOnly) console.log(`PASS  ${id}  [${g.tag}]`);
         } else {
-            // Counted separately from `fail` so the three-way summary's
-            // "(of N checked)" stays consistent; both gate the exit code.
-            publicFail++;
-            const msg = pub.err
-                ? pub.err
-                : `PUBLISHED doc says '${pub.got}', manifest/script say '${pub.want}'`;
-            publicFailDetails.push({ id, msg });
-            console.log(`FAIL  ${id}  [PUBLIC_DOC_ERROR] ${msg}`);
+            st.fail++;
+            const msg = r.err ? r.err : g.failMsg(r);
+            st.details.push({ id, msg });
+            console.log(`FAIL  ${id}  [${g.errType}] ${msg}`);
         }
-    }
-}
-
-// ── README published-promise checks (task 12.1) ───────────────────────────────
-for (const [id, entry] of Object.entries(manifest.claims)) {
-    if (!README_HINTS[id]) continue;
-    const expected = entry.expected;
-    if (expected === null || expected === undefined) continue;
-    const r = checkHintsDoc(id, expected, README_HINTS);
-    if (r === null) continue;
-    readmeChecked++;
-    if (r.ok) {
-        readmePass++;
-        if (!jsonOnly) console.log(`PASS  ${id}  [README.md]`);
-    } else {
-        readmeFail++;
-        const msg = r.err
-            ? r.err
-            : `README.md says '${r.got}', manifest says '${r.want}'`;
-        readmeFailDetails.push({ id, msg });
-        console.log(`FAIL  ${id}  [README_ERROR] ${msg}`);
-    }
-}
-
-// ── spec.md published-promise checks (task 12.1) ─────────────────────────────
-for (const [id, entry] of Object.entries(manifest.claims)) {
-    if (!SPEC_HINTS[id]) continue;
-    const expected = entry.expected;
-    if (expected === null || expected === undefined) continue;
-    const r = checkHintsDoc(id, expected, SPEC_HINTS);
-    if (r === null) continue;
-    specChecked++;
-    if (r.ok) {
-        specPass++;
-        if (!jsonOnly) console.log(`PASS  ${id}  [spec.md]`);
-    } else {
-        specFail++;
-        const msg = r.err
-            ? r.err
-            : `spec.md says '${r.got}', manifest says '${r.want}'`;
-        specFailDetails.push({ id, msg });
-        console.log(`FAIL  ${id}  [SPEC_ERROR] ${msg}`);
     }
 }
 
@@ -1068,31 +1047,16 @@ if (softDetails.length > 0 && !jsonOnly) {
     }
 }
 
-// Public-doc guard summary (task 6.5 / FINDING-9)
-console.log(`public-doc (${PUBLIC_DOC}): ${publicPass}/${publicChecked} figures match the manifest`);
-if (publicFailDetails.length > 0) {
-    console.log('\nPUBLISHED doc is WRONG — these figures are live on GitHub:');
-    for (const f of publicFailDetails) {
-        console.log(`  ${f.id}: ${f.msg}`);
+// Published-document guard summaries (tasks 6.5 / FINDING-9 and 12.1)
+let guardFail = 0;
+for (const g of DOC_GUARDS) {
+    const st = guardState.get(g.key);
+    guardFail += st.fail;
+    console.log(`${g.summary}: ${st.pass}/${st.checked} figures match the manifest`);
+    if (st.details.length > 0) {
+        console.log(`\n${g.failBanner}`);
+        for (const f of st.details) console.log(`  ${f.id}: ${f.msg}`);
     }
 }
 
-// README guard summary (task 12.1)
-console.log(`readme-guard (README.md): ${readmePass}/${readmeChecked} figures match the manifest`);
-if (readmeFailDetails.length > 0) {
-    console.log('\nREADME.md is WRONG — published figures differ from committed expected values:');
-    for (const f of readmeFailDetails) {
-        console.log(`  ${f.id}: ${f.msg}`);
-    }
-}
-
-// spec.md guard summary (task 12.1)
-console.log(`spec-guard (spec.md): ${specPass}/${specChecked} figures match the manifest`);
-if (specFailDetails.length > 0) {
-    console.log('\nspec.md is WRONG — published figures differ from committed expected values:');
-    for (const f of specFailDetails) {
-        console.log(`  ${f.id}: ${f.msg}`);
-    }
-}
-
-if (fail > 0 || publicFail > 0 || readmeFail > 0 || specFail > 0 || twoWayFail) process.exit(1);
+if (fail > 0 || guardFail > 0 || twoWayFail) process.exit(1);
