@@ -11,6 +11,13 @@ export function setStatus(msg, ttlMs = 0) {
     const el = document.getElementById('status');
     if (!el) return;
     el.textContent = msg;
+    // Test seam: the last message actually WRITTEN to the line, which outlives
+    // its ttl.  The browser gates used to read #status live; that was sound
+    // while every message was permanent, and becomes a race the moment one is
+    // not.  Asserting on this proves the user-visible line was written, which
+    // is what the insecure-origin contract promises -- an internal flag would
+    // only prove the code took the branch.
+    if (msg && typeof window !== 'undefined') window.__wdLastStatus = msg;
     clearTimeout(statusTimer);
     if (ttlMs && msg)
         statusTimer = setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, ttlMs);

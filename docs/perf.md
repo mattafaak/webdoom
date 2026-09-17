@@ -194,7 +194,7 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/js/lobby.js` | 32,559 | 11,137 | 10.9 |
 | `build/synth.wasm` | 21,319 | 9,064 | 8.9 |
 | `client/js/input.js` | 18,037 | 6,628 | 6.5 |
-| `client/js/audio.js` | 17,385 | 5,843 | 5.7 |
+| `client/js/audio.js` | 17,922 | 6,065 | 5.9 |
 | `client/js/menu.js` | 15,588 | 5,415 | 5.3 |
 | `client/js/main.js` | 13,244 | 4,907 | 4.8 |
 | `client/js/net.js` | 11,713 | 4,462 | 4.4 |
@@ -209,26 +209,26 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/js/music-worklet.js` | 6,983 | 2,490 | 2.4 |
 | `client/js/countdown.js` | 7,068 | 2,396 | 2.3 |
 | `client/js/persist.js` | 5,338 | 1,997 | 2.0 |
-| `client/js/ui.js` | 2,211 | 966 | 0.9 |
+| `client/js/ui.js` | 2,724 | 1,215 | 1.2 |
 | `client/js/idb.js` | 2,214 | 964 | 0.9 |
 | `client/js/perf-marks.js` | 2,252 | 959 | 0.9 |
 | `client/index.html` | 1,732 | 905 | 0.9 |
 | `client/js/wad-cache.js` | 1,517 | 716 | 0.7 |
 | `client/js/wad-library.js` | 1,159 | 565 | 0.6 |
-| **Total (all, raw)** | **531,457** | — | — |
-| **Total (all, gzip-9)** | — | **219,816** | **214.7** |
-| **JS+CSS+HTML only (raw)** | 201,490 | — | — |
-| **JS+CSS+HTML only (gzip-9)** | — | 73,585 | **71.9** |
+| **Total (all, raw)** | **532,507** | — | — |
+| **Total (all, gzip-9)** | — | **220,287** | **215.1** |
+| **JS+CSS+HTML only (raw)** | 202,540 | — | — |
+| **JS+CSS+HTML only (gzip-9)** | — | 74,056 | **72.3** |
 
 The WAD file itself (doom.wad ≈ 11.8 MB, doom2.wad ≈ 13.9 MB, etc.) is
 fetched separately on first play and cached in the browser; it is not part of
 the initial page-load transfer.
 
 **Finding**: the entire deliverable (wasm + JS glue + client JS + CSS +
-HTML) compresses to **214.7 KB gzip** on the wire, gated by
+HTML) compresses to **215.1 KB gzip** on the wire, gated by
 `payload-size` (perf-015/perf-016) since round 8. The wasm is
-61% of that. The JS+CSS+HTML surface is **71.9 KB gzip**
-— note that is **2.0x the 35.1 KB this table used to
+61% of that. The JS+CSS+HTML surface is **72.3 KB gzip**
+— note that is **2.1x the 35.1 KB this table used to
 claim**, which went stale unnoticed precisely because both figures were
 marked *not machine-verified*: the old table still listed
 `client/js/settings.js`, deleted in round 7, and omitted `wad-import`,

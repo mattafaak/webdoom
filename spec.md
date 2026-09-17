@@ -209,7 +209,12 @@ The primary player environment is plain-HTTP on a LAN/tailnet address
 
 - Every player-facing feature either works on insecure origins or
   degrades **loudly** (user-visible status line, never a swallowed
-  `console.warn`). Music and WAD caching must work there via
+  `console.warn`). Loud is not the same as permanent: the music notice
+  carries an 8 s ttl since round 11, because it reports a path that WORKS
+  and sat on the screen for the whole session otherwise — which is how a
+  player learns to ignore the line that also carries engine errors. The
+  gates assert `window.__wdLastStatus`, the message as written, so the ttl
+  cannot turn them into a race. Music and WAD caching must work there via
   secure-context-free paths (IndexedDB, non-worklet audio sink).
   Since round 11 there are TWO synth locations, and this is the clause that
   decides which one an origin gets: the worklet-hosted `build/synth.wasm`

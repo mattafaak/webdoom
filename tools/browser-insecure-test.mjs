@@ -246,7 +246,9 @@ if (musicRms < 0.0005) {
     cleanup(1);
 }
 
-const musicStatus = await tab2.ev(`document.getElementById('status')?.textContent`);
+// The written message, not the live element: the compatibility notice has an
+// 8 s ttl, so a live read would be a race against this test's own speed.
+const musicStatus = await tab2.ev(`window.__wdLastStatus ?? document.getElementById('status')?.textContent`);
 if (!musicStatus?.includes('compatibility mode')) {
     console.error(`FAIL: status should include 'compatibility mode', got '${String(musicStatus)}'`);
     cleanup(1);

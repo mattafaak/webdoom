@@ -130,7 +130,11 @@ if (rmsVal < 0.0005) {
 }
 
 // ── Assertion (iii): user-visible status message ──────────────────────────
-const statusText = await evaluate(`document.getElementById('status')?.textContent`);
+// window.__wdLastStatus is what setStatus last WROTE to #status (ui.js).  The
+// live element is not read here: the compatibility notice carries an 8 s ttl
+// now, so reading the DOM would pass or fail on how quickly this test got
+// here.  The seam records the write, which is the thing being promised.
+const statusText = await evaluate(`window.__wdLastStatus ?? document.getElementById('status')?.textContent`);
 if (!statusText?.includes('compatibility mode')) {
     console.error(`FAIL (iii): expected status to include 'compatibility mode', got '${String(statusText)}'`);
     cleanup(1);

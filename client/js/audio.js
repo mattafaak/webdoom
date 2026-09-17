@@ -206,7 +206,14 @@ export function createAudio(doom) {
             const reason = insecure ? 'insecure origin' : 'worklet unavailable';
             try {
                 sink = makeBufferSink(ctx);
-                setStatus(`music: compatibility mode (${reason})`);
+                // Informational, so it CLEARS: music works on this path -- same
+                // sequencer, same samples, a different thread -- and a warning
+                // that never leaves the screen during play is how people learn
+                // to ignore the status line, including the messages that matter.
+                // ui.js's own convention: "an informational message clears
+                // itself; an error (no ttl) stays".  This one was miscategorised
+                // from the day it landed (16.4).
+                setStatus(`music: compatibility mode (${reason})`, 8000);
             } catch (fallbackErr) {
                 console.warn('music fallback sink failed:', fallbackErr);
                 setStatus('music unavailable: ' + (fallbackErr.message ?? String(fallbackErr)));
