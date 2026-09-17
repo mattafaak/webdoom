@@ -70,7 +70,7 @@ re-probes. `tools/deploy.sh --check` reports drift and changes nothing.
 ## Tests
 
 ```sh
-tools/run-tests.sh            # everything: 79 legs, ~12 min without the N64 leg (the runner prints its time)
+tools/run-tests.sh            # everything: 80 legs, ~12 min without the N64 leg (the runner prints its time)
 tools/run-tests.sh --jobs 3   # the same legs three at a time: ~6 min, identical verdicts
                               # (~14 min with the N64 leg and the perf tier)
 tools/run-tests.sh --quick    # no WADs, no build, no browser — what CI runs
@@ -86,7 +86,7 @@ that table, and `--require-complete` turns any skip into a failure.
 IWADs and runs the `--quick` tier — lint, the doc-drift gate, the state-machine
 and precache checks, the gate census, and the three fuzz suites. Everything that
 needs a WAD, a built engine or a browser (the sim and render goldens, netplay,
-the ASan and cross-architecture legs, the 21 browser legs) runs locally and says
+the ASan and cross-architecture legs, the 22 browser legs) runs locally and says
 so. The workflow prints the list it did not cover.
 
 Three legs deserve a sentence the registry cannot give them:

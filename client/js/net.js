@@ -164,6 +164,12 @@ function makeBundlePump(doom, numplayers, fabOverride) {
         // TryRunTics paces them). Call once callMain has run.
         go: drain,
 
+        // The per-tic ingame ring is the one _malloc this module makes, and it
+        // was never freed.  Bounded by the engine instance, which bootDoom
+        // recreates per game, so it never accumulated across sessions -- but an
+        // allocation with no matching free is a habit, not a size.
+        dispose() { doom._free(ingamePtr); },
+
         // Join in progress: replay the streamed history (and any live bundles
         // that arrive meanwhile) UNPACED — one web_replay_tic per bundle — up
         // to the frontier, then switch to live. onProgress(done, total) drives
@@ -171,7 +177,25 @@ function makeBundlePump(doom, numplayers, fabOverride) {
         // onCaughtUp runs after _web_end_catchup and before live delivery.
         async catchUp(frontier, onProgress, onCaughtUp) {
             const CHUNK = 512;      // replay this many tics before yielding
+            // No progress for this long means the stream is not coming back.
+            // Generous: a real catch-up over a slow LAN link still advances
+            // several tics a second, so this only fires when nothing arrives.
+            const STALL_MS = 15000;
             const yieldToNet = () => new Promise(r => setTimeout(r, 0));
+            // `frontier` arrives in the `launch`/`inprogress` frame and was
+            // used unchecked.  The loop below has no exit but reaching it.
+            if (!Number.isInteger(frontier) || frontier < 0 || frontier > 0x7FFFFFFF)
+                throw new Error(
+                    `refusing catch-up: frontier ${JSON.stringify(frontier)} is not a plausible tic`);
+            // THE LOOP HAD NO WAY OUT BUT SUCCESS.  Neither attachRelay nor
+            // attachSpectate installs onclose/onerror, so a socket that died
+            // mid-catch-up -- or a frontier the stream can never reach, which
+            // a hostile server could simply assert -- turned this into a
+            // setTimeout(0) hot loop pegging a core forever, with
+            // "JOINING — CATCHING UP" on screen and no way out but a reload.
+            // bootDoom never resolved either, so enterGame's .catch never ran.
+            let lastTic = -1;
+            let lastMoved = Date.now();
             for (;;) {
                 let n = 0;
                 while (queue.length) {
@@ -183,8 +207,14 @@ function makeBundlePump(doom, numplayers, fabOverride) {
                         n = 0;
                     }
                 }
-                onProgress?.(doom._web_gametic(), frontier);
-                if (doom._web_gametic() >= frontier && !queue.length) break;
+                const at = doom._web_gametic();
+                onProgress?.(at, frontier);
+                if (at >= frontier && !queue.length) break;
+                if (at !== lastTic) { lastTic = at; lastMoved = Date.now(); }
+                else if (Date.now() - lastMoved > STALL_MS)
+                    throw new Error(
+                        `catch-up stalled at tic ${at} of ${frontier} — no bundles for ` +
+                        `${Math.round(STALL_MS / 1000)}s; the relay is gone or the frontier is unreachable`);
                 await yieldToNet();
             }
             doom._web_end_catchup();
@@ -235,7 +265,7 @@ export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, nam
     return {
         go: pump.go,
         catchUp: (frontier, onProgress) => pump.catchUp(frontier, onProgress),
-        quit() { ws.close(); },
+        quit() { ws.close(); pump.dispose(); },
     };
 }
 
@@ -282,7 +312,7 @@ export function attachSpectate(doom, baseUrl, { numplayers, slots = null, names 
             const anchor = doom._web_first_ingame();
             if (anchor >= 0) doom._web_set_console(anchor);
         }),
-        quit() { ws.close(); },
+        quit() { ws.close(); pump.dispose(); },
     };
 }
 

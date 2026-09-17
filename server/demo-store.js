@@ -22,6 +22,19 @@ export const TOTAL_QUOTA   = envInt('WEBDOOM_DEMO_QUOTA', 134_217_728);    // 12
 export const TTL_MS        = envInt('WEBDOOM_DEMO_TTL_MS', 86_400_000);    // 24 hours
 export const FRAGMENT_MAX  = 6_000;               // raw bytes; above this, use server id
 
+// Every record costs more than its payload: a 64-character hex key, a Map
+// slot, a record object and a Buffer object, on the order of 200-250 bytes of
+// real RSS.  Charging only `bytes.length` meant a 1-byte demo was charged 1
+// byte, so the 128 MiB quota admitted ~134 million records -- tens of
+// gigabytes of heap -- and the process ran out of memory long before eviction
+// could ever trigger.  POST /api/demos has no auth and no rate limit, and each
+// distinct body is a distinct sha256, so dedup does not help an attacker.
+//
+// 256 is deliberately above the measured overhead: the quota is a safety
+// bound, and the direction to be wrong in is charging slightly too much.
+export const RECORD_OVERHEAD = 256;
+const costOf = rec => rec.bytes.length + RECORD_OVERHEAD;
+
 // Map<id, { bytes: Buffer, wad: string, expires: number }>
 const store = new Map();
 let usedBytes = 0;
@@ -43,7 +56,7 @@ function gcExpired() {
     const now = Date.now();
     for (const [id, rec] of store) {
         if (rec.expires <= now) {
-            usedBytes -= rec.bytes.length;
+            usedBytes -= costOf(rec);
             store.delete(id);
         }
     }
@@ -54,7 +67,7 @@ function evictOldest(needed) {
     const sorted = [...store.entries()].sort((a, b) => a[1].expires - b[1].expires);
     for (const [id, rec] of sorted) {
         if (usedBytes + needed <= TOTAL_QUOTA) break;
-        usedBytes -= rec.bytes.length;
+        usedBytes -= costOf(rec);
         store.delete(id);
     }
 }
@@ -75,14 +88,15 @@ export function putDemo(bytes, wad = '') {
         return id;
     }
 
-    if (usedBytes + bytes.length > TOTAL_QUOTA) {
-        evictOldest(bytes.length);
-        if (usedBytes + bytes.length > TOTAL_QUOTA)
+    const cost = bytes.length + RECORD_OVERHEAD;
+    if (usedBytes + cost > TOTAL_QUOTA) {
+        evictOldest(cost);
+        if (usedBytes + cost > TOTAL_QUOTA)
             throw { status: 507, message: 'demo store quota exhausted' };
     }
 
     store.set(id, { bytes: Buffer.from(bytes), wad, expires: Date.now() + TTL_MS });
-    usedBytes += bytes.length;
+    usedBytes += cost;
     return id;
 }
 
@@ -93,7 +107,7 @@ export function getDemo(id) {
     const rec = store.get(id);
     if (!rec) return null;
     if (rec.expires <= Date.now()) {
-        usedBytes -= rec.bytes.length;
+        usedBytes -= costOf(rec);
         store.delete(id);
         return null;
     }

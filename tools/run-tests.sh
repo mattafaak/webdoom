@@ -617,6 +617,12 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
     leg browser-fire          browser,build,wad,shared "PSX fire background + reduced-motion"  -- node tools/browser-fire-test.mjs "$U" /tmp
     leg browser-ierror        browser,build,wad,shared "I_Error surfaces, no wedge"            -- node tools/browser-ierror-test.mjs "$U"
     leg browser-rafdeath      browser,build,wad,shared "rAF death recovery"                    -- node tools/browser-rafdeath-test.mjs "$U"
+    # The same gate at the OTHER injection point.  _web_frame was the one
+    # statement inside the frame loop's try, so injecting only there proved the
+    # guarded line was guarded; the palette read and the GL draw sat after the
+    # catch and killed the loop with no endSession.  Both are inside now, and
+    # both are exercised.
+    leg browser-rafdeath-draw browser,build,wad,shared "rAF death recovery, draw path"         -- node tools/browser-rafdeath-test.mjs "$U" --inject _web_palette_version
     leg browser-wadimport     browser,build,wad,shared "user WAD import (16.6a)"               -- node tools/browser-wadimport-test.mjs "$U"
     leg browser-mp-gating     browser,build,wad,shared "local-WAD MP gating (16.6b)"           -- node tools/browser-mp-gating-test.mjs "$U"
     leg browser-offline       browser,build,wad,shared "offline single player"                 -- node tools/browser-offline-test.mjs

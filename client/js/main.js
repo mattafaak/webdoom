@@ -96,6 +96,7 @@ function restoreOnFailure(canvas) {
 //         net.join re-simulates the history first, net.spectate is receive-only
 // onQuit: runs on EVERY exit -- Quit Game, I_Error, a throw in the frame loop
 // record: pass -record so G_RecordDemo is armed before G_BeginRecording fires
+
 // The live session's one exit, reachable from outside bootDoom's closure.
 //
 // WHY THIS EXISTS.  endSession is the only thing that stops the rAF loop,
@@ -136,7 +137,28 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     // declared before createDoom: onDoomError can fire before the loop starts
     let running = false;
     let syncHandle = null;
-    let releaseResources = () => {};   // assigned once the handles exist
+    // Disposers, pushed AS EACH HANDLE IS CREATED, and run in reverse.
+    //
+    // This used to be one `releaseResources = () => {...}` assignment at the
+    // END of the boot, 60 lines after the first thing it releases.  Anything
+    // that threw in between escaped cleanup entirely: the relay WebSocket
+    // (so the server kept the colour slot for the rest of the session and
+    // refused the reconnect), the AudioContext with its three window-level
+    // arm listeners, and a 3 s interval left poking a dead instance.  Two
+    // reachable triggers: a shader compile failure throwing out of
+    // createRenderer, and an I_Error during callMain.
+    //
+    // Registering beside the construction is the fix that cannot drift: a
+    // handle added later without a disposer is visible at the call site.
+    const disposers = [];
+    const releaseResources = () => {
+        while (disposers.length) {
+            try { disposers.pop()(); } catch { /* dead instance */ }
+        }
+        document.exitPointerLock?.();
+        canvas.hidden = true;
+        document.getElementById('landing').hidden = false;
+    };
 
     // One exit for the quit path and both error paths.  The caller's onQuit
     // is what re-renders the launcher, so it runs on every exit; the reason
@@ -207,6 +229,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
         ? attachSpectate(doom, baseWsUrl, net)
         : net ? attachRelay(doom, baseWsUrl, net) : null;
     doom.netQuit = () => { try { relay?.quit?.(); } catch { /* already closed */ } };   // D_QuitNetGame
+    disposers.push(() => relay?.quit?.());
 
     // -record here rather than a pre-boot call: G_RecordDemo needs the zone
     // allocator, which D_DoomMain initialises first
@@ -227,20 +250,24 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
         relay?.go();
     }
     window.doomAudio = createAudio(doom);
+    disposers.push(() => window.doomAudio?.stop?.());
     window.webdoom = { doom };              // debug/test handle
 
     // The scrubber asks for a seek; the frame loop performs it on the next
     // animation callback, never mid-frame.
     let seekPending = null;
     let scrubberHandle = null;
+    disposers.push(() => { scrubberHandle?.destroy?.(); scrubberHandle = null; });
     window.webdoom.attachScrubber = (demoBytes, container) => {
         scrubberHandle?.destroy();
         scrubberHandle = createScrubberUI(doom, demoBytes, { container, seekHook: n => { seekPending = n; } });
     };
 
     syncHandle = startSync(doom, wads[0].file);
+    disposers.push(() => syncHandle?.stop?.());
 
     const renderer = createRenderer(canvas);
+    disposers.push(() => { renderer?.destroy?.(); renderer?.dispose?.(); });
     window.webdoom._renderer = renderer;   // browser-pipeline reads .kind
     // memory never grows (ALLOW_MEMORY_GROWTH=0), so the views are stable
     const fb = doom._web_framebuffer();
@@ -253,6 +280,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     status('');
     canvas.focus();
     const input = createInput(doom, canvas, loadSettings());
+    disposers.push(() => { input?.destroy?.(); input?.dispose?.(); });
     doom._web_set_smooth(input.settings.smooth ? 1 : 0);
 
     // through doomAudio, not the export: on the worklet tier the flavour has
@@ -260,21 +288,6 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     window.doomAudio.setOplMode(input.settings.musicBackend === 'opl3' ? 1 : 0);
 
     running = true;
-    // Everything the boot allocated, released in one place.  The relay would
-    // otherwise outlive the engine and hold its server slot; input listeners
-    // and GL objects are per boot (browser-teardown counts them).
-    releaseResources = () => {
-        try { relay?.quit?.(); } catch { /* already closed */ }
-        for (const h of [input, renderer]) {
-            try { h?.destroy?.(); h?.dispose?.(); } catch { /* dead instance */ }
-        }
-        document.exitPointerLock?.();
-        canvas.hidden = true;
-        document.getElementById('landing').hidden = false;
-        try { window.doomAudio?.stop?.(); } catch { /* dead instance */ }
-        try { syncHandle?.stop?.(); } catch { /* dead instance */ }
-        try { scrubberHandle?.destroy?.(); scrubberHandle = null; } catch { /* no-op */ }
-    };
 
     doom.onQuit = () => endSession(null);   // I_Quit: a clean exit, no reason
 
@@ -298,16 +311,28 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
                 doom._web_frame();
                 scrubberHandle?.onFrame?.();
             }
+            // INSIDE the same try as the engine call, deliberately.  These
+            // three lines sat after the catch, so a throw from the frame hook,
+            // the palette read or the GL draw killed the rAF loop with no
+            // endSession at all: no status message, #landing still hidden, the
+            // canvas still visible, input listeners still attached and the
+            // relay socket still holding its server slot -- the ws-001 silent
+            // wedge, in the one loop that exists to prevent it.
+            //
+            // browser-rafdeath injects by patching doom._web_frame, which is
+            // the statement that WAS covered, so the gate proved the guarded
+            // line was guarded and said nothing about these.  It injects here
+            // now as well.
+            window._doomFrameHook?.();      // test seam: per-frame hash collection
+            const v = doom._web_palette_version();
+            renderer.draw(fbView, palView, v !== palVersion);
+            palVersion = v;
         } catch (err) {
             // onDoomError may already have ended the session before the throw
             // propagated here
             if (running) endSession(`engine error: ${err?.message ?? String(err)}`);
             return;
         }
-        window._doomFrameHook?.();          // test seam: per-frame hash collection
-        const v = doom._web_palette_version();
-        renderer.draw(fbView, palView, v !== palVersion);
-        palVersion = v;
         perfMarks.end();
         if (running) requestAnimationFrame(frame);
     };

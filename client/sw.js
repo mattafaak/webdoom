@@ -58,7 +58,32 @@ self.addEventListener('fetch', e => {
             if (res.ok) {
                 const buf = await res.arrayBuffer();
                 const init = { status: res.status, statusText: res.statusText, headers: res.headers };
-                await c.put(e.request.url, new Response(buf.slice(0), init));
+                // A WAD is content-hashed, so a new ?v for the same path means
+                // the file was REPLACED and the old entry can never be asked
+                // for again.  Nothing pruned them: `activate` only deletes
+                // `webdoom-shell-` keys, so webdoom-wads-v1 grew without bound
+                // at 12-18 MB a copy.  That matters because of the line below.
+                try {
+                    for (const k of await c.keys()) {
+                        const ku = new URL(k.url);
+                        if (ku.pathname === url.pathname && ku.search !== url.search)
+                            await c.delete(k);
+                    }
+                } catch { /* best-effort: never fail a download over housekeeping */ }
+                // THE CACHE WRITE MUST NOT BE ABLE TO FAIL THE DOWNLOAD.
+                // Unguarded, a rejected c.put -- QuotaExceededError being the
+                // realistic one, and the pruning above exists because this
+                // cache was the thing filling up -- rejected the whole async
+                // function, so respondWith got a rejected promise and the
+                // page's fetch became a NETWORK ERROR.  main.js then threw
+                // `wad fetch failed` and the game would not start, on every
+                // retry, even though all 15 MB had arrived intact.  The shell
+                // branch below has carried this guard, with a comment saying
+                // why, while the branch far likelier to hit quota had none.
+                try { await c.put(e.request.url, new Response(buf.slice(0), init)); }
+                catch (err) {
+                    console.warn(`webdoom sw: could not cache ${e.request.url}: ${err?.message ?? err}`);
+                }
                 return new Response(buf, init);
             }
             return res;

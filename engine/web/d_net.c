@@ -68,23 +68,29 @@ EMSCRIPTEN_KEEPALIVE void web_net_setup (int player, int numplayers,
     // web_net_bundle -- so a hostile or buggy `welcome`/`launch` could place
     // both out of range.  Note web_net_set_delay already clamps and
     // web_set_player_name already bounds-checks; these two did not.
-    // These refusals used to be silent, which is how the JS side's matching
-    // hole stayed invisible: client/js/net.js sized its own write loops on the
-    // same unchecked `numplayers`, ran BEFORE this function's guard could
-    // matter, and nothing anywhere said a roster had been rejected.  A guard
-    // that declines without saying so teaches nobody that the wire is lying.
+    // These refusals are SILENT, deliberately, and that was re-decided in
+    // round 12 rather than inherited.
+    //
+    // The complaint was fair: a guard that declines without saying so is how
+    // the matching hole in client/js/net.js stayed invisible for so long.  But
+    // a printf here costs two things and buys nothing a user sees.  It adds its
+    // format strings to DATA, which moves __heap_base and restamps perf-009 and
+    // everything derived from it.  And tools/hostile-server-test.mjs asserts BY
+    // OBSERVATION that no hostile value causes a write below the base of the
+    // tic-indexed arrays -- so the stdio buffer a printf touches reads as
+    // exactly the violation that gate exists to catch (measured: 9 bytes,
+    // 272,936 under the base).  Loosening it to permit "benign" writes would be
+    // lowering the bar rather than fixing anything.
+    //
+    // The loudness belongs on the JS side and is there now: checkNetShape in
+    // client/js/net.js refuses the same values before they ever reach this
+    // function, with a message naming the field and the value, and that is the
+    // side a person can actually read.  This stays the silent structural floor
+    // a bare-metal port inherits.
     if (player < 0 || player >= MAXPLAYERS)
-    {
-        printf ("web_net_setup: refusing player %d (not 0..%d)\n", player,
-                MAXPLAYERS - 1);
         return;
-    }
     if (numplayers < 1 || numplayers > MAXPLAYERS)
-    {
-        printf ("web_net_setup: refusing numplayers %d (not 1..%d)\n",
-                numplayers, MAXPLAYERS);
         return;
-    }
 
     consoleplayer = displayplayer = player;
     web_localslot = player;

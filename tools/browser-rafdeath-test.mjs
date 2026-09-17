@@ -22,6 +22,20 @@ import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
 
 const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
+// WHICH engine export to make throw.  This used to be hardcoded to
+// `_web_frame`, and `_web_frame` was the ONE statement inside the frame loop's
+// try -- so the gate proved the guarded line was guarded and said nothing
+// about `_doomFrameHook`, `_web_palette_version` and `renderer.draw`, which sat
+// AFTER the catch.  A throw from any of those killed the loop with no
+// endSession at all: the exact ws-001 wedge, in the loop that exists to prevent
+// it.  Those three are inside the try now, and the suite runs this file once
+// per injection point so the claim covers both halves.
+const injIdx = process.argv.indexOf('--inject');
+const INJECT = injIdx >= 0 ? process.argv[injIdx + 1] : '_web_frame';
+if (!/^_web_[a-z_]+$/.test(INJECT)) {
+    console.error(`FAIL: --inject '${INJECT}' is not an engine export name`);
+    process.exit(2);
+}
 const chrome = await launchChrome();
 const cleanup = code => { chrome.kill(); process.exit(code); };
 const tab = await chrome.tab(url);
@@ -83,20 +97,21 @@ if (!booted) {
 // Monkey-patch doom._web_frame to throw once, then restore (tracks call count).
 // This reproduces the ws-001 class: an unexpected JS exception inside the
 // try { input.frame(); doom._web_frame(); } block.
-const domExported = await ev(`typeof window.webdoom?.doom?._web_frame === 'function'`);
+const domExported = await ev(`typeof window.webdoom?.doom?.${INJECT} === 'function'`);
 if (!domExported) {
-    console.error('FAIL: window.webdoom.doom._web_frame is not a function — game handle missing');
+    console.error(`FAIL: window.webdoom.doom.${INJECT} is not a function — game handle missing`);
     cleanup(1);
 }
+console.log(`  injecting a throw into doom.${INJECT}`);
 
 // Install the throw patch; count how many times it fires.
 await ev(`(() => {
     const d = window.webdoom.doom;
-    const orig = d._web_frame;
+    const orig = d.${INJECT};
     window.__rafThrowCount = 0;
-    d._web_frame = function() {
+    d.${INJECT} = function() {
         window.__rafThrowCount++;
-        d._web_frame = orig;   // restore immediately so teardown can proceed normally
+        d.${INJECT} = orig;   // restore immediately so teardown can proceed normally
         throw new Error('synthetic-rafdeath-ws001');
     };
 })()`);
@@ -107,7 +122,7 @@ await sleep(300);
 // ── Assert: rAF loop stopped (no accumulating exceptions) ─────────────────────
 const throwCount = await ev(`window.__rafThrowCount ?? 0`);
 if (throwCount !== 1) {
-    console.error(`FAIL: _web_frame throw fired ${throwCount} times (expected 1) — rAF loop not stopping cleanly`);
+    console.error(`FAIL: ${INJECT} throw fired ${throwCount} times (expected 1) — rAF loop not stopping cleanly`);
     cleanup(1);
 }
 
@@ -116,14 +131,14 @@ if (throwCount !== 1) {
 // instead we track via an extra counter on the restored function for 500ms).
 await ev(`(() => {
     const d = window.webdoom.doom;
-    const orig = d._web_frame;
+    const orig = d.${INJECT};
     window.__rafPostCount = 0;
-    d._web_frame = function(...a) { window.__rafPostCount++; return orig.apply(d, a); };
+    d.${INJECT} = function(...a) { window.__rafPostCount++; return orig.apply(d, a); };
 })()`);
 await sleep(500);
 const postCount = await ev(`window.__rafPostCount ?? 0`);
 if (postCount > 0) {
-    console.error(`FAIL: rAF loop continued after exception — ${postCount} extra _web_frame calls observed`);
+    console.error(`FAIL: rAF loop continued after exception — ${postCount} extra ${INJECT} calls observed`);
     cleanup(1);
 }
 
@@ -164,5 +179,5 @@ if (failed) {
     cleanup(1);
 }
 
-console.log('PASS — rAF exception recovery: landing restored, status shown, loop stopped (ws-001 fixed)');
+console.log(`PASS — rAF exception recovery via ${INJECT}: landing restored, status shown, loop stopped (ws-001 fixed)`);
 cleanup(0);

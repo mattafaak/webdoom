@@ -212,9 +212,17 @@ async function handleWadImport(file) {
         manifest.push(entry);
         status(`Imported: ${entry.title}`, 6000);
 
-        // Refresh the menu so the new entry appears immediately.
+        // Refresh the menu so the new entry appears immediately -- but ONLY
+        // the screens the new entry actually changes.  Drag-and-drop works
+        // anywhere on #landing, so importing while in OPTIONS, CONTROLS or the
+        // lobby replaced whatever you were on with CHOOSE GAME; in the lobby
+        // that left a live socket holding your colour slot behind a screen you
+        // had not asked for, with Esc the only way back.
+        const on = menu.current()?.id;
         if (menu.depth() <= 1) menu.reset(rootScreen());
-        else menu.refresh(spGameScreen());
+        else if (on === 'sp') menu.refresh(spGameScreen());
+        // any other screen: the library grew, the status line says so, and
+        // the screen the user is on is none of this import's business
     } catch (err) {
         const msg = err instanceof WadError
             ? `Rejected: ${err.message}`

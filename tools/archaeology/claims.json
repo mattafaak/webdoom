@@ -601,9 +601,9 @@
     "perf-009": {
       "family": "measurement-stamp",
       "command": "node tools/archaeology/wasm-stamp.mjs",
-      "expected": "1512480",
+      "expected": "1512384",
       "status": "verified",
-      "notes": "Round 12 moved it 1,512,384 -> 1,512,480 (+96 B of DATA): the two printf format strings added to web_net_setup in engine/web/d_net.c, which made its previously-silent refusal of a hostile roster loud. Round 11 moved it 1,512,336 -> 1,512,384: three ints of music state in i_sound.c (web_music_state) for the worklet synth. restamped 2026-09-16 (round 10): 4,722,048 -> 1,512,304 (C-a: stack 1 MB, untranspose buffer gone) -> 1,512,336 (C8 hybrid build, +32 B of DATA), STACK_SIZE 4 MB -> 1 MB and the 64,000-byte untranspose buffer removed (JS reads screens[0] in place); 13/13 render goldens unmoved. restamped 2026-09-12: 5,042,464 -> 4,722,048, widescreen removed.  The 2026-09-11 stamp (4,721,456 -> 5,042,416) had ATTRIBUTED the growth to the 18.2a widescreen dimension separation by rebuilding at MAXSCREENWIDTH=320 and measuring 4,722,016; the real revert landed 32 B from that prediction, which is the evidence it removed widescreen and nothing else.  Note the pre-revert value had itself drifted 48 B from its stamp unnoticed: perf-009 is a --full-tier claim and no suite leg runs it."
+      "notes": "Round 12 added 96 B for two printf format strings in web_net_setup and then REMOVED them again: the diagnostic cost a heap restamp and read as a write below the tic-array base to hostile-server-test, and the same refusal is already loud in client/js/net.js. Net zero. Round 11 moved it 1,512,336 -> 1,512,384: three ints of music state in i_sound.c (web_music_state) for the worklet synth. restamped 2026-09-16 (round 10): 4,722,048 -> 1,512,304 (C-a: stack 1 MB, untranspose buffer gone) -> 1,512,336 (C8 hybrid build, +32 B of DATA), STACK_SIZE 4 MB -> 1 MB and the 64,000-byte untranspose buffer removed (JS reads screens[0] in place); 13/13 render goldens unmoved. restamped 2026-09-12: 5,042,464 -> 4,722,048, widescreen removed.  The 2026-09-11 stamp (4,721,456 -> 5,042,416) had ATTRIBUTED the growth to the 18.2a widescreen dimension separation by rebuilding at MAXSCREENWIDTH=320 and measuring 4,722,016; the real revert landed 32 B from that prediction, which is the evidence it removed widescreen and nothing else.  Note the pre-revert value had itself drifted 48 B from its stamp unnoticed: perf-009 is a --full-tier claim and no suite leg runs it."
     },
     "perf-011": {
       "family": "measurement-stamp",
@@ -621,14 +621,14 @@
     "perf-015": {
       "family": "size-ledger",
       "command": "node tools/payload-size.mjs",
-      "expected": "218.1",
+      "expected": "220",
       "status": "verified",
       "notes": "total wire payload per page load, KB gzip -9. Derived from sw.js SHELL_FILES, so the app shell defines the set. Was \"unverifiable\" until round 8 (prf-002/003); the published figures had gone badly stale -- the surface was 2.6x its documented 35.1 KB."
     },
     "perf-016": {
       "family": "size-ledger",
       "command": "node tools/payload-size.mjs",
-      "expected": "75.2",
+      "expected": "77.2",
       "status": "verified",
       "notes": "JS+CSS+HTML surface only (no wasm, no glue), KB gzip -9. Derived from sw.js SHELL_FILES, so the app shell defines the set. Was \"unverifiable\" until round 8 (prf-002/003); the published figures had gone badly stale -- the surface was 2.6x its documented 35.1 KB."
     },

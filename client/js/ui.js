@@ -30,7 +30,13 @@ export const loading = {
     _el(id) { return typeof document === 'undefined' ? null : document.getElementById(id); },
     _set(label, pct) {
         const l = this._el('loading-label'); if (l) l.textContent = label;
-        const f = this._el('loading-fill');  if (f) f.style.width = `${pct}%`;
+        // pct === null means INDETERMINATE.  Written as `${pct}%` that is the
+        // literal string "null%", which a CSSStyleDeclaration discards -- so
+        // the bar silently kept whatever fill it had while claiming to be
+        // indeterminate.  aria-valuenow was removed correctly; only the
+        // visual lied.
+        const f = this._el('loading-fill');
+        if (f) f.style.width = pct === null ? '0%' : `${pct}%`;
         const b = this._el('loading-bar');
         if (b) {
             if (pct === null) b.removeAttribute('aria-valuenow');

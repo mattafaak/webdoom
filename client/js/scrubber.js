@@ -78,13 +78,28 @@ export function createScrubberUI(doom, demoBytes, { container = document.body, s
     strip.setAttribute('role', 'presentation');
     strip.setAttribute('aria-hidden', 'true');
 
+    // One pixel per tic was unbounded.  The worst case this file's own header
+    // cites is a 44,580-tic demo, and the server accepts a 1 MiB .lmp, which is
+    // ~260,000 tics -- against Firefox's 32,767 px canvas limit, where an
+    // over-limit canvas yields a context that cannot be drawn into.  The throw
+    // escapes createScrubberUI, out of bootDoom's `after` callback, into
+    // enterGame's .catch.  Chrome's limits are higher, so this never showed
+    // here.  Cap the canvas and down-sample: the strip is a 16 px-tall
+    // decorative overview scaled by CSS anyway, so pixel-per-tic was never
+    // something a reader could resolve.
+    const STRIP_MAX_PX = 8192;
+    const stripW = Math.max(1, Math.min(totalTics, STRIP_MAX_PX));
+    // tic index -> x, and never a zero-width mark
+    const xOf = i => Math.floor(i * stripW / totalTics);
+    const markW = Math.max(1, Math.ceil(stripW / totalTics));
+
     function renderStrip() {
-        strip.width = totalTics;  // 1 px per tic before CSS scaling
+        strip.width = stripW;
         const ctx = strip.getContext('2d');
-        ctx.clearRect(0, 0, totalTics, 16);
+        ctx.clearRect(0, 0, stripW, 16);
         // Background
         ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(0, 0, totalTics, 16);
+        ctx.fillRect(0, 0, stripW, 16);
         // Movement track (mid 6px): brightness of |forward|
         for (let i = 0; i < timeline.length; i++) {
             const t = timeline[i];
@@ -92,15 +107,15 @@ export function createScrubberUI(doom, demoBytes, { container = document.body, s
             if (fwd > 0) {
                 const bright = Math.min(255, fwd * 2);
                 ctx.fillStyle = `rgb(${bright},${bright>>1},0)`;
-                ctx.fillRect(i, 5, 1, 6);
+                ctx.fillRect(xOf(i), 5, markW, 6);
             }
         }
         // Button events (top 4px = fire red, bottom 3px = use yellow, bit-3 = speed cyan)
         for (let i = 0; i < timeline.length; i++) {
             const b = timeline[i].buttons;
-            if (b & BTN_FIRE)  { ctx.fillStyle = '#f00'; ctx.fillRect(i, 0, 1, 4); }
-            if (b & BTN_USE)   { ctx.fillStyle = '#ff0'; ctx.fillRect(i, 13, 1, 3); }
-            if (b & BTN_SPEED) { ctx.fillStyle = '#0ff'; ctx.fillRect(i, 9, 1, 2); }
+            if (b & BTN_FIRE)  { ctx.fillStyle = '#f00'; ctx.fillRect(xOf(i), 0, markW, 4); }
+            if (b & BTN_USE)   { ctx.fillStyle = '#ff0'; ctx.fillRect(xOf(i), 13, markW, 3); }
+            if (b & BTN_SPEED) { ctx.fillStyle = '#0ff'; ctx.fillRect(xOf(i), 9, markW, 2); }
         }
     }
     renderStrip();

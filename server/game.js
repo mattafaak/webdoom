@@ -243,7 +243,6 @@ export function createGame(log = console.log, servedWads = () => []) {
             slabs: [],                  // every sealed bundle, for catch-up, 1,024 per slab
             historyLen: 0,
             historyFull: false,         // cap reached: catch-up can no longer be served
-            scratch: null,              // the bundle being sealed once the cap is reached
             spectators: new Set(),      // read-only observers; never in session.players
         };
         let n = 3;
@@ -314,7 +313,15 @@ export function createGame(log = console.log, servedWads = () => []) {
         safeWs(ws, log, 'game');
         // slot must be an integer 0–3 naming an unoccupied seat of a live session
         let slot;
-        try { slot = +new URL(url, 'http://x').searchParams.get('slot'); } catch { refuse(ws, log); return; }
+        try {
+            // `+null` is 0 and Number.isInteger(0) is true, so a connection
+            // with NO ?slot at all silently bound slot 0.  Not an escalation --
+            // an attacker can just pass slot=0 -- but it turns a client bug
+            // into a silently wrong game rather than a refusal.
+            const raw = new URL(url, 'http://x').searchParams.get('slot');
+            if (raw === null) { refuse(ws, log); return; }
+            slot = +raw;
+        } catch { refuse(ws, log); return; }
         if (!Number.isInteger(slot) || slot < 0 || slot >= MAXPLAYERS) { refuse(ws, log); return; }
         const p = session?.players.find(p => p.slot === slot);
         if (!p || p.ws) { refuse(ws, log); return; }
@@ -326,13 +333,23 @@ export function createGame(log = console.log, servedWads = () => []) {
         // a slot connecting while not-ingame is a drop-in: stream the history
         // so it can re-simulate to the frontier; live bundles follow
         if (!p.ingame) {
+            // Both refusals below happen AFTER `p.ws = ws` and BEFORE the
+            // 'close' handler that undoes it is registered, so each left the
+            // slot pointing at a terminated socket.  relayConnect's own
+            // `if (!p || p.ws) refuse` then rejected every legitimate
+            // reconnect.  The burst path recovers after JOIN_TIMEOUT_MS
+            // because it sets p.joining; the historyFull path does not set it,
+            // so that slot was locked for the rest of the session.  State
+            // written before its undo is armed -- release it by hand here.
+            const unbind = () => { p.ws = null; p.joined = false; };
             if (session.historyFull) {
+                unbind();
                 refuse(ws, log, `game: ${COLORS[slot]} refused — session is past the ${MAX_HISTORY_TICS}-tic history cap, catch-up cannot be served`);
                 return;
             }
             p.joining = true;
             p.reservedAt = p.reservedAt || Date.now();
-            if (!burstHistory(ws, `game: ${COLORS[slot]}`)) return;
+            if (!burstHistory(ws, `game: ${COLORS[slot]}`)) { unbind(); p.joining = false; p.reservedAt = 0; return; }
             log(`game: ${COLORS[slot]} catching up (${session.historyLen} tics)`);
         }
 
@@ -461,7 +478,16 @@ export function createGame(log = console.log, servedWads = () => []) {
                 session.historyFull = true;
                 log(`game: history cap reached (${MAX_HISTORY_TICS} tics) — drop-in and spectating are closed for this session; play continues`);
             }
-            buf = session.scratch ??= Buffer.alloc(size);
+            // A FRESH buffer per tic, deliberately.  `ws` frames unmasked
+            // server payloads without copying, and net.Socket.write queues a
+            // Buffer BY REFERENCE when the kernel buffer is full -- so one
+            // reused scratch meant a backlogged peer received whatever the
+            // NEXT tic wrote into it, not the tic that was queued: silent
+            // bundle corruption and a desync.  The slab path above is already
+            // per-tic for the same reason; this fallback reintroduced the
+            // aliasing the slab design exists to avoid.  38 bytes a tic on a
+            // session already past 30 minutes.
+            buf = Buffer.alloc(size);
         }
         buf.writeUInt32LE(tic, 0);
         let mask = 0, fab = 0;
