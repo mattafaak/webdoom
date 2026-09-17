@@ -96,6 +96,32 @@ function restoreOnFailure(canvas) {
 //         net.join re-simulates the history first, net.spectate is receive-only
 // onQuit: runs on EVERY exit -- Quit Game, I_Error, a throw in the frame loop
 // record: pass -record so G_RecordDemo is armed before G_BeginRecording fires
+// The live session's one exit, reachable from outside bootDoom's closure.
+//
+// WHY THIS EXISTS.  endSession is the only thing that stops the rAF loop,
+// releases the relay socket, the audio context and the sync interval, hides the
+// canvas and un-hides #landing -- and it was a closure local, so a caller that
+// had already got its `doom` back could not reach it.  lobby.js's
+// resetToLauncher therefore "returned to the launcher" by resetting menu state
+// while the engine kept running behind a hidden #landing: the launcher rendered
+// invisibly, the status message explaining the failure was unreadable, window
+// input listeners still fed the live engine, and `booted` was false again, so a
+// keypress could boot a SECOND engine onto the same canvas.  The reachable
+// trigger is a demo permalink whose header the engine rejects -- one click.
+//
+// Returns whether there was a session to end, so a caller can tell the two
+// cases apart.  Re-entrant by construction: the handle is cleared before
+// endSession runs, and endSession's own `released` flag is the second guard,
+// so endSession -> onQuit -> resetToLauncher -> here terminates.
+let activeEndSession = null;
+export function endActiveSession(reason = null) {
+    const fn = activeEndSession;
+    activeEndSession = null;
+    if (!fn) return false;
+    try { fn(reason); } catch { /* boot died mid-construction */ }
+    return true;
+}
+
 export async function bootDoom({ wads, args = [], net = null, onQuit = null, record = false }) {
     // a `launch` naming a WAD this client has no copy of arrives as [] from
     // stackFor(); refuse with a reason before the landing page is hidden
@@ -119,6 +145,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     const endSession = (reason) => {
         if (released) return;          // I_Error then a propagating throw is one exit
         released = true;
+        activeEndSession = null;       // nothing outside may re-enter this
         running = false;
         try { syncHandle?.flush?.(); } catch { /* dead instance */ }   // no wasm calls: safe after abort()
         try { releaseResources(); } catch { /* boot died before construction */ }
@@ -128,6 +155,11 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
         try { onQuit?.(); } catch { /* launcher gone */ }
         if (reason) { try { status(reason); } catch { /* DOM unavailable */ } }
     };
+    // Published here, not after the boot completes: a failure anywhere in the
+    // rest of this function still needs a working teardown, and that is exactly
+    // the window in which the relay socket and the audio listeners already
+    // exist while nothing is watching them.
+    activeEndSession = endSession;
 
     // the engine first, so the WADs can stream into its heap; then every WAD
     // in parallel, one aggregate bar.  A response without content-length

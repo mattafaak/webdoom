@@ -137,7 +137,7 @@ Command: `node tools/zone-measure.mjs` (reports `__heap_base` + peak formula)
 |--------|------|-------|
 | C shadow stack | 1 MB | `STACK_SIZE=1MB` in `engine/Makefile` (4 MB until round 10, 2026-09-16; Axis 3 below); lives at start of linear memory |
 | Static data (DATA + BSS) | 453 KB | initialized tables + zero-init; measured via `__heap_base − 1 MB`; was 1,237 KB before the phase-14 BSS diets (14.2d/e/f), then 515 KB until round 10 removed the 64,000-byte untranspose buffer (`web_rowmajor_buf`) |
-| **Stack + static total (`__heap_base`)** | **1.44 MB** | = 1,512,384 bytes; heap begins here |
+| **Stack + static total (`__heap_base`)** | **1.44 MB** | = 1,512,480 bytes; heap begins here |
 | Zone pool (one `malloc(ZONESIZE)`) | 4 MB | `ZONESIZE` in `engine/web/web.h` (32 MB pre-14.2c); `I_ZoneBase()` in `engine/web/i_system.c` |
 | WAD copy (one `malloc(wad.length)`) | up to 16.61 MB | plutonia.wad, worst case |
 | **Peak heap address** | **~22.06 MB** | = heap_base + zone + worst WAD |
@@ -145,10 +145,13 @@ Command: `node tools/zone-measure.mjs` (reports `__heap_base` + peak formula)
 
 ### INITIAL_MEMORY floor experiment
 
-Measured `__heap_base` = 1,512,384 B (2026-09-17).  Round 10 took it from
+Measured `__heap_base` = 1,512,480 B (2026-09-17).  Round 10 took it from
 4,722,048 by dropping the C stack to 1 MB and deleting the 64,000-byte
 untranspose buffer; round 11 added 48 B for the three ints of music state
-`web_music_state` reports to the worklet synth.  The 4,722,048 figure was the
+`web_music_state` reports to the worklet synth; round 12 added 96 B, which is
+the two `printf` format strings that made `web_net_setup`'s refusal of an
+out-of-range roster loud instead of silent.  A guard that declines without
+saying so costs nothing here and hid a matching hole on the JS side.  The 4,722,048 figure was the
 18.2a widescreen unwinding, landing 32 B from the 2026-09-11 prediction of
 4,722,016 for a rebuild at 320 — which is what said that change removed
 widescreen and nothing else.  Worst WAD = plutonia.wad, 17,420,824 bytes; zone
@@ -190,17 +193,17 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 
 | File | Raw (bytes) | gzip-9 (bytes) | gzip-9 (KB) |
 |------|------------|---------------|------------|
-| `build/doom.wasm` | 299,874 | 133,447 | 130.3 |
-| `client/js/lobby.js` | 32,559 | 11,137 | 10.9 |
+| `build/doom.wasm` | 300,123 | 133,554 | 130.4 |
+| `client/js/lobby.js` | 33,331 | 11,446 | 11.2 |
 | `build/synth.wasm` | 21,319 | 9,064 | 8.9 |
 | `client/js/input.js` | 18,037 | 6,628 | 6.5 |
 | `client/js/audio.js` | 17,922 | 6,065 | 5.9 |
+| `client/js/main.js` | 15,043 | 5,615 | 5.5 |
 | `client/js/menu.js` | 15,588 | 5,415 | 5.3 |
-| `client/js/main.js` | 13,244 | 4,907 | 4.8 |
-| `client/js/net.js` | 11,713 | 4,462 | 4.4 |
+| `client/js/net.js` | 13,724 | 5,172 | 5.1 |
 | `client/js/wad-import.js` | 11,300 | 4,249 | 4.1 |
 | `client/css/webdoom.css` | 10,370 | 3,885 | 3.8 |
-| `build/doom.js` | 8,774 | 3,720 | 3.6 |
+| `build/doom.js` | 8,774 | 3,721 | 3.6 |
 | `client/js/doomfont.js` | 9,575 | 3,663 | 3.6 |
 | `client/js/fire.js` | 9,371 | 3,481 | 3.4 |
 | `client/js/demo.js` | 7,291 | 2,733 | 2.7 |
@@ -215,19 +218,19 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/index.html` | 1,732 | 905 | 0.9 |
 | `client/js/wad-cache.js` | 1,517 | 716 | 0.7 |
 | `client/js/wad-library.js` | 1,159 | 565 | 0.6 |
-| **Total (all, raw)** | **532,507** | — | — |
-| **Total (all, gzip-9)** | — | **220,287** | **215.1** |
-| **JS+CSS+HTML only (raw)** | 202,540 | — | — |
-| **JS+CSS+HTML only (gzip-9)** | — | 74,056 | **72.3** |
+| **Total (all, raw)** | **537,338** | — | — |
+| **Total (all, gzip-9)** | — | **222,122** | **216.9** |
+| **JS+CSS+HTML only (raw)** | 207,122 | — | — |
+| **JS+CSS+HTML only (gzip-9)** | — | 75,783 | **74** |
 
 The WAD file itself (doom.wad ≈ 11.8 MB, doom2.wad ≈ 13.9 MB, etc.) is
 fetched separately on first play and cached in the browser; it is not part of
 the initial page-load transfer.
 
 **Finding**: the entire deliverable (wasm + JS glue + client JS + CSS +
-HTML) compresses to **215.1 KB gzip** on the wire, gated by
+HTML) compresses to **216.9 KB gzip** on the wire, gated by
 `payload-size` (perf-015/perf-016) since round 8. The wasm is
-61% of that. The JS+CSS+HTML surface is **72.3 KB gzip**
+60% of that. The JS+CSS+HTML surface is **74 KB gzip**
 — note that is **2.1x the 35.1 KB this table used to
 claim**, which went stale unnoticed precisely because both figures were
 marked *not machine-verified*: the old table still listed

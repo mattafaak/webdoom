@@ -68,10 +68,23 @@ EMSCRIPTEN_KEEPALIVE void web_net_setup (int player, int numplayers,
     // web_net_bundle -- so a hostile or buggy `welcome`/`launch` could place
     // both out of range.  Note web_net_set_delay already clamps and
     // web_set_player_name already bounds-checks; these two did not.
+    // These refusals used to be silent, which is how the JS side's matching
+    // hole stayed invisible: client/js/net.js sized its own write loops on the
+    // same unchecked `numplayers`, ran BEFORE this function's guard could
+    // matter, and nothing anywhere said a roster had been rejected.  A guard
+    // that declines without saying so teaches nobody that the wire is lying.
     if (player < 0 || player >= MAXPLAYERS)
+    {
+        printf ("web_net_setup: refusing player %d (not 0..%d)\n", player,
+                MAXPLAYERS - 1);
         return;
+    }
     if (numplayers < 1 || numplayers > MAXPLAYERS)
+    {
+        printf ("web_net_setup: refusing numplayers %d (not 1..%d)\n",
+                numplayers, MAXPLAYERS);
         return;
+    }
 
     consoleplayer = displayplayer = player;
     web_localslot = player;

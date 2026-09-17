@@ -404,7 +404,7 @@ From `docs/perf.md §3` (wasm linear memory layout):
 | C shadow stack | 1 MiB (`STACK_SIZE=1MB`, engine/Makefile; 4 MiB until round 10) |
 | Initialized data (DATA) | ~74 KiB (perf.md §1 wasm DATA section) |
 | Zero-initialized BSS | ~379 KiB (static + BSS total = 453 KiB, perf.md §3, 2026-09-16) |
-| **`__heap_base`** | **1.44 MiB** (1,512,384 B, 2026-09-17) |
+| **`__heap_base`** | **1.44 MiB** (1,512,480 B, 2026-09-17) |
 
 The large BSS is dominated by renderer scratch arrays: `visplanes[128]`
 (~83 KiB at sizeof = 664 B; task 14.2d restored vanilla 128 from 1024,

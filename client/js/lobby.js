@@ -1,7 +1,7 @@
 // The launcher: a DOOM-style drill-down menu.  SINGLE PLAYER → a game → boot;
 // MULTIPLAYER → the lobby, START ready on the current defaults, GAME and MAP
 // pickers and value rows for the rest.  Doing nothing = you are Green/Indigo/…
-import { bootDoom } from './main.js';
+import { bootDoom, endActiveSession } from './main.js';
 import { connectLobby, launchArgs } from './net.js';
 import { loadDoomFont } from './doomfont.js';
 import { setStatus, loading } from './ui.js';
@@ -230,6 +230,18 @@ async function handleWadImport(file) {
 // reason: shown in #status; omit it for a clean return (passing '' would
 // blank a message another path just set).
 function resetToLauncher(reason) {
+    // FIRST, because everything below is launcher state and none of it stops
+    // an engine.  A return to the launcher that leaves the rAF loop running
+    // renders the menu into a hidden #landing, keeps the window input
+    // listeners feeding a live engine, and -- since `booted` is cleared just
+    // below -- lets a keypress boot a second engine onto the same canvas.
+    // Returns false when there was no session, which is the common case (a
+    // lobby error before boot), so this costs nothing on that path.
+    //
+    // No recursion: endActiveSession clears its handle before calling, so the
+    // endSession -> onQuit -> toLauncher -> resetToLauncher path lands here
+    // again and finds nothing to end.
+    endActiveSession(null);
     booted = false;
     recOverlay.hide();
     const l = lobby;

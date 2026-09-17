@@ -126,6 +126,29 @@ EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr, int len)
     int episode, map;
     byte* scan;
     byte* zone_buf;
+    // PARSE INTO LOCALS, VALIDATE, THEN COMMIT -- in that order, deliberately.
+    //
+    // This function used to write the header straight into the engine's
+    // globals and validate them afterwards, so every `return -1` below the
+    // parse left consoleplayer, playeringame[], deathmatch, respawnparm,
+    // fastparm and nomonsters holding whatever the file said, with no
+    // rollback.  A demo naming consoleplayer 255 left it at 255 against a
+    // players[] array that is MAXPLAYERS wide and is indexed by consoleplayer
+    // in about twenty places (d_main.c, hu_stuff.c, st_stuff.c, p_tick.c,
+    // g_game.c, s_sound.c) -- roughly 71 KB past the array, read and written.
+    //
+    // That was only survivable because the caller stopped the engine on -1,
+    // and the caller did not: lobby.js called resetToLauncher(), which reset
+    // menu state and left the rAF loop running.  So a crafted `#demo=` link
+    // was one click from a live engine simulating on a corrupted global.  The
+    // two defects were each other's safety net and neither one held.
+    //
+    // The zone allocation moved down here too: it happened before validation,
+    // so a rejected header also leaked a PU_STATIC block and left demobuffer
+    // pointing into it.
+    boolean hdr_deathmatch, hdr_respawn, hdr_fast, hdr_nomonsters;
+    int hdr_console;
+    boolean hdr_ingame[MAXPLAYERS];
 
     // len bounds the terminator scan; a call without it marshals as 0 and is
     // rejected rather than overscanned
@@ -140,13 +163,13 @@ EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr, int len)
     skill = (skill_t) *p++;
     episode = (int) *p++;
     map = (int) *p++;
-    deathmatch = (boolean) *p++;
-    respawnparm = (boolean) *p++;
-    fastparm = (boolean) *p++;
-    nomonsters = (boolean) *p++;
-    consoleplayer = (int) *p++;
+    hdr_deathmatch = (boolean) *p++;
+    hdr_respawn = (boolean) *p++;
+    hdr_fast = (boolean) *p++;
+    hdr_nomonsters = (boolean) *p++;
+    hdr_console = (int) *p++;
     for (i = 0; i < MAXPLAYERS; i++)
-        playeringame[i] = (boolean) *p++;
+        hdr_ingame[i] = (boolean) *p++;
 
     // each tic is exactly 4 bytes, so the marker can only sit 4-aligned
     // after the header; the scan is bounded by len
@@ -162,6 +185,29 @@ EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr, int len)
     scan++;                     /* include the marker byte */
     total = (int) (scan - raw); /* header + tic data + marker */
 
+    // Hostile headers: a level of 0 leaves the engine in GS_DEMOSCREEN and
+    // the attract carousel starts inside the same frame (a hang for the JS
+    // replay loop); a console player not in game never consumes ticcmds, so
+    // the marker is never read.
+    if (episode == 0 || map == 0)
+        return -1;
+    if (skill > sk_nightmare)
+        return -1;
+    if (hdr_console < 0 || hdr_console >= MAXPLAYERS ||
+        !hdr_ingame[hdr_console])
+        return -1;
+
+    /* ---- past this point the header is good; only now touch the engine ----
+     */
+
+    deathmatch = hdr_deathmatch;
+    respawnparm = hdr_respawn;
+    fastparm = hdr_fast;
+    nomonsters = hdr_nomonsters;
+    consoleplayer = hdr_console;
+    for (i = 0; i < MAXPLAYERS; i++)
+        playeringame[i] = hdr_ingame[i];
+
     // Zone-allocate and copy so G_CheckDemoStatus can Z_ChangeTag safely.
     zone_buf = Z_Malloc (total, PU_STATIC, NULL);
     memcpy (zone_buf, raw, total);
@@ -173,18 +219,6 @@ EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr, int len)
     // or the WAD's own DEMO1 replaces this buffer on the first G_Ticker tick
     advancedemo = false;
     gameaction = ga_nothing;
-
-    // Hostile headers: a level of 0 leaves the engine in GS_DEMOSCREEN and
-    // the attract carousel starts inside the same frame (a hang for the JS
-    // replay loop); a console player not in game never consumes ticcmds, so
-    // the marker is never read.
-    if (episode == 0 || map == 0)
-        return -1;
-    if (skill > sk_nightmare)
-        return -1;
-    if (consoleplayer < 0 || consoleplayer >= MAXPLAYERS ||
-        !playeringame[consoleplayer])
-        return -1;
 
     // kept for web_seek_demo, only once the header has passed
     seek_skill = skill;

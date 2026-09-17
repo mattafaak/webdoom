@@ -68,7 +68,7 @@ function ok(label, cond, detail = '') {
 
 console.log('\n── browser-demo-test: record → fragment URL → replay hash check ────');
 
-let tabA, tabB, tabC;
+let tabA, tabB, tabC, tabD;
 try {
     // ── Tab A: wait for SW, navigate SINGLE PLAYER → RECORD & SHARE… → game ──
 
@@ -323,13 +323,62 @@ try {
 
     await tabC.shot('demo-test-tabC.png');
 
+    // ── Tab D: a demo the engine BOOTS for and then refuses ───────────────────
+    //
+    // Tab C covers the ownership gate, which refuses BEFORE booting.  This is
+    // the other path and the one that was broken: the WAD is owned, so
+    // enterGame boots the engine, and the failure happens in the `after`
+    // callback when web_play_demo_buf rejects the header.  lobby.js handled
+    // that by calling resetToLauncher(), which reset menu state and never
+    // touched the DOM or the rAF loop -- so the launcher re-rendered into a
+    // still-hidden #landing, the canvas stayed visible over it, the status
+    // message explaining the failure was unreadable, window input listeners
+    // kept feeding a live engine, and `booted` was false again, so a keypress
+    // could boot a SECOND engine onto the same canvas.
+    //
+    // RED-PROOF: remove the endActiveSession(null) call from resetToLauncher
+    // in client/js/lobby.js and the landing/canvas assertions below fail.
+    {
+        // A header the engine parses and refuses: version 42 is neither
+        // VERSION nor 109.  Same shape as a real one so nothing earlier
+        // rejects it.
+        const bad = Buffer.alloc(18);
+        bad[0] = 42; bad[1] = 2; bad[2] = 1; bad[3] = 1; bad[8] = 0; bad[9] = 1;
+        bad[13] = 0x11; bad[14] = 0x22; bad[15] = 0x33; bad[16] = 0x44; bad[17] = 0x80;
+        const badB64 = bad.toString('base64')
+            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const badUrl = `${srvUrl}#demo=${encodeURIComponent(badB64)}&wad=${encodeURIComponent('doom.wad')}`;
+        tabD = await openTab(badUrl);
+        await waitFor(() => tabD.eval(`!!navigator.serviceWorker.controller`), 20000);
+        // the engine has to boot and then fail, so give it the boot budget
+        await waitFor(() => tabD.eval(`!!window.webdoom?.doom`), 90000, 250).catch(() => {});
+        const booted = await tabD.eval(`!!window.webdoom?.doom`);
+        ok('Tab D: the engine DID boot (this is the post-boot failure path, not the ownership gate)',
+           booted);
+        await sleep(3000);   // let the after-callback failure settle
+
+        const landingHidden = await tabD.eval(`document.getElementById('landing')?.hidden ?? null`);
+        ok('Tab D: #landing is visible again after a refused replay', landingHidden === false,
+           `landing.hidden=${landingHidden}`);
+
+        const canvasHidden = await tabD.eval(`document.getElementById('screen')?.hidden ?? null`);
+        ok('Tab D: the canvas is hidden again', canvasHidden === true,
+           `screen.hidden=${canvasHidden}`);
+
+        const st = await tabD.eval(`window.__wdLastStatus ?? document.getElementById('status')?.textContent ?? ''`);
+        ok('Tab D: the failure is stated on the status line', /demo replay failed/i.test(String(st)),
+           `status="${String(st).slice(0, 80)}"`);
+
+        await tabD.shot('demo-test-tabD.png');
+    }
+
 } catch (err) {
     fail(`unexpected error: ${err.message ?? err}`);
     console.error(err);
 } finally {
     // ── Summary ───────────────────────────────────────────────────────────────
     console.log(`\n  ${passes} passed, ${failures} failed`);
-    const anyErrors = [...(tabA?.errors ?? []), ...(tabB?.errors ?? []), ...(tabC?.errors ?? [])];
+    const anyErrors = [...(tabA?.errors ?? []), ...(tabB?.errors ?? []), ...(tabC?.errors ?? []), ...(tabD?.errors ?? [])];
     if (anyErrors.length)
         console.log('  page errors:', anyErrors.slice(0, 5).join('\n  '));
     // This leg had no top-level PASS line, so run-tests.sh's headline() fell
@@ -338,7 +387,7 @@ try {
     // been deprecated" -- a Chrome deprecation notice standing in for a
     // verdict.  And `0 passed, 0 failed` would have exited 0, so the count
     // needs a floor as well as a voice.
-    const MIN_ASSERTIONS = 12;
+    const MIN_ASSERTIONS = 16;
     if (!failures && passes < MIN_ASSERTIONS) {
         console.log(`FAIL — browser-demo: only ${passes} assertions ran, expected at least ` +
                     `${MIN_ASSERTIONS}; a short run is not a pass`);

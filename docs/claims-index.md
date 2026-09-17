@@ -171,14 +171,14 @@ and inline `*(not machine-verified)*` markers for the 15 unverifiable claims.
 | perf-006 | perf.md:57 | wasm compression ratio (raw / gzip) | 2.45× | derived | 357,978 / 145,990 ≈ 2.45 | derived-from-gated |
 | perf-007 | perf.md:100 | peak zone HWM across all 13 golden demos | 1.36 MB (plutonia demo3) | measurement | tools/zone-measure.mjs | dated-measurement |
 | perf-008 | perf.md:69 | ZONESIZE (hardcoded zone pool) | 4,194,304 B (32 MB) | invariant | tools/archaeology/source-constant-verify.mjs | verified |
-| perf-009 | perf.md:131 | __heap_base (static data end, heap start) | 1,512,384 bytes | measurement | tools/archaeology/wasm-stamp.mjs | verified |
+| perf-009 | perf.md:131 | __heap_base (static data end, heap start) | 1,512,480 bytes | measurement | tools/archaeology/wasm-stamp.mjs | verified |
 | perf-010 | perf.md:132 | zone pool malloc size | 4,194,304 bytes | derived | 4 × 1024 × 1024 = 4,194,304 (32 MB pre-14.2c) | derived-from-gated |
 | perf-011 | perf.md:139 | plutonia.wad file size (worst single IWAD) | 17,420,824 bytes | measurement | tools/archaeology/stamp-check.mjs | verified |
-| perf-012 | perf.md:134 | peak heap address worst-case single IWAD | ~22.06 MB | derived | 1,512,384 + 4,194,304 + 17,420,824 = 23,127,512 B ≈ 22.06 MB | derived-from-gated |
-| perf-013 | perf.md:135 | headroom vs 32 MB (single IWAD) | ~9.94 MB | derived | 33,554,432 − 23,127,512 = 10,426,920 B ≈ 9.94 MB | derived-from-gated |
+| perf-012 | perf.md:134 | peak heap address worst-case single IWAD | ~22.06 MB | derived | 1,512,480 + 4,194,304 + 17,420,824 = 23,127,608 B ≈ 22.06 MB | derived-from-gated |
+| perf-013 | perf.md:135 | headroom vs 32 MB (single IWAD) | ~9.94 MB | derived | 33,554,432 − 23,127,608 = 10,426,824 B ≈ 9.94 MB | derived-from-gated |
 | perf-014 | perf.md:148 | INITIAL_MEMORY floor (tested pass/fail boundary) | 56 MB | measurement | requires emcc INITIAL_MEMORY sweep build; no current script | unverifiable |
-| perf-015 | perf.md:212 | all deliverables total gzip-9 wire size | 215.1 KB | measurement | tools/payload-size.mjs (derived from sw.js SHELL_FILES) | verified |
-| perf-016 | perf.md:213 | JS + CSS + HTML gzip-9 total (no wasm, no glue) | 72.3 KB | measurement | tools/payload-size.mjs (derived from sw.js SHELL_FILES) | verified |
+| perf-015 | perf.md:212 | all deliverables total gzip-9 wire size | 216.9 KB | measurement | tools/payload-size.mjs (derived from sw.js SHELL_FILES) | verified |
+| perf-016 | perf.md:213 | JS + CSS + HTML gzip-9 total (no wasm, no glue) | 74 KB | measurement | tools/payload-size.mjs (derived from sw.js SHELL_FILES) | verified |
 | perf-017 | perf.md:269 | bsp+segs avg ms/frame — wbox (3-demo avg) | 0.2625 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
 | perf-018 | perf.md:269 | bsp+segs avg ms/frame — tank | 0.0549 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
 | perf-019 | perf.md:269 | bsp+segs avg ms/frame — pi5 | 0.0715 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |

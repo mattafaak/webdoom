@@ -361,6 +361,118 @@ await hostileCase('bad version (0x00)',
     await hostileCase('random garbage bytes', garbage);
 }
 
+// ── Gate D — a REJECTED header must not touch engine state ────────────────────
+//
+// Gate C proves hostile .lmp bytes are refused.  It could not see the defect
+// that mattered, because every case there gets a fresh module: the bug was that
+// web_play_demo_buf wrote the header into the engine's GLOBALS and validated it
+// afterwards, so every late `return -1` left consoleplayer, playeringame[],
+// deathmatch, respawnparm, fastparm and nomonsters holding whatever the file
+// said, with no rollback.  A demo naming consoleplayer 255 left it at 255
+// against a 4-wide players[] array that about twenty call sites index by it.
+// It also Z_Malloc'd and copied the buffer BEFORE validating, so a rejected
+// header leaked a PU_STATIC block and left demobuffer pointing into it.
+//
+// So this drives ONE module through headers that pass the version and marker
+// checks and fail the LATER ones -- the only cases that could corrupt anything.
+// Two instruments, both non-vacuous and both checked to read a real number
+// before being trusted:
+//   web_state_hash  iterates playeringame[] and players[].mo, so it moves if a
+//                   rejected header's roster landed, and it is bounded, so it
+//                   cannot itself read out of range while detecting that.
+//   zone used       reset + sample + hwm gives live zone bytes, so a leaked
+//                   PU_STATIC block shows as a delta.
+// A good header is replayed FIRST, because G_InitNew is what builds the world
+// the hash needs -- web_frame() cannot be used here, it blocks under -nodraw.
+//
+// RED-PROOF: move the three validation blocks in engine/web/demo.c back below
+// the assignments, rebuild, and the hash and zone cases fail.
+console.log('\n── demo-verify-test: Gate D — a rejected header leaves no trace ────────');
+{
+    const doomJs = join(root, buildDir, 'doom.js');
+    const wadPath = join(root, 'wads/lib/doom.wad');
+    if (!existsSync(doomJs) || !existsSync(wadPath)) {
+        console.log(`  SKIP  Gate D: ${buildDir}/doom.js or doom.wad absent`);
+    } else {
+        const createDoom = (await import(doomJs)).default;
+        const wadBytes = readFileSync(wadPath);
+        const doom = await createDoom({ noInitialRun: true, print() {}, printErr() {} });
+        const wp = doom._malloc(wadBytes.length);
+        doom.HEAPU8.set(wadBytes, wp);
+        doom.ccall('web_register_file', 'null', ['string', 'number', 'number'],
+                   ['doom.wad', wp, wadBytes.length]);
+        doom.callMain(['-iwad', 'doom.wad', '-nodraw']);
+        doom._web_set_singletics(1);
+
+        const zoneUsed = () => {
+            doom._web_zone_hwm_reset(); doom._web_zone_sample();
+            return doom._web_zone_hwm();
+        };
+        // header: ver, skill, ep, map, dm, respawn, fast, nomon, console,
+        //         playeringame[4]; then one 4-byte tic, then the 0x80 marker.
+        // The marker must not sit at the FIRST tic (a 0-tic demo is its own
+        // rejection), so it goes at byte 17.
+        const hdr = (over = {}) => {
+            const b = Buffer.alloc(18);
+            const f = { ver: 109, skill: 2, ep: 1, map: 1, dm: 0, respawn: 0,
+                        fast: 0, nomon: 0, console: 0, ingame: [1, 0, 0, 0], ...over };
+            b[0] = f.ver; b[1] = f.skill; b[2] = f.ep; b[3] = f.map;
+            b[4] = f.dm; b[5] = f.respawn; b[6] = f.fast; b[7] = f.nomon;
+            b[8] = f.console;
+            for (let i = 0; i < 4; i++) b[9 + i] = f.ingame[i];
+            b[13] = 0x11; b[14] = 0x22; b[15] = 0x33; b[16] = 0x44;   // one tic
+            b[17] = 0x80;                                             // marker
+            return b;
+        };
+        const play = (bytes) => {
+            const p = doom._malloc(bytes.length);
+            doom.HEAPU8.set(bytes, p);
+            const rc = doom._web_play_demo_buf(p, bytes.length);
+            doom._free(p);
+            return rc;
+        };
+
+        // A good header first: G_InitNew builds the level the hash reads.
+        ok('Gate D: a well-formed header of this shape is accepted', play(hdr()) === 0);
+        const baseHash = doom._web_state_hash();
+        const baseUsed = zoneUsed();
+        // Both instruments must read a real number, or every assertion below
+        // passes by observing nothing.
+        ok(`Gate D: instruments live (hash ${baseHash}, zone ${baseUsed} B used)`,
+           baseHash !== 0 && baseUsed > 0);
+
+        const CASES = [
+            ['consoleplayer 255',               hdr({ console: 255 })],
+            ['consoleplayer 4 (== MAXPLAYERS)', hdr({ console: 4 })],
+            ['consoleplayer 0 but not in game', hdr({ console: 0, ingame: [0, 0, 0, 0] })],
+            ['episode 0',                       hdr({ ep: 0 })],
+            ['map 0',                           hdr({ map: 0 })],
+            ['skill 6 (> sk_nightmare)',        hdr({ skill: 6 })],
+            ['every field maxed',               hdr({ skill: 255, ep: 255, map: 255, dm: 255,
+                                                      respawn: 255, fast: 255, nomon: 255,
+                                                      console: 255, ingame: [255, 255, 255, 255] })],
+        ];
+        let refused = 0, hashMoved = 0, leaked = 0;
+        for (const [label, bytes] of CASES) {
+            const rc = play(bytes);
+            if (rc === -1) refused++;
+            else console.log(`  note  '${label}' was ACCEPTED (rc=${rc})`);
+            if (doom._web_state_hash() !== baseHash) {
+                hashMoved++;
+                console.log(`  note  '${label}' moved the state hash`);
+            }
+            const u = zoneUsed();
+            if (u > baseUsed) { leaked++; console.log(`  note  '${label}' leaked ${u - baseUsed} zone bytes`); }
+        }
+        ok(`Gate D: all ${CASES.length} hostile headers refused (${refused}/${CASES.length})`,
+           refused === CASES.length);
+        ok(`Gate D: none moved the engine state hash (${hashMoved} did)`, hashMoved === 0);
+        ok(`Gate D: none leaked a zone block (${leaked} did)`, leaked === 0);
+        ok('Gate D: a good header still replays after the hostile run',
+           play(hdr()) === 0 && doom._web_state_hash() === baseHash);
+    }
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n  ${passes} passed, ${failures} failed`);
