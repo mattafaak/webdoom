@@ -71,6 +71,7 @@ have_zig()     { command -v zig >/dev/null 2>&1; }
 have_clangfmt(){ command -v clang-format >/dev/null 2>&1 && \
                  [ "$(clang-format --version | grep -oE '[0-9]+' | head -1)" = "22" ]; }
 have_qemuarm() { command -v qemu-arm-static >/dev/null 2>&1; }
+have_qemuppc() { command -v qemu-ppc-static >/dev/null 2>&1 || command -v qemu-ppc >/dev/null 2>&1; }
 # the cross compiler, the ares emulator and an X server, together
 have_n64()     { [ -x "${N64_INST:-$HOME/toolchains/n64}/bin/mips64-elf-gcc" ] && \
                  command -v ares >/dev/null 2>&1 && \
@@ -108,6 +109,7 @@ declare -A NEED=(
     [zig]='have_zig|zig not on PATH (needed to cross-build for ARM)'
     [clangfmt]='have_clangfmt|clang-format 22 not present'
     [qemuarm]='have_qemuarm|qemu-arm-static not on PATH'
+    [qemuppc]='have_qemuppc|qemu-ppc-static not on PATH (needed for the BIG-ENDIAN leg)'
     [n64]='have_n64|N64 toolchain incomplete (need mips64-elf-gcc under $N64_INST, ares and xvfb-run; run: source ~/toolchains/env.sh)'
     [gcc]='have_gcc|gcc not on PATH'
     [systemd]='have_systemd|systemd-analyze not on PATH (the unit file cannot be validated here)'
@@ -530,6 +532,22 @@ leg ro-wad          fs,wad     "WAD blob stays read-only over 13 demos (XIP)" --
 # half that was missing.  zig cross-builds the freestanding core for 32-bit ARM
 # and qemu-arm-static replays all 13 golden demos.
 leg arm-cross       zig,qemuarm,wad "freestanding core 13/13 on 32-bit ARM" -- bash tools/freestanding/arm-check.sh
+# THE BIG-ENDIAN LEG, and the reason it did not exist until round 13.
+#
+# tools/freestanding/be-check.sh is a 165-line byte-order gate whose DEFAULTS
+# are PowerPC -- that is what tasks 13.3a/13.3b proved 13/13 on, and what
+# docs/bare-metal.md cites.  The suite reached it through exactly one path,
+# arm-check.sh, which execs it after overriding BE_TARGET, QEMU_BE and
+# CROSS_LABEL to little-endian ARM32.  So the only byte-order gate in the
+# project ran in the one configuration that does not test byte order, while
+# its own header said "the suite RUNS this file" (true, and misleading) and
+# gate-census reported it green -- reachability there is a text grep, and the
+# census header says it cannot see tiers or argument overrides.
+#
+# Nothing was broken: run in its own default it passes 13/13 first time.  It
+# was simply never asked.  This is also the only CHEAP big-endian cover in the
+# repo; the other one is n64-demos at 434 s.
+leg be-cross        zig,qemuppc,wad "freestanding core 13/13 on big-endian PowerPC" -- bash tools/freestanding/be-check.sh
 # The N64 rung of the same argument, and the strongest one: a 93.75 MHz
 # big-endian MIPS console, a 12.4 MB WAD read in place out of cartridge space,
 # and the whole 44,580-tic golden set reproduced bit-for-bit.  MEASURED 8m19s

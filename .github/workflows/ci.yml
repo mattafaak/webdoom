@@ -25,7 +25,7 @@
 # number nothing computed and nobody could check from a dev box.  The runner
 # prints its own totals and every SKIP carries its reason; read those.
 #
-# The full suite (81 legs at the time of writing -- `tools/run-tests.sh --list`
+# The full suite (82 legs at the time of writing -- `tools/run-tests.sh --list`
 # prints the current number, and the runner now asserts its own total against
 # that registry) still runs on a host with the WAD library, a built engine and
 # Chrome:  bash tools/run-tests.sh --require-complete

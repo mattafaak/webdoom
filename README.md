@@ -72,7 +72,7 @@ re-probes. `tools/deploy.sh --check` reports drift and changes nothing.
 ## Tests
 
 ```sh
-tools/run-tests.sh            # everything: 81 legs
+tools/run-tests.sh            # everything: 82 legs
 tools/run-tests.sh --jobs 3   # the same legs three at a time, identical verdicts
                               # Measured on alder (i9-12900K), 2026-09-17:
                               #   --jobs 3 --perf --require-complete
