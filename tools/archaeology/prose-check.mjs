@@ -10,10 +10,10 @@
 // ── WHAT IT MEASURES, AND WHY THE DEFINITION IS LOAD-BEARING ────────────────
 //
 // PARAGRAPH PROSE ONLY: no tables, no list items, no headings, no fenced code,
-// no block quotes.  That definition was arrived at by getting it wrong twice,
-// in opposite directions, and it is stated here because a different definition
-// gives a different answer and a reader deserves to know which one produced the
-// number.
+// no block quotes -- and split into sentences WITHIN each paragraph, never
+// across them.  That definition was arrived at by getting it wrong three times,
+// and it is stated here because a different definition gives a different answer
+// and a reader deserves to know which one produced the number.
 //
 //   1. Splitting sentences naively read a 1,405-word "sentence" in playsim.md
 //      and a 202-word one in README.md.  Both were bullet lists with no
@@ -25,6 +25,14 @@
 //   3. Restricted to running prose, playsim.md reads 6.0 and is one of the
 //      BETTER documents.  Its em-dashes were table-of-contents separators of
 //      the form `Movement and collision — p_map.c`, which are correct.
+//   4. And it was STILL wrong: it joined the paragraphs before splitting them,
+//      so a paragraph ending in ':' before a list was glued to the next and
+//      counted as one enormous sentence.  152 reported against 96 real -- 37%
+//      of every long-sentence figure this tool printed in its first day.  See
+//      the comment in measure(); the fix is to segment before aggregating.
+//
+// Four passes, one lesson each time: the instrument reports the shape of its
+// own preprocessing at least as loudly as the shape of the prose.
 //
 // So: an em-dash separating a label from its target is not a defect, and this
 // tool must not see one.  What it is looking for is the em-dash used instead of
@@ -122,7 +130,21 @@ function measure(rel) {
     const text = readFileSync(join(root, rel), 'utf8');
     const paras = paragraphs(text);
     const joined = paras.join(' ');
-    const sentences = joined.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => wc(s) > 4);
+    // SPLIT PER PARAGRAPH.  This joined them first and then split on sentence
+    // punctuation, so a paragraph ending WITHOUT terminal punctuation -- almost
+    // always one ending in ':' before a list or a table -- was glued to the next
+    // one and counted as a single enormous sentence.  Measured over this repo:
+    // 152 reported against 96 real, so 37% of every long-sentence figure this
+    // tool has ever printed was an artifact, and web-scrutiny.md ranked sixth
+    // worst on a number that was 6x wrong about it (12 reported, 2 real).
+    //
+    // That is the THIRD instance of the error this file's own header documents
+    // fixing twice, which is the point worth keeping: an instrument that
+    // aggregates before it segments will invent whatever it aggregated across.
+    // `joined` survives only for the word and em-dash counts, which are totals
+    // over the same text either way and are unaffected.
+    const sentences = paras.flatMap(par => par.split(/(?<=[.!?])\s+/))
+        .map(s => s.trim()).filter(s => wc(s) > 4);
     const words = wc(joined);
     return {
         rel,
