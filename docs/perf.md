@@ -200,8 +200,8 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/css/webdoom.css` | 10,370 | 3,885 | 3.8 |
 | `build/doom.js` | 8,761 | 3,719 | 3.6 |
 | `client/js/audio.js` | 10,669 | 3,692 | 3.6 |
+| `client/js/doomfont.js` | 9,575 | 3,663 | 3.6 |
 | `client/js/fire.js` | 9,371 | 3,481 | 3.4 |
-| `client/js/doomfont.js` | 8,524 | 3,321 | 3.2 |
 | `client/js/demo.js` | 7,291 | 2,733 | 2.7 |
 | `client/js/scrubber.js` | 7,958 | 2,701 | 2.6 |
 | `client/js/video.js` | 6,625 | 2,523 | 2.5 |
@@ -214,19 +214,19 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/js/music-worklet.js` | 1,970 | 843 | 0.8 |
 | `client/js/wad-cache.js` | 1,517 | 716 | 0.7 |
 | `client/js/wad-library.js` | 1,159 | 565 | 0.6 |
-| **Total (all, raw)** | **493,878** | — | — |
-| **Total (all, gzip-9)** | — | **205,293** | **200.5** |
-| **JS+CSS+HTML only (raw)** | 185,769 | — | — |
-| **JS+CSS+HTML only (gzip-9)** | — | 68,335 | **66.7** |
+| **Total (all, raw)** | **494,929** | — | — |
+| **Total (all, gzip-9)** | — | **205,635** | **200.8** |
+| **JS+CSS+HTML only (raw)** | 186,820 | — | — |
+| **JS+CSS+HTML only (gzip-9)** | — | 68,677 | **67.1** |
 
 The WAD file itself (doom.wad ≈ 11.8 MB, doom2.wad ≈ 13.9 MB, etc.) is
 fetched separately on first play and cached in the browser; it is not part of
 the initial page-load transfer.
 
 **Finding**: the entire deliverable (wasm + JS glue + client JS + CSS +
-HTML) compresses to **200.5 KB gzip** on the wire, gated by
+HTML) compresses to **200.8 KB gzip** on the wire, gated by
 `payload-size` (perf-015/perf-016) since round 8. The wasm is
-65% of that. The JS+CSS+HTML surface is **66.7 KB gzip**
+65% of that. The JS+CSS+HTML surface is **67.1 KB gzip**
 — note that is **1.9x the 35.1 KB this table used to
 claim**, which went stale unnoticed precisely because both figures were
 marked *not machine-verified*: the old table still listed
@@ -1407,12 +1407,22 @@ plus `/api/ui-assets`, same tree, same server:
 
 | load | bytes on the wire |
 |------|-------------------|
-| identity (before) | 1,259,266 |
-| `Accept-Encoding: br` (after) | **444,440 (−65%)** |
+| identity, box art inline (before) | 1,259,266 |
+| `Accept-Encoding: br`, box art inline | 444,440 (−65%) |
+| identity, box art lazy | 530,413 |
+| `Accept-Encoding: br`, box art lazy (shipped) | **209,035 (−83%)** |
+| the seven thumbs, fetched lazily as the list paints | 38,976 (5,568 each) |
 | repeat load with ETags | headers only (304 per file) |
 
+`/api/ui-assets` carried seven full base64 TITLEPICs (730 KB of its 765 KB)
+to draw 80×60 thumbnails; it now names the games that have art (35,484 B,
+18,058 B br) and `/api/thumb/<file>` serves each as 768 bytes of PLAYPAL plus
+80×60 indices, decoded on the server with the client decoder's bounds
+(`wad-content-fuzz` feeds it hostile TITLEPICs), memoised per WAD mtime.
+
 Gated by `http-fuzz` ("the wire" cases: encoded content-length, decode-back,
-`Vary`, per-representation ETag, 304, HTTP/1.0 identity).
+`Vary`, per-representation ETag, 304, HTTP/1.0 identity; the thumb route,
+its 404s, its traversal refusal and its invalidation).
 
 
 ## PSX fire launcher background — perf note

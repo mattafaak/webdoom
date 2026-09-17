@@ -24,7 +24,7 @@ export async function loadDoomFont() {
     let payload;
     try { payload = await res.json(); }
     catch { throw new Error('/api/ui-assets did not answer with JSON'); }
-    const { lumps, titles = {} } = payload ?? {};
+    const { lumps, titles = [] } = payload ?? {};
     if (!lumps || typeof lumps !== 'object' || !lumps.PLAYPAL)
         throw new Error('/api/ui-assets carried no palette — the IWAD it read is not usable');
     const playpal = b64(lumps.PLAYPAL);
@@ -151,24 +151,39 @@ export async function loadDoomFont() {
         return out;
     }
 
-    // box art: each game's TITLEPIC, decoded with its own palette
+    // box art: a blank 4:3 canvas for any game the server has art for,
+    // painted when /api/thumb/<file> arrives (768-byte PLAYPAL + 80x60
+    // indices).  A failed fetch leaves it blank: offline without art is the
+    // intended degradation, and it must not touch #status.
     const thumbCache = new Map();
+    const hasArt = Array.isArray(titles) ? new Set(titles) : new Set();
     function titleThumb(file, height = 60) {
         if (thumbCache.has(file)) return thumbCache.get(file);
-        let out = null;
-        const t = titles[file];
-        if (t) {
-            const c = decodePatch(b64(t.pic), null, b64(t.pal));
-            if (c) {
-                out = document.createElement('canvas');
-                out.height = height;
-                out.width = Math.round(height * 4 / 3);   // aspect-corrected 4:3
+        if (!hasArt.has(file)) { thumbCache.set(file, null); return null; }
+        const out = document.createElement('canvas');
+        out.height = height;
+        out.width = Math.round(height * 4 / 3);   // aspect-corrected 4:3
+        thumbCache.set(file, out);
+        fetch(`/api/thumb/${encodeURIComponent(file)}`)
+            .then(r => r.ok ? r.arrayBuffer() : null)
+            .then(buf => {
+                if (!buf || buf.byteLength < 768 + 80 * 60) return;
+                const bytes = new Uint8Array(buf);
+                const src = document.createElement('canvas');
+                src.width = 80; src.height = 60;
+                const sctx = src.getContext('2d');
+                const img = sctx.createImageData(80, 60);
+                for (let i = 0; i < 80 * 60; i++) {
+                    const q = bytes[768 + i] * 3, p = i * 4;
+                    img.data[p] = bytes[q]; img.data[p + 1] = bytes[q + 1]; img.data[p + 2] = bytes[q + 2];
+                    img.data[p + 3] = 255;
+                }
+                sctx.putImageData(img, 0, 0);
                 const ctx = out.getContext('2d');
                 ctx.imageSmoothingEnabled = false;
-                ctx.drawImage(c, 0, 0, out.width, out.height);
-            }
-        }
-        thumbCache.set(file, out);
+                ctx.drawImage(src, 0, 0, out.width, out.height);
+            })
+            .catch(() => { /* no art: the row keeps its label */ });
         return out;
     }
 

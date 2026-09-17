@@ -309,12 +309,24 @@ async function checkUiAssetCache() {
     const { tmpdir } = await import('node:os');
     const { Buffer } = globalThis;
 
+    // a valid w x h patch, every pixel `idx`: header, column offsets, one
+    // post per column
+    const patch = (w, h, idx) => {
+        const buf = Buffer.alloc(8 + 4 * w + w * (h + 5));
+        buf.writeUInt16LE(w, 0); buf.writeUInt16LE(h, 2);
+        for (let x = 0; x < w; x++) {
+            const o = 8 + 4 * w + x * (h + 5);
+            buf.writeUInt32LE(o, 8 + 4 * x);
+            buf[o] = 0; buf[o + 1] = h; buf.fill(idx, o + 3, o + 3 + h); buf[o + 4 + h] = 0xff;
+        }
+        return buf;
+    };
     const wad = (n, tag) => makeWad([
         ['PLAYPAL',  Buffer.alloc(768, tag)],
         ['M_DOOM',   Buffer.alloc(n, tag)],
         ['M_SKULL1', Buffer.alloc(n, tag)],
         ['M_SKULL2', Buffer.alloc(n, tag)],
-        ['TITLEPIC', Buffer.alloc(n, tag)],
+        ['TITLEPIC', patch(4, 3, tag)],
     ]);
 
     const tree = mkdtempSync(join(tmpdir(), 'webdoom-uicache-'));
@@ -363,12 +375,33 @@ async function checkUiAssetCache() {
               c !== a && c.includes('extra.wad'),
               c === a ? 'identical body — still the startup cache' : `${c.length} bytes, extra.wad present`);
 
+        // box art is per file and lazy: 768 bytes of PLAYPAL + 80x60 indices
+        const thumb = async f => {
+            const r = await fetch(`http://127.0.0.1:${port}/api/thumb/${f}`, { signal: AbortSignal.timeout(5000) });
+            return { status: r.status, bytes: Buffer.from(await r.arrayBuffer()), etag: r.headers.get('etag') };
+        };
+        const t1 = await thumb('doom.wad');
+        check('thumb: /api/thumb/doom.wad is PLAYPAL + 80x60 indices',
+              t1.status === 200 && t1.bytes.length === 768 + 80 * 60 && t1.bytes[0] === 0x11 && t1.bytes[768] === 0x11,
+              `status=${t1.status} ${t1.bytes.length} bytes`);
+        check('thumb: it carries an ETag', !!t1.etag, t1.etag ?? '(absent)');
+        check('thumb: a name the manifest does not list is 404', (await thumb('nope.wad')).status === 404,
+              `status=${(await thumb('nope.wad')).status}`);
+        check('thumb: a traversal is refused', (await thumb('..%2Fmanifest.json')).status >= 400,
+              `status=${(await thumb('..%2Fmanifest.json')).status}`);
+        check('ui-assets: names the games that have art', c.includes('"titles":[') && c.includes('"extra.wad"'),
+              'titles array present');
+
         // A WAD REPLACED IN PLACE: same name, same library, new bytes.  A
         // directory mtime does not move for this; the per-file stamp does.
         writeFileSync(join(tree, 'wads/lib/doom.wad'), wad(64, 0x33));
         const d = await get();
         check('ui-assets: a WAD replaced in place invalidates too',
               d !== c, d === c ? 'identical body — keyed too coarsely' : `${d.length} bytes`);
+        const t2 = await thumb('doom.wad');
+        check('thumb: a WAD replaced in place invalidates its thumb too',
+              t2.status === 200 && t2.bytes[0] === 0x33 && t2.bytes[768] === 0x33 && t2.etag !== t1.etag,
+              `palette byte ${t2.bytes[0]?.toString(16)} etag ${t2.etag}`);
     } finally {
         srv?.kill();
         rmSync(tree, { recursive: true, force: true });

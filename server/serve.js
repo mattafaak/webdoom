@@ -8,7 +8,7 @@ import { brotliCompressSync, gzipSync, constants as zc } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createGame } from './game.js';
-import { uiAssets } from './ui-assets.js';
+import { uiAssets, titleThumb } from './ui-assets.js';
 import { putDemo, getDemo, PER_DEMO_CAP, storeStats } from './demo-store.js';
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
@@ -124,12 +124,13 @@ function send(req, res, code, body, headers = {}, key = null) {
     const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body ?? ''));
     const type = headers['content-type'] ?? 'text/plain; charset=utf-8';
     const base = { 'cache-control': 'no-cache', ...SECURITY_HEADERS, 'content-type': type, ...headers };
-    if (code !== 200 || buf.length < MIN_COMPRESS || !COMPRESSIBLE.test(type)) {
+    // a keyed body always gets its ETag; only text, JSON and wasm are encoded
+    if (code !== 200 || (!key && (buf.length < MIN_COMPRESS || !COMPRESSIBLE.test(type)))) {
         res.writeHead(code, { ...base, 'content-length': buf.length });
         return res.end(buf);
     }
     const r = representation(key, buf);
-    const enc = pickEncoding(req);
+    const enc = COMPRESSIBLE.test(type) && buf.length >= MIN_COMPRESS ? pickEncoding(req) : null;
     const etag = enc ? r.etag.replace(/"$/, `-${enc}"`) : r.etag;
     const out = { ...base, etag, vary: 'accept-encoding' };
     if (etagMatches(req.headers['if-none-match'], etag)) {
@@ -211,6 +212,18 @@ const server = createServer((req, res) => {
             ? send(req, res, 200, assets, { 'content-type': 'application/json' })
             : send(req, res, 404, 'no IWAD available');
     }
+    // GET /api/thumb/<file>: 768-byte PLAYPAL + 80x60 indices, 404 if the
+    // manifest does not name it or its art does not decode
+    const thumbMatch = path.match(/^\/api\/thumb\/([A-Za-z0-9._-]+)$/);
+    if (thumbMatch) {
+        if (req.method !== 'GET') return send(req, res, 405, 'method not allowed');
+        const { parsed } = manifest();
+        const body = parsed && titleThumb(join(root, 'wads/lib'), parsed, thumbMatch[1]);
+        return body
+            ? send(req, res, 200, body, { 'content-type': 'application/octet-stream' }, `thumb:${thumbMatch[1]}:${sha(body)}`)
+            : send(req, res, 404, 'no art for that game');
+    }
+    if (path.startsWith('/api/thumb/')) return send(req, res, 400, 'invalid thumb name');
     if (path === '/') path = '/index.html';
 
     for (const [prefix, dir] of MOUNTS) {

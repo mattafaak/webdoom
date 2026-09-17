@@ -217,7 +217,38 @@ for (const [name, bytes] of SERVER_CASES) {
     verdict.good ? passes++ : failures++;
 }
 
-const EXPECTED = Object.keys(CASES).length + SERVER_CASES.length;
+// The thumb route decodes a TITLEPIC on the server with the client decoder's
+// bounds: a column offset past the lump, a post that runs past it, absurd
+// dimensions.  It must answer null (no art) or bytes, and answer quickly.
+const { titleThumb } = await import(join(root, 'server/ui-assets.js'));
+const hostilePatch = kind => {
+    const b = Buffer.alloc(64);
+    if (kind === 'offsets-past-eof') { b.writeUInt16LE(4, 0); b.writeUInt16LE(4, 2); for (let x = 0; x < 4; x++) b.writeUInt32LE(0x7fffff00, 8 + 4 * x); }
+    if (kind === 'post-runs-past-eof') { b.writeUInt16LE(1, 0); b.writeUInt16LE(4, 2); b.writeUInt32LE(12, 8); b[12] = 0; b[13] = 250; }
+    if (kind === 'absurd-dimensions') { b.writeUInt16LE(0xffff, 0); b.writeUInt16LE(0xffff, 2); }
+    if (kind === 'row-past-height') { b.writeUInt16LE(1, 0); b.writeUInt16LE(2, 2); b.writeUInt32LE(12, 8); b[12] = 200; b[13] = 8; b[24] = 0xff; }
+    return kind === 'empty' ? Buffer.alloc(0) : b;
+};
+const THUMB_CASES = ['offsets-past-eof', 'post-runs-past-eof', 'absurd-dimensions', 'row-past-height', 'empty'];
+for (const kind of THUMB_CASES) {
+    const wadPath = join(badDir, `t-${kind}.wad`);
+    writeFileSync(wadPath, pwad([['PLAYPAL', Buffer.alloc(768, 7)], ['TITLEPIC', hostilePatch(kind)]]));
+    const t0 = Date.now();
+    let verdict;
+    try {
+        const r = titleThumb(badDir, { wads: [{ file: `t-${kind}.wad` }] }, `t-${kind}.wad`);
+        const ms = Date.now() - t0;
+        verdict = (r === null || (Buffer.isBuffer(r) && r.length === 768 + 80 * 60)) && ms < 2000
+            ? { good: true, why: `${r === null ? 'declined' : 'thumb built'} in ${ms}ms` }
+            : { good: false, why: `returned ${r?.length ?? r} in ${ms}ms` };
+    } catch (e) {
+        verdict = { good: false, why: `threw ${e.constructor.name}: ${e.message.slice(0, 60)}` };
+    }
+    console.log(`  ${verdict.good ? 'ok  ' : 'FAIL'} thumb ${kind} - ${verdict.why}`);
+    verdict.good ? passes++ : failures++;
+}
+
+const EXPECTED = Object.keys(CASES).length + SERVER_CASES.length + THUMB_CASES.length;
 console.log(`\n  ${passes} passed, ${failures} failed`);
 if (failures) { console.log(`FAIL wad-content-fuzz-test: ${failures} case(s)`); process.exit(1); }
 if (passes !== EXPECTED) { console.log(`FAIL wad-content-fuzz-test: ran ${passes} of ${EXPECTED} cases`); process.exit(1); }
