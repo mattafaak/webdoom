@@ -3,6 +3,7 @@
 // music goes through the MUS+OPL sequencer in mus_opl.c, pulled by an
 // AudioWorklet via web_music_render.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
+#include <stddef.h>
 #include <stdio.h>
 
 #include <emscripten.h>
@@ -31,8 +32,11 @@ EM_JS (int, js_sfx_playing, (int handle), {
 EM_JS (void, js_sfx_update, (int handle, int vol, int sep, int pitch), {
     if (Module["sfxUpdate"]) Module["sfxUpdate"](handle, vol, sep, pitch);
 });
-EM_JS (void, js_music_event, (int what), {   // 1 play, 0 stop
-    if (Module["musicEvent"]) Module["musicEvent"](what);
+// what: 0 stop, 1 play(data,len,looping), 2 pause, 3 resume, 4 volume(arg).
+// Round 11 widened this from (int what) -- it carried play and stop only, so a
+// JS-side synth could not learn about pause, resume or a volume change at all.
+EM_JS (void, js_music_event, (int what, void* data, int len, int arg), {
+    if (Module["musicEvent"]) Module["musicEvent"](what, data, len, arg);
 });
 // clang-format on
 
@@ -91,6 +95,12 @@ void I_UpdateSoundParams (int handle, int vol, int sep, int pitch)
 // mus_opl.c when JS pulls. One song at a time (matches the game).
 static void* songdata;
 static int songlen;
+// What JS would have to reconstruct otherwise.  client/js/audio.js is created
+// AFTER callMain, so it never saw the boot-time I_SetMusicVolume and
+// I_PlaySong; it reads the state instead of replaying events it missed.
+static int songlooping;
+static int songpaused;
+static int songvol = 127;
 
 void I_InitMusic (void)
 {
@@ -109,7 +119,9 @@ void I_ShutdownMusic (void)
 
 void I_SetMusicVolume (int volume) // menu slider 0..15
 {
-    mus_setvolume (volume * 127 / 15);
+    songvol = volume * 127 / 15;
+    mus_setvolume (songvol);
+    js_music_event (4, 0, 0, songvol);
 }
 
 int I_RegisterSong (void* data, int len)
@@ -122,26 +134,52 @@ int I_RegisterSong (void* data, int len)
 void I_PlaySong (int handle, int looping)
 {
     (void) handle;
+    songlooping = looping;
+    songpaused = 0;
     mus_play (songdata, songlen, looping);
-    js_music_event (1);
+    js_music_event (1, songdata, songlen, looping);
 }
 
 void I_PauseSong (int handle)
 {
     (void) handle;
+    songpaused = 1;
     mus_pause (1);
+    js_music_event (2, 0, 0, 0);
 }
 void I_ResumeSong (int handle)
 {
     (void) handle;
+    songpaused = 0;
     mus_pause (0);
+    js_music_event (3, 0, 0, 0);
 }
 
 void I_StopSong (int handle)
 {
     (void) handle;
     mus_stop ();
-    js_music_event (0);
+    js_music_event (0, 0, 0, 0);
+}
+
+// The music state a second synth needs to reach this one's: seven ints into
+// `out`, which must have room for them.  GENMIDI comes back as a pointer into
+// the zone (load_bank already cached it PU_STATIC), and the song as the
+// pointer I_RegisterSong was handed -- valid until I_UnRegisterSong, i.e.
+// while the lump is still PU_MUSIC.
+//   0 genmidi ptr   1 genmidi len   2 song ptr   3 song len
+//   4 looping       5 paused        6 volume (0..127)
+EMSCRIPTEN_KEEPALIVE void web_music_state (int* out)
+{
+    int lump = W_CheckNumForName ("GENMIDI");
+    out[0] =
+        lump >= 0 ? (int) (size_t) W_CacheLumpName ("GENMIDI", PU_STATIC) : 0;
+    out[1] = lump >= 0 ? W_LumpLength (lump) : 0;
+    out[2] = (int) (size_t) songdata;
+    out[3] = songlen;
+    out[4] = songlooping;
+    out[5] = songpaused;
+    out[6] = songvol;
 }
 
 void I_UnRegisterSong (int handle)

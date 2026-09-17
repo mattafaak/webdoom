@@ -137,7 +137,7 @@ Command: `node tools/zone-measure.mjs` (reports `__heap_base` + peak formula)
 |--------|------|-------|
 | C shadow stack | 1 MB | `STACK_SIZE=1MB` in `engine/Makefile` (4 MB until round 10, 2026-09-16; Axis 3 below); lives at start of linear memory |
 | Static data (DATA + BSS) | 453 KB | initialized tables + zero-init; measured via `__heap_base − 1 MB`; was 1,237 KB before the phase-14 BSS diets (14.2d/e/f), then 515 KB until round 10 removed the 64,000-byte untranspose buffer (`web_rowmajor_buf`) |
-| **Stack + static total (`__heap_base`)** | **1.44 MB** | = 1,512,336 bytes; heap begins here |
+| **Stack + static total (`__heap_base`)** | **1.44 MB** | = 1,512,384 bytes; heap begins here |
 | Zone pool (one `malloc(ZONESIZE)`) | 4 MB | `ZONESIZE` in `engine/web/web.h` (32 MB pre-14.2c); `I_ZoneBase()` in `engine/web/i_system.c` |
 | WAD copy (one `malloc(wad.length)`) | up to 16.61 MB | plutonia.wad, worst case |
 | **Peak heap address** | **~22.06 MB** | = heap_base + zone + worst WAD |
@@ -145,14 +145,14 @@ Command: `node tools/zone-measure.mjs` (reports `__heap_base` + peak formula)
 
 ### INITIAL_MEMORY floor experiment
 
-Measured `__heap_base` = 1,512,336 B (2026-09-16, round 10: stack 4 → 1 MB, untranspose buffer gone; 4,722,048 B on 2026-09-12 when widescreen was removed).  It had read
-5,042,464 B while MAXSCREENWIDTH was 854; the 320,416 B it gave back is the
-18.2a widescreen dimension separation unwinding — visplanes, openings and the
-per-column arrays.  The 2026-09-11 stamp had predicted 4,722,016 B for a
-rebuild at 320, and the revert landed 32 B from it, which is what says the
-change removed widescreen and nothing else.
-Worst-case WAD = plutonia.wad (17,420,824 bytes).  Zone = 4,194,304 B.
-Peak = 26,337,176 B ≈ 25.12 MB.
+Measured `__heap_base` = 1,512,384 B (2026-09-17).  Round 10 took it from
+4,722,048 by dropping the C stack to 1 MB and deleting the 64,000-byte
+untranspose buffer; round 11 added 48 B for the three ints of music state
+`web_music_state` reports to the worklet synth.  The 4,722,048 figure was the
+18.2a widescreen unwinding, landing 32 B from the 2026-09-11 prediction of
+4,722,016 for a rebuild at 320 — which is what said that change removed
+widescreen and nothing else.  Worst WAD = plutonia.wad, 17,420,824 bytes; zone
+4,194,304 B, so peak = 23,127,512 B ≈ 22.06 MB (claims perf-012/013).
 
 The floor-experiment table below is the original pre-14.2c record (64 MB /
 32 MB-zone era). Task 14.2c re-established the shipping floor at 32 MiB
@@ -190,7 +190,7 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 
 | File | Raw (bytes) | gzip-9 (bytes) | gzip-9 (KB) |
 |------|------------|---------------|------------|
-| `build/doom.wasm` | 299,308 | 133,222 | 130.1 |
+| `build/doom.wasm` | 299,521 | 133,291 | 130.2 |
 | `client/js/lobby.js` | 32,559 | 11,137 | 10.9 |
 | `client/js/input.js` | 18,037 | 6,628 | 6.5 |
 | `client/js/menu.js` | 15,588 | 5,415 | 5.3 |
@@ -199,7 +199,7 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/js/wad-import.js` | 11,300 | 4,249 | 4.1 |
 | `client/css/webdoom.css` | 10,370 | 3,885 | 3.8 |
 | `client/js/audio.js` | 11,040 | 3,825 | 3.7 |
-| `build/doom.js` | 8,732 | 3,711 | 3.6 |
+| `build/doom.js` | 8,774 | 3,720 | 3.6 |
 | `client/js/doomfont.js` | 9,575 | 3,663 | 3.6 |
 | `client/js/fire.js` | 9,371 | 3,481 | 3.4 |
 | `client/js/demo.js` | 7,291 | 2,733 | 2.7 |
@@ -214,8 +214,8 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/js/music-worklet.js` | 1,970 | 843 | 0.8 |
 | `client/js/wad-cache.js` | 1,517 | 716 | 0.7 |
 | `client/js/wad-library.js` | 1,159 | 565 | 0.6 |
-| **Total (all, raw)** | **498,029** | — | — |
-| **Total (all, gzip-9)** | — | **206,793** | **201.9** |
+| **Total (all, raw)** | **498,284** | — | — |
+| **Total (all, gzip-9)** | — | **206,871** | **202.0** |
 | **JS+CSS+HTML only (raw)** | 189,989 | — | — |
 | **JS+CSS+HTML only (gzip-9)** | — | 69,860 | **68.2** |
 
@@ -224,7 +224,7 @@ fetched separately on first play and cached in the browser; it is not part of
 the initial page-load transfer.
 
 **Finding**: the entire deliverable (wasm + JS glue + client JS + CSS +
-HTML) compresses to **201.9 KB gzip** on the wire, gated by
+HTML) compresses to **202.0 KB gzip** on the wire, gated by
 `payload-size` (perf-015/perf-016) since round 8. The wasm is
 64% of that. The JS+CSS+HTML surface is **68.2 KB gzip**
 — note that is **1.9x the 35.1 KB this table used to
@@ -1267,7 +1267,7 @@ did not move**.  The layout dependency those goldens once had was a real
 read past the end of an array, fixed since; nothing in the shipping engine
 depends on where the heap starts.
 
-1. `__heap_base` 4,722,048 → 1,512,336 B (−3,209,712 B), all of it heap
+1. `__heap_base` 4,722,048 → 1,512,384 B (−3,209,712 B), all of it heap
    headroom: worst PWAD combo peak 26.13 → 23.06 MB under 32 MB.
 2. Wire-transfer size: none (stack is runtime layout, not CODE/DATA);
    `doom.wasm` 355,883 → 355,395 B from the buffer's removal.

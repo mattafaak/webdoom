@@ -51,7 +51,7 @@ export const ARTIFACTS = {
     'build': {
         desc:    'shipping wasm engine (the artifact almost every gate loads)',
         path:    'build/doom.wasm',
-        also:    ['build/doom.js'],
+        also:    ['build/doom.js', 'build/synth.wasm'],   // one make builds both
         dirs:    [['engine/core', true], ['engine/web', false]],
         files:   ['engine/Makefile'],
         rebuild: 'source tools/emsdk-env.sh && make -C engine',

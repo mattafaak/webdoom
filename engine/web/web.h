@@ -84,5 +84,26 @@ void mus_play (void* data, int len, int loop);
 void mus_stop (void);
 void mus_pause (int pause);
 void mus_setvolume (int vol127);
+int web_music_debug (
+    int what); /* 0 playing, 1 events, 2 noteons, 3 bank, 4 voices */
+void web_set_opl_mode (int mode); /* 0 OPL2, 1 OPL3; call before mus_init */
+void web_music_render (float* out, int nframes); /* out: nframes * 2 floats */
+
+// --- build/synth.wasm contract (engine/web/synth_main.c) ------------------
+//
+// The same mus_opl.c linked as a standalone reactor for the AudioWorklet.
+// Every pointer below is allocated by the CALLER through the module's own
+// `malloc` and becomes the module's: it frees the previous song when a new one
+// is accepted, and frees the new one when mus_play declines it.  `gm` must
+// outlive the module (load_bank keeps no copy of the lump it reads).
+// `out` in web_music_render must have room for nframes * 2 floats.
+void web_music_state (int* out); /* 7 ints: see engine/web/i_sound.c */
+
+void synth_boot (int rate, byte* gm, int gmlen, byte* song, int songlen,
+                 int looping, int paused, int vol127, int oplmode);
+void synth_play (byte* data, int len, int looping);
+void synth_stop (void);
+void synth_pause (int on);
+void synth_volume (int vol127);
 
 #endif

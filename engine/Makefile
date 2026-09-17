@@ -8,7 +8,11 @@ OUT      ?= $(BUILD)/doom.js
 CORE_EXCLUDE := core/i_main.c core/i_net.c core/i_sound.c core/i_system.c \
                 core/i_video.c core/d_net.c
 CORE_SRC := $(filter-out $(CORE_EXCLUDE),$(wildcard core/*.c))
-WEB_SRC  := $(wildcard web/*.c)
+# synth_main.c defines W_* stubs for build/synth.wasm; linking it into
+# doom.wasm would collide with the real w_wad.c.  It is a wildcard match, so
+# it has to be filtered out by name.
+SYNTH_ONLY := web/synth_main.c
+WEB_SRC  := $(filter-out $(SYNTH_ONLY),$(wildcard web/*.c))
 SRC      := $(CORE_SRC) $(WEB_SRC)
 
 # Optional extra compile-time defines for instrumented builds.
@@ -27,7 +31,9 @@ OPT := -Oz
 HOT := core/r_draw.c core/r_segs.c core/r_plane.c core/r_things.c core/r_bsp.c \
        core/r_main.c core/r_data.c core/p_map.c core/p_maputl.c core/p_mobj.c \
        core/p_sight.c core/p_enemy.c core/p_tick.c core/m_fixed.c core/tables.c \
-       web/mus_opl.c web/opl3.c
+       web/mus_opl.c web/opl3.c web/synth_main.c
+# NOTE: HOT_OBJ is expanded HERE, so a file added to HOT after this line would
+# compile at -Oz with nothing saying so (the `+=` after `:=` trap).
 HOT_OBJ := $(patsubst %.c,$(BUILD)/obj/%.o,$(HOT))
 $(HOT_OBJ): OPT := -O3
 
@@ -61,7 +67,19 @@ LDFLAGS := -flto -sMALLOC=emmalloc -sASSERTIONS=0 --closure 1 -sINITIAL_MEMORY=3
 
 OBJ := $(patsubst %.c,$(BUILD)/obj/%.o,$(SRC))
 
-all: $(OUT)
+# build/synth.wasm — the OPL synth alone, for the AudioWorklet (ledger NC6).
+# The SAME objects doom.wasm links, so the two synths cannot drift apart.
+# A reactor: --no-entry, no main, instantiated from bytes by the worklet
+# (AudioWorkletGlobalScope has no fetch).  4 MB covers the chip (~20 KB), the
+# bank, GENMIDI (~11 KB) and any sane MUS lump; growth stays off so the
+# worklet's Float32Array view over the memory never goes stale.
+SYNTH     := $(BUILD)/synth.wasm
+SYNTH_OBJ := $(BUILD)/obj/web/mus_opl.o $(BUILD)/obj/web/opl3.o $(BUILD)/obj/web/synth_main.o
+SYNTH_LDFLAGS := --no-entry -sSTANDALONE_WASM=1 -sMALLOC=emmalloc -sASSERTIONS=0 \
+                 -sINITIAL_MEMORY=4MB -sSTACK_SIZE=64KB -sALLOW_MEMORY_GROWTH=0 \
+                 -sEXPORTED_FUNCTIONS=_malloc,_free
+
+all: $(OUT) $(SYNTH)
 
 # Makefile is a prerequisite so a flag change rebuilds the objects: without
 # it a new OPT relinked the old -O3 objects and reported the old size.
@@ -70,6 +88,10 @@ $(BUILD)/obj/%.o: %.c Makefile
 	emcc $(OPT) $(CFLAGS) $(EXTRA_CFLAGS) -MMD -MP -c $< -o $@
 
 -include $(OBJ:.o=.d)
+
+$(SYNTH): $(SYNTH_OBJ) Makefile
+	emcc -O3 $(CFLAGS) $(EXTRA_CFLAGS) $(SYNTH_LDFLAGS) $(SYNTH_OBJ) -o $(SYNTH)
+	@ls -la $(SYNTH)
 
 $(OUT): $(OBJ) Makefile
 	emcc -O3 $(CFLAGS) $(EXTRA_CFLAGS) $(LDFLAGS) $(OBJ) -o $(OUT)
