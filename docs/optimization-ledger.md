@@ -256,7 +256,7 @@ strictly safer than vanilla's shipping behavior (no guard at all).
 
 Notes: The wasm `STACK_SIZE` followed in round 10 (2026-09-16): 4 MB → 1 MB, together with the removal of the
 64,000-byte untranspose buffer in `engine/web/i_video.c` (JS reads `screens[0]` in place; the GPU swaps the axes).
-`__heap_base` 4,722,048 → 1,512,304 B, `doom.wasm` 355,883 → 355,395 B, 13/13 sim, render and low-detail
+`__heap_base` 4,722,048 → 1,512,336 B, `doom.wasm` 355,883 → 355,395 B, 13/13 sim, render and low-detail
 goldens unmoved — the regold perf.md Axis 3 feared did not happen. Until then the wasm was NOT changed.
 The tools/baremetal linker (doom.ld) has no explicit 4 MiB stack block; stack is whatever RAM
 remains above .bss (implicitly ~several MiB of headroom in QEMU, practically ≪1 MiB used).
@@ -353,6 +353,9 @@ Exception: -Os revisit is explicitly reserved for bare-metal flash-pressure scen
 references prf-007/008; the CODE section shrinks 33% under -Os which is meaningful for flash).
 That is a bare-metal-specific task, not a universal-artifact re-sweep.
 
+Round 10 (2026-09-16) reopened axis 1 PER OBJECT rather than whole-program and landed it as C8:
+the whole-program verdict above still holds (-Oz measured −11% sim on alder that day), the split does not pay it.
+
 ---
 
 ### K6 — Per-target wasm builds (from Plans.md kill-list)
@@ -417,6 +420,23 @@ sanctioned by policy).**
 
 ---
 
+### C8 — Hybrid -Oz/-O3 per-object build (round 10)
+
+| field | value |
+|-------|-------|
+| **mechanism** | `engine/Makefile`: `OPT := -Oz` per object, `$(HOT_OBJ): OPT := -O3` for the 17 hot files (r_draw r_segs r_plane r_things r_bsp r_main r_data p_map p_maputl p_mobj p_sight p_enemy p_tick m_fixed tables mus_opl opl3), link `-O3 -flto`. clang's per-function `minsize` survives LTO; the link level picks the pipeline. |
+| **predicted Δinstr/tic** | 0 on the hot path (unchanged flags); cold code runs rarely per tic. |
+| **axis** | size |
+| **magic-data policy** | None. **COMPLIES.** |
+| **kill rule** | Any golden mismatch → kill. Fleet regression beyond `perf-fleet --check`'s 20% on any host → kill. |
+| **measured size** | `build/doom.wasm` 355,395 → **299,348 B (−15.8%)**, gzip-9 146,751 → **133,995 B (−8.7%)**. README 347 → 292 KB. |
+| **measured speed (alder, bench.mjs doom.wad ×3)** | render µs/frame 54.6/48.6/46.2 → 53.8/48.6/47.1 (−1.5/−0.1/+2.0%); sim fps avg 206,697 → 207,316 (+0.3%). Noise floor from relinking the same -O3 objects: render +0.7…+2.7%, sim ±1.4%. Whole-program -Oz measured −11% sim on alder the same day, whole-program -Os −9.3% on wbox (K5): the split is what makes it free. |
+| **gates** | sim 13/13 · render 13/13 · render-low 13/13 · sim-freelook · sim-invariants · opl-mode · fuzz-diff · adversarial-map · perf-fleet --check (wbox, tank). |
+
+**Verdict: LANDED (round 10, 2026-09-16)**
+
+---
+
 ## Summary
 
 | id | mechanism | axis | Δinstr/tic | verdict |
@@ -428,6 +448,7 @@ sanctioned by policy).**
 | C5 | MAXDRAWSEGS 2048→256 | RAM / portability | 0 instr/tic; 84 KiB BSS savings (1792 × 48 B); peak 205/256 ⚠️ thin 1.25× | LANDED — 14.2e |
 | C6 | MAXOPENINGS 320×256→320×64 | RAM / portability | 0 instr/tic; 120 KiB BSS savings (61,440 × 2 bytes); peak 2,527/20,480 = 8.1× margin | LANDED — 14.2f |
 | C7 | STACK_SIZE 4→1 MiB (bare-metal builds) | RAM / portability | 0 instr/tic; measured peak ≈14 KiB (fs-doom) / ≈128 KiB (harness); 1 MiB = 70×/8× margin; wasm followed in round 10 (2026-09-16), goldens unmoved | LANDED (14.2g) |
+| C8 | Hybrid -Oz/-O3 per-object build | size | 0 on the hot path; doom.wasm 355,395 → 299,348 B (−15.8%), gzip −8.7%; alder render/sim inside the noise floor | LANDED (round 10) |
 | K1 | R_DrawSpan u32 packing | cycle-floor | wbox +7.9% planes REGRESSION | KILLED |
 | K2 | wasm SIMD | cycle-floor | no gather in v128 | KILLED |
 | K3 | Visplane hash | cycle-floor | ceiling 2.9% of planes, probe depth 6.6 | KILLED |
@@ -443,10 +464,10 @@ sanctioned by policy).**
 | NC4 | R_DrawColumn 8-wide unroll (extend existing 4-wide) | cycle-floor | predicted −5K…−10K instr/tic (1–2% of bsp); UNMEASURED | SURVIVES → no live owner |
 | NC5 | R_DrawSpan 4-wide loop unroll | cycle-floor | MEASURED: −47,707 instr/tic p50 doom.wad demo3 (−4.2% whole, −11.9% planes); scalar xfrac/yfrac, no packing | LANDED (20.2b) |
 
-**Totals: 21 candidates, 11 survivors (8 landed, 3 surviving), 10 killed.**
+**Totals: 22 candidates, 12 survivors (9 landed, 3 surviving), 10 killed.**
 
 <!-- Counted from the verdict column of the table above, not written by hand:
-     LANDED C1-C7 + NC5 = 8; KILLED K1-K9 + NC1 = 10; SURVIVES NC2, NC3, NC4 = 3.
+     LANDED C1-C8 + NC5 = 9; KILLED K1-K9 + NC1 = 10; SURVIVES NC2, NC3, NC4 = 3.
      NC2/NC3/NC4 pointed at task 20.2b until round 8.  20.2b was round
      3's LANDING TEMPLATE ("instantiate per ledger entry") and it closed at
      90250e8 with one candidate landed, so those three had been pointed at a

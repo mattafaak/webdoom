@@ -17,7 +17,21 @@ SRC      := $(CORE_SRC) $(WEB_SRC)
 # The unflagged default build is byte-unaffected by these declarations.
 EXTRA_CFLAGS ?=
 
-CFLAGS := -O3 -flto -Dalloca=__builtin_alloca -std=gnu89 -DNORMALUNIX -Icore -Iweb \
+# Per-object optimisation level (round 10, ledger C8).  The renderer, the
+# playsim's hot files and the OPL synth compile at -O3; everything else at
+# -Oz.  The link runs -O3 -flto, which picks the pipeline, while clang's
+# per-function `minsize` attributes survive LTO -- so the cold code stays
+# small and the hot code keeps its schedule.  Measured: whole-program -Oz
+# cost 11% sim throughput; this split costs none and saves ~16% of the wasm.
+OPT := -Oz
+HOT := core/r_draw.c core/r_segs.c core/r_plane.c core/r_things.c core/r_bsp.c \
+       core/r_main.c core/r_data.c core/p_map.c core/p_maputl.c core/p_mobj.c \
+       core/p_sight.c core/p_enemy.c core/p_tick.c core/m_fixed.c core/tables.c \
+       web/mus_opl.c web/opl3.c
+HOT_OBJ := $(patsubst %.c,$(BUILD)/obj/%.o,$(HOT))
+$(HOT_OBJ): OPT := -O3
+
+CFLAGS := -flto -Dalloca=__builtin_alloca -std=gnu89 -DNORMALUNIX -Icore -Iweb \
           -fno-strict-aliasing -Wall -Wno-unused-variable \
           -Wno-unused-but-set-variable -Wno-dangling-else \
           -Wno-parentheses -Wno-missing-braces -Wno-unused-value
@@ -49,14 +63,16 @@ OBJ := $(patsubst %.c,$(BUILD)/obj/%.o,$(SRC))
 
 all: $(OUT)
 
-$(BUILD)/obj/%.o: %.c
+# Makefile is a prerequisite so a flag change rebuilds the objects: without
+# it a new OPT relinked the old -O3 objects and reported the old size.
+$(BUILD)/obj/%.o: %.c Makefile
 	@mkdir -p $(dir $@)
-	emcc $(CFLAGS) $(EXTRA_CFLAGS) -MMD -MP -c $< -o $@
+	emcc $(OPT) $(CFLAGS) $(EXTRA_CFLAGS) -MMD -MP -c $< -o $@
 
 -include $(OBJ:.o=.d)
 
 $(OUT): $(OBJ) Makefile
-	emcc $(CFLAGS) $(EXTRA_CFLAGS) $(LDFLAGS) $(OBJ) -o $(OUT)
+	emcc -O3 $(CFLAGS) $(EXTRA_CFLAGS) $(LDFLAGS) $(OBJ) -o $(OUT)
 	@ls -la $(BUILD)/doom.js $(BUILD)/doom.wasm
 
 clean:

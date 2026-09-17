@@ -171,13 +171,13 @@ and inline `*(not machine-verified)*` markers for the 15 unverifiable claims.
 | perf-006 | perf.md:57 | wasm compression ratio (raw / gzip) | 2.45× | derived | 357,978 / 145,990 ≈ 2.45 | derived-from-gated |
 | perf-007 | perf.md:100 | peak zone HWM across all 13 golden demos | 1.36 MB (plutonia demo3) | measurement | tools/zone-measure.mjs | dated-measurement |
 | perf-008 | perf.md:69 | ZONESIZE (hardcoded zone pool) | 4,194,304 B (32 MB) | invariant | tools/archaeology/source-constant-verify.mjs | verified |
-| perf-009 | perf.md:131 | __heap_base (static data end, heap start) | 1,512,304 bytes | measurement | tools/archaeology/wasm-stamp.mjs | verified |
+| perf-009 | perf.md:131 | __heap_base (static data end, heap start) | 1,512,336 bytes | measurement | tools/archaeology/wasm-stamp.mjs | verified |
 | perf-010 | perf.md:132 | zone pool malloc size | 4,194,304 bytes | derived | 4 × 1024 × 1024 = 4,194,304 (32 MB pre-14.2c) | derived-from-gated |
 | perf-011 | perf.md:139 | plutonia.wad file size (worst single IWAD) | 17,420,824 bytes | measurement | tools/archaeology/stamp-check.mjs | verified |
 | perf-012 | perf.md:134 | peak heap address worst-case single IWAD | ~25.42 MB | derived | 5,042,416 + 4,194,304 + 17,420,824 = 26,657,544 B ≈ 25.42 MB | derived-from-gated |
 | perf-013 | perf.md:135 | headroom vs 64 MB (single IWAD) | ~10.18 MB | derived | 64 MB − 53.82 MB ≈ 10.18 MB | derived-from-gated |
 | perf-014 | perf.md:148 | INITIAL_MEMORY floor (tested pass/fail boundary) | 56 MB | measurement | requires emcc INITIAL_MEMORY sweep build; no current script | unverifiable |
-| perf-015 | perf.md:212 | all deliverables total gzip-9 wire size | 213.3 KB | measurement | tools/payload-size.mjs (derived from sw.js SHELL_FILES) | verified |
+| perf-015 | perf.md:212 | all deliverables total gzip-9 wire size | 200.5 KB | measurement | tools/payload-size.mjs (derived from sw.js SHELL_FILES) | verified |
 | perf-016 | perf.md:213 | JS + CSS + HTML gzip-9 total (no wasm, no glue) | 66.7 KB | measurement | tools/payload-size.mjs (derived from sw.js SHELL_FILES) | verified |
 | perf-017 | perf.md:225 | bsp+segs avg ms/frame — wbox (3-demo avg) | 0.2625 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
 | perf-018 | perf.md:225 | bsp+segs avg ms/frame — tank | 0.0549 ms | measurement | tools/bench.mjs + bench-baseline.json | dated-measurement |
@@ -235,11 +235,11 @@ and inline `*(not machine-verified)*` markers for the 15 unverifiable claims.
 ---
 | ea-048 | engine-archaeology.md:§6 | HACX COLORMAP mismatches vs the (32-L)/32 euclid recipe | 3,517 / 8,192 | invariant | tools/archaeology/colormap-cross-palette.c | verified |
 | ea-049 | engine-archaeology.md:§6 | doom-family WADs shipping byte-identical PLAYPAL+COLORMAP | 4 | invariant | tools/archaeology/colormap-cross-palette.c | verified |
-| readme-001 | README.md:5 | wasm size quoted in README, KB | 347 | measurement | tools/archaeology/size-ledger.mjs | verified |
+| readme-001 | README.md:5 | wasm size quoted in README, KB | 292 | measurement | tools/archaeology/size-ledger.mjs | verified |
 | size-001 | perf.md:§size | doom.wasm raw bytes at the 14.2f base | 356,216 | measurement | tools/archaeology/size-ledger.mjs | dated-measurement |
 | size-002 | perf.md:§size | doom.wasm gzip-9 bytes at the 14.2f base | 146,358 | measurement | tools/archaeology/size-ledger.mjs | dated-measurement |
 | size-003 | perf.md:§size | fs-doom .text bytes at the 14.2f base | 294,785 | measurement | tools/archaeology/size-ledger.mjs | dated-measurement |
-| size-004 | README.md:5 | README KB figure == round(raw/1024); same fact as readme-001 | 347 | derived | tools/archaeology/size-ledger.mjs | verified |
+| size-004 | README.md:5 | README KB figure == round(raw/1024); same fact as readme-001 | 292 | derived | tools/archaeology/size-ledger.mjs | verified |
 | spec-001 | spec.md:102 | fire.js cost per tick, alder, ms | 0.008 | measurement | (node microbench, 2026-07-16; not re-runnable here) | unverifiable |
 | spec-002 | spec.md:102 | fire.js cost per tick, pi5, ms | 0.022 | measurement | (node microbench, 2026-07-16; pi5 retired 2026-09-11) | unverifiable |
 | spec-003 | spec.md:102 | fire.js cost per tick, wbox, ms | 0.072 | measurement | (node microbench, 2026-07-16; not re-runnable here) | unverifiable |

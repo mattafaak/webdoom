@@ -137,7 +137,7 @@ Command: `node tools/zone-measure.mjs` (reports `__heap_base` + peak formula)
 |--------|------|-------|
 | C shadow stack | 1 MB | `STACK_SIZE=1MB` in `engine/Makefile` (4 MB until round 10, 2026-09-16; Axis 3 below); lives at start of linear memory |
 | Static data (DATA + BSS) | 453 KB | initialized tables + zero-init; measured via `__heap_base − 1 MB`; was 1,237 KB before the phase-14 BSS diets (14.2d/e/f), then 515 KB until round 10 removed the 64,000-byte untranspose buffer (`web_rowmajor_buf`) |
-| **Stack + static total (`__heap_base`)** | **1.44 MB** | = 1,512,304 bytes; heap begins here |
+| **Stack + static total (`__heap_base`)** | **1.44 MB** | = 1,512,336 bytes; heap begins here |
 | Zone pool (one `malloc(ZONESIZE)`) | 4 MB | `ZONESIZE` in `engine/web/web.h` (32 MB pre-14.2c); `I_ZoneBase()` in `engine/web/i_system.c` |
 | WAD copy (one `malloc(wad.length)`) | up to 16.61 MB | plutonia.wad, worst case |
 | **Peak heap address** | **~22.06 MB** | = heap_base + zone + worst WAD |
@@ -145,7 +145,7 @@ Command: `node tools/zone-measure.mjs` (reports `__heap_base` + peak formula)
 
 ### INITIAL_MEMORY floor experiment
 
-Measured `__heap_base` = 1,512,304 B (2026-09-16, round 10: stack 4 → 1 MB, untranspose buffer gone; 4,722,048 B on 2026-09-12 when widescreen was removed).  It had read
+Measured `__heap_base` = 1,512,336 B (2026-09-16, round 10: stack 4 → 1 MB, untranspose buffer gone; 4,722,048 B on 2026-09-12 when widescreen was removed).  It had read
 5,042,464 B while MAXSCREENWIDTH was 854; the 320,416 B it gave back is the
 18.2a widescreen dimension separation unwinding — visplanes, openings and the
 per-column arrays.  The 2026-09-11 stamp had predicted 4,722,016 B for a
@@ -190,7 +190,7 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 
 | File | Raw (bytes) | gzip-9 (bytes) | gzip-9 (KB) |
 |------|------------|---------------|------------|
-| `build/doom.wasm` | 355,395 | 146,403 | 143.0 |
+| `build/doom.wasm` | 299,348 | 133,239 | 130.1 |
 | `client/js/lobby.js` | 32,498 | 11,114 | 10.9 |
 | `client/js/input.js` | 17,073 | 6,194 | 6.0 |
 | `client/js/menu.js` | 15,543 | 5,401 | 5.3 |
@@ -214,8 +214,8 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/js/music-worklet.js` | 1,970 | 843 | 0.8 |
 | `client/js/wad-cache.js` | 1,517 | 716 | 0.7 |
 | `client/js/wad-library.js` | 1,159 | 565 | 0.6 |
-| **Total (all, raw)** | **549,925** | — | — |
-| **Total (all, gzip-9)** | — | **218,457** | **213.3** |
+| **Total (all, raw)** | **493,878** | — | — |
+| **Total (all, gzip-9)** | — | **205,293** | **200.5** |
 | **JS+CSS+HTML only (raw)** | 185,769 | — | — |
 | **JS+CSS+HTML only (gzip-9)** | — | 68,335 | **66.7** |
 
@@ -224,9 +224,9 @@ fetched separately on first play and cached in the browser; it is not part of
 the initial page-load transfer.
 
 **Finding**: the entire deliverable (wasm + JS glue + client JS + CSS +
-HTML) compresses to **213.3 KB gzip** on the wire, gated by
+HTML) compresses to **200.5 KB gzip** on the wire, gated by
 `payload-size` (perf-015/perf-016) since round 8. The wasm is
-67% of that. The JS+CSS+HTML surface is **66.7 KB gzip**
+65% of that. The JS+CSS+HTML surface is **66.7 KB gzip**
 — note that is **1.9x the 35.1 KB this table used to
 claim**, which went stale unnoticed precisely because both figures were
 marked *not machine-verified*: the old table still listed
@@ -1267,7 +1267,7 @@ did not move**.  The layout dependency those goldens once had was a real
 read past the end of an array, fixed since; nothing in the shipping engine
 depends on where the heap starts.
 
-1. `__heap_base` 4,722,048 → 1,512,304 B (−3,209,744 B), all of it heap
+1. `__heap_base` 4,722,048 → 1,512,336 B (−3,209,744 B), all of it heap
    headroom: worst PWAD combo peak 26.13 → 23.06 MB under 32 MB.
 2. Wire-transfer size: none (stack is runtime layout, not CODE/DATA);
    `doom.wasm` 355,883 → 355,395 B from the buffer's removal.
@@ -1348,15 +1348,15 @@ All five axes measured. No flag change is justified:
 
 | axis | conclusion | justification |
 |------|-----------|---------------|
-| -O3 vs -Os | **keep -O3** | -Os: −15% gzip, but −9.3% sim fps on wbox (kill) |
+| -O3 vs -Os | **hybrid since round 10** (ledger C8) | whole-program -Os/-Oz kills wbox/alder sim speed; per-object -Oz with the 17 hot files at -O3 does not, and saves 15.8% raw / 8.7% gzip |
 | -O3 vs -O2 | **keep -O3** | -O2: −2.7% gzip, no speed win; trivial size delta |
 | --closure 1 | **keep --closure 1** | -closure 0: +67.5% doom.js gzip, no benefit |
 | STACK_SIZE | **1MB** (round 10) | kept at 4MB for fear of a regold; the goldens did not move when it fell |
 | INITIAL_MEMORY=64MB | **keep 64MB** | 9.17 MB headroom at worst real PWAD combo |
 | emmalloc | **keep emmalloc** | correct for DOOM's zone-dominant allocation pattern |
 
-The shipped flags (`-O3 -flto --closure 1 -sINITIAL_MEMORY=64MB
--sSTACK_SIZE=1MB -sMALLOC=emmalloc`) are the optimal point on the
+The shipped flags (`-Oz` per object, `-O3` on the 17 hot files and at link, `-flto --closure 1 -sINITIAL_MEMORY=32MB
+-sSTACK_SIZE=1MB -sMALLOC=emmalloc`) are the measured point on the
 size×speed frontier for browser and bare-metal targets given the current
 constraints. The only actionable future path to a smaller payload is
 reducing ZONESIZE (deferred to task 3.x), which would lower the INITIAL_MEMORY
@@ -1364,6 +1364,32 @@ floor by ~28 MB and is worth revisiting once the render-path texture cache
 peak is characterised.
 
 ---
+
+### Axis 1, reopened per object: the hybrid -Oz/-O3 build (round 10, 2026-09-16)
+
+Axis 1 above was a whole-program sweep, and its kill stands: `-Os` for
+every file costs 9.3% sim throughput on wbox and `-Oz` cost 11% on alder
+when re-measured today. What was never tried is the split. The renderer
+(`r_*.c`), the playsim's hot files (`p_map p_maputl p_mobj p_sight p_enemy
+p_tick`), `m_fixed.c`, `tables.c` and the OPL synth compile at `-O3`; the
+other 49 objects at `-Oz`; the link runs `-O3 -flto`. Under LTO the link
+level picks the pipeline, and clang's per-function `minsize` attribute
+survives it, so the cold code stays small while the hot code keeps its
+schedule (`engine/Makefile`, `HOT`).
+
+| build | wasm raw | gzip-9 | alder render µs/frame (demo1/2/3) | alder sim fps avg |
+|-------|----------|--------|-----------------------------------|-------------------|
+| whole `-O3` (before) | 355,395 | 146,751 | 54.6 / 48.6 / 46.2 | 206,697 |
+| hybrid (shipped) | **299,348** | **133,995** | 53.8 / 48.6 / 47.1 | 207,316 |
+| Δ | **−15.8%** | **−8.7%** | −1.5% / −0.1% / +2.0% | +0.3% |
+
+The noise floor was measured in the same sitting: relinking the unchanged
+`-O3` objects and benching again moved render by +0.7…+2.7% and sim by
+−1.4…+1.4%, so every delta in the hybrid row is inside it. Method:
+`node tools/bench.mjs doom.wad 3 --json` on alder, same wad, same reps,
+same host, before and after; the 13 sim, render and low-detail goldens are
+byte-identical. `perf-fleet --check` (wbox, tank) gates the fleet.
+
 
 ## PSX fire launcher background — perf note
 
