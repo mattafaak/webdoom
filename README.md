@@ -72,11 +72,17 @@ re-probes. `tools/deploy.sh --check` reports drift and changes nothing.
 ## Tests
 
 ```sh
-tools/run-tests.sh            # everything: 82 legs
-tools/run-tests.sh --jobs 3   # the same legs three at a time, identical verdicts
-                              # Measured on alder (i9-12900K), 2026-09-17:
-                              #   --jobs 3 --perf --require-complete
-                              #   13 min 51 s, 81 of 81 passed, 0 skipped
+tools/run-tests.sh            # everything: 82 legs, one at a time
+tools/run-tests.sh --jobs 6   # the same legs six at a time, identical verdicts
+                              # Measured on alder (i9-12900K, 24 threads),
+                              # 2026-09-17, --perf --require-complete, 82 of 82
+                              # passed and nothing skipped in every arm:
+                              #   --jobs 3   10 min 42 s
+                              #   --jobs 6    9 min 37 s   <- the recommendation
+                              #   --jobs 10   9 min 24 s
+                              # 6 is where the curve flattens: 3->6 saves 65 s,
+                              # 6->10 saves 13 more for twice the browsers.  The
+                              # floor is n64-demos, 434 s of it on its own.
                               # The runner prints its own time; your host is not alder.
 tools/run-tests.sh --quick    # no WADs, no build, no browser — what CI runs
 tools/run-tests.sh --list     # the leg registry

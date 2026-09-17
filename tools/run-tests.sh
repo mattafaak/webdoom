@@ -35,7 +35,32 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --quick)            TIER=quick; shift ;;
         # legs run N at a time, each on its own server and port; a leg tagged
-        # `alone` (CPU-heavy or timing-graded) drains the pool first
+        # `alone` (timing-graded -- contention IS the measurement) drains the
+        # pool first, while `heavy` (expensive but hash-graded) may overlap.
+        #
+        # MEASURED on alder (i9-12900K, 24 threads), 2026-09-17, one tree, 82
+        # legs, --perf --require-complete, N64 toolchain sourced.  Every arm
+        # returned the same table: 82 passed, 0 failed, 0 skipped.
+        #
+        #   --jobs 3   642 s (10 min 42 s)   1,228 leg-seconds, 1.91x packed
+        #   --jobs 6   577 s ( 9 min 37 s)   1,209 leg-seconds, 2.10x packed
+        #   --jobs 10  564 s ( 9 min 24 s)
+        #
+        # 6 is the recommendation: 3->6 saves 65 s, 6->10 saves 13 more for
+        # twice the concurrent browsers.  n64-demos is the floor at 434 s, so
+        # at 6 the whole rest of the suite costs 143 s beside it.
+        #
+        # For the record, because it is the bigger number and it is NOT a
+        # --jobs result: splitting `alone` into `alone`+`heavy` took the same
+        # host from 831 s to 642 s at an unchanged --jobs 3, with one MORE leg
+        # in the run.  Reading 831 -> 577 as "what --jobs 6 bought" would
+        # credit the flag with the tag split's 189 s.
+        #
+        # THE DEFAULT STAYS 1 DELIBERATELY.  Every number above was taken on a
+        # 24-thread box; CI runs this file with no --jobs on a 2-core GitHub
+        # runner, where six concurrent Chromes is an untested configuration and
+        # the timing-graded legs have nowhere to hide.  A default is what an
+        # unmeasured host gets, so it is the conservative one.
         --jobs)             JOBS="$2"; shift 2 ;;
         # opt-in because it reaches other machines (~30 s), not because it is
         # slow; it SKIPs, named and counted, in the default run
@@ -124,6 +149,12 @@ declare -A NEED=(
     [perf]='have_perf|perf tier not requested (run: tools/run-tests.sh --perf; ~30 s measured, needs wbox and tank up)'
     # not a prerequisite: under --jobs the leg runs with the pool drained
     [alone]='true|'
+    # not a prerequisite either, and NOT `alone`: expensive but not graded on
+    # time, so it may share the machine.  `alone` meant two different things --
+    # "contention would corrupt the measurement" and "this leg is a pig" -- and
+    # the second does not need the pool drained on a 24-core host.  n64-demos
+    # alone was 434 s of an 831 s run with 23 cores idle beside it.
+    [heavy]='true|'
 )
 need_reason() {   # need_reason <tag> -> why it is unmet
     case "$1" in
@@ -500,7 +531,7 @@ leg build-invariants emsdk     "compile -DWEBDOOM_INVARIANTS"          -- bash t
 leg sim-invariants   wad,fresh-invariants     "13 demos, armed asserts, renderer running, freelook + interpolation active" -- node tools/demo-test.mjs --sim-drawn --smooth --fractic 32768 --pitch 40 --build-dir build-invariants
 
 # ── differential + goldens ───────────────────────────────────────────────────
-leg fuzz-diff       native,wad,alone "20 mutated demos: wasm == native"      -- node tools/fuzz/run-fuzz.mjs --seeds 20 --parallel 8 --require-native
+leg fuzz-diff       native,wad,heavy "20 mutated demos: wasm == native"      -- node tools/fuzz/run-fuzz.mjs --seeds 20 --parallel 8 --require-native
 leg sim-goldens     build,wad  "13 demos, per-tic gamestate hashes"    -- node tools/demo-test.mjs
 leg render-goldens  build,wad  "13 demos, per-tic framebuffer hashes"  -- node tools/demo-test.mjs --render
 leg render-low      build,wad  "low-detail render goldens (14.2b)"     -- node tools/demo-test.mjs --render --low-detail
@@ -519,7 +550,7 @@ leg golden-provenance -        "every golden says where it came from"       -- n
 # Plans; also hand-run.  demo-verify.mjs is the SHIPPED 19.4 CLI, and its test
 # re-implements the logic rather than importing it, so the CLI's own argv
 # handling, --all mode and size cap were ungated.
-leg native-asan     native,wad,alone "13 demos under ASan/UBSan (README's claim)"  -- bash tools/native-sanitize/run-all.sh wads/lib tools/native-sanitize/out sim
+leg native-asan     native,wad,heavy "13 demos under ASan/UBSan (README's claim)"  -- bash tools/native-sanitize/run-all.sh wads/lib tools/native-sanitize/out sim
 leg freestanding-sim fs,wad    "fs-doom 13/13 == vanilla (rung 1 proof)"     -- bash tools/freestanding/run-check.sh
 # its own out dir: under --jobs it ran beside freestanding-sim, both writing
 # per-demo JSON into freestanding/out/, and one read a file mid-write
@@ -554,7 +585,7 @@ leg be-cross        zig,qemuppc,wad "freestanding core 13/13 on big-endian Power
 # for the 13 demos (23:30:40 -> 23:38:59, 2026-09-11) -- the longest leg in the
 # suite by a wide margin, and it is here rather than in the out-of-suite
 # registry because it is now green and a gate nobody runs rots.
-leg n64-demos       n64,wad,slow,alone "13/13 demo sim-hashes on emulated N64 (~8 min)" -- bash tools/n64/run-n64-demos.sh
+leg n64-demos       n64,wad,slow,heavy "13/13 demo sim-hashes on emulated N64 (~8 min)" -- bash tools/n64/run-n64-demos.sh
 leg demo-verify-cli build,wad  "the shipped 19.4 CLI itself, --all mode"     -- node tools/demo-verify.mjs --all
 
 # ── netcode determinism ──────────────────────────────────────────────────────
@@ -578,7 +609,7 @@ leg demo-seek       build,wad  "scrubber seek == linear replay (19.3)" -- node t
 leg demo-verify     build,wad  "13 goldens + doctored + hostile (19.4)" -- node tools/demo-verify-test.mjs
 
 # ── tenet 4: the sanitizer IS the gate ───────────────────────────────────────
-leg adversarial-map native,wad,alone "30 adversarial maps, 0 ASan/UBSan reports" -- node tools/fuzz/run-map-fuzz.mjs --adversarial-gate
+leg adversarial-map native,wad,heavy "30 adversarial maps, 0 ASan/UBSan reports" -- node tools/fuzz/run-map-fuzz.mjs --adversarial-gate
 
 # The other direction (task 23.8).  Every other fuzz gate points hostile CLIENT
 # at the server; this points a hostile SERVER at the engine, which is the
