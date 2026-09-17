@@ -169,6 +169,89 @@ if (!shipsSection) {
            + '— the table shape changed and rule 7 is checking nothing');
 }
 
+// ── rule 8: the `source` column must point at something that exists ─────────
+//
+// Nothing has ever read this column.  Three of its locators were stale and one
+// (rme-010) named README lines holding unrelated live text for a promise whose
+// sentence had been deleted -- so the index could point a reader at the wrong
+// paragraph indefinitely and every gate stayed green.  This is the same blind
+// spot as claims-index's doc:line column, one document over.
+//
+// Graded loosely on purpose: the column says "doc and approximate location",
+// so a line number merely has to EXIST in the file it names.  A range is
+// checked at both ends.  Anything that is not a `file:line` shape -- "README
+// (removed)", a section reference -- is counted and skipped, and a rule that
+// grades nothing is a failure.
+{
+    // Part C's source column is a BARE perf.md line number, so a pattern that
+    // demanded a filename graded 17 rows and called itself broken.
+    const SRC = /^(?:(README|spec\.md|perf\.md|magic-data\.md)[:\s]*)?(\d+)(?:\s*[–-]\s*(\d+))?$/;
+    const FILE = { README: 'README.md', 'spec.md': 'spec.md',
+                   'perf.md': 'docs/perf.md', 'magic-data.md': 'docs/magic-data.md' };
+    const PART_FILE = { A: 'README.md', B: 'spec.md', C: 'docs/perf.md' };
+    const lines = {};
+    let graded = 0, skipped = 0;
+    for (const r of rows) {
+        const m = SRC.exec(r.source.trim());
+        if (!m) { skipped++; continue; }
+        const rel = m[1] ? FILE[m[1]] : PART_FILE[r.part];
+        if (!rel) { skipped++; continue; }
+        lines[rel] ??= readFileSync(join(root, rel), 'utf8').split('\n').length;
+        const n = lines[rel];
+        graded++;
+        for (const which of [m[2], m[3]].filter(Boolean))
+            if (Number(which) < 1 || Number(which) > n)
+                fail(`promises-index: ${r.id} cites ${r.source}, but ${rel} has ${n} lines`,
+                     '    The source column is "doc and approximate location"; this one is off the end.');
+    }
+    if (graded < 20)
+        fail(`promises-index: only ${graded} source locator(s) could be graded (${skipped} skipped) `
+           + '— the column changed shape and rule 8 is checking nothing');
+}
+
+// ── rule 9: every README feature bullet has a row ───────────────────────────
+//
+// spec.md tenet 6 says "every quantitative or behavioral claim in README.md and
+// this spec maps to a gate, committed evidence, or an explicit FLAGGED entry --
+// a promise without a gate is doc drift".  Rules 1-8 grade the rows that EXIST.
+// Nothing checked for a promise with no row at all, so tenet 6's completeness
+// half could never fail, and six README passages had no `rme-` row: the audio
+// bullet, the 1-4 players bullet, the netcode bullet, the deploy paragraph, the
+// document count and the three suite timings.
+//
+// Full completeness is not mechanisable -- "every behavioral claim" is a
+// judgement.  The FEATURE BULLET LIST is, and it is where the promises are: a
+// `- ` item in README's opening block must be cited by at least one Part A row
+// whose source range covers one of its lines.
+{
+    const readmeLines = readFileSync(join(root, 'README.md'), 'utf8').split('\n');
+    const covered = new Set();
+    for (const r of rows.filter(x => x.part === 'A')) {
+        const m = /^README[:\s]*(\d+)(?:\s*[–-]\s*(\d+))?$/.exec(r.source.trim());
+        if (!m) continue;
+        for (let i = Number(m[1]); i <= Number(m[2] ?? m[1]); i++) covered.add(i);
+    }
+    // the opening feature list: the run of `- ` bullets before the screenshot
+    const stop = readmeLines.findIndex(l => l.startsWith('!['));
+    const bullets = [];
+    for (let i = 0; i < (stop < 0 ? readmeLines.length : stop); i++) {
+        if (!/^- /.test(readmeLines[i])) continue;
+        const span = [i + 1];
+        for (let j = i + 1; j < readmeLines.length && /^\s+\S/.test(readmeLines[j]); j++) span.push(j + 1);
+        bullets.push({ at: i + 1, span, text: readmeLines[i].slice(2, 60) });
+    }
+    const orphan = bullets.filter(b => !b.span.some(n => covered.has(n)));
+    if (!bullets.length)
+        fail('promises-index: found no README feature bullets — rule 9 is checking nothing');
+    else if (orphan.length)
+        fail(`promises-index: ${orphan.length} README feature bullet(s) have no Part A row`,
+             orphan.map(o => `    README:${o.at}  "${o.text}…"`).join('\n')
+             + '\n    spec.md tenet 6 says every promise maps to a gate, evidence or a FLAGGED entry.'
+             + '\n    A bullet with no row is outside that promise entirely.');
+    else
+        console.log(`  rule 9: all ${bullets.length} README feature bullets are covered by a Part A row`);
+}
+
 if (bad) { console.log(`\npromises-index-check: ${bad} problem(s)`); process.exit(1); }
 const by = {};
 for (const r of rows) by[VOCAB.find(v => r.disp.startsWith(`**${v}`))] = (by[VOCAB.find(v => r.disp.startsWith(`**${v}`))] ?? 0) + 1;

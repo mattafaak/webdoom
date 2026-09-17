@@ -161,6 +161,14 @@ Round 11 closed at **79 legs**, 18 quick, 21 browser, 31 documents (round 10:
 `ci.yml`, `CONTRIBUTING.md` and `docs/README.md` is derived from
 `run-tests.sh --list` or from the checker that grades it.
 
+That last clause was FALSE when it was written, and round 12 made it true
+rather than deleting it. The root `README.md`'s document count was derived
+from nothing: `docs-index-check` read `docs/README.md` and no other file, so
+the front door said 30 where the index and the gate said 31, and this very
+sentence asserted that could not happen. Rule 5 there now grades the root
+README's count and the index's per-file line figures, and is red-proofed in
+both directions.
+
 Measured on alder at the close: serial **12 min 13 s** (79 legs, 2 skipped);
 `--jobs 3` **6 min 6 s** with identical verdicts; and the complete run —
 `--jobs 3 --perf --require-complete` with the N64 toolchain sourced —

@@ -77,6 +77,15 @@ does not exist.
    *published promises* too: every quantitative or behavioral claim in
    README.md and this spec maps to a gate, committed evidence, or an
    explicit FLAGGED entry — a promise without a gate is doc drift.
+   **What enforces the COMPLETENESS half, and what does not:**
+   `promises-index-check` rule 9 fails when a feature bullet in README's
+   opening list has no row in `docs/promises-index.md`. That is
+   mechanical, and it caught three unindexed promises the day it was
+   written — the audio bullet, the player-count bullet and the netcode
+   bullet, one of which describes this project's central correctness
+   claim. It does not, and cannot, grade "every behavioral claim" in
+   running prose; that part stays a judgement, and this sentence used to
+   read as though a checker were making it.
 
 ## Correctness gates (every change must pass)
 

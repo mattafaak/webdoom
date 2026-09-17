@@ -31,7 +31,7 @@ heading rather than the top.
 
 | document | what it is |
 |---|---|
-| [playsim.md](playsim.md) | **long** (1,798). The simulation: thinkers, P_Random, the frozen surface the demo goldens depend on |
+| [playsim.md](playsim.md) | **long** (1,812). The simulation: thinkers, P_Random, the frozen surface the demo goldens depend on |
 | [renderer.md](renderer.md) | **long** (1,154). BSP, segs, planes, sprites, the low-detail variant and the retired toggles |
 | [formats.md](formats.md) | **long** (1,146). WAD, lump and asset formats as this engine reads them |
 | [engine-archaeology.md](engine-archaeology.md) | where every magic constant and table came from, each with a committed reproducer |
@@ -44,7 +44,7 @@ heading rather than the top.
 
 | document | what it is |
 |---|---|
-| [perf.md](perf.md) | **long** (1,982). The memory, size and per-stage baseline. Note: still describes a four-host fleet in places; `spec.md`'s 2026-09-11 amendment retired pi5 |
+| [perf.md](perf.md) | **long** (2,003). The memory, size and per-stage baseline. Note: still describes a four-host fleet in places; `spec.md`'s 2026-09-11 amendment retired pi5 |
 | [optimization-ledger.md](optimization-ledger.md) | every candidate considered, measured, and landed or killed — with the kill rule it was judged against |
 | [divergence-atlas.md](divergence-atlas.md) | where this port diverges from vanilla, and why each one is sanctioned |
 | [feasibility-atlas.md](feasibility-atlas.md) | the retro-hardware arithmetic: what could run this, and what provably cannot. Has its own table of contents |

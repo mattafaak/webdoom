@@ -15,7 +15,7 @@
 //
 // usage: node tools/archaeology/docs-index-check.mjs
 // Copyright (C) 2026, GPL-2.0-or-later.
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative } from 'node:path';
@@ -80,5 +80,54 @@ if (dangling.length) {
     }
 }
 
+// 5. The ROOT README's copy of that same count, and the index's per-file line
+// figures.
+//
+// Rule 4 reads docs/README.md and nothing else, so the root README.md -- the
+// front door, the file most people read first -- kept its own uncounted copy.
+// It said "30 documents" against 31 for as long as nobody looked, while
+// Plans.md asserted that "every count in README.md, ci.yml, CONTRIBUTING.md
+// and docs/README.md is derived from run-tests.sh --list or from the checker
+// that grades it".  That assertion was false about exactly this number.
+//
+// The line figures are the same shape one level down: docs/README.md labels
+// five documents "long" with a line count each, plus a total, and none of them
+// was graded.  Three of the five had drifted and the total was off by ~400.
+// They are allowed to be ROUNDED -- the document says so -- so the tolerance
+// below is generous and only catches real rot.
+{
+    const ROOT = 'README.md';
+    const rootText = readFileSync(join(root, ROOT), 'utf8');
+    const m = rootText.match(/\|\s*`docs\/`\s*\|\s*(\d+)\s+documents/);
+    if (!m) {
+        console.error(`FAIL docs-index-check: ${ROOT} has no "| \`docs/\` | N documents" cell to check`);
+        process.exit(1);
+    }
+    if (Number(m[1]) !== tracked.length) {
+        console.error(`FAIL docs-index-check: ${ROOT} says ${m[1]} documents; ` +
+                      `this check counts ${tracked.length} tracked under docs/`);
+        console.error(`    docs/README.md and the root README must agree; only one of them was graded.`);
+        process.exit(1);
+    }
+
+    const TOL = 25;          // "Sizes are rounded" -- catch rot, not rounding
+    const bad = [];
+    for (const lm of text.matchAll(/\[([\w.-]+\.md)\]\([^)]*\)\s*\|\s*\*\*long\*\*\s*\((\d[\d,]*)\)/g)) {
+        const [, file, claimed] = lm;
+        const abs = join(root, 'docs', file);
+        if (!existsSync(abs)) continue;          // rule 2 already grades links
+        const real = readFileSync(abs, 'utf8').split('\n').length - 1;
+        const said = Number(claimed.replace(/,/g, ''));
+        if (Math.abs(said - real) > TOL) bad.push(`${file}: says ${said}, is ${real}`);
+    }
+    if (bad.length) {
+        console.error(`FAIL docs-index-check: ${bad.length} line figure(s) in ${INDEX} are more than ${TOL} lines out:`);
+        for (const b of bad) console.error(`    ${b}`);
+        console.error('    (rounding is fine; these are stale)');
+        process.exit(1);
+    }
+}
+
 console.log(`PASS docs-index-check: all ${tracked.length} documents under docs/ are linked from ${INDEX}, ` +
-            'and every link resolves');
+            'every link resolves, the root README agrees on the count, and every "long" line figure ' +
+            `is within ${25} lines of the file`);
