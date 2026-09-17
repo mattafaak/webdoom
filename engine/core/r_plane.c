@@ -218,33 +218,6 @@ R_MapPlane
     ds_x1 = x1;
     ds_x2 = x2;
 
-#ifdef WEBDOOM_FAKEFLAT
-// webdoom task 20.3a: FastDoom fake-flat (unconditional solid-colour mode).
-// Every floor/ceiling span is replaced with a single representative colour —
-// no distance threshold, no per-pixel texture read.  FastDoom technique:
-// sample the 64x64 flat tile centre (index 32+32*64=2080) once per span at
-// R_MapPlane call time, then apply ds_colormap for distance-based shading.
-// Render-only; playsim unchanged.  Sky is routed via R_RenderSkyRange, not here.
-    {
-	/* ylookup/columnofs defined in r_draw.c; no public header — block extern. */
-	extern byte *ylookup[];
-	extern int   columnofs[];
-	byte solid = ds_colormap[ds_source[32 + 32*64]];
-	byte *dest = ylookup[ds_y] + columnofs[ds_x1];
-	int n = ds_x2 - ds_x1 + 1;
-	while (n-- > 0)
-	{
-	    *dest = solid;
-	    dest += SCREENHEIGHT;
-	}
-	return;
-    }
-#endif
-/* Reset the line counter so the toggle-off build's debug metadata (and
-   therefore the LTO wasm binary) stays byte-identical to a build of this
-   file without the WEBDOOM_FAKEFLAT block above.  The original spanfunc()
-   call was at physical line 222 — update this value if R_MapPlane moves. */
-#line 221
     // high or low detail
     spanfunc ();	
 }

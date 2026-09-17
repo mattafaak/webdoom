@@ -22,34 +22,6 @@ static int paletteversion; // bumped on every I_SetPalette
 // Sized to SCREENWIDTH; only the first SCREENWIDTH columns are populated.
 static byte web_rowmajor_buf[SCREENWIDTH * SCREENHEIGHT];
 
-#ifdef WEBDOOM_DIFFBLIT
-/* --- 20.3d WEBDOOM_DIFFBLIT: differential blit behind compile-time toggle ---
-   Column-major snapshot of the previous frame (same layout as screens[0]).
-   I_FinishUpdate compares each column against the snapshot; columns whose
-   SCREENHEIGHT-byte content is unchanged skip the column-major → row-major
-   transpose into web_rowmajor_buf, saving memory-write bandwidth on frames
-   where large fractions of the screen are stationary.
-   FastDoom analogue: VGA dirty-column blit tracking (column-major → row-major
-   transpose ≡ VGA column blit; changed columns only ≡ dirty-page tracking).
-   Trade-off: one memcmp(SCREENHEIGHT bytes) overhead per column per frame.
-   For timedemo (camera in motion, ~100% columns dirty every tic) comparison
-   cost exceeds savings — measured negative for timedemo, expected positive
-   for real-play static scenes (open menus, spectating, stationary view).
-   Invalidation uses an explicit web_prev_valid flag, not a sentinel byte
-   pattern: any fill value could legitimately occur as a full column of
-   screens[0], which would make memcmp report "unchanged" and leave a stale
-   wrong-stride column in web_rowmajor_buf. The flag has no such collision.
-   web_prev_valid is 0 in BSS at startup, so the first call cannot skip and
-   every column is transposed.  This used to be a second variable comparing
-   the render width against its previous value, which was needed while the
-   width could change at runtime (Hor+ widescreen); the width is a constant
-   again, and the flag alone already covers the first call. */
-static byte web_prev_col[SCREENWIDTH * SCREENHEIGHT];
-static int web_prev_valid; /* snapshot usable for skip decisions */
-#endif                     /* WEBDOOM_DIFFBLIT */
-/* Reset line counter so the toggle-off binary stays byte-identical to master.
-   void I_InitGraphics was at physical line 25 — update if i_video.c moves. */
-#line 25
 void I_InitGraphics (void) {}
 
 void I_ShutdownGraphics (void) {}
@@ -70,28 +42,12 @@ void I_FinishUpdate (void)
 {
     const byte* src = screens[0];
     int x, y;
-#ifdef WEBDOOM_DIFFBLIT
-    for (x = 0; x < SCREENWIDTH; x++)
-    {
-        const byte* col = src + x * SCREENHEIGHT;
-        byte* prv = web_prev_col + x * SCREENHEIGHT;
-        if (web_prev_valid && memcmp (col, prv, SCREENHEIGHT) == 0)
-            continue;                    /* column unchanged — skip transpose */
-        memcpy (prv, col, SCREENHEIGHT); /* update snapshot */
-        for (y = 0; y < SCREENHEIGHT; y++)
-            web_rowmajor_buf[y * SCREENWIDTH + x] = col[y];
-    }
-    web_prev_valid = 1;
-#else
-#line 45
     for (x = 0; x < SCREENWIDTH; x++)
     {
         const byte* col = src + x * SCREENHEIGHT;
         for (y = 0; y < SCREENHEIGHT; y++)
             web_rowmajor_buf[y * SCREENWIDTH + x] = col[y];
     }
-#endif /* WEBDOOM_DIFFBLIT */
-#line 51
 }
 
 void I_ReadScreen (byte* scr)

@@ -51,8 +51,8 @@ its own is not evidence that anything ran.
 - **Unknown flags are ignored.** `demo-test.mjs` parses with
   `process.argv.includes(...)`, so a typo'd flag silently runs a *different*
   suite and passes. Copy gate invocations verbatim from `tools/run-tests.sh`
-  and confirm the mode tag in the output (`[low-detail]`, `[fakeflat]`,
-  `[potato]`) matches what you intended.
+  and confirm the mode tag in the output (`[low-detail]`, or none for the
+  vanilla path) matches what you intended.
 - **Measurements must be symmetric.** A before/after comparison with different
   flags, demos, or build settings on each side manufactures its own result.
   State the build flags, the demo, and the host on both sides.

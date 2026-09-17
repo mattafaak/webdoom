@@ -12,8 +12,8 @@
 // 20.2b/20.3a-d optimization series: the memory-safety gate had been green
 // against code that was no longer in the repo, and nothing could say so.
 //
-// The same hole existed one level up: `run-tests.sh` builds build-invariants/,
-// build-fakeflat/ and build-potato/ but never build/, so every gate that loads
+// The same hole existed one level up: `run-tests.sh` built the variant trees
+// but never build/, so every gate that loads
 // build/doom.js — smoke, sim goldens, render goldens, size-ledger, music, seek,
 // verify — validated whatever artifact a human last left there.  size-ledger
 // ran at line 17, before any compilation at all.
@@ -74,11 +74,10 @@ export const ARTIFACTS = {
     //
     // These were not registered, and the registry IS the contract -- so nothing
     // checked them.  The gap had teeth because the suite pairs them
-    // asymmetrically: `build-fakeflat` needs emsdk, `render-fakeflat` needs only
-    // `wad`.  On a host without emsdk the five build legs SKIP and the seven
-    // legs that LOAD those trees run anyway, against whatever bytes are on disk,
-    // and print e.g. "PASS — all [fakeflat] render goldens pixel-identical
-    // (13 demos)" from a tree built before the change under test.
+    // asymmetrically: `build-invariants` needs emsdk, `sim-invariants` needs only
+    // `wad`.  On a host without emsdk the build leg SKIPs and the leg that LOADS
+    // the tree runs anyway, against whatever bytes are on disk, from a tree built
+    // before the change under test.
     //
     // Same sources as `build` -- the variants differ only by a -D on the command
     // line -- so the same dirs and Makefile decide staleness.
@@ -89,10 +88,6 @@ export const ARTIFACTS = {
     // passed over in silence. Present-and-stale is always a failure.
     ...Object.fromEntries([
         ['build-invariants', 'WEBDOOM_INVARIANTS', 'demo-visible invariant asserts'],
-        ['build-fakeflat',   'WEBDOOM_FAKEFLAT',   'FastDoom fake-flat toggle'],
-        ['build-potato',     'WEBDOOM_POTATO',     'FastDoom potato/half-width columns'],
-        ['build-sbskip',     'WEBDOOM_SBSKIP',     'FastDoom status-bar redraw skip'],
-        ['build-diffblit',   'WEBDOOM_DIFFBLIT',   'FastDoom differential blit'],
         ['build-perf',       'WEB_PERF_*_STATS',   'instrumented build for verify-all --full runtime-stat claims'],
     ].map(([dir, define, desc]) => [dir, {
         desc:     `${desc} (-D${define})`,
@@ -199,7 +194,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     for (const n of names) {
         // An optional variant that was never built on this host is uninvolved,
         // not stale.  Named and counted, never silent -- and only when the user
-        // asked for everything: `artifact-freshness build-potato` is someone
+        // asked for everything: `artifact-freshness build-perf` is someone
         // asking about that tree specifically, and "absent" is the answer.
         const explicit = !(args.includes('--all') || args.length === 0);
         if (ARTIFACTS[n].optional && !explicit && !inspect(n).exists) {

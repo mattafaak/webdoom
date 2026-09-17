@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # tools/build-toggle.sh — build one compile-time toggle into its own artifact dir.
 #
-#   bash tools/build-toggle.sh WEBDOOM_FAKEFLAT build-fakeflat
-#   bash tools/build-toggle.sh '' build-invariants WEBDOOM_INVARIANTS
+#   bash tools/build-toggle.sh WEBDOOM_INVARIANTS build-invariants
 #
 # The shipping build/ is never touched: each toggle gets its own BUILD and OUT so
 # the byte-identity claims in docs/optimization-ledger.md stay checkable.

@@ -10,12 +10,8 @@
 //        node tools/demo-test.mjs --record    # (re)write sim golden traces
 //        node tools/demo-test.mjs --render    # verify render goldens (absent golden = FAIL)
 //        node tools/demo-test.mjs --render --record  # force re-record render goldens
-//        node tools/demo-test.mjs --render-fakeflat --record  # record fakeflat render goldens
-//        node tools/demo-test.mjs --render-fakeflat  # verify fakeflat render goldens
-//        node tools/demo-test.mjs --render-potato --record  # record potato render goldens
-//        node tools/demo-test.mjs --render-potato  # verify potato render goldens
 //        node tools/demo-test.mjs --sim-drawn --smooth --pitch 40  # sim invariance with the renderer running
-//        node tools/demo-test.mjs --sim-drawn --build-dir build-sbskip  # same, for a compile-time variant
+//        node tools/demo-test.mjs --sim-drawn --build-dir build-invariants  # same, on the armed build
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -24,8 +20,6 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const record = process.argv.includes('--record');
 const renderMode = process.argv.includes('--render');
 const lowDetail = process.argv.includes('--low-detail'); // 14.2b: low-detail render goldens
-const fakeFlatRender = process.argv.includes('--render-fakeflat'); // 20.3a: WEBDOOM_FAKEFLAT render goldens
-const potatoRender   = process.argv.includes('--render-potato');   // 20.3c: WEBDOOM_POTATO render goldens
 const simDrawn       = process.argv.includes('--sim-drawn');        // round 8 T2: sim hashes with the render path RUNNING
 const smoothMod      = process.argv.includes('--smooth');            // round 8 T2: pass T enables frame interpolation
 const pitchIdx       = process.argv.indexOf('--pitch');
@@ -35,12 +29,7 @@ const fracticPin     = fracticIdx >= 0 ? Number(process.argv[fracticIdx + 1]) : 
 const crossIdx = process.argv.indexOf('--cross');
 const chocoBin = crossIdx >= 0 ? process.argv[crossIdx + 1] : null;
 const buildDirIdx = process.argv.indexOf('--build-dir');
-// --render-fakeflat defaults to build-fakeflat/ (built with -DWEBDOOM_FAKEFLAT)
-// --render-potato defaults to build-potato/ (built with -DWEBDOOM_POTATO)
-const buildDir = buildDirIdx >= 0 ? process.argv[buildDirIdx + 1]
-               : fakeFlatRender   ? 'build-fakeflat'
-               : potatoRender     ? 'build-potato'
-               : 'build';
+const buildDir = buildDirIdx >= 0 ? process.argv[buildDirIdx + 1] : 'build';
 
 // ── argv validation (task 21.6) ──────────────────────────────────────────────
 // Every flag above is read with process.argv.includes(), which cannot tell a
@@ -49,13 +38,11 @@ const buildDir = buildDirIdx >= 0 ? process.argv[buildDirIdx + 1]
 // demos)".  A reviewer reading that line sees a green render gate over the full
 // count.  This is the documented trap in CLAUDE.md and it was still live.
 const BOOL_FLAGS = new Set([
-    '--record', '--render', '--low-detail',
-    '--render-fakeflat', '--render-potato',
-    '--sim-drawn', '--smooth',
+    '--record', '--render', '--low-detail', '--sim-drawn', '--smooth',
 ]);
 const VALUE_FLAGS = new Set(['--cross', '--build-dir', '--record-reason', '--pitch', '--fractic']);
 const USAGE = 'usage: demo-test.mjs [--record] [--render [--low-detail] | ' +
-              '--render-fakeflat | --render-potato | --sim-drawn [--smooth --fractic N] [--pitch N]] ' +
+              '--sim-drawn [--smooth --fractic N] [--pitch N]] ' +
               '[--cross BIN] [--build-dir DIR] [--record-reason TEXT]';
 for (let i = 2; i < process.argv.length; i++) {
     const a = process.argv[i];
@@ -79,9 +66,7 @@ const RECORD_REASON = record ? recordReason(process.argv) : null;
 const PROV = () => provenance('demo-test.mjs', buildDir, RECORD_REASON);
 
 // Selecting two gate families runs only the first and silently skips the rest.
-const MODES = { '--render': renderMode,
-                '--render-fakeflat': fakeFlatRender, '--render-potato': potatoRender,
-                '--sim-drawn': simDrawn };
+const MODES = { '--render': renderMode, '--sim-drawn': simDrawn };
 const chosen = Object.keys(MODES).filter(k => MODES[k]);
 if (chosen.length > 1) {
     console.error(`FAIL: ${chosen.join(' and ')} select different gate families; pick one\n${USAGE}`);
@@ -286,8 +271,8 @@ if (renderMode) {
             // This branch used to share the `record` arm above AND increment
             // `verified`, so deleting a golden re-created it from the build
             // under test and still printed the full-count PASS line — a silent,
-            // self-authorising regold.  The fakeflat/potato families never
-            // had this hole; the two oldest and most load-bearing gates did.
+            // self-authorising regold, in the two oldest and most load-bearing
+            // gates.
             if (!existsSync(goldenPath)) {
                 console.log(`FAIL ${name} ${detailTag}render: golden absent ` +
                             `(run --render${lowDetail ? ' --low-detail' : ''} --record first)`);
@@ -322,239 +307,6 @@ if (renderMode) {
     process.exit(0);
 }
 
-// ── fakeflat render mode (20.3a: --render-fakeflat) ─────────────────────────
-//
-// Records/verifies per-tic FNV-1a 32-bit framebuffer hashes of the build-fakeflat
-// wasm (compiled with -DWEBDOOM_FAKEFLAT).  All floor/ceiling spans are filled
-// with a single representative colour (unconditional — no distance branch),
-// producing different pixel output from the vanilla render path.  These goldens are therefore a separate, dedicated
-// set — vanilla render goldens (-render.json) are never modified by this mode.
-//
-// Golden suffix: -render-fakeflat.json
-// Mode tag in PASS/FAIL lines: [fakeflat]
-// No auto-record: missing goldens are hard errors.  Use --record for initial recording.
-
-if (fakeFlatRender) {
-    function fnv1aFakeflat(heapu8, fbPtr, palVer) {
-        let h = 0x811c9dc5;
-        const end = fbPtr + 320 * 200;
-        for (let i = fbPtr; i < end; i++) {
-            h = Math.imul(h ^ heapu8[i], 0x01000193);
-        }
-        h = Math.imul(h ^ ( palVer        & 0xff), 0x01000193);
-        h = Math.imul(h ^ ((palVer >>> 8)  & 0xff), 0x01000193);
-        h = Math.imul(h ^ ((palVer >>> 16) & 0xff), 0x01000193);
-        h = Math.imul(h ^ ((palVer >>> 24) & 0xff), 0x01000193);
-        return h >>> 0;
-    }
-
-    let failures = 0;
-    let verified = 0;
-
-    for (const [wad, engineName, demos] of MATRIX) {
-        const path = join(root, 'wads/lib', wad);
-        if (!existsSync(path)) { console.log(`skip ${wad}: not fetched`); continue; }
-        const wadBytes = readFileSync(path);
-
-        for (const demo of demos) {
-            let done = null;
-            const doom = await createDoom({
-                print: () => {},
-                printErr: t => { const m = /timed (\d+) gametics/.exec(t); if (m) done = +m[1]; },
-                onDoomError: msg => { if (!/timed \d+ gametics/.test(msg)) done = `error: ${msg}`; },
-            });
-            {
-                const p = doom._malloc(wadBytes.length);
-                doom.HEAPU8.set(wadBytes, p);
-                doom.ccall('web_register_file', null, ['string', 'number', 'number'],
-                    [engineName, p, wadBytes.length]);
-            }
-
-            const trace = [];
-            try {
-                doom.callMain(['-timedemo', demo]);
-                doom._web_set_smooth(0);
-                const fbPtr = doom._web_framebuffer();
-                let lastTic = -1;
-                for (let i = 0; i < 200000 && done === null; i++) {
-                    doom._web_wipe_skip();
-                    doom._web_frame();
-                    const tic = doom._web_gametic();
-                    if (tic !== lastTic) {
-                        trace.push(fnv1aFakeflat(doom.HEAPU8, fbPtr,
-                            doom._web_palette_version()));
-                        lastTic = tic;
-                    }
-                }
-            } catch (e) {
-                if (done === null) done = `threw: ${String(e).slice(0, 80)}`;
-            }
-
-            const name = `${wad.replace('.wad', '')}-${demo}`;
-            if (typeof done !== 'number') {
-                console.log(`FAIL ${name} [fakeflat] render: ${done ?? 'never finished'}`);
-                failures++;
-                continue;
-            }
-
-            const goldenPath = join(goldenDir, `${name}-render-fakeflat.json`);
-            if (record) {
-                writeFileSync(goldenPath, JSON.stringify({ tics: done, trace, provenance: PROV() }));
-                console.log(`recorded ${name} [fakeflat] render: ${done} gametics, ${trace.length} hashes`);
-                verified++;
-                continue;
-            }
-            // No auto-record: missing golden is a hard error.
-            if (!existsSync(goldenPath)) {
-                console.log(`FAIL ${name} [fakeflat] render: golden absent (run --render-fakeflat --record first)`);
-                failures++;
-                continue;
-            }
-
-            const golden = JSON.parse(readFileSync(goldenPath));
-            if (golden.tics !== done) {
-                console.log(`FAIL ${name} [fakeflat] render: ran ${done} gametics, golden ${golden.tics}`);
-                failures++;
-                continue;
-            }
-            let diverged = -1;
-            for (let i = 0; i < golden.trace.length; i++) {
-                if (golden.trace[i] !== trace[i]) { diverged = i; break; }
-            }
-            if (diverged >= 0) {
-                console.log(`FAIL ${name} [fakeflat] render: PIXEL DESYNC at tic ${diverged} of ${golden.trace.length}`);
-                failures++;
-            } else {
-                console.log(`PASS ${name} [fakeflat] render: ${done} gametics pixel-identical`);
-                verified++;
-            }
-        }
-    }
-
-    if (failures) { console.log(`${failures} [fakeflat] render golden(s) failed`); process.exit(1); }
-    assertFullCoverage('[fakeflat] render', verified);
-    console.log(record ? `[fakeflat] render golden traces written`
-                       : `PASS — all [fakeflat] render goldens pixel-identical (${verified} demos)`);
-    process.exit(0);
-}
-
-// ── potato render mode (20.3c: --render-potato) ─────────────────────────────
-//
-// Records/verifies per-tic FNV-1a 32-bit framebuffer hashes of the build-potato
-// wasm (compiled with -DWEBDOOM_POTATO).  Only even dc_x columns are rendered;
-// adjacent odd columns are copies of the preceding even column (column-major
-// memcpy, 1 per even column).  This visually doubles every wall/sprite column
-// horizontally and halves texture reads/colormap lookups.  The output is visually
-// different from vanilla, so a separate dedicated golden set is required.
-//
-// Golden suffix: -render-potato.json
-// Mode tag in PASS/FAIL lines: [potato]
-// No auto-record: missing goldens are hard errors.  Use --record for initial recording.
-
-if (potatoRender) {
-    function fnv1aPotato(heapu8, fbPtr, palVer) {
-        let h = 0x811c9dc5;
-        const end = fbPtr + 320 * 200;
-        for (let i = fbPtr; i < end; i++) {
-            h = Math.imul(h ^ heapu8[i], 0x01000193);
-        }
-        h = Math.imul(h ^ ( palVer        & 0xff), 0x01000193);
-        h = Math.imul(h ^ ((palVer >>> 8)  & 0xff), 0x01000193);
-        h = Math.imul(h ^ ((palVer >>> 16) & 0xff), 0x01000193);
-        h = Math.imul(h ^ ((palVer >>> 24) & 0xff), 0x01000193);
-        return h >>> 0;
-    }
-
-    let failures = 0;
-    let verified = 0;
-
-    for (const [wad, engineName, demos] of MATRIX) {
-        const path = join(root, 'wads/lib', wad);
-        if (!existsSync(path)) { console.log(`skip ${wad}: not fetched`); continue; }
-        const wadBytes = readFileSync(path);
-
-        for (const demo of demos) {
-            let done = null;
-            const doom = await createDoom({
-                print: () => {},
-                printErr: t => { const m = /timed (\d+) gametics/.exec(t); if (m) done = +m[1]; },
-                onDoomError: msg => { if (!/timed \d+ gametics/.test(msg)) done = `error: ${msg}`; },
-            });
-            {
-                const p = doom._malloc(wadBytes.length);
-                doom.HEAPU8.set(wadBytes, p);
-                doom.ccall('web_register_file', null, ['string', 'number', 'number'],
-                    [engineName, p, wadBytes.length]);
-            }
-
-            const trace = [];
-            try {
-                doom.callMain(['-timedemo', demo]);
-                doom._web_set_smooth(0);
-                const fbPtr = doom._web_framebuffer();
-                let lastTic = -1;
-                for (let i = 0; i < 200000 && done === null; i++) {
-                    doom._web_wipe_skip();
-                    doom._web_frame();
-                    const tic = doom._web_gametic();
-                    if (tic !== lastTic) {
-                        trace.push(fnv1aPotato(doom.HEAPU8, fbPtr,
-                            doom._web_palette_version()));
-                        lastTic = tic;
-                    }
-                }
-            } catch (e) {
-                if (done === null) done = `threw: ${String(e).slice(0, 80)}`;
-            }
-
-            const name = `${wad.replace('.wad', '')}-${demo}`;
-            if (typeof done !== 'number') {
-                console.log(`FAIL ${name} [potato] render: ${done ?? 'never finished'}`);
-                failures++;
-                continue;
-            }
-
-            const goldenPath = join(goldenDir, `${name}-render-potato.json`);
-            if (record) {
-                writeFileSync(goldenPath, JSON.stringify({ tics: done, trace, provenance: PROV() }));
-                console.log(`recorded ${name} [potato] render: ${done} gametics, ${trace.length} hashes`);
-                verified++;
-                continue;
-            }
-            // No auto-record: missing golden is a hard error.
-            if (!existsSync(goldenPath)) {
-                console.log(`FAIL ${name} [potato] render: golden absent (run --render-potato --record first)`);
-                failures++;
-                continue;
-            }
-
-            const golden = JSON.parse(readFileSync(goldenPath));
-            if (golden.tics !== done) {
-                console.log(`FAIL ${name} [potato] render: ran ${done} gametics, golden ${golden.tics}`);
-                failures++;
-                continue;
-            }
-            let diverged = -1;
-            for (let i = 0; i < golden.trace.length; i++) {
-                if (golden.trace[i] !== trace[i]) { diverged = i; break; }
-            }
-            if (diverged >= 0) {
-                console.log(`FAIL ${name} [potato] render: PIXEL DESYNC at tic ${diverged} of ${golden.trace.length}`);
-                failures++;
-            } else {
-                console.log(`PASS ${name} [potato] render: ${done} gametics pixel-identical`);
-                verified++;
-            }
-        }
-    }
-
-    if (failures) { console.log(`${failures} [potato] render golden(s) failed`); process.exit(1); }
-    assertFullCoverage('[potato] render', verified);
-    console.log(record ? `[potato] render golden traces written`
-                       : `PASS — all [potato] render goldens pixel-identical (${verified} demos)`);
-    process.exit(0);
-}
-
 // ── sim-drawn mode (round 8 T2: --sim-drawn) ────────────────────────────────
 //
 // The sim-invariance gate for render-side options and compile-time render
@@ -567,10 +319,10 @@ if (potatoRender) {
 // of D_Display -- so R_SetupFrame, R_ShearView, R_InterpolateSectors, ST_Drawer
 // and I_FinishUpdate never execute.  Every leg claiming a render-side option
 // "leaves the playsim untouched" was asserting over code that did not run.
-// MEASURED (round 8 T1): with `prndindex++` poisoned into the WEBDOOM_SBSKIP
-// and WEBDOOM_DIFFBLIT guarded blocks, the -nodraw sim gate printed
-// "PASS -- all demos bit-identical to golden (13 demos)" for BOTH toggles,
-// while the same two binaries failed the render gate 13/13.
+// MEASURED (round 8 T1): with `prndindex++` poisoned into two render-side
+// blocks (the since-removed status-bar-skip and differential-blit variants),
+// the -nodraw sim gate printed "PASS -- all demos bit-identical to golden
+// (13 demos)" for both, while the same two binaries failed the render gate 13/13.
 //
 // The deleted sim-wide leg had that hole and one more: its vacuity arm
 // (web_screenwidth() > 320) asserted that a SETTER had written a variable, not

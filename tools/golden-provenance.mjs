@@ -94,7 +94,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         if (Array.isArray(doc?.trace)) traces.push([f, doc]);
     }
 
-    if (traces.length < 40) {
+    if (traces.length < 39) {
         console.log(`FAIL golden-provenance: found only ${traces.length} trace goldens; ` +
                     `tools/golden/ holds far more. The discovery is broken, which is not a pass.`);
         process.exit(1);

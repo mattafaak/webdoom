@@ -1,12 +1,8 @@
 wads/
 !wads/.gitkeep
 build/
-build-fakeflat/
 build-invariants/
 build-perf/
-build-potato/
-build-diffblit/
-build-sbskip/
 node_modules/
 *.wasm
 *.wasm.map

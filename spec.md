@@ -36,7 +36,7 @@ shipped, gated feature that the contract never claimed at all.
 | Rebindable keys, gamepad, and an OPTIONS screen on the launcher menu | `browser-options` |
 | Freelook and frame interpolation — render-side, opt-in | `sim-freelook`, `sim-invariants` |
 | Music: the in-engine OPL2/OPL3 sequencer from the IWAD's own GENMIDI | `opl-mode`, `browser-music-fallback` |
-| **Five compile-time render variants**, each pixel-identical or explained | `render-fakeflat`, `render-potato`, `render-sbskip`, `render-diffblit`, `toggle-identity` |
+| **Low-detail render mode** (runtime `web_set_detail`), pixel-exact against its own goldens | `render-low` |
 | **A freestanding core** with no OS, and an N64 correctness leg | `freestanding-sim`, `ro-wad`, `arm-cross`, `n64-demos` |
 | **The gate machinery itself**: claims, promises, doc drift, status drift, the census | `doc-drift`, `claims-index`, `promises-index`, `status-drift`, `docs-index`, `gate-census`, `web-contract` |
 | **Teardown**: play → quit → play accumulates nothing | `browser-teardown` |
@@ -256,9 +256,9 @@ every HUD widget, a runtime `screenwidth`, and a compile-time
 did not use it and did not like how it looked.
 
 The revert is proven the way the original rule demanded: **the 320 goldens did
-not move.** All six families are byte- or pixel-identical across 13 demos —
-`sim-goldens`, `render-goldens`, `render-low`, `render-fakeflat`,
-`render-potato`, `render-sbskip`, `render-diffblit` — with no regold.
+not move.** All six families of the day were byte- or pixel-identical across
+13 demos — sim, render, render-low and the four toggle legs retired in round
+10 — with no regold.
 Independently, `__heap_base` fell 5,042,464 → 4,722,048, and
 `claims.json` `perf-009` had recorded 4,722,016 as the measured value for a
 320-wide build: 32 bytes apart, so what came out was widescreen and nothing

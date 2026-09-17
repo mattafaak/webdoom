@@ -639,16 +639,16 @@ verify-all.sh ALL PASS · size-ledger hard checks green.
 
 ---
 
-> **The md5 rows below are the SHIPPING ARTIFACTS, not frozen constants**
-> (maintenance contract, task 23.1). Any change to `engine/` changes all five,
-> because every toggle build is the same engine plus one `#ifdef`. Re-recorded
-> 2026-09-11 when the 23.1 network-input guards landed in `d_net.c` and
-> `i_main.c`. `tools/toggle-identity-check.mjs` compares them to the artifacts
-> on every suite run; when it goes red the question is *"did I change the
-> engine?"* — yes means update these rows in the same commit, no means
-> something is wrong. It caught exactly that on its first run: 20.3d's row had
-> been stale for 49 days because commit 22fa00f changed `i_video.c` the day
-> after the landing commit recorded the figure.
+> **Retired 2026-09-16 (round 10).** The four 20.3 toggles below are gone
+> from the engine: no player could reach a compile-time variant, 20.3b
+> measured a net loss and 20.3d was never measured. The removal was proven
+> the way their presence was — `build/doom.wasm` stayed byte-identical
+> (`b65732eb1be202690e861c36d7849afe`, 355,883 bytes) with the blocks and
+> the eight `#line` directives deleted, so the directives had been inert.
+> The md5 rows below are HISTORY, the values at retirement (`cef1e70`); no
+> checker reads them any more (`tools/toggle-identity-check.mjs` went with
+> the trees it checked). The sections stay as the record of what was tried,
+> what it cost and what it bought.
 
 ## Phase 20.3a — FastDoom fake-flat: unconditional solid-colour flats (task 20.3a)
 
@@ -673,8 +673,8 @@ compiler's source-line counter so the toggle-off binary is byte-identical to mas
 | field | value |
 |-------|-------|
 | **mechanism** | `WEBDOOM_FAKEFLAT` in R_MapPlane(): all flat spans filled with `ds_colormap[ds_source[32+32*64]]`, no distance check. 1 ds_source read per span (at call time), then constant-colour column-major fill. `#line 221` preserves toggle-off byte-identity. |
-| **toggle-off byte-identity** | `build/doom.wasm` md5 = `b65732eb1be202690e861c36d7849afe` (re-proven after redesign). Size 355,883 bytes. |
-| **toggle-on build** | `build-fakeflat/doom.wasm` md5 = `09fb3065ae107c9bc42e210f9eae288a`. Size 354,123 bytes (budget: 360,448 bytes → green; smaller than first attempt due to removed threshold code). Built with `EXTRA_CFLAGS=-DWEBDOOM_FAKEFLAT BUILD=../build-fakeflat`. |
+| **toggle-off byte-identity** | `build/doom.wasm` md5 at retirement (cef1e70) `b65732eb1be202690e861c36d7849afe`, 355,883 bytes. |
+| **toggle-on build** | `build-fakeflat/doom.wasm` md5 at retirement (cef1e70) `09fb3065ae107c9bc42e210f9eae288a`, 354,123 bytes (budget: 360,448 bytes → green; smaller than first attempt due to removed threshold code). Built with `EXTRA_CFLAGS=-DWEBDOOM_FAKEFLAT BUILD=../build-fakeflat`. |
 | **golden set name** | `*-render-fakeflat.json` (13 files: doom-demo{1-4}, doom2/tnt/plutonia-demo{1-3}). Vanilla goldens (`-render.json`) untouched. |
 | **icount (local, doom.wad demo3, WD_CYCLES=1 fs-doom)** | toggle-off: `total_instr=4,141,325,830` mean=1,072,049 p50=1,110,572 instr/tic. toggle-on: `total_instr=2,925,922,948` mean=757,423 p50=860,682 instr/tic. **Delta: −249,890 instr/tic p50 (−22.5%)** — genuine reduction. Per-pixel ds_source reads, xfrac/yfrac arithmetic, and xstep/ystep additions are eliminated for all flat spans. Fleet SSH unavailable; local-only measurement. |
 | **sim invariance** | 13/13 sim goldens bit-identical in both modes (render-only change; playsim untouched). |
@@ -685,17 +685,11 @@ compiler's source-line counter so the toggle-off binary is byte-identical to mas
 
 **Verdict: LANDED — task 20.3a**
 
-> **On the md5s in the "landing evidence" lines below.** They are the values at
-> the landing commit and are marked "at landing" for that reason. The CURRENT
-> values live in each variant's byte-identity table row, which
-> `tools/toggle-identity-check.mjs` verifies against the artifacts on every
-> suite run. Until that marker was added, these four lines all read
-> `toggle-off md5 c669142745…` in the present tense while
-> the table rows beside them read `3edea657b5a54395613fef9cd2dbc539` — the
-> artifact's actual md5 — so this file contradicted itself four times and passed
-> 8/8, because the checker's regex only matches the backticked table form.
-> `Plans.md` and the 2026-09-11 suite baseline cite the same stale hash as the
-> proof that the build is byte-reproducible; both are corrected.
+> The md5s in the "landing evidence" lines below are the values at each
+> landing commit and are marked "at landing"; the table rows above them are
+> the values at retirement. Until the marker was added these lines read in
+> the present tense against rows that disagreed, and the file contradicted
+> itself four times while passing its checker.
 
 20.3a landing evidence: unconditional solid-colour flat fill, no distance threshold.
 toggle-off md5 at landing (6d19915) c669142745449ff04bd2fef30fa17412 · toggle-on md5 at landing (6d19915) b2cc4f756075afe7d344400f3b0e11a4
@@ -711,8 +705,8 @@ Skip `ST_drawWidgets(false)` in `ST_diffDraw()` when the full set of widget-visi
 | field | value |
 |-------|-------|
 | **mechanism** | `ST_diffDraw()` in st_stuff.c: compact `sb_snap_t` struct (22 integer/boolean fields) compared field-by-field against `sb_prev`; early `return` on match. `#line 1122` + `#line 1137` preserve toggle-off byte-identity. |
-| **toggle-off byte-identity** | `build/doom.wasm` md5 = `b65732eb1be202690e861c36d7849afe` (proven). Size 355,883 bytes. |
-| **toggle-on build** | `build-sbskip/doom.wasm` md5 = `ea9b9b3565e6ec03b766db68cfb8edbd`. Size 356,693 bytes (budget: 360,448 bytes → green). Built with `EXTRA_CFLAGS=-DWEBDOOM_SBSKIP BUILD=../build-sbskip`. |
+| **toggle-off byte-identity** | `build/doom.wasm` md5 at retirement (cef1e70) `b65732eb1be202690e861c36d7849afe`, 355,883 bytes. |
+| **toggle-on build** | `build-sbskip/doom.wasm` md5 at retirement (cef1e70) `ea9b9b3565e6ec03b766db68cfb8edbd`, 356,693 bytes (budget: 360,448 bytes → green). Built with `EXTRA_CFLAGS=-DWEBDOOM_SBSKIP BUILD=../build-sbskip`. |
 | **toggle-on pixel output** | Pixel-identical to toggle-off: `node tools/demo-test.mjs --render --build-dir build-sbskip` → PASS all 13 demos. No separate golden set required (identity is the proof). |
 | **icount (local, doom.wad demo3, WD_CYCLES=1 fs-doom)** | toggle-off: `total_instr=3,995,411,289` mean=1,034,277 p50=1,110,737 instr/tic. toggle-on: `total_instr=4,031,549,363` mean=1,043,632 p50=1,091,409 instr/tic. **Delta p50: −19,328 instr/tic (−1.7%); delta mean: +9,355 instr/tic (+0.9% worse in total)**. timedemo has near-continuous state changes (health/ammo/face tick every tic), so skip rarely fires and snapshot-comparison overhead dominates. Real-play gain is in static-HUD intervals (spectating, no damage, same weapon) where the skip fires every frame — not measurable via timedemo. Fleet SSH unavailable; local-only measurement. |
 | **timedemo limitation** | By design: timedemo drives nearly every state field each tic. The skip is a static-HUD optimisation. A timedemo cannot demonstrate its benefit; this is documented, not a kill-rule violation. |
@@ -740,8 +734,8 @@ Draw only even-numbered `dc_x` columns; the adjacent odd column is filled by a s
 | field | value |
 |-------|-------|
 | **mechanism** | `R_DrawColumnPotato()` in r_draw.c: odd `dc_x` → early return; even `dc_x` → full R_DrawColumn (4-wide pow2 unroll + non-pow2 modulo path) → `memcpy(even_start+SCREENHEIGHT, even_start, pixcount)`. `#line 359` after `#endif` preserves toggle-off byte-identity. r_main.c hook: `#ifdef WEBDOOM_POTATO … if (!detailshift) colfunc = basecolfunc = R_DrawColumnPotato; #endif` + `#line 749`. |
-| **toggle-off byte-identity** | `build/doom.wasm` md5 = `b65732eb1be202690e861c36d7849afe` (proven). Size 355,883 bytes. |
-| **toggle-on build** | `build-potato/doom.wasm` md5 = `4db9dd6bc7d2083f0aa5437675116636`. Size 356,801 bytes (budget: 360,448 bytes → green). Built with `EXTRA_CFLAGS=-DWEBDOOM_POTATO BUILD=../build-potato`. |
+| **toggle-off byte-identity** | `build/doom.wasm` md5 at retirement (cef1e70) `b65732eb1be202690e861c36d7849afe`, 355,883 bytes. |
+| **toggle-on build** | `build-potato/doom.wasm` md5 at retirement (cef1e70) `4db9dd6bc7d2083f0aa5437675116636`, 356,801 bytes (budget: 360,448 bytes → green). Built with `EXTRA_CFLAGS=-DWEBDOOM_POTATO BUILD=../build-potato`. |
 | **golden set name** | `*-render-potato.json` (13 files: doom-demo{1-4}, doom2/tnt/plutonia-demo{1-3}). Vanilla goldens (`-render.json`) untouched. |
 | **icount (local, doom.wad demo3, WD_CYCLES=1 fs-doom -m32 -O1)** | toggle-off: `total_instr=3,906,937,453` mean=1,011,374 p50=1,091,809 instr/tic. toggle-on: `total_instr=3,371,255,240` mean=872,704 p50=926,504 instr/tic. **Delta: −165,305 instr/tic p50 (−15.1% whole-program)**. Wall/sprite texture reads and colormap lookups halved for column-draw surfaces. Fleet SSH unavailable; local-only measurement, single-host (same precedent as 20.3a/20.3b). |
 | **sim invariance** | 13/13 sim goldens bit-identical in both modes (toggle-on build-potato sim PASS). Render-only change; playsim untouched. |
@@ -771,8 +765,8 @@ Trade-off: one `memcmp(SCREENHEIGHT bytes = 200 B)` per column per frame regardl
 | field | value |
 |-------|-------|
 | **mechanism** | `I_FinishUpdate()` in engine/web/i_video.c: column-major snapshot `web_prev_col[]` + `web_prev_screenwidth` + `web_prev_valid` flag. `memcmp(col, prv, SCREENHEIGHT)` per column; skip transpose on match (only when `web_prev_valid`); `memcpy` + transpose on mismatch. `web_prev_valid = 0` on width change or first call — no byte-pattern sentinel, so no collision class. `#line 25` (after static-var block) + `#line 45` + `#line 51` (inside `#else` branch of function body) preserve toggle-off byte-identity. |
-| **toggle-off byte-identity** | `build/doom.wasm` md5 = `b65732eb1be202690e861c36d7849afe` (proven). Size 355,883 bytes. |
-| **toggle-on build** | `build-diffblit/doom.wasm` md5 = `a7926d2fed81d63c0b895922240743d2`. Size 355,914 bytes (budget: 360,448 bytes → green). Built with `EXTRA_CFLAGS=-DWEBDOOM_DIFFBLIT BUILD=../build-diffblit`. **Corrected 2026-09-11 (task 21.12)**: the landing commit b150eec recorded md5 `f7a3c7de67b22477cc669687c74fda62` / 356,639 bytes, and the very next commit — 22fa00f, "invalidation flag replaces byte-pattern sentinel" — changed `i_video.c` without updating this row. The artifact was right and the record was stale for 49 days; nothing checked it until `tools/toggle-identity-check.mjs` existed. Toggle-off byte-identity, render pixel-identity and 13/13 sim invariance all re-verified at the corrected md5. |
+| **toggle-off byte-identity** | `build/doom.wasm` md5 at retirement (cef1e70) `b65732eb1be202690e861c36d7849afe`, 355,883 bytes. |
+| **toggle-on build** | `build-diffblit/doom.wasm` md5 at retirement (cef1e70) `a7926d2fed81d63c0b895922240743d2`, 355,914 bytes (budget: 360,448 bytes → green). Built with `EXTRA_CFLAGS=-DWEBDOOM_DIFFBLIT BUILD=../build-diffblit`. **Corrected 2026-09-11 (task 21.12)**: the landing commit b150eec recorded md5 `f7a3c7de67b22477cc669687c74fda62` / 356,639 bytes, and the very next commit — 22fa00f, "invalidation flag replaces byte-pattern sentinel" — changed `i_video.c` without updating this row. The artifact was right and the record was stale for 49 days; nothing checked it until `tools/toggle-identity-check.mjs` existed. Toggle-off byte-identity, render pixel-identity and 13/13 sim invariance all re-verified at the corrected md5. |
 | **toggle-on pixel output** | Pixel-identical to toggle-off: `node tools/demo-test.mjs --render --build-dir build-diffblit` → PASS all 13 demos. `web_rowmajor_buf` retains valid transposed data for unchanged columns across frames; JS upload is always of the full buffer regardless. No separate golden set required. |
 | **throughput measurement** | FINDING — see measurement note above. No icount or bench.mjs stage-timer path instruments `I_FinishUpdate`. bench.mjs sim-fps toggle-off 208,412 fps vs toggle-on 207,159 fps (−0.6%); sim-fps uses -nodraw and is a noise reading for this feature. The technique targets static-scene wasm→rowmajor-buf bandwidth, not timedemo throughput. Fleet SSH unavailable; local-only. |
 | **sim invariance** | 13/13 sim goldens bit-identical (I_FinishUpdate writes to web_rowmajor_buf only; playsim untouched). |

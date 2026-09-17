@@ -247,10 +247,10 @@ a file added to the app shell joins this measurement with no edit here.
 
 ### A. Per-stage ranked costs per host
 
-> **Compile-time render variants.** Five toggles change what the renderer does
-> (fake-flat, potato, low-detail, status-bar skip, differential blit). Their map
-> — build dirs, golden families and suite legs — is `renderer.md` §12b; their
-> measured effect and kill rules are `optimization-ledger.md` §20.3a–d. Every
+> **Render variants.** Besides the vanilla path there is one runtime variant,
+> low-detail (`web_set_detail`, gated by `render-low`). The four FastDoom
+> compile-time toggles were retired in round 10 (2026-09-16); their history and
+> measured effect stay in `optimization-ledger.md` §20.3a–d. Every
 > figure in THIS file is the vanilla path unless it says otherwise.
 
 

@@ -390,28 +390,6 @@ leg render-low      build,wad  "low-detail render goldens (14.2b)"     -- node t
 # deleted with widescreen.  This is its successor on the shipping artifact.
 leg sim-freelook    build,wad  "13 demos, freelook active, playsim untouched (spc-011)" -- node tools/demo-test.mjs --sim-drawn --pitch 40
 
-leg build-fakeflat   emsdk     "compile -DWEBDOOM_FAKEFLAT"            -- bash tools/build-toggle.sh WEBDOOM_FAKEFLAT build-fakeflat
-leg render-fakeflat  wad,fresh-fakeflat       "fakeflat render goldens (20.3a)"       -- node tools/demo-test.mjs --render-fakeflat
-leg build-potato     emsdk     "compile -DWEBDOOM_POTATO"              -- bash tools/build-toggle.sh WEBDOOM_POTATO build-potato
-leg render-potato    wad,fresh-potato         "potato render goldens (20.3c)"         -- node tools/demo-test.mjs --render-potato
-
-# ── 20.3b and 20.3d shipped with no regression gate at all (task 21.12) ───────
-# run-tests.sh built and gated only fakeflat and potato.  Both of these are
-# PIXEL-IDENTICAL when on — that is the whole claim — so they need no golden
-# family of their own: the gate is the vanilla render goldens replayed against
-# the toggle build, which is exactly the proof the ledger records.  Their only
-# surviving evidence until now was an md5 typed into a document.
-leg build-sbskip     emsdk     "compile -DWEBDOOM_SBSKIP"              -- bash tools/build-toggle.sh WEBDOOM_SBSKIP build-sbskip
-leg render-sbskip    wad,fresh-sbskip         "sbskip pixel-identical to vanilla (20.3b)" -- node tools/demo-test.mjs --render --build-dir build-sbskip
-leg sim-sbskip       wad,fresh-sbskip         "sbskip leaves the playsim untouched"   -- node tools/demo-test.mjs --sim-drawn --build-dir build-sbskip
-leg build-diffblit   emsdk     "compile -DWEBDOOM_DIFFBLIT"            -- bash tools/build-toggle.sh WEBDOOM_DIFFBLIT build-diffblit
-leg render-diffblit  wad,fresh-diffblit       "diffblit pixel-identical to vanilla (20.3d)" -- node tools/demo-test.mjs --render --build-dir build-diffblit
-leg sim-diffblit     wad,fresh-diffblit       "diffblit leaves the playsim untouched" -- node tools/demo-test.mjs --sim-drawn --build-dir build-diffblit
-
-# Every md5 the ledger states about a built artifact, checked against the
-# artifact — including the toggle-off byte-identity claim that all four 20.3
-# entries rest on.  "proven" used to mean a human ran md5sum once.
-leg toggle-identity  build     "ledger md5/size claims == the artifacts"    -- node tools/toggle-identity-check.mjs
 leg golden-provenance -        "every golden says where it came from"       -- node tools/golden-provenance.mjs --check
 
 

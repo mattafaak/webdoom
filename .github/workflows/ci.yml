@@ -25,7 +25,7 @@
 # number nothing computed and nobody could check from a dev box.  The runner
 # prints its own totals and every SKIP carries its reason; read those.
 #
-# The full suite (88 legs at the time of writing -- `tools/run-tests.sh --list`
+# The full suite (77 legs at the time of writing -- `tools/run-tests.sh --list`
 # prints the current number, and the runner now asserts its own total against
 # that registry) still runs on a host with the WAD library, a built engine and
 # Chrome:  bash tools/run-tests.sh --require-complete
@@ -119,8 +119,8 @@ jobs:
             echo 'Game data is not distributable, so this runner has no IWADs.'
             echo 'These gates need one and did **not** run here:'
             echo
-            echo '- 13 sim goldens, and 5 render golden families (65 more comparisons)'
-            echo '- the wide/sim-invariance, fakeflat, potato, sbskip and diffblit toggles'
+            echo '- 13 sim goldens, and 2 render golden families (26 more comparisons)'
+            echo '- the armed sim-invariance build and its freelook/interpolation leg'
             echo '- netplay 2p/4p, drop-in, spectator, churn, mixed-width'
             echo '- the differential fuzzer and the adversarial ASan map gate'
             echo '- the freestanding and 32-bit-ARM cross-architecture legs'
