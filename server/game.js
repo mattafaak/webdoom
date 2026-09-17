@@ -26,12 +26,15 @@ const MAX_CONNS = envInt('WEBDOOM_MAX_CONNS', 50);
 const MAX_SPECTATORS = envInt('WEBDOOM_MAX_SPECTATORS', 8);
 // a peer with more than this queued is not keeping up and is dropped
 const SEND_BACKLOG_CAP = envInt('WEBDOOM_SEND_BACKLOG', 4 * 1024 * 1024);
-// session.history is one Buffer per sealed tic (~266 B retained each,
-// measured), kept from tic 0 because drop-in and spectator catch-up replay
-// it whole -- a ring would hand a joiner a prefix and desync it silently.
-// So it stops growing at the cap and those two features refuse past it;
-// live play continues.  35 Hz × 30 min ≈ 17 MB.
+// The sealed history -- one 38-byte bundle per tic -- is kept from tic 0
+// because drop-in and spectator catch-up replay it whole; a ring would hand
+// a joiner a prefix and desync it silently.  So it stops growing at the cap
+// and those two features refuse past it; live play continues.  It lives in
+// 1,024-tic slabs (round 10): one Buffer object per tic cost ~460 B of RSS
+// each (28.8 MB for the 63,000-tic cap, measured after GC); the slabs hold
+// the same bundles in 8.1 MB, and a view is made only while one is sent.
 const MAX_HISTORY_TICS = envInt('WEBDOOM_MAX_HISTORY_TICS', 35 * 60 * 30);
+const SLAB_TICS = 1024;
 // 4 players × 35 Hz = 140 msg/s aggregate; 300 per connection is 2× that
 const RATE_CAP_PER_SEC = envInt('WEBDOOM_RATE_CAP', 300);
 const RATE_WINDOW_MS = 1000;
@@ -237,8 +240,10 @@ export function createGame(log = console.log, servedWads = () => []) {
             params: { ...params },      // frozen for the game; handed to drop-ins
             slots,                      // the tic-0 ingame slots
             names: null,
-            history: [],                // every sealed bundle, for catch-up
+            slabs: [],                  // every sealed bundle, for catch-up, 1,024 per slab
+            historyLen: 0,
             historyFull: false,         // cap reached: catch-up can no longer be served
+            scratch: null,              // the bundle being sealed once the cap is reached
             spectators: new Set(),      // read-only observers; never in session.players
         };
         let n = 3;
@@ -269,12 +274,14 @@ export function createGame(log = console.log, servedWads = () => []) {
     // in the Node heap, so a stalled peer is refused rather than allowed to
     // pull the whole history into memory.  Returns false when refused.
     function burstHistory(ws, who) {
-        for (const b of session.history) {
+        const size = 6 + CMD_SIZE * session.numplayers;
+        for (let i = 0; i < session.historyLen; i++) {
             if (ws.bufferedAmount > SEND_BACKLOG_CAP) {
                 refuse(ws, log, `${who} too slow to catch up (${ws.bufferedAmount} B buffered) — dropping`);
                 return false;
             }
-            ws.send(b);
+            const off = (i % SLAB_TICS) * size;
+            ws.send(session.slabs[Math.floor(i / SLAB_TICS)].subarray(off, off + size));
         }
         return true;
     }
@@ -296,7 +303,7 @@ export function createGame(log = console.log, servedWads = () => []) {
         }
         if (!burstHistory(ws, 'spectate: observer')) return;
         session.spectators.add(ws);
-        log(`spectate: observer connected (history ${session.history.length} tics)`);
+        log(`spectate: observer connected (history ${session.historyLen} tics)`);
         ws.on('close', () => {
             session?.spectators.delete(ws);
             log('spectate: observer disconnected');
@@ -326,7 +333,7 @@ export function createGame(log = console.log, servedWads = () => []) {
             p.joining = true;
             p.reservedAt = p.reservedAt || Date.now();
             if (!burstHistory(ws, `game: ${COLORS[slot]}`)) return;
-            log(`game: ${COLORS[slot]} catching up (${session.history.length} tics)`);
+            log(`game: ${COLORS[slot]} catching up (${session.historyLen} tics)`);
         }
 
         ws.on('message', buf => {
@@ -422,7 +429,21 @@ export function createGame(log = console.log, servedWads = () => []) {
                 p.joinAt = 0;
                 log(`game: ${COLORS[p.slot]} dropped in at tic ${tic}`);
             }
-        const buf = Buffer.alloc(6 + CMD_SIZE * session.numplayers);
+        const size = 6 + CMD_SIZE * session.numplayers;
+        let buf;
+        if (session.historyLen < MAX_HISTORY_TICS) {
+            // retained: the next slot of the current slab (every byte is written)
+            if (session.historyLen % SLAB_TICS === 0) session.slabs.push(Buffer.allocUnsafe(size * SLAB_TICS));
+            const off = (session.historyLen % SLAB_TICS) * size;
+            buf = session.slabs[session.slabs.length - 1].subarray(off, off + size);
+            session.historyLen++;
+        } else {
+            if (!session.historyFull) {
+                session.historyFull = true;
+                log(`game: history cap reached (${MAX_HISTORY_TICS} tics) — drop-in and spectating are closed for this session; play continues`);
+            }
+            buf = session.scratch ??= Buffer.alloc(size);
+        }
         buf.writeUInt32LE(tic, 0);
         let mask = 0, fab = 0;
         session.players.forEach((p, i) => {
@@ -430,16 +451,11 @@ export function createGame(log = console.log, servedWads = () => []) {
             let cmd = p.cmds.get(tic);
             if (!cmd) { fab |= 1 << i; cmd = p.last; }
             cmd.copy(buf, 6 + i * CMD_SIZE);
-            p.last = Buffer.from(cmd);
+            if (cmd !== p.last) cmd.copy(p.last);     // p.last is allocated once per player
             p.cmds.delete(tic);
         });
         buf[4] = mask;
         buf[5] = fab;
-        if (session.history.length < MAX_HISTORY_TICS) session.history.push(buf);
-        else if (!session.historyFull) {
-            session.historyFull = true;
-            log(`game: history cap reached (${MAX_HISTORY_TICS} tics) — drop-in and spectating are closed for this session; play continues`);
-        }
         for (const p of session.players)
             if (p.ws?.readyState === 1) p.ws.send(buf);
         for (const sw of session.spectators)
