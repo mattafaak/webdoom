@@ -137,13 +137,24 @@ One line each. The tables, DoDs and landing hashes are in the commit history
 | 6 — the program itself | 2026-09-12 | perf-fleet tier, history cap, settings SCHEMA, one reset path, one #status, keyboard-usable launcher, spec "What ships" | c2628ba |
 | 7 — strip to single player, deathmatch and WADs | 2026-09-12 | OPTIONS as a menu screen, widescreen and Panini removed, four QoL overlays deleted, attestation endpoint deleted | b6bf591 |
 | 9 — simplification | 2026-09-16 | menus that flow (one game list, value rows, RULES, CONNECTING, `full` handled), one boot funnel and one reset path, one IndexedDB path, comments cut to the why, one lobby loop on the server, seven dead engine getters, `tools/lib/` under every leg, Plans.md and the archives | 01b997b |
+| 11 — finish what was measured | 2026-09-17 | the OPL synth runs in the AudioWorklet as a second wasm built from the engine's own objects (ledger NC6 landed); the ledger's last three survivors measured and decided (NC3 landed at −4,398 instr/tic, NC2 and NC4 killed with numbers); the claims-index locator column graded and re-anchored (152 of 158) with three derived rows carrying a heap base two revisions stale; every leg's server on `tools/lib`; the last two PARTIAL promises gated; the live LAN server wired to a freshness check after 25 h of silent drift; n64/rp2040 builds track header dependencies | see `git log --grep '^docs: record round 11'` |
 | 10 — slim and unorthodox | 2026-09-16 | GM SoundFont backend and the four FastDoom toggles cut (engine byte-identical); the GPU swaps the framebuffer axes, wasm stack 1 MB, hybrid -Oz/-O3 build (doom.wasm 355,883 → 299,348 B, goldens unmoved); br/gzip + ETag revalidation and lazy 5.5 KB box art (cold launcher 1,259,266 → 209,035 B); the OPL synth measured on every host (ledger NC6: worklet-side synth next); hex goldens; net-fuzz pooled (46 → 10 s); `run-tests.sh --jobs N` (705 → 367 s); the WAD streams into the heap (JS heap 14 → 1.5 MB); history slabs on the server (29 → 8 MB) | see `git log --grep '^docs: record round 10'` |
 | 8 — the gates that were never armed | 2026-09-12 | render-path invariance gates, stamp tier, four README promises gated (`service-file`, `smoke-pwad`, `load-budget`, `firefox-frame`), the ledgers' value columns | a63048a |
 
-Round 10 closed at **77 legs**, 18 quick, 19 browser, 30 documents (round 8
-had closed at 91 / 19 / 20 / 32); every count in `README.md`, `ci.yml`,
-`CONTRIBUTING.md` and `docs/README.md` is derived from `run-tests.sh --list`
-or from the checker that grades it.
+Round 11 closed at **79 legs**, 18 quick, 21 browser, 31 documents (round 10:
+77 / 18 / 19 / 30; round 8: 91 / 19 / 20 / 32); every count in `README.md`,
+`ci.yml`, `CONTRIBUTING.md` and `docs/README.md` is derived from
+`run-tests.sh --list` or from the checker that grades it.
+
+Measured on alder at the close: serial **12 min 13 s** (79 legs, 2 skipped);
+`--jobs 3` **6 min 6 s** with identical verdicts; and the complete run —
+`--jobs 3 --perf --require-complete` with the N64 toolchain sourced —
+**14 min 6 s, 79 of 79 passing, nothing skipped**.
+
+The optimization ledger has **no open candidates left**: 23 candidates, 11
+landed, 12 killed, 0 surviving. `status-drift` rule 5 had to learn the
+difference between "the verdict format changed" and "there are none left",
+because asserting at least one survivor made finishing the work a failure.
 
 ## Phase Z: decide and record — no new gates
 

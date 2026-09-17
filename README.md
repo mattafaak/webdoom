@@ -70,8 +70,9 @@ re-probes. `tools/deploy.sh --check` reports drift and changes nothing.
 ## Tests
 
 ```sh
-tools/run-tests.sh            # everything: 79 legs, ~12 min without the N64 leg (~20 with it; the runner prints its time)
+tools/run-tests.sh            # everything: 79 legs, ~12 min without the N64 leg (the runner prints its time)
 tools/run-tests.sh --jobs 3   # the same legs three at a time: ~6 min, identical verdicts
+                              # (~14 min with the N64 leg and the perf tier)
 tools/run-tests.sh --quick    # no WADs, no build, no browser — what CI runs
 tools/run-tests.sh --list     # the leg registry
 ```
