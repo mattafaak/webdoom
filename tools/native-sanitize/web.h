@@ -24,7 +24,7 @@ void    Web_FileWrite   (const char* path, byte* data, int len);
 
 // MUS+OPL music sequencer stubs (i_sound.c, native: all no-ops).
 void mus_init      (int samplerate);
-void mus_play      (void* data, int len, int loop);
+int mus_play       (void* data, int len, int loop);
 void mus_stop      (void);
 void mus_pause     (int pause);
 void mus_setvolume (int vol127);

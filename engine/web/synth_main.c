@@ -79,11 +79,25 @@ void* W_CacheLumpName (char* name, int tag)
 
 EMSCRIPTEN_KEEPALIVE void synth_play (byte* data, int len, int looping)
 {
-    mus_play (data, len, looping);
-    // mus_play validates the header (MUS\x1a, score bounds) and DECLINES by
-    // returning with its own pointer unchanged -- so on a refusal the old block
-    // is still live and it is the new one that must go.
-    if (web_music_debug (0))
+    // Replaying the block this module already owns.  Without this, the accept
+    // path below frees `song` and then assigns the freed pointer back to it,
+    // and mus_opl reads through it for the rest of the session -- a
+    // use-after-free reached by nothing more exotic than passing the same
+    // pointer twice.  The shipped client never does, because it mallocs a fresh
+    // block per song; the contract never said it could not, which is the
+    // difference between safe and safe-by-accident.
+    if (data == song)
+    {
+        mus_play (data, len, looping);
+        return;
+    }
+
+    // mus_play returns 1 when it has TAKEN the buffer and 0 when it declined
+    // and touched nothing -- so on a refusal the old block is still live and it
+    // is the new one that must go.  This used to read the decision out of
+    // web_music_debug(0), the `playing` flag through a debug accessor, which
+    // was correct and one added early return away from freeing the live song.
+    if (mus_play (data, len, looping))
     {
         free (song); /* free(NULL) on the first call is fine */
         song = data;

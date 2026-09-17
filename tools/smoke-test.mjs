@@ -38,6 +38,14 @@ for (let i = 0; i < frames; i++) {
 }
 
 const px = doom.HEAPU8.subarray(fb, fb + 320 * 200);
+// `nonzero` is a LIVENESS SIGNAL, not a measurement, and the headline prints it
+// only so a reader can see the gate looked at something.  It wobbles by a pixel
+// or two between identical runs -- 63,463 / 63,463 / 63,464 over three runs of
+// `doom.wad 700` -- because the loop below is wall-clock paced, so the last
+// frame lands at a slightly different point in the attract loop each time.  The
+// assertion is the threshold at :56 and is nowhere near that noise.  Do not
+// quote this number as a figure or pin it in a golden; the per-tic framebuffer
+// hashes in `render-goldens` are the deterministic instrument.
 const nonzero = px.reduce((n, v) => n + (v !== 0), 0);
 console.log(`frames rendered: ${frames}, distinct: ${hashes.size}, nonzero px: ${nonzero}/64000`);
 

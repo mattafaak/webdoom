@@ -34,7 +34,7 @@ void I_SetMusicVolume(int volume) { (void)volume; }
 
 // mus_* stubs (web.h interface used by i_sound.c in engine):
 void mus_init(int samplerate)        { (void)samplerate; }
-void mus_play(void* d, int l, int p) { (void)d; (void)l; (void)p; }
+int mus_play(void* d, int l, int p) { (void)d; (void)l; (void)p; return 0; }
 void mus_stop(void)                  {}
 void mus_pause(int p)                { (void)p; }
 void mus_setvolume(int v)            { (void)v; }

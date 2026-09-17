@@ -286,4 +286,68 @@ for (const [mode, name] of [[0, 'OPL2'], [1, 'OPL3']]) {
                 `${quanta} quanta of ${QUANTUM} frames`);
 }
 
+// Gate 8: synth_play's OWNERSHIP CONTRACT (task 26.2).
+//
+// synth_main.c decides whether to free the caller's block or the previous one,
+// and until round 13 it read that decision out of web_music_debug(0) -- the
+// `playing` flag, through a debug accessor.  mus_play returns the decision now
+// (1 = took the buffer, 0 = declined and touched nothing), so this asserts the
+// contract the free depends on, against the real module:
+//
+//   a good song is TAKEN         -> web_music_debug(0) is 1, and it renders
+//   a bad header is DECLINED     -> the module survives, the previous song is
+//                                   still the one loaded, and audio is
+//                                   byte-identical to before the refusal
+//   the SAME pointer replayed    -> no free/reassign of a live block; the
+//                                   module still renders (before the round-13
+//                                   guard this freed `song` and assigned the
+//                                   freed pointer straight back to it)
+//
+// WHAT THIS GATE CANNOT DO, said plainly: wasm has no allocator poisoning, so
+// a use-after-free here reads whatever emmalloc left behind and usually looks
+// fine.  These assertions prove the CONTRACT, not the absence of a UAF.  The
+// guard in synth_play is what prevents it; this is what notices if the contract
+// it rests on ever changes.
+{
+    const { instance } = await WebAssembly.instantiate(readFileSync(SYNTH_WASM), {});
+    const x = instance.exports;
+    x._initialize();
+    const eng = await engineWithMusic(0);
+    const put = buf => { const p = x.malloc(buf.length);
+                         if (!p) throw new Error('synth.wasm malloc failed');
+                         new Uint8Array(x.memory.buffer).set(buf, p); return p; };
+    const render = () => { const sc = x.malloc(SZ); x.web_music_render(sc, NFRAMES);
+                           const b = Buffer.from(new Uint8Array(x.memory.buffer, sc, SZ));
+                           x.free(sc); return b; };
+    const fail = m => { console.error(`FAIL: gate 8: ${m}`); process.exit(1); };
+
+    const songPtr = put(eng.song);
+    x.synth_boot(44100, put(eng.genmidi), eng.genmidi.length,
+                 songPtr, eng.song.length, eng.looping, eng.paused, eng.vol, 0);
+    if (!x.web_music_debug(0)) fail('a valid song was not accepted by synth_boot');
+    const good = render();
+    if (good.equals(Buffer.alloc(SZ))) fail('the accepted song rendered pure silence — nothing was verified');
+
+    // a header that fails the MUS magic: taken must be 0, and the module lives
+    const bad = put(Buffer.from('NOTMUS__________'));
+    x.synth_play(bad, 16, 0);
+    if (x.web_music_debug(0)) fail('a bad MUS header was ACCEPTED (mus_play returned 1)');
+
+    // the previous song is still the loaded one: unpause and it renders again
+    x.synth_pause(0);
+    const afterRefusal = render();
+    if (afterRefusal.equals(Buffer.alloc(SZ)))
+        fail('after a refused song the module renders silence — the previous song was lost');
+
+    // replaying the block the module already owns must not free it
+    x.synth_play(songPtr, eng.song.length, 0);
+    if (!x.web_music_debug(0)) fail('replaying the owned song was refused');
+    const replayed = render();
+    if (replayed.equals(Buffer.alloc(SZ)))
+        fail('replaying the owned song rendered silence — the module lost its song');
+
+    console.log('gate 8 PASS: synth_play ownership contract — accepted, declined (previous song ' +
+                'survives), and same-pointer replay, on the real synth.wasm (4 assertions)');
+}
+
 console.log('PASS: OPL2/OPL3 mode toggle verified; synth.wasm identical on real music');

@@ -10,7 +10,7 @@
 #include "w_wad.h"
 
 void mus_init(int samplerate)      { (void)samplerate; }
-void mus_play(void* data, int len, int loop) { (void)data; (void)len; (void)loop; }
+int mus_play(void* data, int len, int loop) { (void)data; (void)len; (void)loop; return 0; }
 void mus_stop(void)                {}
 void mus_pause(int pause)          { (void)pause; }
 void mus_setvolume(int vol127)     { (void)vol127; }

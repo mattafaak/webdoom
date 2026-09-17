@@ -80,7 +80,7 @@ void Web_FileWrite (const char* path, byte* data, int len);
 
 // MUS + OPL music sequencer (mus_opl.c)
 void mus_init (int samplerate);
-void mus_play (void* data, int len, int loop);
+int mus_play (void* data, int len, int loop); /* 1 = took the buffer */
 void mus_stop (void);
 void mus_pause (int pause);
 void mus_setvolume (int vol127);
@@ -97,8 +97,11 @@ void web_set_opl_mode (int mode); /* 0 OPL2, 1 OPL3; call before mus_init */
 // The same mus_opl.c linked as a standalone reactor for the AudioWorklet.
 // Every pointer below is allocated by the CALLER through the module's own
 // `malloc` and becomes the module's: it frees the previous song when a new one
-// is accepted, and frees the new one when mus_play declines it.  `gm` must
-// outlive the module (load_bank keeps no copy of the lump it reads).
+// is accepted, and frees the new one when mus_play declines it -- mus_play's
+// int return is the signal, 1 for taken and 0 for declined.  Passing the block
+// the module ALREADY owns is allowed and is a no-op replay; it used to be a
+// use-after-free.  `gm` must outlive the module (load_bank keeps no copy of the
+// lump it reads).
 // `out` in web_music_render must have room for nframes * 2 floats.
 void web_music_state (int* out); /* 7 ints: see engine/web/i_sound.c */
 
