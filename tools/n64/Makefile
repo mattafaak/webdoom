@@ -225,13 +225,23 @@ else
 endif
 	@echo "ROM size: $$(wc -c < $@) bytes"
 
+# -MMD -MP: a HEADER change has to rebuild the objects that include it.  Without
+# these this Makefile tracked .c files only, so editing engine/core/r_data.h left
+# every object stale -- and round 11 found out the honest way, with a link error
+# (`undefined reference to R_GetColumn`) from an r_segs.o compiled seven hours
+# earlier.  A link error is the LUCKY outcome: had the change not moved a symbol,
+# the stale object would have linked and this gate would have tested code that is
+# no longer in the tree.  freestanding, native-sanitize and baremetal already did
+# this; n64 and rp2040 did not.
 $(OBJ_DIR)/core/%.o: $(CORE_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CORE_CFLAGS) -c $< -o $@
+	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 
 $(OBJ_DIR)/plat/%.o: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(PLAT_CFLAGS) -c $< -o $@
+	$(CC) $(PLAT_CFLAGS) -MMD -MP -c $< -o $@
+
+-include $(OBJ:.o=.d)
 
 size: $(OUT_ELF)
 	@echo "=== mips64-elf-size $(OUT_ELF) ==="

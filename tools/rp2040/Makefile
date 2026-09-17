@@ -83,13 +83,19 @@ $(OUT): $(OBJ)
 	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
 	@echo "built $@"
 
+# -MMD -MP: a header change must rebuild the objects that include it.  Same hole
+# the n64 Makefile had until round 11, where it produced a stale object and a
+# link error; here it would produce a stale FOOTPRINT, which is the whole point
+# of this target.
 $(OBJ_DIR)/core/%.o: $(CORE_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 $(OBJ_DIR)/plat/%.o: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+-include $(OBJ:.o=.d)
 
 size: $(OUT)
 	@echo "=== arm-none-eabi-size $(OUT) ==="
