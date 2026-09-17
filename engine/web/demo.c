@@ -5,7 +5,9 @@
 //
 // Recording contract:
 //   1. Pass '-record webdemo' to callMain; G_RecordDemo is called after Z_Init
-//      in D_DoomMain, and G_BeginRecording is called from D_DoomLoop.
+//      in D_DoomMain, and G_BeginRecording is called from D_DoomLoop.  (There
+//      was a web_demo_start() export for arming it afterwards; nothing in
+//      client/ or tools/ ever called it, so round 11 removed it.)
 //   2. Optionally call web_set_singletics(1) after callMain so that every
 //      web_frame() call advances exactly one tic regardless of wall-clock time.
 //      This is essential in Node.js test harnesses where emscripten_get_now()
@@ -75,13 +77,6 @@ extern boolean singletics; /* d_main.c: debug flag, also set by timedemo */
 EMSCRIPTEN_KEEPALIVE void web_set_singletics (int on)
 {
     singletics = on ? true : false;
-}
-
-// Arm recording after callMain (G_RecordDemo needs the zone allocator).  The
-// usual path is the '-record webdemo' callMain argument instead.
-EMSCRIPTEN_KEEPALIVE void web_demo_start (void)
-{
-    G_RecordDemo ("webdemo");
 }
 
 // Append the marker and stop; returns the .lmp byte count (0 if not

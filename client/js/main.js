@@ -223,9 +223,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     const input = createInput(doom, canvas, loadSettings());
     doom._web_set_smooth(input.settings.smooth ? 1 : 0);
 
-    // musicBackend supersedes the legacy opl3 bool
-    const musicBackend = input.settings.musicBackend ?? (input.settings.opl3 ? 'opl3' : 'opl2');
-    doom._web_set_opl_mode(musicBackend === 'opl3' ? 1 : 0);
+    doom._web_set_opl_mode(input.settings.musicBackend === 'opl3' ? 1 : 0);
 
     running = true;
     // Everything the boot allocated, released in one place.  The relay would

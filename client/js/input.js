@@ -5,7 +5,9 @@
 // doomdef.h key codes
 import { teardownLedger } from './ui.js';
 
-export const DK = {
+// Doom key codes (d_event.h).  Not exported: nothing outside this module has
+// ever imported it, and the two test files that mention DK do so in comments.
+const DK = {
     RIGHT: 0xae, LEFT: 0xac, UP: 0xad, DOWN: 0xaf,
     ESCAPE: 27, ENTER: 13, TAB: 9, BACKSPACE: 127, PAUSE: 0xff,
     RSHIFT: 0x80+0x36, RCTRL: 0x80+0x1d, RALT: 0x80+0x38,
@@ -52,8 +54,6 @@ export const defaultSettings = () => ({
     mouseY: 'off',         // 'off' | 'look' (freelook) | 'move' (1993)
     alwaysRun: false,
     smooth: true,          // uncapped-fps render interpolation
-    opl3: false,           // task 17.1 legacy: false=OPL2 mono, true=OPL3 stereo
-                           // superseded by musicBackend in task 17.2b; kept for compat
     musicBackend: 'opl2',  // 'opl2' | 'opl3'
     padDeadzone: 0.15,
     padTurnSpeed: 1.0,
@@ -72,7 +72,6 @@ const SCHEMA = {
     musicBackend:   { oneOf: ['opl2', 'opl3'] },
     alwaysRun:      { bool: true },
     smooth:         { bool: true },
-    opl3:           { bool: true },
 };
 
 // KeyboardEvent.code is alphanumeric; anything else was not written by us.
@@ -112,7 +111,10 @@ export function loadSettings() {
     // was dead from the day mouseY gained a default, and a legacy 1993-style
     // preference silently became 'off'.
     if (stored.mouseMove === true && stored.mouseY === undefined) s.mouseY = 'move';
-    // task 17.2b: opl3:true with no musicBackend promotes to the 3-way picker.
+    // task 17.2b: a stored opl3:true with no musicBackend is a pre-17.2b
+    // preference; promote it.  Reading the RAW object is why round 11 could
+    // drop `opl3` from the defaults and the schema without losing it -- the
+    // bool was live only here; everywhere else it was written and never read.
     if (stored.opl3 === true && stored.musicBackend === undefined) s.musicBackend = 'opl3';
     return s;
 }
@@ -291,15 +293,22 @@ export function createInput(doom, canvas, settings) {
     let padSeen = false;
     on(window, 'gamepadconnected', () => { padSeen = true; });
     on(window, 'gamepaddisconnected', () => { padPrev = 0; padSeen = false; });
-    let uiMode = 0;                                      // read by the edge handlers
-    const EDGES_GAME = [
+    // Which buttons are edge-triggered, by mode.  LB/RB used to appear in both
+    // tables guarded by `uiMode || cycleWeapon(...)`, which reads as dead code
+    // in the game table (uiMode is 0 there, so the guard never fires) and is
+    // load-bearing in the UI table (uiMode is truthy, so it makes them inert).
+    // Membership says the same thing without a variable read per press.
+    const EDGES_BOTH = [
         [9, () => tapKey(DK.ESCAPE)],                        // start
         [8, () => tapKey(DK.TAB)],                           // select: automap
-        [4, () => uiMode || cycleWeapon(-1)],                // LB
-        [5, () => uiMode || cycleWeapon(1)],                 // RB
+    ];
+    const EDGES_GAME = [
+        ...EDGES_BOTH,
+        [4, () => cycleWeapon(-1)],                          // LB
+        [5, () => cycleWeapon(1)],                           // RB
     ];
     const EDGES_UI = [
-        ...EDGES_GAME,
+        ...EDGES_BOTH,
         [12, () => tapKey(DK.UP)], [13, () => tapKey(DK.DOWN)],
         [14, () => tapKey(DK.LEFT)], [15, () => tapKey(DK.RIGHT)],
         [0, () => tapKey(DK.ENTER)], [1, () => tapKey(DK.BACKSPACE)],
@@ -319,7 +328,7 @@ export function createInput(doom, canvas, settings) {
         const gp = gpads?.[0];
         if (!gp) return;
         const b = i => gp.buttons[i]?.pressed ?? false;
-        uiMode = doom._web_ui_mode();
+        const uiMode = doom._web_ui_mode();
 
         // edge-triggered buttons
         const edges = uiMode ? EDGES_UI : EDGES_GAME;

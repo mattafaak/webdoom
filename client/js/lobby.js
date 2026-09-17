@@ -130,8 +130,7 @@ const BACKENDS = ['opl2', 'opl3'];
 const onoff = v => (v ? 'ON' : 'OFF');
 
 function optionsScreen() {
-    // opl3 is a legacy bool kept in step with musicBackend for back-compat.
-    const music = (v, dir) => { const b = cyc(BACKENDS, v, dir); S().opl3 = b === 'opl3'; return b; };
+    const music = (v, dir) => cyc(BACKENDS, v, dir);
     return {
         id: 'options',
         title: 'OPTIONS',
@@ -249,7 +248,11 @@ function resetToLauncher(reason) {
 
 
 // Quit Game (→ Y) inside the engine returns here.
-function returnToMenu() { resetToLauncher(); }
+// One wrapper for both exits.  There were two identical ones, returnToMenu
+// and leaveLobby; both exist to DROP their caller's argument, because
+// resetToLauncher(reason) would print whatever onQuit/onBack passed as a
+// status line.
+function toLauncher() { resetToLauncher(); }
 
 // ── one way into a game ──────────────────────────────────────────────────────
 // Every path that boots the engine -- single player, a lobby launch, a
@@ -262,7 +265,7 @@ function enterGame({ wads, args = [], net = null, record = false, after = null }
     fire?.pause();
     menu.hide();
     if (record) recOverlay.show();
-    bootDoom({ wads, args, net, record, onQuit: returnToMenu })
+    bootDoom({ wads, args, net, record, onQuit: toLauncher })
         .then(doom => {
             if (record) recOverlay.arm(doom, wads[0].file);
             after?.(doom);
@@ -350,7 +353,7 @@ let countdown = null;
 // On the stack from the click until the server answers, so leaving it (ESC)
 // closes the socket: a connection with no screen would hold a colour slot
 // nobody can see.
-const connectingScreen = () => ({ id: 'connecting', title: 'CONNECTING…', items: [], onBack: leaveLobby });
+const connectingScreen = () => ({ id: 'connecting', title: 'CONNECTING…', items: [], onBack: toLauncher });
 
 function enterMultiplayer() {
     if (lobby) resetToLauncher();          // a stale handle: start clean
@@ -511,7 +514,7 @@ function inProgressScreen() {
                 ({ text: (pl.name ?? pl.color) + (pl.live ? '  ' : '… '), color: pl.color })),
             { text: `-  ${entry(p.wad)?.title ?? p.wad}  ${mapName(p)}  ${mode}` },
         ],
-        onBack: leaveLobby,
+        onBack: toLauncher,
         items: [
             free.length
                 ? { label: 'DROP IN', action: dropIn }
@@ -562,7 +565,7 @@ function lobbyScreen() {
         title: 'FIGHT TOGETHER',
         header: (roster?.players ?? []).map(pl =>
             ({ text: pl.name + '  ', color: pl.color })),
-        onBack: leaveLobby,
+        onBack: toLauncher,
         // GAME and MAP open a picker on Enter (long lists); every value row
         // cycles with ←/→.  maxValue is the longest value a row can show, so
         // the menu never re-scales as a value changes.
@@ -597,7 +600,6 @@ function lobbyScreen() {
 
 // guard T25: resetToLauncher dismisses a countdown the user ESC'd out of, and
 // nulls `lobby` before close() so the 'closed' handler reads this as deliberate.
-function leaveLobby() { resetToLauncher(); }
 
 // --- boot ------------------------------------------------------------------------
 (async () => {

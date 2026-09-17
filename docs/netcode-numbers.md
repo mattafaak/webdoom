@@ -106,3 +106,29 @@ at measurable rates. See spec.md §Netcode contract for the updated claim.
 
 **Scope**: game-loop tic-observation timing (not TCP-layer timestamps). Reflects
 practical impact on game pacing, not bare network latency.
+
+## 4. Per-tic allocation in `sealTic` — measured, NOT optimized (round 11)
+
+**Question**: `sealTic()` allocates a `subarray` view per sealed tic and a
+closure per `session.players.forEach`, and `seal()` builds a `filter` array
+and two `every` closures per pass. Round 10 removed the retained allocations
+(the history is 1,024-tic slabs now, 28.8 → 8.1 MB of RSS at the cap). Are the
+remaining short-lived ones worth removing?
+
+**Measurement**: `tools/hol-measure.mjs`, loopback, n=441 gaps, on alder:
+
+| metric | ms |
+|--------|----|
+| tic period | 28.571 |
+| p50 | 28.68 |
+| p99 | 29.08 |
+| max | 41.96 |
+
+**Verdict: DOCUMENT, DON'T OPTIMIZE.** p50 sits 0.11 ms above the tic period
+and p99 0.51 ms above it: the pacing is bound by the 35 Hz period, and the
+whole budget a per-tic allocation could return is inside the gap between p50
+and p99 of an instrument whose own resolution is the 14 ms poll. There is no
+instrument here that could show the difference, so landing it would be an
+unmeasured change to the lockstep path — the one place in this codebase where
+a silent behaviour change becomes a desync. Revisit if a profile ever shows GC
+pauses inside a tic, which this measurement says are not happening.

@@ -56,7 +56,9 @@ export function createMenu(font, host, opts = {}) {
         // and adjusted in place, so splitting it into columns at the 8-item
         // mark makes it read as two unrelated lists.  A MAP PICKER wants the
         // columns; OPTIONS never does, however long it gets.
-        const wrapped = !s.nowrap && !s.items.some(it => it.thumb) && s.items.length > 8;
+        const hasThumb = s.items.some(it => it.thumb);
+        const hasCycle = s.items.some(it => it.cycle);
+        const wrapped = !s.nowrap && !hasThumb && s.items.length > 8;
         root.classList.toggle('wide', wrapped);
 
         // Pick the scale. Cycleable values always reserve their "< >"
@@ -126,10 +128,10 @@ export function createMenu(font, host, opts = {}) {
         const list = Object.assign(document.createElement('div'), { className: 'items' });
         list.setAttribute('role', 'menu');
         if (s.title) list.setAttribute('aria-label', String(s.title));
-        if (s.items.some(it => it.thumb)) list.classList.add('noWrap');   // art rows: one column
+        if (hasThumb) list.classList.add('noWrap');                       // art rows: one column
         // centre the items under the title/logo, EXCEPT when a value can be
         // cycled — those left-anchor so a changing value never shifts rows
-        if (wrapped || !s.items.some(it => it.cycle)) list.style.alignSelf = 'center';
+        if (wrapped || !hasCycle) list.style.alignSelf = 'center';
         s.items.forEach((item, i) => {
             const row = document.createElement('div');
             row.className = 'row' + (i === sel ? ' sel' : '');
@@ -175,7 +177,7 @@ export function createMenu(font, host, opts = {}) {
         // constrain columns to the menu's fixed width so they never run off
         // the screen. Measure the widest row, then cap the height so it
         // wraps into only as many columns as fit.
-        if (!list.classList.contains('noWrap') && list.children.length > 8) {
+        if (!hasThumb && list.children.length > 8) {
             const rows = [...list.children];
             const rowH = rows[0].offsetHeight, gapV = 6, gapH = 56;
             const rowW = Math.max(...rows.map(r => r.offsetWidth));
