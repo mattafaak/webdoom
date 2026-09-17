@@ -90,9 +90,21 @@ async function sha256hex(bytes) {
 }
 
 // ---------------------------------------------------------------------------
-// Known-WAD table (mirrors tools/wad-identify.mjs)
+// Known-WAD table — THE source, not a copy.
+//
+// tools/wad-identify.mjs used to carry its own transcription of both tables
+// under a comment saying they mirrored each other, and nothing compared them.
+// They drifted: the server-side copy read "Mephisto’s Maosoleum" against this
+// one's "Mephisto's Mausoleum" -- a misspelling AND a curly apostrophe, so the
+// same WAD got a different title depending on whether it arrived from the
+// library or from a local import.  `minos.wad` and `virgil.wad` differed by
+// apostrophe alone, and `hacx.wad` carried its skipReason here and not there,
+// which matters because check-menu-reachable reads only this copy.
+//
+// The tool imports these now.  A mirror that cannot be compared should not be
+// a mirror.
 // ---------------------------------------------------------------------------
-const KNOWN = {
+export const KNOWN = {
     'doom.wad':          { title: 'The Ultimate Doom' },
     'doomu.wad':         { title: 'The Ultimate Doom', rename: 'doom.wad' },
     'doom2.wad':         { title: 'Doom II: Hell on Earth' },
@@ -106,7 +118,7 @@ const KNOWN = {
     'sigil_v1_21.wad':   { title: 'SIGIL', base: 'doom.wad', rename: 'sigil.wad' },
     'tnt31.wad':         { title: 'TNT: Evilution — MAP31 fix', base: 'tnt.wad', patch: true },
 };
-const MASTER_TITLES = {
+export const MASTER_TITLES = {
     'attack.wad': 'Attack', 'blacktwr.wad': 'Black Tower',
     'bloodsea.wad': 'Bloodsea Keep', 'canyon.wad': 'Canyon',
     'catwalk.wad': 'The Catwalk', 'combine.wad': 'The Combine',

@@ -59,11 +59,43 @@ for (const [label, [fa, ra], [fb, rb]] of MIRRORS) {
     else { console.log(`  FAIL ${label}: ${fa} says ${a}, ${fb} says ${b}`); bad++; }
 }
 
+// ── the mirror that was deleted rather than gated ───────────────────────────
+//
+// KNOWN and MASTER_TITLES were transcribed into BOTH client/js/wad-import.js
+// and tools/wad-identify.mjs, each under a comment saying they mirrored the
+// other, and nothing compared them.  They drifted: the tool read
+// "Mephisto’s Maosoleum" against the client's "Mephisto's Mausoleum", so the
+// same WAD showed a different -- and misspelled -- title depending on whether
+// it came from the served library or a local import.  The live manifest on
+// this box carried the misspelling.
+//
+// The fix was to delete the copy: wad-identify.mjs imports the tables now.  So
+// there is no pair left to compare, and the thing worth asserting is that the
+// copy has not come BACK.  A regex mirror here would compare a table to
+// itself and pass forever.
+{
+    const tool = src('tools/wad-identify.mjs');
+    const dup = /^\s*const\s+(KNOWN|MASTER_TITLES)\s*=\s*\{/m.exec(tool);
+    const imports = /import\s*\{[^}]*\bKNOWN\b[^}]*\}\s*from\s*'\.\.\/client\/js\/wad-import\.js'/.test(tool);
+    checked++;
+    if (dup) {
+        console.log(`  FAIL wad tables: tools/wad-identify.mjs defines its own ${dup[1]} again`
+                  + ' — it must import from client/js/wad-import.js, which is the source');
+        bad++;
+    } else if (!imports) {
+        console.log('  FAIL wad tables: tools/wad-identify.mjs no longer imports KNOWN from'
+                  + ' client/js/wad-import.js — the link this check exists to hold is gone');
+        bad++;
+    } else {
+        console.log('  ok   wad tables: tools/wad-identify.mjs imports KNOWN/MASTER_TITLES, no second copy');
+    }
+}
+
 if (checked === 0) {
     console.log('FAIL wire-constants: nothing was compared');
     process.exit(1);
 }
 console.log(bad
-    ? `FAIL wire-constants: ${bad} of ${MIRRORS.length} mirrors disagree or could not be read`
-    : `PASS wire-constants: ${checked} of ${MIRRORS.length} cross-wire constants agree on both sides`);
+    ? `FAIL wire-constants: ${bad} of ${MIRRORS.length + 1} mirrors disagree or could not be read`
+    : `PASS wire-constants: ${checked} of ${MIRRORS.length + 1} cross-wire mirrors agree (5 constants, plus the WAD title tables, which are imported rather than copied)`);
 process.exit(bad ? 1 : 0);

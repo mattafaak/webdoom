@@ -217,7 +217,7 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/js/main.js` | 16,472 | 6,170 | 6.0 |
 | `client/js/audio.js` | 17,922 | 6,065 | 5.9 |
 | `client/js/menu.js` | 17,286 | 6,058 | 5.9 |
-| `client/js/wad-import.js` | 11,300 | 4,249 | 4.1 |
+| `client/js/wad-import.js` | 12,023 | 4,608 | 4.5 |
 | `client/css/webdoom.css` | 10,370 | 3,885 | 3.8 |
 | `build/doom.js` | 8,774 | 3,720 | 3.6 |
 | `client/js/doomfont.js` | 9,575 | 3,663 | 3.6 |
@@ -234,19 +234,19 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 | `client/index.html` | 1,732 | 905 | 0.9 |
 | `client/js/wad-cache.js` | 1,517 | 716 | 0.7 |
 | `client/js/wad-library.js` | 1,159 | 565 | 0.6 |
-| **Total (all, raw)** | **545,571** | — | — |
-| **Total (all, gzip-9)** | — | **225,282** | **220** |
-| **JS+CSS+HTML only (raw)** | 215,526 | — | — |
-| **JS+CSS+HTML only (gzip-9)** | — | 79,013 | **77.2** |
+| **Total (all, raw)** | **546,294** | — | — |
+| **Total (all, gzip-9)** | — | **225,641** | **220.4** |
+| **JS+CSS+HTML only (raw)** | 216,249 | — | — |
+| **JS+CSS+HTML only (gzip-9)** | — | 79,372 | **77.5** |
 
 The WAD file itself (doom.wad ≈ 11.8 MB, doom2.wad ≈ 13.9 MB, etc.) is
 fetched separately on first play and cached in the browser; it is not part of
 the initial page-load transfer.
 
 **Finding**: the entire deliverable (wasm + JS glue + client JS + CSS +
-HTML) compresses to **220 KB gzip** on the wire, gated by
+HTML) compresses to **220.4 KB gzip** on the wire, gated by
 `payload-size` (perf-015/perf-016) since round 8. The wasm is
-59% of that. The JS+CSS+HTML surface is **77.2 KB gzip**
+59% of that. The JS+CSS+HTML surface is **77.5 KB gzip**
 — note that is **2.1x the 35.1 KB this table used to
 claim**, which went stale unnoticed precisely because both figures were
 marked *not machine-verified*: the old table still listed

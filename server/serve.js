@@ -193,14 +193,18 @@ const server = createServer((req, res) => {
         if (req.method !== 'GET') return send(req, res, 405, 'method not allowed');
         const rec = getDemo(demoMatch[1]);
         if (!rec) return send(req, res, 404, 'demo not found');
-        res.writeHead(200, {
+        // Through send(), not writeHead: this was the ONE 200 in the file that
+        // answered directly, so the only route returning attacker-uploaded
+        // bytes -- POST /api/demos has no auth -- was also the only one without
+        // nosniff, without the CSP, and without the headersSent guard that
+        // exists a few lines up for exactly this shape.  application/octet-stream
+        // is not COMPRESSIBLE, so send() takes its plain branch and this is
+        // byte-equivalent plus the headers.
+        return send(req, res, 200, rec.bytes, {
             'content-type': 'application/octet-stream',
-            'content-length': rec.bytes.length,
             'cache-control': 'no-store',
             'x-demo-wad': rec.wad || '',
         });
-        res.end(rec.bytes);
-        return;
     }
     if (path.startsWith('/api/demos/')) return send(req, res, 400, 'invalid demo id');
 

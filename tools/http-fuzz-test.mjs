@@ -253,6 +253,38 @@ async function checkSecurityHeaders() {
               csp.includes('blob:') && csp.includes('ws:'),
               csp || '(absent)');
     }
+
+    // THE ROUTE THAT RETURNS ATTACKER-UPLOADED BYTES.  POST /api/demos has no
+    // auth, and GET /api/demos/<id> was the one 200 in serve.js that answered
+    // with res.writeHead directly instead of through send() -- so the only
+    // response body a stranger controls was also the only one shipped without
+    // nosniff, without the CSP and without the headersSent guard.  Nothing
+    // asserted headers on this route, which is why it stayed that way.
+    {
+        const body = Buffer.from('http-fuzz demo header probe');
+        const up = await fetch(`http://127.0.0.1:${s.port}/api/demos?wad=doom.wad`,
+            { method: 'POST', body, signal: AbortSignal.timeout(4000) });
+        const { id } = await up.json();
+        const res = await fetch(`http://127.0.0.1:${s.port}/api/demos/${id}`,
+            { signal: AbortSignal.timeout(4000) });
+        const got = Buffer.from(await res.arrayBuffer());
+        check('a stored demo: X-Content-Type-Options nosniff',
+              res.headers.get('x-content-type-options') === 'nosniff',
+              res.headers.get('x-content-type-options') ?? '(absent)');
+        check('a stored demo: Referrer-Policy set',
+              res.headers.get('referrer-policy') === 'no-referrer',
+              res.headers.get('referrer-policy') ?? '(absent)');
+        check('a stored demo: CSP present',
+              (res.headers.get('content-security-policy') ?? '').includes("object-src 'none'"),
+              res.headers.get('content-security-policy') ?? '(absent)');
+        // and the route still does its job, byte for byte
+        check('a stored demo: bytes round-trip unchanged', got.equals(body),
+              `${got.length} B back, ${body.length} B up`);
+        check('a stored demo: still no-store and still names its WAD',
+              res.headers.get('cache-control') === 'no-store' &&
+              res.headers.get('x-demo-wad') === 'doom.wad',
+              `${res.headers.get('cache-control')} / ${res.headers.get('x-demo-wad')}`);
+    }
     s.kill();
 }
 

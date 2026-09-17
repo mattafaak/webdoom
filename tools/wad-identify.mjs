@@ -8,31 +8,20 @@ import { join, basename } from 'node:path';
 const [dir, out] = process.argv.slice(2);
 if (!dir || !out) { console.error('usage: wad-identify.mjs <dir> <out.json>'); process.exit(1); }
 
-// Known titles by canonical filename; base = IWAD a PWAD loads on top of.
-const KNOWN = {
-    'doom.wad':     { title: 'The Ultimate Doom' },
-    'doomu.wad':    { title: 'The Ultimate Doom', rename: 'doom.wad' },
-    'doom2.wad':    { title: 'Doom II: Hell on Earth' },
-    'tnt.wad':      { title: 'Final Doom: TNT — Evilution' },
-    'plutonia.wad': { title: 'Final Doom: The Plutonia Experiment' },
-    'nerve.wad':    { title: 'No Rest for the Living', base: 'doom2.wad' },
-    'chex.wad':     { title: 'Chex Quest', standalone: true },
-    // HACX v2.0-r61 is the GZDoom-era remaster (ACS scripts, no vanilla
-    // data) — not runnable on a vanilla engine. v1.2 (doom2 PWAD) would be.
-    'hacx.wad':     { skip: true },
-    'sigil.wad':        { title: 'SIGIL', base: 'doom.wad' },
-    'sigil_v1_21.wad':  { title: 'SIGIL', base: 'doom.wad', rename: 'sigil.wad' },
-    'tnt31.wad':    { title: 'TNT: Evilution — MAP31 fix', base: 'tnt.wad', patch: true },
-};
-const MASTER_TITLES = { // Master Levels PWADs, all on doom2
-    'attack.wad': 'Attack', 'blacktwr.wad': 'Black Tower', 'bloodsea.wad': 'Bloodsea Keep',
-    'canyon.wad': 'Canyon', 'catwalk.wad': 'The Catwalk', 'combine.wad': 'The Combine',
-    'fistula.wad': 'The Fistula', 'garrison.wad': 'The Garrison', 'geryon.wad': 'Geryon',
-    'manor.wad': 'Titan Manor', 'mephisto.wad': 'Mephisto’s Maosoleum',
-    'minos.wad': 'Minos’ Judgement', 'nessus.wad': 'Nessus', 'paradox.wad': 'Paradox',
-    'subspace.wad': 'Subspace', 'subterra.wad': 'Subterra', 'teeth.wad': 'The Express Elevator to Hell',
-    'ttrap.wad': 'Trapped on Titan', 'vesperas.wad': 'Vesperas', 'virgil.wad': 'Virgil’s Lead',
-};
+// The known-WAD tables come from client/js/wad-import.js, which is the source.
+//
+// They were transcribed here, under a comment in each file saying they mirrored
+// each other, and nothing compared them.  They drifted: this copy read
+// "Mephisto’s Maosoleum" against the client's "Mephisto's Mausoleum" -- a
+// misspelling and a curly apostrophe -- so the same WAD got a different title
+// depending on whether it came from the served library or a local import.
+// `minos.wad` and `virgil.wad` differed by apostrophe, and `hacx.wad`'s
+// skipReason existed only client-side, which check-menu-reachable reads.
+//
+// wad-import.js is browser code but its top level touches no DOM, so node can
+// import it; verified by this file doing so.
+import { KNOWN, MASTER_TITLES } from '../client/js/wad-import.js';
+
 
 function lumps(buf) {
     const n = buf.readInt32LE(4), dirOfs = buf.readInt32LE(8), names = [];
