@@ -47,9 +47,10 @@
 //   node ~/.cache/webdoom-pipeline/tools/browser-pipeline.mjs \
 //       --url http://127.0.0.1:8691/ --json
 
-import { spawn, execFileSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { chromeBin } from './chrome-harness.mjs';
 import { launchChrome } from './lib/cdp.mjs';
+import { startServer } from './lib/server.mjs';
 import { sleep } from './lib/util.mjs';
 import { existsSync }          from 'node:fs';
 import { join, dirname }       from 'node:path';
@@ -85,8 +86,6 @@ const MIN_FRAMES     = framesIdx >= 0 ? Number(args[framesIdx + 1]) : 200;
 
 // ── Config (env overrides) ─────────────────────────────────────────────────────
 const CHROME_BIN = chromeBin();
-const DEFAULT_URL  = 'http://127.0.0.1:8666/';
-const SPAWN_PORT   = 8691;
 
 const hostname = os.hostname();
 
@@ -95,7 +94,7 @@ let ownSrv = null;
 
 const cleanup = code => {
     try { chrome?.kill('SIGKILL'); }  catch (_) {}
-    try { ownSrv?.kill('SIGKILL'); }  catch (_) {}
+    try { ownSrv?.stop(); }           catch (_) {}
     process.exit(code);
 };
 process.on('uncaughtException', e => { console.error('uncaught:', e); cleanup(1); });
@@ -104,41 +103,30 @@ process.on('SIGTERM', () => cleanup(1));
 
 const fail = msg => { console.error(`FAIL: ${msg}`); cleanup(1); };
 
-// ── Helper: check if a URL is reachable ───────────────────────────────────────
-const urlReachable = async url => {
-    try {
-        const r = await fetch(url, { signal: AbortSignal.timeout(1500) });
-        return r.ok;
-    } catch (_) { return false; }
-};
-
 // ── 1. Resolve server URL ─────────────────────────────────────────────────────
-let BASE_URL = EXPLICIT_URL ?? DEFAULT_URL;
-
-if (!EXPLICIT_URL) {
-    const alive = await urlReachable(DEFAULT_URL);
-    if (!alive) {
-        let servePath = join(root, 'server/serve.js');
-        if (!existsSync(join(root, 'server/node_modules/ws'))) {
-            try {
-                const out   = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: root }).toString();
-                const first = out.split('\n').find(l => l.startsWith('worktree '));
-                if (first) {
-                    const mainRoot = first.replace('worktree ', '').trim();
-                    if (existsSync(join(mainRoot, 'server/node_modules/ws'))) {
-                        servePath = join(mainRoot, 'server/serve.js');
-                    }
-                }
-            } catch (_) {}
-        }
-        ownSrv = spawn('node', [servePath], {
-            env:   { ...process.env, DOOM_PORT: String(SPAWN_PORT), DOOM_HOST: '127.0.0.1' },
-            stdio: 'ignore',
-        });
-        ownSrv.on('error', e => fail(`server spawn: ${e.message}`));
-        await sleep(1000);
-        BASE_URL = `http://127.0.0.1:${SPAWN_PORT}/`;
+//
+// Without --url this starts its OWN server on a free port, polled ready.  It
+// used to probe http://127.0.0.1:8666/ first and attach to whatever answered
+// -- which on this host is the long-running webdoom.service, a DIFFERENT build
+// from the tree being measured.  A perf harness that silently profiles someone
+// else's binary is worse than one that refuses to run.
+let BASE_URL = EXPLICIT_URL;
+if (!BASE_URL) {
+    // A git worktree has no server/node_modules; the main checkout does, and
+    // `ws` is the server's only dependency.
+    let servePath = join(root, 'server/serve.js');
+    if (!existsSync(join(root, 'server/node_modules/ws'))) {
+        try {
+            const out   = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: root }).toString();
+            const first = out.split('\n').find(l => l.startsWith('worktree '));
+            if (first) {
+                const mainRoot = first.replace('worktree ', '').trim();
+                if (existsSync(join(mainRoot, 'server/node_modules/ws'))) servePath = join(mainRoot, 'server/serve.js');
+            }
+        } catch (_) { /* not a worktree; the default path stands */ }
     }
+    ownSrv = await startServer({ servePath }).catch(e => fail(`server: ${e.message}`));
+    BASE_URL = ownSrv.url;
 }
 
 // ── 2. Launch Chrome with ?perfmarks=1 ────────────────────────────────────────

@@ -394,20 +394,20 @@ flagged NEEDS-Q0 where the JS side might dominate.
 
 #### §C results — cheap pass (task 12.2a, 2026-07-17, commit 13ffb9d)
 
-Measured via `tools/browser-metrics.mjs`: boots webdoom headlessly, navigates
-to E1M1, plays for 60 s (wall), samples `Performance.getMetrics` before and
-after.  Raw golden files: `tools/golden/browser-metrics-<host>.json`.
+Measured in task 12.2a via `tools/browser-metrics.mjs`, RETIRED in round 11:
+it booted webdoom headlessly, played 60 s and sampled `Performance.getMetrics`,
+and nothing compared its two committed goldens against anything — an
+ungated measurement with a golden is a file, not a gate.  The per-stage
+successor is `browser-pipeline` (p50/p90/p99 per stage against a committed
+per-host baseline, leg `browser-pipeline`), and `browser-teardown` covers the
+accumulation question this section opened.  The figures below stand as the
+2026-07-17 measurement they were.  Reproduce the successor (alder):
 
-Reproduce (alder):
 ```
-node tools/browser-metrics.mjs --url http://127.0.0.1:8666/ --json --duration 60
+node tools/browser-pipeline.mjs --json      # starts its own server
 ```
-Reproduce (remote fleet):
-```
-# on wbox: start server, then run script
-DOOM_PORT=8669 node ~/.cache/webdoom-metrics/server/serve.js &
-node ~/.cache/webdoom-metrics/tools/browser-metrics.mjs --url http://127.0.0.1:8669/ --json --duration 60
-```
+
+
 
 **Aggregate results** (ScriptDuration, TaskDuration are cumulative CPU seconds;
 LayoutDuration and RecalcStyleDuration are 0 throughout — DOM does not change

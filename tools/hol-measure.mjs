@@ -6,7 +6,7 @@
 //
 // Usage: node tools/hol-measure.mjs [ws://HOST:PORT]
 // Output (stdout): JSON with p50/p99/max gap stats.
-import { spawn } from 'node:child_process';
+import { startServer } from './lib/server.mjs';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -18,8 +18,6 @@ process.on('uncaughtException', e => {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const argBase = process.argv[2];
-const PORT = argBase ? null : 8694;
-const base = argBase ?? `ws://127.0.0.1:${PORT}`;
 
 const { connectLobby, attachRelay, launchArgs } =
     await import(join(root, 'client/js/net.js'));
@@ -28,19 +26,15 @@ const wadBytes = readFileSync(join(root, 'wads/lib/doom.wad'));
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// a free port polled until it answers (tools/lib/server.mjs), not a fixed
+// port after a fixed sleep
 let server = null;
-if (!argBase) {
-    server = spawn('node', [join(root, 'server/serve.js')], {
-        env: { ...process.env, DOOM_PORT: PORT, DOOM_HOST: '127.0.0.1' },
-        stdio: ['ignore', 'pipe', 'inherit'],
-    });
-    server.stdout.on('data', () => {});
-    await sleep(800);
-}
+if (!argBase) server = await startServer();
+const base = argBase ?? server.ws;
 
 const fail = msg => {
     console.error(`FAIL: ${msg}`);
-    server?.kill();
+    server?.stop();
     process.exit(1);
 };
 
@@ -112,7 +106,7 @@ for (;;) {
 }
 
 for (const c of clients) { c.relay.quit(); c.lobby.close(); }
-server?.kill();
+server?.stop();
 
 // Compute inter-arrival gaps from ticTimestamps (when new tic first observed)
 // Filter: skip first 35 tics (warmup) and last 10 (drain).

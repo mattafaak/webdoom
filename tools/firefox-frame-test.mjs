@@ -30,6 +30,7 @@
 //
 // usage: node tools/firefox-frame-test.mjs [url] [outdir]
 import { spawn } from 'node:child_process';
+import { startServer } from './lib/server.mjs';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -37,22 +38,21 @@ import { fileURLToPath } from 'node:url';
 import { pngStats } from './png-stats.mjs';
 
 const root   = join(dirname(fileURLToPath(import.meta.url)), '..');
-const url    = process.argv[2] ?? 'http://127.0.0.1:8694/';
+let   url    = process.argv[2] ?? null;
 const outdir = process.argv[3] ?? tmpdir();
 const PORT   = 9280;
 const FF     = process.env.FIREFOX_BIN ?? '/usr/bin/firefox';
 const sleep  = ms => new Promise(r => setTimeout(r, ms));
 
-// Spawn our own server unless a URL was given, so the leg is self-contained
-// (a dedicated port: the 12.2b stale-server lesson).
-const PAGE_PORT = 8694;
+// Spawn our own server unless a URL was given, so the leg is self-contained.
+// tools/lib/server.mjs allocates a free port and POLLS it ready.  This was
+// port 8694 after a 1,200 ms sleep, which restates the 12.2b stale-server
+// lesson rather than applying it: a fixed port is exactly what an orphan from
+// an earlier run is already listening on, and a sleep cannot tell them apart.
 let srv = null;
-if (process.argv[2] === undefined) {
-    srv = spawn('node', [join(root, 'server/serve.js')], {
-        env: { ...process.env, DOOM_PORT: String(PAGE_PORT), DOOM_HOST: '127.0.0.1' },
-        stdio: ['ignore', 'ignore', 'ignore'],
-    });
-    await sleep(1200);
+if (!url) {
+    srv = await startServer();
+    url = srv.url;
 }
 
 const profile = mkdtempSync(join(tmpdir(), 'ff-frame-'));
@@ -65,13 +65,13 @@ let finished = false;
 const cleanup = code => {
     if (finished) return; finished = true;
     try { process.kill(-ff.pid, 'SIGKILL'); } catch { try { ff.kill('SIGKILL'); } catch { /* gone */ } }
-    try { srv?.kill('SIGKILL'); } catch { /* gone */ }
+    try { srv?.stop(); } catch { /* gone */ }
     rmSync(profile, { recursive: true, force: true });
     process.exit(code);
 };
 process.on('exit', () => {
     try { process.kill(-ff.pid, 'SIGKILL'); } catch { /* gone */ }
-    try { srv?.kill('SIGKILL'); } catch { /* gone */ }
+    try { srv?.stop(); } catch { /* gone */ }
 });
 const fail = msg => { console.error(`FAIL: ${msg}`); cleanup(1); };
 

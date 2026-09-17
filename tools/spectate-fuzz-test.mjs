@@ -14,7 +14,7 @@
 // refused" are the same observation from the attacker's side.
 //
 // usage: node tools/spectate-fuzz-test.mjs
-import { spawn } from 'node:child_process';
+import { startServer } from './lib/server.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -24,24 +24,21 @@ process.on('uncaughtException', e => {
 });
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const PORT = Number(process.env.SPECTATE_FUZZ_PORT ?? 8681);
-const base = `ws://127.0.0.1:${PORT}`;
 const MAX_SPECTATORS = 2;                  // pinned low so the cap is reachable
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const { connectLobby } = await import(join(root, 'client/js/net.js'));
 
+// A free port polled until it answers, not 8681 after a 900 ms sleep: an
+// orphan from an earlier run answers just as well as this one.
 let crashed = null;
-const server = spawn('node', [join(root, 'server/serve.js')], {
-    env: { ...process.env, DOOM_PORT: String(PORT), DOOM_HOST: '127.0.0.1',
-           WEBDOOM_MAX_SPECTATORS: String(MAX_SPECTATORS) },
-    stdio: ['ignore', 'ignore', 'pipe'],
+const srv = await startServer({
+    env: { WEBDOOM_MAX_SPECTATORS: String(MAX_SPECTATORS) },
+    onStderr: t => { if (/Error:|at Object\.|at Module\.|UnhandledPromise/.test(t)) crashed ??= t.slice(0, 200); },
 });
-server.stderr.on('data', d => {
-    const t = d.toString();
-    if (/Error:|at Object\.|at Module\.|UnhandledPromise/.test(t)) crashed ??= t.slice(0, 200);
-});
-await sleep(900);
+const server = srv.proc;
+const PORT = srv.port;
+const base = srv.ws;
 
 let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log(`PASS ${m}`); };
@@ -164,7 +161,7 @@ if (crashed) bad(`server logged a crash at some point: ${crashed}`);
 
 a.close(); b.close();
 await sleep(200);
-server.kill();
+srv.stop();
 
 const total = pass + fail;
 if (total < 8) { console.log(`FAIL spectate-fuzz: only ${total} case(s) ran — the suite did not run`); process.exit(1); }

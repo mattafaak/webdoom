@@ -1,9 +1,29 @@
 // Start a webdoom server for a test and wait until it answers.  Readiness is
 // an HTTP poll with a timeout, never a fixed sleep; a port is allocated unless
 // given, so an orphan from an earlier run cannot be mistaken for this one.
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { root, sleep, freePort } from './util.mjs';
+
+// Who is actually listening on this port?  A free port plus a readiness poll
+// still cannot tell THIS server from one that raced in ahead of it, and that
+// is the 12.2b lesson: a stale server answers just as well and serves a
+// different build.  run-tests.sh has asserted ownership since round 4
+// (assert_port_owned); the shared helper did not, so every leg on it was one
+// race away from measuring somebody else.  No `ss` means "could not verify",
+// which is said out loud rather than passed over -- an unverifiable check that
+// looks like a passing one is the shape this project keeps naming.
+function assertOwned(port, pid) {
+    let out;
+    try { out = execFileSync('ss', ['-tlnpH', `sport = :${port}`], { encoding: 'utf8' }); }
+    catch { return `port ${port} ownership NOT verified (ss unavailable)`; }
+    const owner = /pid=(\d+)/.exec(out)?.[1];
+    if (!owner) throw new Error(`port ${port}: ss sees no listener, but the server just answered on it`);
+    if (owner !== String(pid))
+        throw new Error(`port ${port} is held by pid ${owner}, not the server we started (pid ${pid}) — ` +
+                        `a foreign or orphaned server would have been tested instead of this build`);
+    return null;
+}
 
 export async function startServer({ port = null, env = {}, servePath = join(root, 'server/serve.js'),
                                      onStderr = null, onStdout = null, readyMs = 15000 } = {}) {
@@ -34,5 +54,8 @@ export async function startServer({ port = null, env = {}, servePath = join(root
         if (Date.now() > deadline) { stop(); throw new Error(`server on ${port} not ready in ${readyMs} ms`); }
         await sleep(150);
     }
-    return { proc, port, url: `http://127.0.0.1:${port}/`, ws: `ws://127.0.0.1:${port}`, stop };
+    let note = null;
+    try { note = assertOwned(port, proc.pid); }
+    catch (e) { stop(); throw e; }
+    return { proc, port, note, url: `http://127.0.0.1:${port}/`, ws: `ws://127.0.0.1:${port}`, stop };
 }

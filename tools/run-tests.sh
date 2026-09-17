@@ -637,7 +637,7 @@ leg browser-insecure browser "real insecure origin: IDB WAD cache + music fallba
 # committed per host -- a host without one SKIPs by name, as browser-pipeline does.
 leg load-budget     browser,loadbudget,build,wad,alone "warm load within this host's budget (rme-005)" -- node tools/load-budget-test.mjs
 leg browser-pipeline browser,baseline,alone "per-frame JS/GPU cost vs this host's baseline" -- bash tools/pipeline-gate.sh
-leg firefox-smoke    firefox "Firefox UA executes JS and fetches /api/wads" -- bash tools/firefox-smoke.sh
+leg firefox-smoke    firefox "Firefox UA executes JS and fetches /api/wads" -- node tools/firefox-smoke.mjs
 # rme-002: firefox-smoke proves the HTML parsed and JS ran; it asserts NO frame.
 # Firefox 155 does not speak CDP at all (--remote-debugging-port serves WebDriver
 # BiDi, /json/list 404s), so this drives BiDi. It runs under Xvfb, NOT --headless:

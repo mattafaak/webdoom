@@ -43,7 +43,7 @@
 // run); a fresh profile forces the online phase to actually fill the caches
 // before we go offline.
 //
-// Dedicated server on port 8692 (not 8668): run-tests.sh keeps its own
+// Its own server on a free port (tools/lib/server.mjs) (not 8668): run-tests.sh keeps its own
 // server alive for the remaining suites; killing 8668 from inside this test
 // would break all subsequent browser gates.
 //

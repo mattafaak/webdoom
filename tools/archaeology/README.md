@@ -47,7 +47,7 @@ three sources per claim.
 
 These produce numbers or artifacts rather than verdicts, so `gate-census`
 does not count them and no leg runs them: `bench.mjs` (run remotely by
-`fleet-bench.sh`, the `perf-fleet` leg), `browser-metrics.mjs`, `gen-tables.mjs`
+`fleet-bench.sh`, the `perf-fleet` leg), `browser-pipeline.mjs`, `gen-tables.mjs`
 (writes `golden/tables-canon.json`), `hol-measure.mjs`, `plane-measure.mjs`,
 `zone-measure.mjs`, `build-choco-reference.sh` (needs SDL2),
 `freestanding/{cycle-attrib,cycle-floor,gen-imports,zone-stats}.sh`,
