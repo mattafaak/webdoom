@@ -32,3 +32,9 @@ qemu_*.core
 
 # N64 gate scratch: per-demo ROMs (14 MB each) and ares logs, rebuilt every run.
 tools/n64/n64_trace_work/
+
+# Python bytecode caches: generated whenever compare.py is imported (the
+# freestanding Makefile does), invalidated by any edit or interpreter bump.
+# One was committed by accident in 6a5a930 and read by nothing.
+__pycache__/
+*.pyc

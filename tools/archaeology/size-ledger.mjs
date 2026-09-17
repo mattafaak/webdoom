@@ -29,6 +29,7 @@ import { readFileSync, statSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { gzipSize } from '../lib/gzip.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -44,26 +45,8 @@ function fileSize(path) {
     try { return statSync(path).size; } catch { return null; }
 }
 
-// A gzip that FAILS must return null, not a number.
-//
-// This was `gzip -9kc "file" | wc -c`, and execSync runs that through /bin/sh,
-// which has no pipefail -- so the pipeline's status is wc's, and wc succeeds at
-// counting nothing. A missing or unreadable file therefore returned the STRING
-// "0", parseInt made it the NUMBER 0, and the surrounding try/catch never fired
-// because nothing ever threw. Measured: gzipSize('/nonexistent') === 0, which
-// then flows on as a real measurement -- size-002 would be published as 0 bytes.
-//
-// Dropping the pipe is the whole fix: gzip's own non-zero exit reaches
-// execSync, which throws, and stdout's length is the same number `wc -c` was
-// counting. Verified byte-identical on both artifacts (doom.wasm 147,308,
-// doom.js 3,762), which matters because these are GATED claims -- switching to
-// zlib.gzipSync instead would have been 298 bytes smaller on doom.wasm and
-// silently moved a published figure.
-function gzipSize(path) {
-    try {
-        return execSync(`gzip -9kc "${path}"`, { maxBuffer: 1 << 28 }).length;
-    } catch { return null; }
-}
+// gzipSize now lives in tools/lib/gzip.mjs -- see there for why it shells out
+// rather than using zlib, and for the 769-byte disagreement that copy caused.
 
 function fsDoomTextSize(binPath) {
     try {

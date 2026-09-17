@@ -150,6 +150,41 @@
       "words": 2684,
       "long": 12,
       "rate": 15.6
+    },
+    "tools/archaeology/README.md": {
+      "words": 186,
+      "long": 2,
+      "emdash": 0
+    },
+    "tools/baremetal/README.md": {
+      "words": 1130,
+      "long": 6,
+      "rate": 13.3
+    },
+    "tools/coverage/NEGATIVE-SPACE.md": {
+      "words": 1016,
+      "long": 1,
+      "rate": 23.6
+    },
+    "tools/coverage/REPORT.md": {
+      "words": 84,
+      "long": 0,
+      "emdash": 2
+    },
+    "tools/freestanding/BE-NOTES.md": {
+      "words": 2068,
+      "long": 3,
+      "rate": 6.3
+    },
+    "tools/freestanding/IMPORTS.md": {
+      "words": 202,
+      "long": 0,
+      "emdash": 0
+    },
+    "tools/golden/archive/README.md": {
+      "words": 150,
+      "long": 1,
+      "emdash": 3
     }
   }
 }

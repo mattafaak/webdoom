@@ -16,7 +16,7 @@
 //
 // usage: node tools/payload-size.mjs [--record]
 import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
-import { gzipSync } from 'node:zlib';
+import { gzipSize } from './lib/gzip.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -42,7 +42,7 @@ for (const url of shell) {
     const p = resolve(url);
     if (!existsSync(p) || !statSync(p).isFile()) { missing.push(url); continue; }
     const buf = readFileSync(p);
-    rows.push({ url, raw: buf.length, gz: gzipSync(buf, { level: 9 }).length,
+    rows.push({ url, raw: buf.length, gz: gzipSize(p),
                 engine: url.startsWith('/engine/') });
 }
 if (missing.length) {

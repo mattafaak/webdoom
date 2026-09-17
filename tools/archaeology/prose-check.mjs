@@ -100,6 +100,20 @@ function corpus() {
         if (!existsSync(d)) continue;
         for (const f of readdirSync(d)) if (f.endsWith('.md')) files.push(`docs/${sub}/${f}`);
     }
+    // ...and the markdown under tools/, which BOTH documentation gates missed:
+    // docs-index-check scopes to docs/, and this file used to as well, leaving
+    // ~1,900 lines ungated.  One of them, tools/archaeology/README.md, carries
+    // a registry of measurement tools that nothing enforced.
+    const walk = (rel) => {
+        const abs = join(root, rel);
+        if (!existsSync(abs)) return;
+        for (const e of readdirSync(abs, { withFileTypes: true })) {
+            if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
+            if (e.isDirectory()) walk(`${rel}/${e.name}`);
+            else if (e.name.endsWith('.md')) files.push(`${rel}/${e.name}`);
+        }
+    };
+    walk('tools');
     return files.sort();
 }
 
