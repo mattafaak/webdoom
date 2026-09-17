@@ -12,6 +12,7 @@
 #   tools/run-tests.sh                 # full tier (everything)
 #   tools/run-tests.sh --quick         # no WADs, no build, no browser — clone-safe
 #   tools/run-tests.sh --only ID [...] # run just these legs
+#   tools/run-tests.sh --jobs N        # N legs at a time (round 10); 1 = serial
 #   tools/run-tests.sh --list          # print the leg registry and exit
 #   tools/run-tests.sh --require-complete   # a SKIP is a failure
 #
@@ -29,9 +30,13 @@ NO_SLOW=0
 REQUIRE_COMPLETE=0
 ONLY=()
 LIST=0
+JOBS=1
 while [ $# -gt 0 ]; do
     case "$1" in
         --quick)            TIER=quick; shift ;;
+        # legs run N at a time, each on its own server and port; a leg tagged
+        # `alone` (CPU-heavy or timing-graded) drains the pool first
+        --jobs)             JOBS="$2"; shift 2 ;;
         # opt-in because it reaches other machines (~30 s), not because it is
         # slow; it SKIPs, named and counted, in the default run
         --perf)             PERF=1; shift ;;
@@ -115,6 +120,8 @@ declare -A NEED=(
     [shared]='have_shared|shared browser server on 8668 not started'
     [slow]='have_notslow|--no-slow given: this leg is ~7 min of the suite'
     [perf]='have_perf|perf tier not requested (run: tools/run-tests.sh --perf; ~30 s measured, needs wbox and tank up)'
+    # not a prerequisite: under --jobs the leg runs with the pool drained
+    [alone]='true|'
 )
 need_reason() {   # need_reason <tag> -> why it is unmet
     case "$1" in
@@ -160,24 +167,39 @@ leg() {
         [ "$want" = "1" ] || return 0
     fi
 
+    ORDER+=("$id")
     local t
     for t in ${needs//,/ }; do
         [ "$t" = "-" ] && continue
+        # a fresh-* need under --jobs is judged when the leg launches, after
+        # the build-* leg it waits on has finished
+        [ "$JOBS" -gt 1 ] && [[ "$t" == fresh-* ]] && continue
         if ! need_met "$t"; then
-            local why; why="$(need_reason "$t")"
-            printf '\n── %-26s SKIP — %s\n' "$id" "$why"
-            printf '%s\tSKIP\t0\t%s\n' "$id" "$why" >> "$SUMMARY"
-            SKIPPED=$((SKIPPED + 1))
+            skip_leg "$id" "$(need_reason "$t")"
             return 0
         fi
     done
+
+    if [ "$JOBS" -gt 1 ]; then
+        QUEUE+=("$id"$'\t'"$desc"$'\t'"$needs"$'\t'"$(printf '%q ' "$@")")
+        return 0
+    fi
 
     printf '\n── %-26s %s\n' "$id" "$desc"
     local log="$LOGDIR/$id.log" rc=0 t0 t1
     t0=$(date +%s)
     bash tools/gate.sh --tail 2 --log "$log" "$id" -- "$@" || rc=$?
     t1=$(date +%s)
-    local secs=$((t1 - t0)) head; head="$(headline "$log" "$rc")"
+    record_leg "$id" "$rc" "$((t1 - t0))"
+}
+skip_leg() {   # skip_leg <id> <why>
+    printf '\n── %-26s SKIP — %s\n' "$1" "$2"
+    printf '%s\tSKIP\t0\t%s\n' "$1" "$2" >> "$SUMMARY"
+    SKIPPED=$((SKIPPED + 1))
+}
+record_leg() {   # record_leg <id> <rc> <secs>
+    local id="$1" rc="$2" secs="$3" log="$LOGDIR/$1.log" head
+    head="$(headline "$log" "$rc")"
     if [ "$rc" -eq 0 ]; then
         PASSED=$((PASSED + 1))
         printf '%s\tPASS\t%s\t%s\n' "$id" "$secs" "$head" >> "$SUMMARY"
@@ -187,6 +209,89 @@ leg() {
         mkdir -p "$REPO/tools/.suite-logs"
         cp "$log" "$REPO/tools/.suite-logs/$id.log" 2>/dev/null || true
     fi
+}
+
+# ── --jobs: the scheduler ────────────────────────────────────────────────────
+# leg() enqueues `id \t desc \t needs \t cmd` (cmd %q-quoted); this runs up to
+# JOBS at a time in their own process groups, each `shared` leg on a server of
+# its own, an `alone` leg with the pool drained before and after, and a leg
+# whose fresh-X need waits on build-X after that leg has finished.  Output is
+# collected per leg and printed under its heading when it completes, so a
+# FAIL still sits under its own name; the table is assembled in registry order.
+QUEUE=()
+ORDER=()
+declare -A RUNNING=()     # pid -> id
+declare -A LEG_T0=()
+declare -A LEG_SRV=()     # id -> private server pid
+declare -A DONE=()        # id -> 1 once finished (for fresh-X waits)
+free_port() { node -e "const s=require('node:net').createServer();s.listen(0,'127.0.0.1',()=>{console.log(s.address().port);s.close()})"; }
+launch_leg() {   # launch_leg <id> <desc> <needs> <cmd>
+    local id="$1" desc="$2" needs="$3" cmd="$4" t
+    for t in ${needs//,/ }; do
+        if [[ "$t" == fresh-* ]] && ! need_met "$t"; then
+            skip_leg "$id" "$(need_reason "$t")"; DONE[$id]=1; return 0
+        fi
+    done
+    if [[ ",$needs," == *,shared,* ]]; then
+        local port; port="$(free_port)"
+        if ! serve_start "$port" > "$LOGDIR/$id.srv" 2>&1; then
+            cat "$LOGDIR/$id.srv"; skip_leg "$id" "private browser server on $port did not start"; DONE[$id]=1; return 0
+        fi
+        LEG_SRV[$id]="${SERVERS[-1]}"
+        cmd="${cmd//__SHARED_URL__/http://127.0.0.1:$port/}"
+    fi
+    LEG_T0[$id]=$(date +%s)
+    setsid bash -c "exec bash tools/gate.sh --tail 2 --log \"$LOGDIR/$id.log\" \"$id\" -- $cmd" \
+        > "$LOGDIR/$id.out" 2>&1 &
+    RUNNING[$!]="$id"
+}
+reap_one() {   # wait for any running leg and record it
+    local pid rc=0 id
+    wait -n -p pid ${!RUNNING[@]} || rc=$?
+    id="${RUNNING[$pid]}"; unset "RUNNING[$pid]"
+    printf '\n── %-26s %s\n' "$id" "$(grep -m1 -oP "^\Q$id\E\t\K[^\t]*" <<< "$(printf '%s\n' "${QUEUE[@]}")")"
+    cat "$LOGDIR/$id.out"
+    record_leg "$id" "$rc" "$(( $(date +%s) - LEG_T0[$id] ))"
+    DONE[$id]=1
+    if [ -n "${LEG_SRV[$id]-}" ]; then kill "${LEG_SRV[$id]}" 2>/dev/null; wait "${LEG_SRV[$id]}" 2>/dev/null; unset "LEG_SRV[$id]"; fi
+}
+drain() { while [ "${#RUNNING[@]}" -gt 0 ]; do reap_one; done; }
+run_queue() {
+    local n="${#QUEUE[@]}" pending=() i e id desc needs cmd launched
+    for ((i = 0; i < n; i++)); do pending+=("$i"); done
+    while [ "${#pending[@]}" -gt 0 ] || [ "${#RUNNING[@]}" -gt 0 ]; do
+        launched=0
+        local rest=()
+        for i in "${pending[@]}"; do
+            e="${QUEUE[$i]}"
+            IFS=$'\t' read -r id desc needs cmd <<< "$e"
+            local blocked=0 t
+            for t in ${needs//,/ }; do
+                [[ "$t" == fresh-* ]] && [ -z "${DONE[build-${t#fresh-}]-}" ] && blocked=1
+            done
+            if [ "$blocked" = "1" ] || [ "$launched" = "1" ] || [ "${#RUNNING[@]}" -ge "$JOBS" ]; then rest+=("$i"); continue; fi
+            if [[ ",$needs," == *,alone,* ]]; then
+                drain; launch_leg "$id" "$desc" "$needs" "$cmd"; drain
+            else
+                launch_leg "$id" "$desc" "$needs" "$cmd"
+            fi
+            launched=1
+        done
+        pending=("${rest[@]}")
+        # nothing launched: either the pool is full or every pending leg is
+        # blocked -- in both cases wait for one to finish
+        if [ "$launched" = "0" ]; then
+            if [ "${#RUNNING[@]}" -gt 0 ]; then reap_one
+            elif [ "${#pending[@]}" -gt 0 ]; then
+                # blocked forever: the build-* leg it waits on is not in this run
+                for i in "${pending[@]}"; do
+                    IFS=$'\t' read -r id desc needs cmd <<< "${QUEUE[$i]}"
+                    launch_leg "$id" "$desc" "$needs" "$cmd"
+                done
+                pending=(); drain
+            fi
+        fi
+    done
 }
 
 # ── throwaway servers ────────────────────────────────────────────────────────
@@ -239,8 +344,12 @@ serve_stop_all() {
     for p in ${SERVERS[@]+"${SERVERS[@]}"}; do kill "$p" 2>/dev/null; wait "$p" 2>/dev/null; done
     SERVERS=()
 }
-# one trap for every server this run starts
-cleanup() { serve_stop_all; rm -rf "$LOGDIR"; }
+# one trap for every server and every running leg this run starts
+cleanup() {
+    local p
+    for p in ${!RUNNING[@]+"${!RUNNING[@]}"}; do kill -- "-$p" 2>/dev/null; kill "$p" 2>/dev/null; done
+    serve_stop_all; rm -rf "$LOGDIR"
+}
 trap cleanup EXIT INT TERM
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -381,7 +490,7 @@ leg build-invariants emsdk     "compile -DWEBDOOM_INVARIANTS"          -- bash t
 leg sim-invariants   wad,fresh-invariants     "13 demos, armed asserts, renderer running, freelook + interpolation active" -- node tools/demo-test.mjs --sim-drawn --smooth --fractic 32768 --pitch 40 --build-dir build-invariants
 
 # ── differential + goldens ───────────────────────────────────────────────────
-leg fuzz-diff       native,wad "20 mutated demos: wasm == native"      -- node tools/fuzz/run-fuzz.mjs --seeds 20 --parallel 8 --require-native
+leg fuzz-diff       native,wad,alone "20 mutated demos: wasm == native"      -- node tools/fuzz/run-fuzz.mjs --seeds 20 --parallel 8 --require-native
 leg sim-goldens     build,wad  "13 demos, per-tic gamestate hashes"    -- node tools/demo-test.mjs
 leg render-goldens  build,wad  "13 demos, per-tic framebuffer hashes"  -- node tools/demo-test.mjs --render
 leg render-low      build,wad  "low-detail render goldens (14.2b)"     -- node tools/demo-test.mjs --render --low-detail
@@ -400,7 +509,7 @@ leg golden-provenance -        "every golden says where it came from"       -- n
 # Plans; also hand-run.  demo-verify.mjs is the SHIPPED 19.4 CLI, and its test
 # re-implements the logic rather than importing it, so the CLI's own argv
 # handling, --all mode and size cap were ungated.
-leg native-asan     native,wad "13 demos under ASan/UBSan (README's claim)"  -- bash tools/native-sanitize/run-all.sh wads/lib tools/native-sanitize/out sim
+leg native-asan     native,wad,alone "13 demos under ASan/UBSan (README's claim)"  -- bash tools/native-sanitize/run-all.sh wads/lib tools/native-sanitize/out sim
 leg freestanding-sim fs,wad    "fs-doom 13/13 == vanilla (rung 1 proof)"     -- bash tools/freestanding/run-check.sh
 leg ro-wad          fs,wad     "WAD blob stays read-only over 13 demos (XIP)" -- bash tools/freestanding/ro-wad-check.sh
 # The ARM reference, on alder (F4).  spec.md lists pi5 as "ARM reference", but
@@ -417,7 +526,7 @@ leg arm-cross       zig,qemuarm,wad "freestanding core 13/13 on 32-bit ARM" -- b
 # for the 13 demos (23:30:40 -> 23:38:59, 2026-09-11) -- the longest leg in the
 # suite by a wide margin, and it is here rather than in the out-of-suite
 # registry because it is now green and a gate nobody runs rots.
-leg n64-demos       n64,wad,slow    "13/13 demo sim-hashes on emulated N64 (~8 min)" -- bash tools/n64/run-n64-demos.sh
+leg n64-demos       n64,wad,slow,alone "13/13 demo sim-hashes on emulated N64 (~8 min)" -- bash tools/n64/run-n64-demos.sh
 leg demo-verify-cli build,wad  "the shipped 19.4 CLI itself, --all mode"     -- node tools/demo-verify.mjs --all
 
 # ── netcode determinism ──────────────────────────────────────────────────────
@@ -441,7 +550,7 @@ leg demo-seek       build,wad  "scrubber seek == linear replay (19.3)" -- node t
 leg demo-verify     build,wad  "13 goldens + doctored + hostile (19.4)" -- node tools/demo-verify-test.mjs
 
 # ── tenet 4: the sanitizer IS the gate ───────────────────────────────────────
-leg adversarial-map native,wad "30 adversarial maps, 0 ASan/UBSan reports" -- node tools/fuzz/run-map-fuzz.mjs --adversarial-gate
+leg adversarial-map native,wad,alone "30 adversarial maps, 0 ASan/UBSan reports" -- node tools/fuzz/run-map-fuzz.mjs --adversarial-gate
 
 # The other direction (task 23.8).  Every other fuzz gate points hostile CLIENT
 # at the server; this points a hostile SERVER at the engine, which is the
@@ -477,7 +586,11 @@ leg wad-content-fuzz build,wad "hostile GENMIDI/MUS lump payloads (23.2)" -- nod
 if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^persist$'; then
     U=http://127.0.0.1:8668/
     if have_browser && have_build && have_wad; then
-        if serve_start 8668; then SHARED_UP=1; else
+        if [ "$JOBS" -gt 1 ]; then
+            # each browser leg gets its own server when it launches: two legs
+            # on one lobby would see each other's games
+            U=__SHARED_URL__; SHARED_UP=1
+        elif serve_start 8668; then SHARED_UP=1; else
             echo "  note: shared browser server on 8668 did not start — the 16 legs below will each SKIP"
         fi
     fi
@@ -511,7 +624,7 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
         # across three cycles: growth that repeats per cycle is a leak, a one-off
         # difference is not.
     leg browser-teardown  browser,build,wad,shared "play->quit->play x3 leaks nothing"      -- node tools/browser-teardown-test.mjs "$U"
-    [ "$SHARED_UP" = "1" ] && serve_stop_all
+    [ "$SHARED_UP" = "1" ] && [ "$JOBS" -le 1 ] && serve_stop_all
 fi
 
 # These three own their servers (dedicated ports, per the 12.2b stale-server
@@ -520,8 +633,8 @@ leg browser-insecure browser "real insecure origin: IDB WAD cache + music fallba
 # rme-005: "second load is instant". The offline half is gated; "instant" was a
 # performance claim with no gate. This is a REGRESSION gate against a baseline
 # committed per host -- a host without one SKIPs by name, as browser-pipeline does.
-leg load-budget     browser,loadbudget,build,wad "warm load within this host's budget (rme-005)" -- node tools/load-budget-test.mjs
-leg browser-pipeline browser,baseline "per-frame JS/GPU cost vs this host's baseline" -- bash tools/pipeline-gate.sh
+leg load-budget     browser,loadbudget,build,wad,alone "warm load within this host's budget (rme-005)" -- node tools/load-budget-test.mjs
+leg browser-pipeline browser,baseline,alone "per-frame JS/GPU cost vs this host's baseline" -- bash tools/pipeline-gate.sh
 leg firefox-smoke    firefox "Firefox UA executes JS and fetches /api/wads" -- bash tools/firefox-smoke.sh
 # rme-002: firefox-smoke proves the HTML parsed and JS ran; it asserts NO frame.
 # Firefox 155 does not speak CDP at all (--remote-debugging-port serves WebDriver
@@ -542,40 +655,49 @@ leg firefox-frame   firefox,xvfb,build,wad "Firefox renders a real frame via Web
 # --check is what makes it a gate rather than a recorder: fleet-bench.sh
 # normally ENDS by rewriting tools/golden/bench-baseline.json, and a gate that
 # rewrites its own reference to match what it just measured cannot fail.
-leg perf-fleet      perf,build,wad "per-stage render ms on alder+wbox+tank vs baseline" -- bash tools/fleet-bench.sh --check
+leg perf-fleet      perf,build,wad,alone "per-stage render ms on alder+wbox+tank vs baseline" -- bash tools/fleet-bench.sh --check
 
 fi   # QUICK_ONLY
+
+[ "$JOBS" -gt 1 ] && run_queue
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════════════════════
+# rows land in completion order under --jobs; the table is registry order
+ORDERED="$LOGDIR/ordered.tsv"
+for id in ${ORDER[@]+"${ORDER[@]}"}; do grep -m1 "^$id"$'\t' "$SUMMARY" || true; done > "$ORDERED"
 echo
 echo "══════════════════════════════════════════════════════════════════════════════"
 printf '  %-22s %-11s %5s  %s\n' LEG VERDICT SECS "WHAT IT REPORTED"
 echo "  ────────────────────────────────────────────────────────────────────────────"
 while IFS=$'\t' read -r id verdict secs note; do
     printf '  %-22s %-11s %5s  %s\n' "$id" "$verdict" "$secs" "$note"
-done < "$SUMMARY"
+done < "$ORDERED"
 echo "  ────────────────────────────────────────────────────────────────────────────"
 
 # ── persist the per-leg table ────────────────────────────────────────────────
-# the only per-leg timing this project produces; kept beside the failing logs
+# the only per-leg timing this project produces; kept beside the failing logs.
+# Only a whole-tier run writes it: an --only run used to overwrite it with a
+# handful of legs labelled as the tier.
 ELAPSED=$(( $(date +%s) - SUITE_T0 ))
-mkdir -p "$REPO/tools/.suite-logs"
-{
-    printf '# webdoom suite — %s, tier %s, host %s, %d s\n' "$(date -Is)" "$TIER" "$(hostname)" "$ELAPSED"
-    printf '# leg\tverdict\tsecs\theadline\n'
-    cat "$SUMMARY"
-} > "$REPO/tools/.suite-logs/last-run.tsv" 2>/dev/null || true
+if [ "${#ONLY[@]}" -eq 0 ]; then
+    mkdir -p "$REPO/tools/.suite-logs"
+    {
+        printf '# webdoom suite — %s, tier %s, host %s, jobs %s, %d s\n' "$(date -Is)" "$TIER" "$(hostname)" "$JOBS" "$ELAPSED"
+        printf '# leg\tverdict\tsecs\theadline\n'
+        cat "$ORDERED"
+    } > "$REPO/tools/.suite-logs/last-run.tsv" 2>/dev/null || true
+fi
 
 TOTAL=$((PASSED + FAILED + SKIPPED))
-printf '  %d legs: %d passed, %d failed, %d skipped  (tier: %s, %d min %d s)\n' \
-       "$TOTAL" "$PASSED" "$FAILED" "$SKIPPED" "$TIER" "$((ELAPSED / 60))" "$((ELAPSED % 60))"
+printf '  %d legs: %d passed, %d failed, %d skipped  (tier: %s, jobs: %s, %d min %d s)\n' \
+       "$TOTAL" "$PASSED" "$FAILED" "$SKIPPED" "$TIER" "$JOBS" "$((ELAPSED / 60))" "$((ELAPSED % 60))"
 if [ "$NOTES" -gt 0 ]; then
     printf '  %d note(s) — something could not be verified:\n' "$NOTES"
     printf '    %s\n' "${NOTE_TEXT[@]}"
 fi
-printf '  per-leg timings: tools/.suite-logs/last-run.tsv\n'
+[ "${#ONLY[@]}" -eq 0 ] && printf '  per-leg timings: tools/.suite-logs/last-run.tsv\n'
 
 # A run that executed no legs is not a pass — the shape this whole round exists
 # to remove (failure mode #3).

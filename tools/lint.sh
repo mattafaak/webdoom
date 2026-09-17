@@ -19,6 +19,9 @@
 #
 # engine/core/ is EXEMPT (vendored linuxdoom-1.10 archaeology record).
 set -euo pipefail
+NODE_CHECK_ERR="$(mktemp -t node-check-err-XXXXXX)"
+trap 'rm -f "$NODE_CHECK_ERR"' EXIT
+
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -166,9 +169,9 @@ fi
 
 NODE_FAIL=0
 for f in ${JS_FILES[@]+"${JS_FILES[@]}"}; do
-    if ! node --check "$f" 2>/tmp/node-check-err; then
+    if ! node --check "$f" 2>"$NODE_CHECK_ERR"; then
         echo "lint: FAIL node --check $f"
-        cat /tmp/node-check-err
+        cat "$NODE_CHECK_ERR"
         NODE_FAIL=1
     fi
 done
