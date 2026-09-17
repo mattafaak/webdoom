@@ -467,6 +467,20 @@ async function checkWire() {
     check('wire: security headers on a negotiated response',
           hdr(br, 'x-content-type-options') === 'nosniff' && !!hdr(br, 'content-security-policy'),
           hdr(br, 'x-content-type-options') ?? '(absent)');
+    // /api/status: counts only, GET only, and it must not need a lobby.
+    const st = await get('/api/status');
+    let body = null;
+    try { body = JSON.parse(st.body); } catch { /* not JSON */ }
+    check('status: GET /api/status is counts-only JSON',
+          st.status === 200 && body && typeof body.session === 'boolean' &&
+          typeof body.players === 'number' && typeof body.spectators === 'number',
+          `status=${st.status} body=${st.body.slice(0, 90)}`);
+    check('status: it leaks no names, slots or addresses',
+          body && !/name|slot|addr|ip\b/i.test(st.body), st.body.slice(0, 90));
+    const post = await rawHttp(s.host, s.port,
+        `POST /api/status HTTP/1.1\r\nHost: ${s.host}:${s.port}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+    check('status: a non-GET is refused', post.status === 405, `status=${post.status}`);
+
     const alive = await healthCheck(s.host, s.port);
     check('wire: server still up', alive && !s.didCrash(), `alive=${alive}`);
     s.kill();

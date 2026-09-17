@@ -49,7 +49,12 @@ LAN players (or tailnet peers) just open the URL. First player into the
 Multiplayer panel is Green, second Indigo, then Brown, Red. Anyone picks
 the game/map/skill/mode; anyone hits START; 3-2-1, everyone's in.
 
-`webdoom.service` is a ready systemd unit.
+`webdoom.service` is a ready systemd unit. It runs `node server/serve.js` out
+of this directory, so the client files it serves are whatever is on disk while
+the server process is whatever was running when it started — those drift.
+`tools/deploy.sh` closes the gap: it runs the quick tier, refuses while anyone
+is mid-game (`GET /api/status` reports counts only), restarts the unit, and
+re-probes. `tools/deploy.sh --check` reports drift and changes nothing.
 
 ## Layout
 

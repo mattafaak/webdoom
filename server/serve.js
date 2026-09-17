@@ -204,6 +204,14 @@ const server = createServer((req, res) => {
     }
     if (path.startsWith('/api/demos/')) return send(req, res, 400, 'invalid demo id');
 
+    // GET /api/status — counts only: is a game live, how many are in it.
+    // No names, no slots, no addresses; an operator needs to know whether a
+    // restart would drop anyone, and nothing more.
+    if (path === '/api/status') {
+        if (req.method !== 'GET') return send(req, res, 405, 'method not allowed');
+        return send(req, res, 200, JSON.stringify(game.status()), { 'content-type': 'application/json' });
+    }
+
     if (path === '/api/ui-assets') {
         const { parsed } = manifest();
         if (!parsed) return send(req, res, 503, 'wads/manifest.json is unreadable or not valid JSON — run tools/fetch-wads.sh');

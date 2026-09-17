@@ -488,6 +488,19 @@ export function createGame(log = console.log, servedWads = () => []) {
     capped(spectateWss, 'spectate', ws => spectateConnect(ws));
 
     return {
+        // What is going on right now, for an operator: counts only, never names,
+        // slots or addresses.  tools/deploy.sh refuses to restart the service
+        // while a game is live, and check@webdoom reads the same route -- both
+        // need this to be cheap and to require no lobby connection.
+        status() {
+            return {
+                session: !!session,
+                players: session ? session.players.filter(p => p.ingame).length : 0,
+                spectators: session ? session.spectators.size : 0,
+                lobby: lobby.size,
+                tic: session ? session.tic : 0,
+            };
+        },
         upgrade(req, socket, head) {
             // a URL llhttp accepts and the WHATWG parser rejects must not throw
             let path;
