@@ -1,6 +1,6 @@
 # webdoom documentation index
 
-**31 documents** (17 top-level `.md` beside this index, 7 in `archive/`, 5 hardware bring-ups in
+**32 documents** (18 top-level `.md` beside this index, 7 in `archive/`, 5 hardware bring-ups in
 subdirectories, and id Software's 2 originals), ~15,700 lines. The count names
 its SET on purpose: this line read "26 documents" while `docs-index-check`'s own
 PASS line, in the same breath, said "all 32 documents under docs/" — both true
@@ -25,6 +25,7 @@ heading rather than the top.
 |---|---|
 | [../spec.md](../spec.md) | **the product contract, and the SSOT.** Precedence: spec > sub-specs > Plans.md. Read the tenets before changing anything. |
 | [../Plans.md](../Plans.md) | the current planning round: task table, statuses, verdicts, open findings |
+| [glossary.md](glossary.md) | **start here if a word is doing work you cannot see.** DOOM's vocabulary, the terms this project invented (`leg`, `golden`, `regold`, `red-proof`, `vacuous gate`, `the cascade`), and the key to all fifteen identifier schemes |
 | [2026-09-11-suite-baseline.md](2026-09-11-suite-baseline.md) | a **frozen** full-suite run kept as evidence, with every red and its disposition. It records 71 legs; the registry has grown since, so read it as a dated record and not as the current state |
 
 ## Reference — how the engine works
