@@ -120,8 +120,23 @@ kill rule and the measurement, and is the record when the row closes.
 |------|------|-----|---------|--------|
 | NC6 | Run the OPL synth inside the AudioWorklet as a second wasm (`build/synth.wasm`) built from the same `mus_opl.o`/`opl3.o` the engine links, so `web_music_render` leaves the main thread; `BufferSink` stays for insecure origins | met, with one amendment: byte-identity is against the ENGINE over real music rather than `opl2-ref.f32` (that golden renders a chip that is not sequencing — see the note in `tools/opl-mode-test.mjs`), and the browser leg proves the wiring and an empty main-thread stage while `opl-mode` gate 7 proves the samples, because no audio device pulls the graph headless | - | cc:完了 [647e32b] |
 | NC2 | MAXSEGS 64→32 after the solidsegs census the ledger entry has always demanded | census done (peak 17 of 64 over the 13 demos, 44,580 tics); KILLED on value, not margin — 256 bytes is noise against the footprint that motivated the BSS diets, and webdoom's overflow behaviour is a silently dropped wall | - | cc:完了 |
-| NC3 | `R_GetColumn` single-patch fast path | LANDED: −4,398 instr/tic p50 on doom.wad demo3 (−0.39%), clearing its 2,000 floor; inside the noise floor on the shipped wasm and +353 B there, which the entry says plainly; 13/13 across five golden families | - | cc:完了 |
+| NC3 | `R_GetColumn` single-patch fast path | LANDED: −4,398 instr/tic p50 on doom.wad demo3 (−0.39%), clearing its 2,000 floor; inside the noise floor on the shipped wasm and +353 B there, which the entry says plainly; 13/13 across the five golden-comparing legs (sim, render, render-low, sim-invariants, sim-freelook); note two RENDER golden families exist today, so the older sense of that phrase is not this one | - | cc:完了 |
 | NC4 | `R_DrawColumn` 8-wide unroll written for the column-major framebuffer | KILLED: +84,524 instr/tic p50 on doom.wad demo3 (+7.5% WORSE) and flat on the wasm — at -O3 with LTO the compiler already chooses its unrolling | - | cc:完了 |
+
+
+# Open work — round 12 (2026-09-17)
+
+Findings from round 12's audits that were deliberately NOT fixed, each with the
+reason it was left. A finding recorded here is one somebody can pick up; a
+finding fixed blind is one nobody can check afterwards. The round fixed
+fourteen defects it could demonstrate and stopped at the ones it could not.
+
+| Task | 内容 | DoD | Depends | Status |
+|------|------|-----|---------|--------|
+| 26.1 | No flow control between the relay stream and the 35-deep `netcmds` ring (`BACKUPTICS`, `engine/web/d_net.c`). A hidden tab stops `requestAnimationFrame` but not WebSocket delivery, so after 35 tics the ring wraps; `TryRunTics`'s `realtics` is uncapped, so the sim then runs ~100 tics against 35 entries and can eject on a consistancy mismatch. `d_net.h` documents an intended slack of `BACKUPTICS/2-1`, and nothing enforces it | a browser leg that hides a tab mid-netgame and asserts the sim survives, then the enforcement. NOT fixed blind: the mechanism is unambiguous in the code, the user-visible ejection is inferred, and netcode changes risk tic-identity across every golden — a bad trade against an unreproduced symptom | - | cc:TODO |
+| 26.2 | `engine/web/mus_opl.c` (649 lines) and `opl3.c` (1,351) were never read past their exported surface in the round-12 audit, and `synth_main.c:80-93` DEPENDS on `mus_play`'s MUS header validation to decide whether to free the caller's buffer. That dependency is unverified next to a feature that landed in round 11 | read the validation path and either confirm the ownership contract or gate it with a hostile MUS lump through `web_music_*` | - | cc:TODO |
+| 26.3 | Seven suspected defects the audit could not confirm, kept as suspicions rather than promoted: `usegamma` from the user's own config indexes `gammatable[5][256]` at `i_video.c:26` with no clamp visible at that site (inherited vanilla behaviour, possibly clamped in `M_LoadDefaults`); and `p.cmds` retains `subarray` views of `ws`'s pooled read buffer, up to 513 per player, which may pin whole pool chunks | reproduce or refute each, one at a time. Listing a suspicion as a defect is the failure this project already named | - | cc:TODO |
+| 26.4 | `tools/` was not swept for vacuous gates. Round 12 found three gates verifying the wrong boundary, all three by tracing a specific bug rather than by survey, so the survey itself is undone: the bodies of `net-fuzz-test.mjs`, `http-fuzz-test.mjs`, `browser-resilience-test.mjs` and `demo-test.mjs`, and all of `tools/lib/`, went unread | a census of every leg against the three CLAUDE.md gate rules, with the count it checked | - | cc:TODO |
 
 
 # Closed rounds

@@ -122,20 +122,27 @@ family). Two figures remain ungateable.
 
 ## Summary
 
-| category | total | gated | evidenced | flagged |
-|----------|-------|-------|-----------|---------|
-| README.md | 10 | 1 | 3 | 6 |
-| spec.md | 8 | 3 | 4 | 1 |
-| perf.md (not-machine-verified) | 10 | 1 | 3 | 6 |
-| magic-data.md | 16 | 14 | 1 | 1 |
-| **Total** | **44** | **18** | **10** | **12** |
+| part | source | promises |
+|------|--------|----------|
+| A | `README.md` | 10 |
+| B | `spec.md` | 9 |
+| C | `perf.md` figures marked *(not machine-verified)* | 10 |
+| D | `magic-data.md` numeric figures | 16 |
+| **Total** | | **45** |
+
+Across all 45: **28 gated, 10 evidenced, 5 flagged, 1 resolved, 1 ungateable.**
+
+Every figure above is computed by `promises-index-check.mjs` from the rows and
+printed on each run. The per-part DISPOSITION split is deliberately absent: the
+checker does not compute it, so putting it here would be a hand-count, and a
+hand-count is precisely what rotted. The table that stood here read 44 total,
+18 gated, 12 flagged against a real 45, 28 and 5 — three of four numbers wrong,
+all in the flattering direction — directly above a paragraph correctly stating
+that there is one inventory now and the checker computes it. Two passes had
+already rewritten the paragraph and left the table alone.
 
 > Note: magic-data.md figures have their own gate mechanism (PUBLIC_HINTS) but
-> are counted here like every other row. The table above used to carry two
-> totals — "28 (excl. magic-data) / 44 (incl.)" — and a per-disposition split
-> ("5/19 gated, 10/11 evidenced, 13/14 flagged") that matched neither the
-> checker nor the rows. There is one inventory and one set of counts now, and
-> `promises-index-check.mjs` computes them.
+> are counted here like every other row.
 
 **45 promises in the table.** Counts are asserted against it by
 `tools/archaeology/promises-index-check.mjs` rather than typed — the header and this
@@ -181,11 +188,23 @@ entry, not a gap to be filled with the nearest task number.
 
 | promise | state | owner |
 |---------|-------|-------|
-| rme-002 (Firefox rendered frame) | PARTIAL | no live owner — needs geckodriver or Firefox's Remote Protocol in the harness |
-| rme-003 (uncapped framerate) | PARTIAL | no live owner — the toggle's *effect* is gated (`sim-invariants`); the render RATE is unobservable through a demo-driven leg, which steps one tic per frame |
-| rme-004 (analog twin-stick) | PARTIAL | no live owner — a headless runner has no stick, and a synthetic `Gamepad` would gate the shim rather than the path |
-| rme-005 ("second load is instant") | PARTIAL | no live owner — needs a committed load-time budget, and inherits `browser-pipeline`'s host-drift problem |
-| spc-005 (small enough to read in a sitting) | FLAGGED | no live owner — a LOC ceiling gates a proxy, not the promise |
 | prf-001 (INITIAL_MEMORY 56 MB) | FLAGGED | no live owner — needs an emcc INITIAL_MEMORY sweep |
 | prf-007 / prf-008 / prf-009 (`-Os` figures) | FLAGGED | **none, by verdict** — killed optimization, archived; not worth CI-reproducing |
 | mda-016 (FixedDiv magnitudes) | FLAGGED | **none, by verdict** — approximate scientific notation in prose; no exact claim exists to gate |
+| spc-005 (small enough to read in a sitting) | UNGATEABLE | **none, by verdict (round 8)** — a LOC ceiling gates a proxy, not the promise |
+
+That is the whole of it: the five FLAGGED rows and the one UNGATEABLE one,
+which is what `promises-index-check.mjs` computes.
+
+**This table listed four more until round 12, and they were the reason to
+distrust it.** `rme-002` (Firefox rendered frame), `rme-003` (uncapped
+framerate), `rme-004` (analog twin-stick) and `rme-005` ("second load is
+instant") sat here as `PARTIAL` with "no live owner", thirty lines below a
+sentence correctly saying no PARTIAL rows remained. All four are `GATED` in the
+table above — rounds 8 and 11 gated them, by `firefox-frame`, by
+`browser-pipeline`'s rAF-vs-tic count, by `browser-gamepad`'s synthetic pad and
+by `browser-offline`. `spc-005` was listed as FLAGGED and is UNGATEABLE.
+
+Nothing reads this column, which is the whole explanation: a row here is prose,
+and the checker grades the disposition cell in the main table. The same round
+that closed those four promises updated the rows and not the summary of them.

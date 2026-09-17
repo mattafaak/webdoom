@@ -200,7 +200,15 @@ const ROW = /^\|\s*((?:C|K|NC)\d+)\s*\|.*\|\s*(LANDED|KILLED|SURVIVES)\b/gm;
 const rows = [...ledger.matchAll(ROW)];
 const tally = { LANDED: 0, KILLED: 0, SURVIVES: 0 };
 for (const r of rows) tally[r[2]]++;
-const totalsLine = /\*\*Totals:\s*(\d+)\s*candidates,\s*(\d+)\s*survivors\s*\((\d+)\s*landed,\s*(\d+)\s*surviving\),\s*(\d+)\s*killed\.?\*\*/.exec(ledger);
+// The wording changed in round 12 and this pattern changed with it.  It used
+// to require "N survivors (X landed, Y surviving)", where "survivors" meant
+// landed-plus-undecided -- so the line read "11 survivors (11 landed, 0
+// surviving)", which is arithmetically fine and unparseable by a person.  The
+// machine never needed the redundant total; it recomputes every figure from
+// the rows anyway.  Note "undecided" rather than "still open": rule 1 above
+// scans every document for "is open" near a landed candidate, so the obvious
+// replacement wording would have reddened this same file.
+const totalsLine = /\*\*Totals:\s*(\d+)\s*candidates\s*[—-]\s*(\d+)\s*landed,\s*(\d+)\s*undecided,\s*(\d+)\s*killed\.?\*\*/.exec(ledger);
 
 if (rows.length < 10)
     fail(`status-drift: only ${rows.length} candidate rows parsed from the ledger table `
@@ -209,15 +217,14 @@ else if (!totalsLine)
     fail('status-drift: the ledger has candidate rows but no **Totals:** line in the expected shape'
        + ' — either it was removed or its wording drifted past this check');
 else {
-    const [, cand, surv, landedN, survivingN, killedN] = totalsLine.map(Number);
+    const [, cand, landedN, undecidedN, killedN] = totalsLine.map(Number);
     const want = {
         cand: rows.length,
         landed: tally.LANDED,
         killed: tally.KILLED,
-        surviving: tally.SURVIVES,
-        surv: tally.LANDED + tally.SURVIVES,
+        undecided: tally.SURVIVES,
     };
-    const got = { cand, landed: landedN, killed: killedN, surviving: survivingN, surv };
+    const got = { cand, landed: landedN, killed: killedN, undecided: undecidedN };
     for (const k of Object.keys(want))
         if (want[k] !== got[k])
             fail(`docs/optimization-ledger.md Totals: says ${k}=${got[k]}, the rows say ${k}=${want[k]}`,

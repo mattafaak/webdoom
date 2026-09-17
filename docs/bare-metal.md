@@ -30,14 +30,17 @@ shown. Code claims are cited as `file:line`.
 > WAD blob. Gate commit b3c8a40 (`tools/freestanding/run-check.sh`) verified
 > 13/13 golden demos bit-identical to vanilla. Every claim in §1–§7 was measured
 > against this bring-up; gaps and validated predictions are recorded in §8.
-> **Scope caveat**: this is hosted-freestanding (Linux, glibc, -m32 ABI). The
-> **Superseded (24.4).** This banner said the QEMU/OS-less rung (11.1b) was
-> deferred for want of a cross-compiler.  It is not: §7 of this same document
-> records PPC/MIPS/ARM QEMU trials, 13.4b landed a full OS-less D_DoomMain on
-> ARM, and as of 2026-09-11 alder cross-builds the freestanding core for
-> 32-bit ARM with zig and replays all 13 golden demos bit-identically under
-> qemu-arm-static (`tools/freestanding/arm-check.sh`, suite leg `arm-cross`).
-> The banner outlived the blocker by two phases.
+> **Scope caveat**: this is hosted-freestanding — Linux, glibc, the -m32 ABI.
+> It is not the OS-less rung, which is a separate step and has since been
+> taken.
+>
+> **The OS-less rung is done (superseded 24.4).** This banner used to say that
+> rung was deferred for want of a cross-compiler, and it outlived that blocker
+> by two phases. §7 records the PPC, MIPS and ARM QEMU trials; 13.4b landed a
+> full OS-less `D_DoomMain` on ARM; and since 2026-09-11 alder cross-builds the
+> freestanding core for 32-bit ARM with zig and replays all 13 golden demos
+> bit-identically under qemu-arm-static (`tools/freestanding/arm-check.sh`,
+> suite leg `arm-cross`).
 
 ---
 

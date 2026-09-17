@@ -1,5 +1,12 @@
 # Suite baseline — 2026-09-11 (task 22.1)
 
+> **FROZEN. This is a dated record, not the current state.** Everything below
+> describes the suite as it stood on 2026-09-11 and is deliberately not kept up
+> to date: its value is being a contemporary account. Three of the five render
+> golden families it names (`wide`, `fakeflat`, `potato`) were deleted in rounds
+> 7 and 10, and the 71 legs it reports have since grown. For what the suite is
+> today, run `tools/run-tests.sh --list`.
+
 First end-to-end run of `tools/run-tests.sh` since 2026-07-24 (49 days), and the
 first one that could report what it did: the previous runner aborted at the
 first red under `set -eo pipefail`, so any failure left every later leg

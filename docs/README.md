@@ -1,7 +1,7 @@
 # webdoom documentation index
 
 **31 documents** (17 top-level `.md` beside this index, 7 in `archive/`, 5 hardware bring-ups in
-subdirectories, and id Software's 2 originals), ~15620 lines. The count names
+subdirectories, and id Software's 2 originals), ~15,700 lines. The count names
 its SET on purpose: this line read "26 documents" while `docs-index-check`'s own
 PASS line, in the same breath, said "all 32 documents under docs/" — both true
 about different sets, and the document did not say which. The figure is now the
@@ -25,13 +25,13 @@ heading rather than the top.
 |---|---|
 | [../spec.md](../spec.md) | **the product contract, and the SSOT.** Precedence: spec > sub-specs > Plans.md. Read the tenets before changing anything. |
 | [../Plans.md](../Plans.md) | the current planning round: task table, statuses, verdicts, open findings |
-| [2026-09-11-suite-baseline.md](2026-09-11-suite-baseline.md) | the last full-suite run recorded as evidence, with every red and its disposition |
+| [2026-09-11-suite-baseline.md](2026-09-11-suite-baseline.md) | a **frozen** full-suite run kept as evidence, with every red and its disposition. It records 71 legs; the registry has grown since, so read it as a dated record and not as the current state |
 
 ## Reference — how the engine works
 
 | document | what it is |
 |---|---|
-| [playsim.md](playsim.md) | **long** (1,800). The simulation: thinkers, P_Random, the frozen surface the demo goldens depend on |
+| [playsim.md](playsim.md) | **long** (1,798). The simulation: thinkers, P_Random, the frozen surface the demo goldens depend on |
 | [renderer.md](renderer.md) | **long** (1,154). BSP, segs, planes, sprites, the low-detail variant and the retired toggles |
 | [formats.md](formats.md) | **long** (1,146). WAD, lump and asset formats as this engine reads them |
 | [engine-archaeology.md](engine-archaeology.md) | where every magic constant and table came from, each with a committed reproducer |
@@ -44,11 +44,11 @@ heading rather than the top.
 
 | document | what it is |
 |---|---|
-| [perf.md](perf.md) | **long** (1,958). The memory, size and per-stage baseline. Note: still describes a four-host fleet in places; `spec.md`'s 2026-09-11 amendment retired pi5 |
+| [perf.md](perf.md) | **long** (1,982). The memory, size and per-stage baseline. Note: still describes a four-host fleet in places; `spec.md`'s 2026-09-11 amendment retired pi5 |
 | [optimization-ledger.md](optimization-ledger.md) | every candidate considered, measured, and landed or killed — with the kill rule it was judged against |
 | [divergence-atlas.md](divergence-atlas.md) | where this port diverges from vanilla, and why each one is sanctioned |
 | [feasibility-atlas.md](feasibility-atlas.md) | the retro-hardware arithmetic: what could run this, and what provably cannot. Has its own table of contents |
-| [bare-metal.md](bare-metal.md) | **long** (1,190). The core ↔ platform contract a no-OS port starts from |
+| [bare-metal.md](bare-metal.md) | **long** (1,198). The core ↔ platform contract a no-OS port starts from |
 
 ## The verification machinery
 

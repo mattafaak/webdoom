@@ -278,8 +278,8 @@ The vocabulary now carries its weight:
 | unverifiable | 17 |
 | verified | 134 |
 
-134 of 204 rows are gated by `claims.json`
-(154 manifest entries; the difference is rows whose status says, out
+137 of 207 rows are gated by `claims.json`
+(157 manifest entries; the difference is rows whose status says, out
 loud, that nothing checks them).  The old summary claimed "172 / 188 = 91%"
 alongside a stated total of 193 — three mutually inconsistent numbers in one
 document, which is what prompted 24.2.

@@ -484,7 +484,7 @@ sanctioned by policy).**
 | NC5 | R_DrawSpan 4-wide loop unroll | cycle-floor | MEASURED: −47,707 instr/tic p50 doom.wad demo3 (−4.2% whole, −11.9% planes); scalar xfrac/yfrac, no packing | LANDED (20.2b) |
 | NC6 | OPL synth off the main thread (AudioWorklet wasm) | browser frame budget | 0 in the engine; the 1.84 / 4.09 / 19.7 ms p99 per 100 ms call leaves the main thread entirely; +213 B wasm, +21,319 B new module | LANDED (round 11) |
 
-**Totals: 23 candidates, 11 survivors (11 landed, 0 surviving), 12 killed.**
+**Totals: 23 candidates — 11 landed, 0 undecided, 12 killed.**
 
 <!-- Counted from the verdict column of the table above, not written by hand:
      LANDED C1-C8 + NC3 + NC5 + NC6 = 11; KILLED K1-K9 + NC1 + NC2 + NC4 = 12;
