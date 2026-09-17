@@ -22,7 +22,7 @@ are what keep it small.
 WAD_SRC=host:~/doom-wads tools/fetch-wads.sh   # your own IWADs; none ship here
 source tools/emsdk-env.sh && make -C engine    # build the wasm engine
 node server/serve.js                           # http://127.0.0.1:8666/
-bash tools/run-tests.sh --quick                # 18 legs, no WAD or browser needed
+bash tools/run-tests.sh --quick                # 19 legs, no WAD or browser needed
 ```
 
 `tools/run-tests.sh --list` prints every leg and what it needs. A leg that

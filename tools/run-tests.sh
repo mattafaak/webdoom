@@ -435,6 +435,14 @@ leg status-drift    -    "no doc contradicts a landed verdict"        -- node to
 # 26 documents, 8 linked from README.  A document nobody links is one nobody
 # reads, and adding one is when it is cheap to say where it belongs (D5).
 leg docs-index      -    "every doc is reachable from docs/README.md" -- node tools/archaeology/docs-index-check.mjs
+# Prose, graded.  Every other number here is gated, and the reason the line
+# counts, the promise totals and the claim totals all rotted is that nobody
+# could see them rot -- readability is the same shape of problem.  Ceilings live
+# in prose-budget.json and RATCHET: improve a document, re-record, and it cannot
+# slide back.  Read the header for why it measures paragraph prose only; a
+# different definition gives a different answer and the first two drafts of this
+# instrument were wrong in opposite directions.
+leg prose           -    "no document is denser than its recorded ceiling" -- node tools/archaeology/prose-check.mjs
 # The launcher may not offer a game that can never load: hacx.wad sat in
 # GAME_ORDER, absent from the manifest and refused by the importer, while
 # README advertised it as part of the shipped library (E1).

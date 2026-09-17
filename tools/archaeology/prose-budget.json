@@ -1,0 +1,155 @@
+{
+  "_comment": "Ceilings for tools/archaeology/prose-check.mjs.  A document may not get DENSER than its entry: sentences over 40 words, and em-dashes per 1,000 words of paragraph prose (an absolute em-dash count below the tool's PROSE_FLOOR, where a rate would be noise).  Improve a document and re-record; the ceiling tightens and cannot slide back.  Regenerate with `node tools/archaeology/prose-check.mjs --record`.",
+  "files": {
+    "CLAUDE.md": {
+      "words": 608,
+      "long": 3,
+      "rate": 14.8
+    },
+    "CONTRIBUTING.md": {
+      "words": 357,
+      "long": 0,
+      "emdash": 3
+    },
+    "Plans.md": {
+      "words": 946,
+      "long": 4,
+      "rate": 8.5
+    },
+    "README.md": {
+      "words": 505,
+      "long": 1,
+      "rate": 17.8
+    },
+    "SECURITY.md": {
+      "words": 283,
+      "long": 1,
+      "emdash": 3
+    },
+    "docs/2026-09-11-suite-baseline.md": {
+      "words": 1146,
+      "long": 5,
+      "rate": 11.3
+    },
+    "docs/386/BRING-UP.md": {
+      "words": 486,
+      "long": 1,
+      "rate": 2.1
+    },
+    "docs/README.md": {
+      "words": 314,
+      "long": 0,
+      "emdash": 4
+    },
+    "docs/bare-metal.md": {
+      "words": 5555,
+      "long": 6,
+      "rate": 4.9
+    },
+    "docs/claims-index.md": {
+      "words": 1115,
+      "long": 5,
+      "rate": 18.8
+    },
+    "docs/divergence-atlas.md": {
+      "words": 2700,
+      "long": 3,
+      "rate": 5.6
+    },
+    "docs/engine-archaeology.md": {
+      "words": 4275,
+      "long": 9,
+      "rate": 11.9
+    },
+    "docs/feasibility-atlas.md": {
+      "words": 3545,
+      "long": 8,
+      "rate": 7.6
+    },
+    "docs/formats.md": {
+      "words": 2764,
+      "long": 1,
+      "rate": 3.3
+    },
+    "docs/glossary.md": {
+      "words": 208,
+      "long": 0,
+      "emdash": 0
+    },
+    "docs/magic-data.md": {
+      "words": 1157,
+      "long": 5,
+      "rate": 14.7
+    },
+    "docs/n64/BRING-UP.md": {
+      "words": 890,
+      "long": 3,
+      "rate": 13.5
+    },
+    "docs/n64/DEMO-GATE-STATUS.md": {
+      "words": 902,
+      "long": 5,
+      "rate": 10
+    },
+    "docs/n64/MIPS-ABI-LANDMINES.md": {
+      "words": 1624,
+      "long": 0,
+      "rate": 18.5
+    },
+    "docs/netcode-numbers.md": {
+      "words": 757,
+      "long": 1,
+      "rate": 9.2
+    },
+    "docs/netcode.md": {
+      "words": 689,
+      "long": 0,
+      "rate": 14.5
+    },
+    "docs/optimization-ledger.md": {
+      "words": 3401,
+      "long": 9,
+      "rate": 14.4
+    },
+    "docs/perf.md": {
+      "words": 9262,
+      "long": 30,
+      "rate": 9.8
+    },
+    "docs/playsim.md": {
+      "words": 6578,
+      "long": 6,
+      "rate": 5.9
+    },
+    "docs/promises-index.md": {
+      "words": 2300,
+      "long": 17,
+      "rate": 13.9
+    },
+    "docs/renderer.md": {
+      "words": 4597,
+      "long": 4,
+      "rate": 7
+    },
+    "docs/rp2040/BRING-UP.md": {
+      "words": 534,
+      "long": 0,
+      "rate": 13.1
+    },
+    "docs/state-machine.md": {
+      "words": 161,
+      "long": 0,
+      "emdash": 1
+    },
+    "docs/web-scrutiny.md": {
+      "words": 1924,
+      "long": 12,
+      "rate": 10.9
+    },
+    "spec.md": {
+      "words": 2684,
+      "long": 13,
+      "rate": 15.6
+    }
+  }
+}
