@@ -7,6 +7,39 @@ const CMD_SIZE = 8;
 // off the wire before it reaches an array subscript.
 const MAXPLAYERS = 4;
 
+// Everything in a `launch` or `inprogress` frame is attacker-controlled: the
+// threat model this whole file is written against is an impostor answering
+// ws://host:8666/ws/lobby, which on a plain-HTTP LAN is anything on the wire.
+//
+// `slot` was bounded (see the welcome handler) and `numplayers` was NOT, and
+// numplayers is a LOOP BOUND on two fixed-size allocations in makeBundlePump:
+// an 8-byte _malloc for the per-tic ingame ring, and the engine's
+// `static ticcmd_t scratch[MAXPLAYERS]`, which is 32 bytes.  A launch frame
+// carrying numplayers 1000 plus one correctly-sized 8,006-byte bundle wrote
+// ~1 KB and ~8 KB of attacker-chosen bytes past them.
+//
+// The engine's own guard in web_net_setup rejects numplayers > MAXPLAYERS, but
+// it runs BEFORE the pump and only protects the C-side write loop -- so it
+// cannot stop this, and a gate that exercises it proves the wrong boundary.
+// The check has to be here, at the point the value crosses out of the wire.
+//
+// This REFUSES rather than clamps.  A server sending either value out of range
+// is hostile or broken; continuing with a silently different player count
+// produces a game that desyncs instead of one that fails.
+function checkNetShape(numplayers, slots) {
+    if (!Number.isInteger(numplayers) || numplayers < 1 || numplayers > MAXPLAYERS)
+        throw new Error(
+            `refusing launch: numplayers ${JSON.stringify(numplayers)} is not an integer 1..${MAXPLAYERS}`);
+    if (slots == null) return null;
+    if (!Array.isArray(slots))
+        throw new Error(`refusing launch: slots is ${typeof slots}, not an array`);
+    for (const s of slots)
+        if (!Number.isInteger(s) || s < 0 || s >= MAXPLAYERS)
+            throw new Error(
+                `refusing launch: slot ${JSON.stringify(s)} is not an integer 0..${MAXPLAYERS - 1}`);
+    return slots;
+}
+
 // How long a ping may go unanswered before it resolves with a fallback.
 // See PING_TIMEOUT_MS at the call site in lobby.js for why this exists at all.
 const PING_TIMEOUT_MS = 3000;
@@ -146,6 +179,7 @@ function makeBundlePump(doom, numplayers, fabOverride) {
 // occupied lobby slots (sparse: color choice = slot choice); the bundle
 // is always numplayers wide with phantoms marked not-ingame.
 export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, names = null, jitterMs = 5 }, WS = WebSocket) {
+    slots = checkNetShape(numplayers, slots);   // before anything sizes on it
     const ws = new WS(`${baseUrl}/ws/game?slot=${slot}`);
     ws.binaryType = 'arraybuffer';
 
@@ -196,6 +230,7 @@ export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, nam
 // discarded by the no-op netSend; netcmds[] is written only by web_net_bundle
 // (sealed bundles), so the simulation is authoritative and deterministic.
 export function attachSpectate(doom, baseUrl, { numplayers, slots = null, names = null }, WS = WebSocket) {
+    slots = checkNetShape(numplayers, slots);   // before anything sizes on it
     const ws = new WS(`${baseUrl}/ws/spectate`);
     ws.binaryType = 'arraybuffer';
 

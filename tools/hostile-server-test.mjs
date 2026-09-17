@@ -24,6 +24,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { attachRelay, attachSpectate } from '../client/js/net.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const bdIdx = process.argv.indexOf('--build-dir');
@@ -112,6 +113,62 @@ console.log('\n-- hostile console player ---------------------------------------
 for (const [label, p] of [['web_set_console 99', 99], ['web_set_console -1', -1]])
     noWriteBelowFloor(label, () => doom._web_set_console(p));
 
+// -- a hostile launch through the SHIPPED client path --------------------------
+//
+// Everything above calls the C exports DIRECTLY, which proves the engine's own
+// guards and proves nothing about the layer a hostile server actually reaches
+// first.  It reaches client/js/net.js, and net.js sizes two fixed allocations
+// on `numplayers` straight off the wire: an 8-byte _malloc for the per-tic
+// ingame ring and the engine's `static ticcmd_t scratch[MAXPLAYERS]` (32 B).
+// web_net_setup's rejection does not help -- it runs first and only bounds the
+// C-side write loop, so the JS loop had already written by then.
+//
+// So this drives the exported attach functions with a stub socket, which is the
+// same code path the browser runs.  RED-PROOF: remove the checkNetShape() calls
+// from net.js and every case below reports "accepted".
+class StubWS {
+    constructor(url) { this.url = url; this.readyState = 0; this.binaryType = ''; }
+    send() {}
+    close() { this.readyState = 3; }
+}
+function mustRefuse(name, fn) {
+    let threw = null;
+    try { fn(); } catch (e) { threw = e; }
+    ok(name, !!threw, threw ? `refused: ${String(threw.message ?? threw).slice(0, 72)}` : 'ACCEPTED');
+}
+
+console.log('\n-- a hostile launch through client/js/net.js --------------------------');
+for (const [label, np, slots] of [
+    ['relay numplayers 1000',      1000, [0]],
+    ['relay numplayers 9',            9, null],
+    ['relay numplayers 0',            0, null],
+    ['relay numplayers -3',          -3, null],
+    ['relay numplayers 2.5',        2.5, null],
+    ['relay numplayers "4" (string)', '4', null],
+    ['relay numplayers null',      null, null],
+    ['relay numplayers 2**31',    2 ** 31, null],
+    ['relay slots [99]',              4, [99]],
+    ['relay slots [-1]',              4, [-1]],
+    ['relay slots [0,1,2,1e6]',       4, [0, 1, 2, 1e6]],
+    ['relay slots not an array',      4, { 0: 0 }],
+]) mustRefuse(label, () => attachRelay(
+    doom, 'ws://127.0.0.1:1', { slot: 0, numplayers: np, slots }, StubWS));
+
+for (const [label, np, slots] of [
+    ['spectate numplayers 1000', 1000, [0]],
+    ['spectate slots [1e6]',        4, [1e6]],
+]) mustRefuse(label, () => attachSpectate(
+    doom, 'ws://127.0.0.1:1', { numplayers: np, slots }, StubWS));
+
+// Anti-vacuity: a guard that refuses everything would pass every case above.
+{
+    let threw = null;
+    try { attachRelay(doom, 'ws://127.0.0.1:1', { slot: 0, numplayers: 4, slots: [0, 1, 2, 3] }, StubWS); }
+    catch (e) { threw = e; }
+    ok('a legitimate 4-player launch is still accepted', !threw,
+       threw ? `WRONGLY refused: ${String(threw.message ?? threw).slice(0, 72)}` : 'accepted');
+}
+
 // A guard that returns early is only correct if the NORMAL path still works.
 // (Running frames here would block: web_net_setup made this a netgame and
 // TryRunTics waits for tics, which hung the first version of this test.)
@@ -123,7 +180,7 @@ const goodWrites = wrote(beforeGood, full());
 ok('a valid bundle still lands in the tic ring', goodWrites.length > 0 && Math.min(...goodWrites) >= FLOOR,
    goodWrites.length ? `wrote ${goodWrites.length} bytes at or above slot 0` : 'wrote nothing');
 
-const EXPECTED = 13;   // 5 tic + 5 roster + 2 console + 1 liveness
+const EXPECTED = 28;   // 5 tic + 5 roster + 2 console + 14 hostile-launch + 1 anti-vacuity + 1 liveness
 console.log(`\n  ${passes} passed, ${failures} failed`);
 if (failures) { console.log(`FAIL hostile-server-test: ${failures} case(s) let a hostile value through`); process.exit(1); }
 if (passes < EXPECTED) {
