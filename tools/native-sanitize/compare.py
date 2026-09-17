@@ -32,8 +32,9 @@ def compare_trace(name, golden_path, out_path):
         print(f"FAIL  {name}: tics {o['tics']} != golden {g['tics']}")
         return False
 
-    gt = g["trace"]
-    ot = o["trace"]
+    unpack = lambda t: [int(t[i:i+8], 16) for i in range(0, len(t), 8)] if isinstance(t, str) else t   # hex-string goldens (round 10)
+    gt = unpack(g["trace"])
+    ot = unpack(o["trace"])
     if len(gt) != len(ot):
         print(f"FAIL  {name}: trace length {len(ot)} != golden {len(gt)}")
         return False

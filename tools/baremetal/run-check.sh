@@ -97,8 +97,9 @@ with open(golden_path) as f:
 with open(bm_path) as f:
     bm = json.load(f)
 
-golden_trace = golden.get("trace", [])
-bm_trace     = bm.get("trace", [])
+unpack = lambda t: [int(t[i:i+8], 16) for i in range(0, len(t), 8)] if isinstance(t, str) else t   # hex-string goldens (round 10)
+golden_trace = unpack(golden.get("trace", []))
+bm_trace     = unpack(bm.get("trace", []))
 tics         = bm.get("tics", 0)
 
 print(f"golden tics={golden.get('tics')}, bm tics={tics}")

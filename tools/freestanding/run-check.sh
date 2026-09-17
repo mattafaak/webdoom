@@ -100,8 +100,9 @@ for entry in "${DEMOS[@]}"; do
     # Compare per-tic hashes; report the first divergent tic on mismatch.
     verdict=$(python3 - "$ABS_OUT_DIR/${out_prefix}.json" "$golden" <<'PY'
 import json, sys
-fs = json.load(open(sys.argv[1]))["trace"]
-gd = json.load(open(sys.argv[2]))["trace"]
+unpack = lambda t: [int(t[i:i+8], 16) for i in range(0, len(t), 8)] if isinstance(t, str) else t   # hex-string goldens (round 10)
+fs = unpack(json.load(open(sys.argv[1]))["trace"])
+gd = unpack(json.load(open(sys.argv[2]))["trace"])
 if fs == gd:
     print(f"OK {len(fs)} tics identical")
 else:

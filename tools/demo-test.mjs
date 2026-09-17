@@ -13,6 +13,7 @@
 //        node tools/demo-test.mjs --sim-drawn --smooth --pitch 40  # sim invariance with the renderer running
 //        node tools/demo-test.mjs --sim-drawn --build-dir build-invariants  # same, on the armed build
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { packTrace, readGolden } from './lib/golden.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -264,7 +265,7 @@ if (renderMode) {
 
             const goldenPath = join(goldenDir, `${name}${goldenSuffix}.json`);
             if (record) {
-                writeFileSync(goldenPath, JSON.stringify({ tics: done, trace, provenance: PROV() }));
+                writeFileSync(goldenPath, JSON.stringify({ tics: done, trace: packTrace(trace), provenance: PROV() }));
                 console.log(`recorded ${name} ${detailTag}render: ${done} gametics, ${trace.length} hashes`);
                 verified++;
                 continue;
@@ -282,7 +283,7 @@ if (renderMode) {
                 continue;
             }
 
-            const golden = JSON.parse(readFileSync(goldenPath));
+            const golden = readGolden(goldenPath);
             if (golden.tics !== done) {
                 console.log(`FAIL ${name} ${detailTag}render: ran ${done} gametics, golden ${golden.tics}`);
                 failures++;
@@ -444,7 +445,7 @@ if (simDrawn) {
 
             const goldenPath = join(goldenDir, `${name}.json`);
             if (!existsSync(goldenPath)) { fail('sim golden absent (the sim gate owns it)'); continue; }
-            const golden = JSON.parse(readFileSync(goldenPath));
+            const golden = readGolden(goldenPath);
             const minRendered = Math.floor(golden.tics / 2);
             const MIN_CHANGED = Math.max(8, Math.floor(golden.tics / 20));
 
@@ -480,7 +481,7 @@ if (simDrawn) {
             // Without this, A4's inequality could be satisfied by a broken hash.
             const rPath = join(goldenDir, `${name}-render.json`);
             if (!existsSync(rPath)) { fail(`render golden absent: ${name}-render.json (A3 cannot run)`); continue; }
-            const rGolden = JSON.parse(readFileSync(rPath));
+            const rGolden = readGolden(rPath);
             let rdiv = -1;
             for (let i = 0; i < rGolden.trace.length; i++)
                 if (rGolden.trace[i] !== control.fbTrace[i]) { rdiv = i; break; }
@@ -576,7 +577,7 @@ for (const [wad, engineName, demos] of MATRIX) {
 
         const goldenPath = join(goldenDir, `${name}.json`);
         if (record) {
-            writeFileSync(goldenPath, JSON.stringify({ tics: done, trace, provenance: PROV() }));
+            writeFileSync(goldenPath, JSON.stringify({ tics: done, trace: packTrace(trace), provenance: PROV() }));
             console.log(`recorded ${name}: ${done} gametics, ${trace.length} samples`);
             verified++;   // without this, --record ended at the 0-verified guard
             continue;
@@ -588,7 +589,7 @@ for (const [wad, engineName, demos] of MATRIX) {
             continue;
         }
 
-        const golden = JSON.parse(readFileSync(goldenPath));
+        const golden = readGolden(goldenPath);
         if (golden.tics !== done) {
             console.log(`FAIL ${name}: ran ${done} gametics, golden ${golden.tics}`);
             failures++;

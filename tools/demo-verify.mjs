@@ -20,6 +20,7 @@
 // Exit 0 = VERIFIED, exit 1 = DIVERGED or error, exit 2 = usage error.
 
 import { readFileSync, existsSync } from 'node:fs';
+import { readGolden } from './lib/golden.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -270,7 +271,7 @@ async function runSingle() {
         console.error(`FAIL: golden not found: ${goldenFile}`);
         process.exit(1);
     }
-    const golden = JSON.parse(readFileSync(goldenFile, 'utf8'));
+    const golden = readGolden(goldenFile);
 
     const wadPath = wadFile.startsWith('/') ? wadFile : join(root, wadFile);
     await loadEngine();
@@ -351,7 +352,7 @@ async function runAll() {
                 failures++;
                 continue;
             }
-            const golden = JSON.parse(readFileSync(goldenPath, 'utf8'));
+            const golden = readGolden(goldenPath);
 
             // Extract demo lump from WAD (e.g. "DEMO1" lump from doom.wad).
             const lumpName = demo.toUpperCase();  // demo1 → DEMO1

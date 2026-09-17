@@ -132,8 +132,9 @@ for entry in "${DEMOS[@]}"; do
 
     if python3 - "$sim_out" "$golden" << 'PY' 2>/dev/null; then
 import json, sys
-fs = json.load(open(sys.argv[1]))["trace"]
-gd = json.load(open(sys.argv[2]))["trace"]
+unpack = lambda t: [int(t[i:i+8], 16) for i in range(0, len(t), 8)] if isinstance(t, str) else t   # hex-string goldens (round 10)
+fs = unpack(json.load(open(sys.argv[1]))["trace"])
+gd = unpack(json.load(open(sys.argv[2]))["trace"])
 sys.exit(0 if fs == gd else 1)
 PY
         HASH_PASS=$((HASH_PASS + 1))

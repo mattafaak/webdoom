@@ -25,7 +25,8 @@
 //   node tools/golden-provenance.mjs --migrate   # stamp pre-21.3 goldens
 //
 // Copyright (C) 2026, GPL-2.0-or-later.
-import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { packTrace, unpackTrace, isTraceDoc } from './lib/golden.mjs';
 import { createHash } from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -76,8 +77,8 @@ export function recordReason(argv) {
 // ── CLI ──────────────────────────────────────────────────────────────────────
 if (import.meta.url === `file://${process.argv[1]}`) {
     const mode = process.argv[2];
-    if (!['--check', '--migrate'].includes(mode)) {
-        console.error('usage: golden-provenance.mjs --check | --migrate');
+    if (!['--check', '--migrate', '--repack'].includes(mode)) {
+        console.error('usage: golden-provenance.mjs --check | --migrate | --repack');
         process.exit(2);
     }
 
@@ -91,13 +92,36 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     for (const f of files) {
         let doc;
         try { doc = JSON.parse(readFileSync(join(GOLDEN_DIR, f), 'utf8')); } catch { continue; }
-        if (Array.isArray(doc?.trace)) traces.push([f, doc]);
+        if (isTraceDoc(doc)) traces.push([f, doc]);
     }
 
     if (traces.length < 39) {
         console.log(`FAIL golden-provenance: found only ${traces.length} trace goldens; ` +
                     `tools/golden/ holds far more. The discovery is broken, which is not a pass.`);
         process.exit(1);
+    }
+
+    // --repack: the same hashes as one hex string per golden (round 10).  Not a
+    // regold -- the values are unchanged and provenance is untouched -- so it
+    // needs no reason and no clean tree.
+    if (mode === '--repack') {
+        let n = 0, before = 0, after = 0;
+        for (const [f, doc] of traces) {
+            const p = join(GOLDEN_DIR, f);
+            const was = readFileSync(p, 'utf8');
+            const values = unpackTrace(doc.trace);
+            doc.trace = packTrace(values);
+            const now = JSON.stringify(doc);
+            if (now === was) continue;
+            if (unpackTrace(doc.trace).some((v, i) => v !== values[i])) {
+                console.log(`FAIL golden-provenance --repack: ${f} does not round-trip`);
+                process.exit(1);
+            }
+            writeFileSync(p, now);
+            n++; before += was.length; after += now.length;
+        }
+        console.log(`repacked ${n} of ${traces.length} golden(s): ${before} -> ${after} bytes, hashes unchanged`);
+        process.exit(0);
     }
 
     if (mode === '--migrate') {

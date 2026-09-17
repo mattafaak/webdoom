@@ -16,6 +16,7 @@
 // usage: node tools/demo-verify-test.mjs [--build-dir <dir>]
 
 import { readFileSync, existsSync } from 'node:fs';
+import { readGolden } from './lib/golden.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -173,7 +174,7 @@ for (const [wad, , demos] of MATRIX) {
             ok(`${name}: golden exists`, false);
             continue;
         }
-        const golden = JSON.parse(readFileSync(goldenPath, 'utf8'));
+        const golden = readGolden(goldenPath);
 
         const lmpBytes = extractWadLump(wadBytes, demo.toUpperCase());
         if (!lmpBytes) {
@@ -223,7 +224,7 @@ if (!existsSync(doomWadPath)) {
         ok('Gate B: DEMO1 lump extracted', false);
     } else {
         const goldenPath = join(goldenDir, 'doom-demo1.json');
-        const golden     = JSON.parse(readFileSync(goldenPath, 'utf8'));
+        const golden     = readGolden(goldenPath);
 
         // The demo header is 13 bytes.  Each tic is 4 bytes.
         // Tic 50 starts at offset 13 + 50*4 = 213.
@@ -265,7 +266,7 @@ const hostileGoldenPath = join(goldenDir, 'doom-demo1.json');
 const hostileWadPath    = join(wadDir, 'doom.wad');
 const canRunHostile     = existsSync(hostileGoldenPath) && existsSync(hostileWadPath);
 if (canRunHostile)
-    hostileGolden = JSON.parse(readFileSync(hostileGoldenPath, 'utf8'));
+    hostileGolden = readGolden(hostileGoldenPath);
 
 async function hostileCase(label, lmpBytes) {
     if (!canRunHostile) { console.log(`  skip ${label}: doom.wad not fetched`); return; }
