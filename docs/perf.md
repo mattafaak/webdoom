@@ -192,42 +192,43 @@ Command: `ls -la` + `gzip -9 -c <file> | wc -c`
 |------|------------|---------------|------------|
 | `build/doom.wasm` | 299,521 | 133,291 | 130.2 |
 | `client/js/lobby.js` | 32,559 | 11,137 | 10.9 |
+| `build/synth.wasm` | 21,319 | 9,064 | 8.9 |
 | `client/js/input.js` | 18,037 | 6,628 | 6.5 |
+| `client/js/audio.js` | 17,385 | 5,843 | 5.7 |
 | `client/js/menu.js` | 15,588 | 5,415 | 5.3 |
-| `client/js/main.js` | 13,101 | 4,847 | 4.7 |
+| `client/js/main.js` | 13,244 | 4,907 | 4.8 |
 | `client/js/net.js` | 11,713 | 4,462 | 4.4 |
 | `client/js/wad-import.js` | 11,300 | 4,249 | 4.1 |
 | `client/css/webdoom.css` | 10,370 | 3,885 | 3.8 |
-| `client/js/audio.js` | 11,040 | 3,825 | 3.7 |
 | `build/doom.js` | 8,774 | 3,720 | 3.6 |
 | `client/js/doomfont.js` | 9,575 | 3,663 | 3.6 |
 | `client/js/fire.js` | 9,371 | 3,481 | 3.4 |
 | `client/js/demo.js` | 7,291 | 2,733 | 2.7 |
 | `client/js/scrubber.js` | 7,958 | 2,701 | 2.6 |
 | `client/js/video.js` | 6,625 | 2,523 | 2.5 |
+| `client/js/music-worklet.js` | 6,983 | 2,490 | 2.4 |
 | `client/js/countdown.js` | 7,068 | 2,396 | 2.3 |
 | `client/js/persist.js` | 5,338 | 1,997 | 2.0 |
 | `client/js/ui.js` | 2,211 | 966 | 0.9 |
 | `client/js/idb.js` | 2,214 | 964 | 0.9 |
 | `client/js/perf-marks.js` | 2,252 | 959 | 0.9 |
 | `client/index.html` | 1,732 | 905 | 0.9 |
-| `client/js/music-worklet.js` | 1,970 | 843 | 0.8 |
 | `client/js/wad-cache.js` | 1,517 | 716 | 0.7 |
 | `client/js/wad-library.js` | 1,159 | 565 | 0.6 |
-| **Total (all, raw)** | **498,284** | — | — |
-| **Total (all, gzip-9)** | — | **206,871** | **202.0** |
-| **JS+CSS+HTML only (raw)** | 189,989 | — | — |
-| **JS+CSS+HTML only (gzip-9)** | — | 69,860 | **68.2** |
+| **Total (all, raw)** | **531,104** | — | — |
+| **Total (all, gzip-9)** | — | **219,660** | **214.5** |
+| **JS+CSS+HTML only (raw)** | 201,490 | — | — |
+| **JS+CSS+HTML only (gzip-9)** | — | 73,585 | **71.9** |
 
 The WAD file itself (doom.wad ≈ 11.8 MB, doom2.wad ≈ 13.9 MB, etc.) is
 fetched separately on first play and cached in the browser; it is not part of
 the initial page-load transfer.
 
 **Finding**: the entire deliverable (wasm + JS glue + client JS + CSS +
-HTML) compresses to **202.0 KB gzip** on the wire, gated by
+HTML) compresses to **214.5 KB gzip** on the wire, gated by
 `payload-size` (perf-015/perf-016) since round 8. The wasm is
-64% of that. The JS+CSS+HTML surface is **68.2 KB gzip**
-— note that is **1.9x the 35.1 KB this table used to
+61% of that. The JS+CSS+HTML surface is **71.9 KB gzip**
+— note that is **2.0x the 35.1 KB this table used to
 claim**, which went stale unnoticed precisely because both figures were
 marked *not machine-verified*: the old table still listed
 `client/js/settings.js`, deleted in round 7, and omitted `wad-import`,
@@ -1455,11 +1456,29 @@ wbox and a quarter of a frame on tank, in a burst the rAF budget cannot
 absorb. The plan's threshold was 5% of a 16.7 ms frame at p99 on tank
 (0.83 ms); tank reads 4.09.
 
-**Verdict: phase 2 is warranted and scheduled for the next pass** — a
-second wasm built from `mus_opl.c` + `opl3.c` running inside the
-AudioWorklet (GENMIDI and song bytes posted over the port; volume, pause and
-stop as messages), the main-thread `BufferSink` path kept for insecure
-origins, `opl-mode` extended to the second wasm against `opl2-ref.f32`.
+**Verdict: built in round 11 (ledger NC6).** `build/synth.wasm` — the same
+`mus_opl.c` and `opl3.c` objects the engine links, as a standalone reactor —
+runs inside the AudioWorklet and renders each 128-frame quantum there. The
+per-call figures above are what left the main thread: on wbox a 19.7 ms burst
+every 100 ms, gone from the frame budget entirely. The main-thread `BufferSink`
+path is kept for insecure origins, which have no `AudioContext.audioWorklet`.
+
+Two things the build taught, recorded because they change what the numbers
+mean:
+
+- **No audio device, no `process()`.** Headless Chrome and headed Chrome under
+  `xvfb-run` both arm the context, fetch and instantiate the module, report
+  `{ready:true, playing:1}` — and never call `process()`. So the browser leg
+  `browser-music-worklet` asserts the wiring and an EMPTY main-thread `opl`
+  stage, and the samples are gated in node by `opl-mode` gate 7, which drives
+  the shipped `client/js/music-worklet.js` 128 frames at a time and requires
+  byte-identity with the engine over 690 quanta.
+- **`opl2-ref.f32` renders a chip that is not sequencing.** The engine
+  registers the title song on the FIRST `web_frame()`, and gates 2/3 render
+  straight after `callMain` — `playing=0, events=0, noteons=0`. That golden
+  pins the OPL core's reset/init/render path, not the MUS sequencer or the
+  GENMIDI instruments. The new gates take a frame first and assert note-ons on
+  both sides, so equality cannot compare two silences.
 
 
 ## PSX fire launcher background — perf note

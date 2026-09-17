@@ -223,7 +223,9 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     const input = createInput(doom, canvas, loadSettings());
     doom._web_set_smooth(input.settings.smooth ? 1 : 0);
 
-    doom._web_set_opl_mode(input.settings.musicBackend === 'opl3' ? 1 : 0);
+    // through doomAudio, not the export: on the worklet tier the flavour has
+    // to reach the worklet's own copy of the synth as well
+    window.doomAudio.setOplMode(input.settings.musicBackend === 'opl3' ? 1 : 0);
 
     running = true;
     // Everything the boot allocated, released in one place.  The relay would

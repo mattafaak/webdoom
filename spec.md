@@ -35,7 +35,7 @@ shipped, gated feature that the contract never claimed at all.
 | Offline single player once a WAD is cached | `browser-offline`, `sw-precache` |
 | Rebindable keys, gamepad, and an OPTIONS screen on the launcher menu | `browser-options` |
 | Freelook and frame interpolation — render-side, opt-in | `sim-freelook`, `sim-invariants` |
-| Music: the in-engine OPL2/OPL3 sequencer from the IWAD's own GENMIDI | `opl-mode`, `browser-music-fallback` |
+| Music: the in-engine OPL2/OPL3 sequencer from the IWAD's own GENMIDI, on the audio thread | `opl-mode`, `browser-music-worklet`, `browser-music-fallback` |
 | **Low-detail render mode** (runtime `web_set_detail`), pixel-exact against its own goldens | `render-low` |
 | **A freestanding core** with no OS, and an N64 correctness leg | `freestanding-sim`, `ro-wad`, `arm-cross`, `n64-demos` |
 | **The gate machinery itself**: claims, promises, doc drift, status drift, the census | `doc-drift`, `claims-index`, `promises-index`, `status-drift`, `docs-index`, `gate-census`, `web-contract` |
@@ -211,6 +211,11 @@ The primary player environment is plain-HTTP on a LAN/tailnet address
   degrades **loudly** (user-visible status line, never a swallowed
   `console.warn`). Music and WAD caching must work there via
   secure-context-free paths (IndexedDB, non-worklet audio sink).
+  Since round 11 there are TWO synth locations, and this is the clause that
+  decides which one an origin gets: the worklet-hosted `build/synth.wasm`
+  needs `AudioContext.audioWorklet`, so an insecure origin gets the
+  main-thread pump into a `BufferSink` instead — same samples, same
+  sequencer, different thread. `browser-insecure` gates that it still does.
 - A dedicated insecure-origin leg exists — `browser-insecure`, headless
   Chrome with `--host-resolver-rules="MAP insecure.test 127.0.0.1"` —
   because every other browser gate runs on `127.0.0.1`, a secure context,
@@ -241,9 +246,18 @@ The primary player environment is plain-HTTP on a LAN/tailnet address
   Both are gone; the in-engine OPL sequencer is the whole music contract.
 - **Never bundled**: Microsoft GS wavetable, Roland ROMs/Nuked-SC55,
   provenance-unclear soundfonts. User-supplied files are fine.
-- Determinism rule (unchanged): engine music state changes only via
-  `S_*` calls driven by gamestate; sample generation only via JS pulls.
-  A peer with no audio at all stays tic-identical.
+- **Where the samples are generated (amended 2026-09-17, round 11).** On a
+  secure origin the AudioWorklet runs its own copy of the sequencer —
+  `build/synth.wasm`, linked from the same `mus_opl.c` and `opl3.c` objects
+  the engine links — and renders each 128-frame quantum itself; the engine
+  posts it song bytes and control events. Everywhere else (no
+  `AudioContext.audioWorklet`, or the module could not be fetched) the
+  main-thread pump pulls `web_music_render` from the engine's own synth, as
+  before. The two are held byte-identical by `opl-mode`.
+- Determinism rule (unchanged in substance): engine music state changes only
+  via `S_*` calls driven by gamestate, and NEITHER synth can reach the
+  playsim — the worklet's copy has no game state at all, and the engine's is
+  pulled, never pushed. A peer with no audio stays tic-identical.
 
 ## Widescreen view — REVERSED 2026-09-12
 

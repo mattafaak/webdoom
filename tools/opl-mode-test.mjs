@@ -240,4 +240,55 @@ for (const [mode, name] of [[0, 'OPL2'], [1, 'OPL3']]) {
                 `${NFRAMES} frames of ${eng.song.length}-byte D_INTRO (${eng.noteons} note-ons, vol ${eng.vol})`);
 }
 
+// ── Gate 7: the SHIPPED worklet renders those same bytes ─────────────────
+//
+// Gates 5 and 6 drive synth.wasm directly.  This drives it the way the browser
+// does: through client/js/music-worklet.js, over its own message protocol, one
+// 128-frame quantum at a time.  Two things it proves that nothing else can:
+// the worklet file's own init/copy/render path is correct, and per-quantum
+// rendering is byte-identical to one long call (the sequencer is per-frame
+// stateful, so this is a property worth asserting rather than assuming).
+//
+// It lives in node because the browser cannot do it: headless Chrome and
+// headed Chrome under xvfb both arm the context, instantiate the module and
+// report {ready:true, playing:1} -- and never call process(), because no audio
+// device pulls the graph.  The browser leg proves the wiring; this proves the
+// samples.
+{
+    const { loadWorklet } = await import(join(root, 'tools/lib/worklet-host.mjs'));
+    const eng = await engineWithMusic(0);
+    const w = await loadWorklet();
+    const ready = await w.send({
+        type: 'init', wasm: readFileSync(SYNTH_WASM), rate: 44100,
+        genmidi: eng.genmidi, song: eng.song, looping: eng.looping,
+        paused: eng.paused, volume: eng.vol, oplMode: 0,
+    }, m => m && m.ready !== undefined);
+    if (!ready || ready.ready !== true) {
+        console.error(`FAIL: the worklet did not instantiate synth.wasm (${ready ? ready.error : 'no reply'})`);
+        process.exit(1);
+    }
+    // NFRAMES is not a multiple of the quantum, so the last call renders more
+    // than is compared; the synth is per-frame stateful, so rendering the extra
+    // frames is harmless and only the first NFRAMES are read back.
+    const QUANTUM = 128;
+    const out = Buffer.alloc(SZ);
+    let quanta = 0;
+    for (let done = 0; done < NFRAMES; done += QUANTUM) {
+        const { l, r } = w.process(QUANTUM);
+        quanta++;
+        for (let k = 0; k < Math.min(QUANTUM, NFRAMES - done); k++) {
+            out.writeFloatLE(l[k], (done + k) * 8);
+            out.writeFloatLE(r[k], (done + k) * 8 + 4);
+        }
+    }
+    if (!out.equals(eng.buf)) {
+        let i = 0; while (i < SZ && out[i] === eng.buf[i]) i++;
+        console.error(`FAIL: the worklet's output differs from the engine at byte ${i} of ${SZ} ` +
+                      `(quantum ${Math.floor(i / 8 / QUANTUM)})`);
+        process.exit(1);
+    }
+    console.log(`gate 7 PASS: client/js/music-worklet.js byte-identical to the engine over ` +
+                `${quanta} quanta of ${QUANTUM} frames`);
+}
+
 console.log('PASS: OPL2/OPL3 mode toggle verified; synth.wasm identical on real music');
