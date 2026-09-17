@@ -12,10 +12,9 @@
 //
 // usage: node tools/web-registry-test.mjs [build-dir]
 import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { root } from './lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const buildDir = process.argv[2] ?? 'build';
 
 const results = [];

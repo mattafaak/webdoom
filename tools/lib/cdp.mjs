@@ -66,7 +66,6 @@ async function openTab(port, url = 'about:blank') {
         on: (method, fn) => handlers.set(method, fn),
         ev: async (expression, opts = {}) =>
             (await cdp('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, ...opts })).result?.result?.value,
-        navigate: url => cdp('Page.navigate', { url }),
         // a key press; vk is the Windows virtual key code the page's handlers see
         async key(k, vk, code) {
             code ??= k.length === 1 ? `Key${k.toUpperCase()}` : k;
@@ -100,7 +99,6 @@ async function openTab(port, url = 'about:blank') {
             }
             return false;
         },
-        row: pfx => tab.ev(`document.querySelector('#dmenu .row[data-label^=${JSON.stringify(pfx)}]')?.dataset.label ?? null`),
         inGame: () => tab.ev(`!document.getElementById('screen').hidden && document.getElementById('status')?.textContent === ''`),
         // SINGLE PLAYER → the first Doom entry → the engine running
         async bootSP(secs = 90) {

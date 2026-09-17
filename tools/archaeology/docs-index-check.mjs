@@ -17,10 +17,9 @@
 // Copyright (C) 2026, GPL-2.0-or-later.
 import { readFileSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { dirname, join, relative } from 'node:path';
+import { join, relative } from 'node:path';
+import { root } from '../lib/util.mjs';
 
-const root  = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const INDEX = 'docs/README.md';
 const text  = readFileSync(join(root, INDEX), 'utf8');
 

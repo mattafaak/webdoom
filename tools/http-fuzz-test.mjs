@@ -10,10 +10,9 @@
 // Also the wire: negotiated br/gzip, ETag/304, on the real server (round 10).
 import { createConnection } from 'node:net';
 import { startServer } from './lib/server.mjs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { root } from './lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // a server on a free port, ready when it answers (tools/lib/server.mjs)

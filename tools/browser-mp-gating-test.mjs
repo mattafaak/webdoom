@@ -30,20 +30,18 @@ process.on('SIGINT',  () => cleanup(1));
 process.on('SIGTERM', () => cleanup(1));
 const openTab = tabUrl => chrome.tab(tabUrl);
 
+// The poll, the selector and the error-status check are tab.waitForMenu() in
+// tools/lib/cdp.mjs; this wrapper is only this file's FAILURE POLICY.  Keeping
+// the policy local is the point: the shared primitive returns false on timeout,
+// and these call sites ignore the return value, so adopting it bare would have
+// turned every timeout into a silent continue.
 async function waitForMenu(tab, label = 'tab', timeoutSecs = 30) {
-    for (let i = 0; i < timeoutSecs * 2; i++) {
-        const ready = await tab.ev(
-            `!!document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]')`,
-        );
-        if (ready) return;
-        const s = await tab.ev(`document.getElementById('status')?.textContent`);
-        if (s?.startsWith('cannot') || s?.startsWith('engine error')) {
-            console.error(`FAIL: ${label}: error while waiting for menu: "${s}"`);
-            cleanup(1);
-        }
-        await sleep(500);
-    }
-    console.error(`FAIL: ${label}: lobby menu did not appear within ${timeoutSecs}s`);
+    let ok;
+    try { ok = await tab.waitForMenu(timeoutSecs); }
+    catch (e) { console.error(`FAIL: ${label}: ${e.message}`); cleanup(1); }
+    if (ok) return;
+    const s = await tab.ev(`document.getElementById('status')?.textContent`);
+    console.error(`FAIL: ${label}: lobby menu did not appear within ${timeoutSecs}s (status: "${s}")`);
     cleanup(1);
 }
 

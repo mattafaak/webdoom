@@ -9,8 +9,6 @@ export function check(label, ok, detail = '') {
     else    { fails++; console.log(`  FAIL  ${label}${detail ? `: ${detail}` : ''}`); }
     return !!ok;
 }
-export const pass = label => check(label, true);
-export const counts = () => ({ passes, fails });
 
 // The sanctioned end: prints the summary and the verdict line, sets the exit
 // code, returns whether everything passed.  `what` is the one-line headline

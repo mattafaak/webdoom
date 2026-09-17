@@ -23,10 +23,9 @@
 // Copyright (C) 2026, GPL-2.0-or-later.
 import { readFileSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { root } from './lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const REGISTRY = join(root, 'tools/gates-not-in-suite.json');
 const ROOTS = ['tools/run-tests.sh'];
 

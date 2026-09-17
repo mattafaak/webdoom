@@ -4,10 +4,9 @@
 // canon, plus the boot-verification checksum. Rerun after a toolchain
 // (libm) change — the boot CRC will have told you.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { root } from './lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const canon = JSON.parse(readFileSync(join(root, 'tools/golden/tables-canon.json')));
 
 const createDoom = (await import(join(root, 'build/doom.js'))).default;

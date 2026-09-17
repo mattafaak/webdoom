@@ -26,7 +26,6 @@ const openTab = () => chrome.tab(url);
 const cleanup = code => { chrome.kill(); process.exit(code); };
 
 // thin names over the tab helpers, so the cases read as they always did
-const waitForMenu = (tab, secs) => tab.waitForMenu(secs);
 const clickItem = (tab, text, retries) => tab.click(text, retries);
 const pressEsc = tab => tab.esc();
 
@@ -94,7 +93,7 @@ async function runTest(name, fn) {
 await runTest('lobby-menu-nav', async () => {
     const tab = await openTab();
     try {
-        assert(await waitForMenu(tab), 'root menu did not appear');
+        assert(await tab.waitForMenu(), 'root menu did not appear');
 
         // T01: LANDING → SP-PICK
         assert(await clickItem(tab, 'SINGLE PLAYER'), 'SINGLE PLAYER not found');
@@ -190,7 +189,7 @@ await runTest('lobby-menu-nav', async () => {
 await runTest('sp-quit', async () => {
     const tab = await openTab();
     try {
-        assert(await waitForMenu(tab), 'root menu did not appear');
+        assert(await tab.waitForMenu(), 'root menu did not appear');
 
         let clicked = false, booted = false;
         for (let i = 0; i < 120; i++) {
@@ -244,7 +243,7 @@ await runTest('sp-quit', async () => {
 await runTest('mp-lobby-ws-close', async () => {
     const tab = await openTab();
     try {
-        assert(await waitForMenu(tab), 'root menu did not appear');
+        assert(await tab.waitForMenu(), 'root menu did not appear');
         await patchWS(tab);
 
         assert(await clickItem(tab, 'MULTIPLAYER'), 'MULTIPLAYER not found');
@@ -307,8 +306,8 @@ await runTest('drop-in-offer-esc', async () => {
     const tabA = await openTab();
     const tabB = await openTab();
     try {
-        assert(await waitForMenu(tabA), 'A: menu did not appear');
-        assert(await waitForMenu(tabB), 'B: menu did not appear');
+        assert(await tabA.waitForMenu(), 'A: menu did not appear');
+        assert(await tabB.waitForMenu(), 'B: menu did not appear');
 
         // Tab A: connect to lobby and start a solo game
         await patchWS(tabA);
@@ -377,8 +376,8 @@ await runTest('drop-in-offer-ws-close', async () => {
     const tabA = await openTab();
     const tabB = await openTab();
     try {
-        assert(await waitForMenu(tabA), 'A: menu did not appear');
-        assert(await waitForMenu(tabB), 'B: menu did not appear');
+        assert(await tabA.waitForMenu(), 'A: menu did not appear');
+        assert(await tabB.waitForMenu(), 'B: menu did not appear');
 
         await patchWS(tabA);
         assert(await clickItem(tabA, 'MULTIPLAYER'), 'A: MULTIPLAYER not found');
@@ -438,7 +437,7 @@ await waitForCleanServer(12);
 await runTest('mp-countdown-ws-close', async () => {
     const tab = await openTab();
     try {
-        assert(await waitForMenu(tab), 'root menu did not appear');
+        assert(await tab.waitForMenu(), 'root menu did not appear');
         await patchWS(tab);
 
         assert(await clickItem(tab, 'MULTIPLAYER'), 'MULTIPLAYER not found');
@@ -502,7 +501,7 @@ await waitForCleanServer(16);
 await runTest('mp-countdown-esc', async () => {
     const tab = await openTab();
     try {
-        assert(await waitForMenu(tab), 'root menu did not appear');
+        assert(await tab.waitForMenu(), 'root menu did not appear');
         await patchWS(tab);
 
         assert(await clickItem(tab, 'MULTIPLAYER'), 'MULTIPLAYER not found');
@@ -563,7 +562,7 @@ await waitForCleanServer(16);
 await runTest('mp-lobby-full', async () => {
     const tab = await openTab();
     try {
-        assert(await waitForMenu(tab), 'root menu did not appear');
+        assert(await tab.waitForMenu(), 'root menu did not appear');
         await patchWS(tab);
         assert(await clickItem(tab, 'MULTIPLAYER'), 'MULTIPLAYER not found');
         let inLobby = false;
@@ -618,7 +617,7 @@ await waitForCleanServer(16);
 await runTest('mp-launch-wad-fail', async () => {
     const tab = await openTab();
     try {
-        assert(await waitForMenu(tab), 'root menu did not appear');
+        assert(await tab.waitForMenu(), 'root menu did not appear');
         await tab.cdp('Network.enable', {});
         await patchWS(tab);
 

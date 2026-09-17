@@ -21,10 +21,9 @@
 // Usage: node tools/archaeology/wasm-stamp.mjs [path/to/doom.wasm]
 // Exits 0 when wasm exists and __heap_base matches; 1 on hard failure.
 import { readFileSync, existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { root } from '../lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const wasmPath = process.argv[2] ?? join(root, 'build/doom.wasm');
 
 if (!existsSync(wasmPath)) {

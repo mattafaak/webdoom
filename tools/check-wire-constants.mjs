@@ -16,10 +16,9 @@
 //
 // usage: node tools/check-wire-constants.mjs
 import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { root } from './lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const src = f => readFileSync(join(root, f), 'utf8');
 
 // [label, [file, regex], [file, regex]]

@@ -33,11 +33,10 @@ import { spawn } from 'node:child_process';
 import { startServer } from './lib/server.mjs';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { pngStats } from './png-stats.mjs';
+import { root } from './lib/util.mjs';
 
-const root   = join(dirname(fileURLToPath(import.meta.url)), '..');
 let   url    = process.argv[2] ?? null;
 const outdir = process.argv[3] ?? tmpdir();
 const PORT   = 9280;

@@ -47,10 +47,10 @@
 import { readFileSync, existsSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { root } from './lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const bdIdx = process.argv.indexOf('--build-dir');
 const buildDir = bdIdx >= 0 ? process.argv[bdIdx + 1] : 'build';
 const CASE_MS = 90_000;

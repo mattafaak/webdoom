@@ -15,15 +15,14 @@
 //
 // usage: node tools/spectate-fuzz-test.mjs
 import { startServer } from './lib/server.mjs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { root } from './lib/util.mjs';
 
 process.on('uncaughtException', e => {
     console.error('UNCAUGHT:', e?.message ?? String(e).slice(0, 300));
     process.exit(1);
 });
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_SPECTATORS = 2;                  // pinned low so the cap is reachable
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 

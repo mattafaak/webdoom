@@ -37,11 +37,10 @@
 //   const { pwad, mutations, numSectors } = genMutatedMap(seed, { adversarial: false });
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { mulberry32 } from './gen-demo.mjs';
+import { root } from '../lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DOOM_WAD = join(root, 'wads/lib/doom.wad');
 
 // ── WAD directory parser ──────────────────────────────────────────────────────

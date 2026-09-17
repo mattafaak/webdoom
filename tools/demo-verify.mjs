@@ -21,12 +21,11 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { readGolden } from './lib/golden.mjs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { root } from './lib/util.mjs';
 
 const REPLAY_TIC_CAP = 200_000;  // explicit cap; reject demos that run longer
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // ── CLI arg parsing ───────────────────────────────────────────────────────────
 

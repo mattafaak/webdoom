@@ -8,15 +8,14 @@
 // Output (stdout): JSON with p50/p99/max gap stats.
 import { startServer } from './lib/server.mjs';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { root } from './lib/util.mjs';
 
 process.on('uncaughtException', e => {
     console.error('UNCAUGHT:', e?.message ?? String(e).slice(0, 300));
     process.exit(1);
 });
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const argBase = process.argv[2];
 
 const { connectLobby, attachRelay, launchArgs } =

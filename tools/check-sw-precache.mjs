@@ -9,10 +9,9 @@
 // exit 0 = all good; exit 1 = drift detected (prints missing/stale entries)
 import { readFileSync, existsSync } from 'node:fs';
 import { readdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { root } from './lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const clientDir = join(root, 'client');
 const buildDir = join(root, 'build');
 

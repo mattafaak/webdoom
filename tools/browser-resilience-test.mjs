@@ -16,18 +16,9 @@ const cleanup = code => { chrome.kill(); process.exit(code); };
 const openTab = () => chrome.tab(url);
 
 // Wait for lobby menu to be rendered
-async function waitForMenu(tab, secs = 25) {
-    for (let i = 0; i < secs * 2; i++) {
-        const ready = await tab.ev(
-            `!!document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]')`,
-        );
-        if (ready) return true;
-        const s = await tab.ev(`document.getElementById('status')?.textContent`);
-        if (s?.startsWith('cannot')) throw new Error(`lobby: ${s}`);
-        await sleep(500);
-    }
-    return false;
-}
+// Same contract as tools/lib/cdp.mjs's tab.waitForMenu: true, false on
+// timeout, throw on an error status.  This file's callers already check it.
+const waitForMenu = (tab, secs = 25) => tab.waitForMenu(secs);
 
 // Click through SP menu and wait until engine canvas is live
 async function bootIntoGame(tab, secs = 60) {

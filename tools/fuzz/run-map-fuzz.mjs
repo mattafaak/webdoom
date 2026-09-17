@@ -27,13 +27,12 @@
 // Exit: 0 = no divergences/crashes; 1 = any finding found.
 
 import { readFileSync, writeFileSync, mkdirSync, rmSync, symlinkSync, existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
 import { tmpdir, cpus } from 'node:os';
 import { createHash } from 'node:crypto';
+import { root } from '../lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 // ── args ──────────────────────────────────────────────────────────────────────
 let seedsBenign = 75;

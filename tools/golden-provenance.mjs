@@ -29,10 +29,9 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from '
 import { packTrace, unpackTrace, isTraceDoc } from './lib/golden.mjs';
 import { createHash } from 'node:crypto';
 import { execSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { root } from './lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const GOLDEN_DIR = join(root, 'tools/golden');
 
 const sh = cmd => { try { return execSync(cmd, { cwd: root, encoding: 'utf8' }).trim(); } catch { return ''; } };

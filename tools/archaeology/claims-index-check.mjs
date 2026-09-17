@@ -27,11 +27,10 @@
 // usage: node tools/archaeology/claims-index-check.mjs
 // Copyright (C) 2026, GPL-2.0-or-later.
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 
 import { computeSummary } from './claims-summary.mjs';
-const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
+import { root } from '../lib/util.mjs';
 const INDEX = join(root, 'docs/claims-index.md');
 const claims = JSON.parse(readFileSync(join(root, 'tools/archaeology/claims.json'), 'utf8')).claims;
 

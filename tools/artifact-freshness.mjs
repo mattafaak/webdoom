@@ -36,10 +36,9 @@
 //
 // Copyright (C) 2026, GPL-2.0-or-later.
 import { existsSync, statSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join, relative } from 'node:path';
+import { join, relative } from 'node:path';
+import { root } from './lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // engine/core minus the six platform files every target replaces; those live in
 // each target's own directory and are covered by that target's `dirs` entry.

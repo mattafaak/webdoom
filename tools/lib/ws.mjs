@@ -8,8 +8,8 @@ import { root } from './util.mjs';
 
 export const WebSocket = createRequire(join(root, 'server/game.js'))('ws');
 
-export const AWAIT_MS = 20000;
-export const withTimeout = (p, label, ms = AWAIT_MS) => Promise.race([p, new Promise((_, rej) =>
+const AWAIT_MS = 20000;
+const withTimeout = (p, label, ms = AWAIT_MS) => Promise.race([p, new Promise((_, rej) =>
     setTimeout(() => rej(new Error(`timeout ${ms}ms: ${label}`)), ms).unref())]);
 export const open = ws => withTimeout(
     new Promise((res, rej) => { ws.on('open', res); ws.on('error', rej); }), 'ws open');

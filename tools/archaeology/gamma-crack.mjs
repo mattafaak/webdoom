@@ -12,10 +12,9 @@
 // Exits 0 if ea-010..ea-013 pass (ea-014 is a known finding, reported but not fatal).
 // Exits 1 if ea-010..ea-013 disagree with the formula.
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { root } from '../lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
 // ── Parse gamma table from v_video.c ────────────────────────────────────────
 

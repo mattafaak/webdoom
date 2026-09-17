@@ -21,11 +21,10 @@
 // Exits 0 on all-pass (invariants match + artifacts exist), 1 on any hard failure.
 import { readFileSync, statSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { gzipSize } from '../lib/gzip.mjs';
+import { root } from '../lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
 let failures = 0;
 const claimActuals = {};

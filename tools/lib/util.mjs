@@ -6,20 +6,11 @@ import { createServer } from 'node:net';
 export const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// --name value   (undefined when absent)
-export function argValue(name) {
+// --name value   (undefined when absent).  Not exported: buildDirArg is the
+// only caller, and every tool wants the build dir rather than the raw flag.
+function argValue(name) {
     const i = process.argv.indexOf(name);
     return i >= 0 ? process.argv[i + 1] : undefined;
-}
-// argv without the --name value pairs listed, and without node + script
-export function positional(...valueFlags) {
-    const out = [];
-    const a = process.argv.slice(2);
-    for (let i = 0; i < a.length; i++) {
-        if (valueFlags.includes(a[i])) { i++; continue; }
-        out.push(a[i]);
-    }
-    return out;
 }
 // The build directory a harness loads doom.js from (--build-dir DIR, default build).
 export const buildDirArg = () => argValue('--build-dir') ?? 'build';

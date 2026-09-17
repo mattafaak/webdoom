@@ -4,10 +4,9 @@
 // usage: node tools/demo-store-fuzz-test.mjs
 import { startServer } from './lib/server.mjs';
 import { createConnection } from 'node:net';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { root } from './lib/util.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 // Caps stated in server/demo-store.js — import as source-of-truth.
 // We read them dynamically so the test stays in sync with the policy file.
 const { PER_DEMO_CAP, TOTAL_QUOTA, TTL_MS, FRAGMENT_MAX } =
