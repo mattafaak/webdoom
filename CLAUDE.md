@@ -90,3 +90,22 @@ browser takes — had no `dispose` at all, and `h?.dispose?.()` skipped it in
 silence. Optional-call and a swallowing `catch` will hide that indefinitely. If
 a fix is worth a comment saying what it reclaims, it is worth a gate that counts
 the thing reclaimed.
+
+## A gate can test the layer next to the hole
+
+Round 12 found three hostile-input gates that stayed green while the defect
+they existed for shipped. Each ran, and each verified something real, one call
+away from where the attacker enters:
+
+- `hostile-server-test.mjs` called `web_net_setup`'s C export directly. A
+  hostile `launch` reaches `client/js/net.js` first and corrupted the heap there.
+- `browser-rafdeath-test.mjs` threw from the one statement inside the frame
+  loop's `try`. The three statements after the `catch` were the unguarded ones.
+- `hostile-lobby-test.mjs` hardened `net.js` and never registered `lobby.js`'s
+  own handlers, which held the unguarded dereferences.
+
+So ask of every hostile-input gate: does it enter through the attacker's door?
+Move the assertion to the real boundary and red-proof it there. Testing both
+layers is fine; testing only the inner one reports safety nobody checked. No
+survey for this shape has been run (`tools/vacuity-census.mjs` grades the other
+rules), so all three were found by tracing a bug.
