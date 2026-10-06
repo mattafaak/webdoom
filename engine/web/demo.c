@@ -1,45 +1,17 @@
-// webdoom demo recording/playback bridge.
-// Provides JS-callable functions to record user gameplay into a .lmp buffer
-// and to replay a .lmp from wasm heap memory — bypassing the WAD lump system
-// and G_CheckDemoStatus (which calls I_Error and would abort the runtime).
+// webdoom demo recording and replay, for JS.
 //
-// Recording contract:
-//   1. Pass '-record webdemo' to callMain; G_RecordDemo is called after Z_Init
-//      in D_DoomMain, and G_BeginRecording is called from D_DoomLoop.  (There
-//      was a web_demo_start() export for arming it afterwards; nothing in
-//      client/ or tools/ ever called it, so round 11 removed it.)
-//   2. Optionally call web_set_singletics(1) after callMain so that every
-//      web_frame() call advances exactly one tic regardless of wall-clock time.
-//      This is essential in Node.js test harnesses where emscripten_get_now()
-//      barely advances in a tight loop (only ~1 tic/second without it).
-//   3. Drive frames with web_frame() — each tic is written to demobuffer.
-//   4. Call web_demo_stop() to append DEMOMARKER and stop recording.
-//      Returns byte count; caller slices HEAPU8[web_demo_buf_ptr()..+count].
+// Recording: pass '-record webdemo' to callMain (G_RecordDemo needs the zone,
+// so it runs inside D_DoomMain), drive frames with web_frame(), then
+// web_demo_stop() appends the marker and returns the .lmp length; the bytes
+// are at web_demo_buf_ptr().
 //
-// Playback contract:
-//   1. Allocate wasm heap memory and copy .lmp bytes in (_malloc + HEAPU8.set).
-//   2. Optionally call web_set_singletics(1) for wall-clock-free replay.
-//   3. Call web_play_demo_buf(heapPtr, len).  Returns 0 on success, -1 on
-//   error.
-//      `len` is the size of the buffer at heapPtr and is mandatory: without
-//      it the terminator scan is unbounded with respect to the allocation.
-//      Internally calls G_InitNew from the demo header, then sets demoplayback.
-//   4. Drive frames with web_frame() until web_demo_playing() returns 0.
-//
-// Seek contract (task 19.3):
-//   1. web_play_demo_buf must have been called successfully (zone copy is
-//   live).
-//   2. web_set_singletics(1) must be set (seek uses singletics for exact tic
-//      counting; calling code must ensure this before web_seek_demo).
-//   3. Call web_seek_demo(N): rewinds demo_p to header+13, re-calls G_InitNew,
-//      fast-forwards N tics with nodrawers=1 (no rendering), restores
-//      nodrawers=0.  Returns actual tic reached (< N only if demo ended early).
-//   4. After web_seek_demo returns, call web_wipe_skip() then web_frame() once
-//      to render the final frame at tic N.
-//   Zone invariant: web_seek_demo never calls Z_Malloc — it reuses the zone
-//   copy made by web_play_demo_buf.  Repeated seeks keep web_zone_hwm flat
-//   (G_InitNew calls Z_FreeTags(PU_LEVEL) which reclaims and rebuilds level
-//   data in-place, so the level HWM stabilises after the first seek).
+// Replay: web_play_demo_buf(ptr, len) copies the .lmp, then each replay start
+// -- the first, and every web_seek_demo -- puts the engine in the state a
+// fresh -playdemo would: the header's globals, the -fast tables, gametic, and
+// a zone copy of the bytes that G_CheckDemoStatus may release at the marker.
+// Replay runs in singletics (one tic per web_frame) from then on.  After the
+// marker the engine goes on to the attract loop exactly as vanilla does, and a
+// seek starts the replay again from the beginning.
 //
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <stddef.h>
@@ -53,6 +25,9 @@
 #include "web.h"      /* D_DoomFrame (for web_seek_demo fast-forward) */
 #include "g_game.h"   /* G_RecordDemo, G_InitNew */
 #include "z_zone.h"   /* Z_Malloc, PU_STATIC */
+#include "info.h"     /* states, mobjinfo: what G_InitNew changes for -fast */
+#include "m_fixed.h"
+#include <stdlib.h> /* malloc, free */
 
 /* Internal demo buffer pointers defined in g_game.c */
 extern byte* demobuffer;
@@ -62,17 +37,100 @@ extern byte* demoend; /* g_game.c: demobuffer + maxsize */
 /* Title-screen demo advance flag defined in d_main.c */
 extern boolean advancedemo;
 
-/* Static: demo header params captured by web_play_demo_buf for seek reuse. */
-/* web_seek_demo re-calls G_InitNew without re-parsing raw bytes. */
-static skill_t seek_skill = sk_medium;
-static int seek_episode = 0;
-static int seek_map = 0;
+extern boolean netdemo;    /* g_game.c */
+extern boolean singletics; /* d_main.c: one tic per web_frame() */
+extern int maketic;        /* d_net.c */
+
+// The replay: the .lmp as given (the zone copy is made from it at every
+// start, because G_CheckDemoStatus releases that one at the marker), and the
+// header fields a start re-applies.
+static byte* replay_src;
+static int replay_len;
+static byte* replay_zone; /* zone copy; the zone clears it if purged */
+static int replay_gametic;
+static struct
+{
+    skill_t skill;
+    int episode, map;
+    boolean deathmatch, respawn, fast, nomonsters;
+    int console;
+    boolean ingame[MAXPLAYERS];
+} hdr;
+
+// G_InitNew halves these when fastparm is set, every time it is called, so a
+// second start of a -fast demo would halve them again; each start restores
+// the values the first one saw.
+#define FAST_FIRST S_SARG_RUN1
+#define FAST_COUNT (S_SARG_PAIN2 - S_SARG_RUN1 + 1)
+static boolean fast_saved;
+static int fast_tics[FAST_COUNT];
+static fixed_t fast_speed[3];
+static skill_t fast_gameskill;
+
+static void save_fast_tables (void)
+{
+    int i;
+    for (i = 0; i < FAST_COUNT; i++)
+        fast_tics[i] = states[FAST_FIRST + i].tics;
+    fast_speed[0] = mobjinfo[MT_BRUISERSHOT].speed;
+    fast_speed[1] = mobjinfo[MT_HEADSHOT].speed;
+    fast_speed[2] = mobjinfo[MT_TROOPSHOT].speed;
+    fast_gameskill = gameskill;
+    fast_saved = true;
+}
+
+static void restore_fast_tables (void)
+{
+    int i;
+    for (i = 0; i < FAST_COUNT; i++)
+        states[FAST_FIRST + i].tics = fast_tics[i];
+    mobjinfo[MT_BRUISERSHOT].speed = fast_speed[0];
+    mobjinfo[MT_HEADSHOT].speed = fast_speed[1];
+    mobjinfo[MT_TROOPSHOT].speed = fast_speed[2];
+    gameskill = fast_gameskill;
+}
+
+// Put the engine at tic 0 of the replay, as G_DoPlayDemo would.
+static void begin_replay (void)
+{
+    int i;
+
+    if (replay_zone)
+        Z_Free (replay_zone);
+    // owned, so G_CheckDemoStatus may re-tag it PU_CACHE at the marker
+    Z_Malloc (replay_len, PU_STATIC, &replay_zone);
+    memcpy (replay_zone, replay_src, replay_len);
+    demobuffer = replay_zone;
+    demo_p = replay_zone + 13;
+
+    restore_fast_tables ();
+    deathmatch = hdr.deathmatch;
+    respawnparm = hdr.respawn;
+    fastparm = hdr.fast;
+    nomonsters = hdr.nomonsters;
+    consoleplayer = hdr.console;
+    for (i = 0; i < MAXPLAYERS; i++)
+        playeringame[i] = hdr.ingame[i];
+    if (playeringame[1])
+    {
+        netgame = true; // as G_DoPlayDemo: a two-player demo is a net demo
+        netdemo = true;
+    }
+
+    // the sim reads gametic (A_Tracer), so every start is at the same one
+    gametic = maketic = replay_gametic;
+    // or the WAD's own DEMO1 replaces this buffer on the first G_Ticker tick
+    advancedemo = false;
+    gameaction = ga_nothing;
+    singletics = true;
+
+    G_InitNew (hdr.skill, hdr.episode, hdr.map);
+    usergame = false; // as G_DoPlayDemo: a replay is not a session
+    demoplayback = true;
+}
 
 /* DEMOMARKER is #defined inside g_game.c — duplicate the value here. */
 #define WEBDEMO_MARKER 0x80
-
-// one tic per web_frame() regardless of wall clock (G_TimeDemo's singletics)
-extern boolean singletics; /* d_main.c: debug flag, also set by timedemo */
 
 EMSCRIPTEN_KEEPALIVE void web_set_singletics (int on)
 {
@@ -111,48 +169,25 @@ EMSCRIPTEN_KEEPALIVE int web_demo_playing (void)
     return demoplayback ? 1 : 0;
 }
 
-// Start replaying a .lmp from wasm heap memory: parse the header, G_InitNew,
-// then demoplayback so G_Ticker reads from demobuffer.  0 on success, -1 on a
-// bad version or a hostile header.  The bytes are copied into a zone block
-// (PU_STATIC) because G_CheckDemoStatus calls Z_ChangeTag(demobuffer) at the
-// marker, and a raw heap pointer there reads a garbage block header.
+// Start replaying a .lmp from wasm heap memory.  0 on success, -1 on a bad
+// version or a hostile header, in which case the engine is untouched: the
+// header is parsed into locals and validated before anything is committed.
+// The bytes are copied, so the caller may free its buffer.
 EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr, int len)
 {
     byte* raw = (byte*) (size_t) heapPtr;
     byte* p = raw;
     byte* end;
+    byte* scan;
     int ver, i, total;
     skill_t skill;
     int episode, map;
-    byte* scan;
-    byte* zone_buf;
-    // PARSE INTO LOCALS, VALIDATE, THEN COMMIT -- in that order, deliberately.
-    //
-    // This function used to write the header straight into the engine's
-    // globals and validate them afterwards, so every `return -1` below the
-    // parse left consoleplayer, playeringame[], deathmatch, respawnparm,
-    // fastparm and nomonsters holding whatever the file said, with no
-    // rollback.  A demo naming consoleplayer 255 left it at 255 against a
-    // players[] array that is MAXPLAYERS wide and is indexed by consoleplayer
-    // in about twenty places (d_main.c, hu_stuff.c, st_stuff.c, p_tick.c,
-    // g_game.c, s_sound.c) -- roughly 71 KB past the array, read and written.
-    //
-    // That was only survivable because the caller stopped the engine on -1,
-    // and the caller did not: lobby.js called resetToLauncher(), which reset
-    // menu state and left the rAF loop running.  So a crafted `#demo=` link
-    // was one click from a live engine simulating on a corrupted global.  The
-    // two defects were each other's safety net and neither one held.
-    //
-    // The zone allocation moved down here too: it happened before validation,
-    // so a rejected header also leaked a PU_STATIC block and left demobuffer
-    // pointing into it.
     boolean hdr_deathmatch, hdr_respawn, hdr_fast, hdr_nomonsters;
     int hdr_console;
     boolean hdr_ingame[MAXPLAYERS];
 
-    // len bounds the terminator scan; a call without it marshals as 0 and is
-    // rejected rather than overscanned
-    if (len < 14) /* 13-byte header + at least one 4-byte tic */
+    // len bounds the terminator scan
+    if (len < 14) /* 13-byte header + at least the marker */
         return -1;
     end = raw + len;
 
@@ -171,24 +206,19 @@ EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr, int len)
     for (i = 0; i < MAXPLAYERS; i++)
         hdr_ingame[i] = (boolean) *p++;
 
-    // each tic is exactly 4 bytes, so the marker can only sit 4-aligned
-    // after the header; the scan is bounded by len
+    // each tic is 4 bytes per player, so the marker sits 4-aligned after the
+    // header; the scan is bounded by len
     scan = p;
     while (scan < end && *scan != WEBDEMO_MARKER)
         scan += 4;
     if (scan >= end || *scan != WEBDEMO_MARKER)
-        return -1; /* no terminator inside the buffer — reject */
+        return -1; /* no terminator inside the buffer */
     if (scan == p)
-        return -1;              /* hostile: 0-tic demo (marker at first tic) —
-                                   nothing to replay; rejecting avoids the
-                                   post-marker attract-carousel states */
-    scan++;                     /* include the marker byte */
-    total = (int) (scan - raw); /* header + tic data + marker */
+        return -1;                  /* a 0-tic demo has nothing to replay */
+    total = (int) (scan + 1 - raw); /* header + tics + marker */
 
-    // Hostile headers: a level of 0 leaves the engine in GS_DEMOSCREEN and
-    // the attract carousel starts inside the same frame (a hang for the JS
-    // replay loop); a console player not in game never consumes ticcmds, so
-    // the marker is never read.
+    // A level of 0 leaves the engine in GS_DEMOSCREEN, and a console player
+    // not in the game never consumes ticcmds, so the marker is never read.
     if (episode == 0 || map == 0)
         return -1;
     if (skill > sk_nightmare)
@@ -197,39 +227,28 @@ EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr, int len)
         !hdr_ingame[hdr_console])
         return -1;
 
-    /* ---- past this point the header is good; only now touch the engine ----
-     */
+    /* ---- the header is good; only now touch the engine ---- */
 
-    deathmatch = hdr_deathmatch;
-    respawnparm = hdr_respawn;
-    fastparm = hdr_fast;
-    nomonsters = hdr_nomonsters;
-    consoleplayer = hdr_console;
+    if (!fast_saved)
+        save_fast_tables ();
+    free (replay_src);
+    replay_src = malloc (total);
+    memcpy (replay_src, raw, total);
+    replay_len = total;
+    replay_gametic = gametic;
+
+    hdr.skill = skill;
+    hdr.episode = episode;
+    hdr.map = map;
+    hdr.deathmatch = hdr_deathmatch;
+    hdr.respawn = hdr_respawn;
+    hdr.fast = hdr_fast;
+    hdr.nomonsters = hdr_nomonsters;
+    hdr.console = hdr_console;
     for (i = 0; i < MAXPLAYERS; i++)
-        playeringame[i] = hdr_ingame[i];
+        hdr.ingame[i] = hdr_ingame[i];
 
-    // Zone-allocate and copy so G_CheckDemoStatus can Z_ChangeTag safely.
-    zone_buf = Z_Malloc (total, PU_STATIC, NULL);
-    memcpy (zone_buf, raw, total);
-
-    // Adjust pointers to the zone copy.
-    demobuffer = zone_buf;
-    demo_p = zone_buf + (int) (p - raw);
-
-    // or the WAD's own DEMO1 replaces this buffer on the first G_Ticker tick
-    advancedemo = false;
-    gameaction = ga_nothing;
-
-    // kept for web_seek_demo, only once the header has passed
-    seek_skill = skill;
-    seek_episode = episode;
-    seek_map = map;
-
-    G_InitNew (skill, episode, map);
-
-    // as G_DoPlayDemo: G_InitNew set usergame, and a replay is not a session
-    usergame = false;
-    demoplayback = true;
+    begin_replay ();
     return 0;
 }
 
@@ -239,32 +258,22 @@ EMSCRIPTEN_KEEPALIVE void web_set_nodraw (int on)
     nodrawers = on ? true : false;
 }
 
-// Seek to targetTic by re-simming from tic 0 (the seek contract above).
-// Returns the tic reached: targetTic unless the demo ended early, -1 if
-// web_play_demo_buf was never called (demoplayback alone cannot say -- it is
-// cleared at end of demo, which is normal after a seek).
+// Seek to targetTic by replaying from tic 0 with drawing off.  Returns the
+// tic reached (fewer than targetTic only if the demo ended first), or -1 if
+// no replay was ever started.  Works after the marker too: the replay starts
+// again from its own copy.
 EMSCRIPTEN_KEEPALIVE int web_seek_demo (int targetTic)
 {
     int i;
+    boolean drew = !nodrawers;
 
-    if (seek_episode == 0 && seek_map == 0)
+    if (!replay_src)
         return -1;
+    begin_replay ();
 
-    demo_p = demobuffer + 13; // the zone copy persists across seeks
-    advancedemo = false;
-    gameaction = ga_nothing;
-
-    // G_InitNew → P_SetupLevel → Z_FreeTags(PU_LEVEL): the level heap is
-    // reclaimed and rebuilt in place, so the HWM is flat after the first seek
-    if (seek_episode > 0 && seek_map > 0)
-        G_InitNew (seek_skill, seek_episode, seek_map);
-    usergame = false;
-    demoplayback = true;
-
-    nodrawers = true; // pure sim throughput
+    nodrawers = true;
     for (i = 0; i < targetTic && demoplayback; i++)
         D_DoomFrame ();
-    nodrawers = false;
-
-    return i; /* actual tic reached */
+    nodrawers = !drew;
+    return i;
 }

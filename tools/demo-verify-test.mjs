@@ -89,7 +89,8 @@ async function verifyDemoBytes(lmpBytes, wadPath, golden) {
         return { ok: false, error: `WAD not found: ${wadPath}` };
     const wadBytes = readFileSync(wadPath);
 
-    const doom = await createDoom({ print: () => {}, printErr: () => {}, onDoomError: () => {} });
+    let engineError = null;
+    const doom = await createDoom({ print: () => {}, printErr: () => {}, onDoomError: m => { engineError = m; } });
 
     // Register WAD under the engine-expected name (doomu.wad for doom.wad,
     // same name for doom2/tnt/plutonia).  Only ONE registration — double-loading
@@ -117,24 +118,26 @@ async function verifyDemoBytes(lmpBytes, wadPath, golden) {
     if (rc !== 0)
         return { ok: false, error: `web_play_demo_buf returned ${rc}` };
 
-    // Carousel guard + nodraw — mirrors demo-verify.mjs (see comment there).
-    const myBuf = doom._web_demo_buf_ptr();
     doom._web_set_nodraw(1);
 
     const trace  = [];
     let lastTic  = -1;
     let cappedOut = false;
     for (let i = 0; i < REPLAY_TIC_CAP + 10 && doom._web_demo_playing(); i++) {
-        if (doom._web_demo_buf_ptr() !== myBuf) break;  // carousel took over — demo ended
         if (trace.length >= REPLAY_TIC_CAP) { cappedOut = true; break; }
         doom._web_wipe_skip();
-        try { doom._web_frame(); } catch (_) { break; }
+        try { doom._web_frame(); } catch (e) { engineError ??= String(e?.message ?? e); }
+        if (engineError) break;
+        // the marker tic is not a demo tic: -timedemo, which recorded the
+        // goldens, ends inside it
+        if (!doom._web_demo_playing()) break;
         const tic = doom._web_gametic();
         if (tic !== lastTic) {
             trace.push(doom._web_state_hash() >>> 0);
             lastTic = tic;
         }
     }
+    if (engineError) return { ok: false, error: `engine error during replay: ${engineError}` };
     if (cappedOut) return { ok: false, error: `exceeded tic cap ${REPLAY_TIC_CAP}` };
 
     const n = Math.min(trace.length, golden.trace.length);

@@ -578,6 +578,7 @@ leg churn           build,wad  "connect/disconnect churn"              -- node t
 leg demo-seek       build,wad  "scrubber seek == linear replay (19.3)" -- node tools/demo-seek-test.mjs
 leg demo-verify     build,wad  "13 goldens + doctored + hostile (19.4)" -- node tools/demo-verify-test.mjs
 leg save-compat     build,wad  "savegames written by 2a6a2de load and replay identically" -- node tools/save-compat-test.mjs
+leg demo-replay     build,wad  "13 IWAD demos through web_play_demo_buf, seek, -fast, two-player" -- node tools/demo-replay-test.mjs
 
 # ── tenet 4: the sanitizer IS the gate ───────────────────────────────────────
 leg adversarial-map native,wad,heavy "30 adversarial maps, 0 ASan/UBSan reports" -- node tools/fuzz/run-map-fuzz.mjs --adversarial-gate

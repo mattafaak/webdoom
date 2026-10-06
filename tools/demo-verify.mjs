@@ -134,10 +134,11 @@ async function verifyDemo(lmpBytes, wadPath, golden) {
 
     const wadBytes = readFileSync(wadPath);
 
+    let engineError = null;
     const doom = await createDoom({
         print: () => {},
         printErr: () => {},
-        onDoomError: () => {},
+        onDoomError: m => { engineError = m; },
     });
 
     // Register WAD under the engine-expected name (doomu.wad for doom.wad,
@@ -167,12 +168,6 @@ async function verifyDemo(lmpBytes, wadPath, golden) {
     if (rc !== 0)
         return { ok: false, error: `web_play_demo_buf returned ${rc} (bad version or no marker)` };
 
-    // Carousel guard: after OUR demo's marker, G_CheckDemoStatus starts the
-    // WAD's attract carousel — demobuffer switches away from our zone copy and
-    // web_demo_playing() stays true (playing the WAD's DEMO1).  Without this
-    // guard a 0/short-tic hostile demo grinds ticCap fully-rendered attract
-    // frames (~80 min at the default cap).  Buffer-pointer change = replay over.
-    const myBuf = doom._web_demo_buf_ptr();
     // Verification hashes sim state only — rendering is pure waste.  nodraw
     // also prevents the wall-clock melt wipe from arming (19.3 precedent).
     doom._web_set_nodraw(1);
@@ -182,16 +177,20 @@ async function verifyDemo(lmpBytes, wadPath, golden) {
     let lastTic = -1;
     let cappedOut = false;
     for (let i = 0; i < ticCap + 10 && doom._web_demo_playing(); i++) {
-        if (doom._web_demo_buf_ptr() !== myBuf) break;  // carousel took over — demo ended
         if (trace.length >= ticCap) { cappedOut = true; break; }
         doom._web_wipe_skip();
-        try { doom._web_frame(); } catch (_) { break; }
+        try { doom._web_frame(); } catch (e) { engineError ??= String(e?.message ?? e); }
+        if (engineError) break;
+        // the marker tic is not a demo tic: -timedemo, which recorded the
+        // goldens, ends inside it
+        if (!doom._web_demo_playing()) break;
         const tic = doom._web_gametic();
         if (tic !== lastTic) {
             trace.push(doom._web_state_hash() >>> 0);
             lastTic = tic;
         }
     }
+    if (engineError) return { ok: false, error: `engine error during replay: ${engineError}` };
 
     if (cappedOut)
         return { ok: false, error: `demo exceeded replay tic cap of ${ticCap}` };

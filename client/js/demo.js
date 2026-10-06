@@ -108,9 +108,7 @@ export function startReplay(doom, bytes) {
     if (!ptr) throw new Error(`out of memory for a ${bytes.length}-byte demo`);
     doom.HEAPU8.set(bytes, ptr);
     const rc = doom._web_play_demo_buf(ptr, bytes.length);
-    // Note: ptr is intentionally NOT freed — the zone copy in web_play_demo_buf
-    // owns the data; the malloc'd raw copy can be freed but the zone buffer
-    // outlives playback.  Both are reclaimed when the wasm instance exits.
+    doom._free(ptr);        // the engine keeps its own copy
     return rc;
 }
 

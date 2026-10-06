@@ -14,24 +14,25 @@ const BTN_FIRE   = 0x01;
 const BTN_USE    = 0x02;
 const BTN_SPEED  = 0x08;
 
-// parseDemoTimeline: extract per-tic input data from raw .lmp bytes.
-// Returns an array of { forward, side, angle, buttons } objects (one per tic).
-// header is 13 bytes; each tic is 4 bytes; last byte is DEMOMARKER (0x80).
+// parseDemoTimeline: the console player's input per tic, from raw .lmp bytes,
+// as { forward, side, angle, buttons }.  The header is 13 bytes (byte 8 the
+// console player, bytes 9-12 who is in the game); each tic then holds 4 bytes
+// for every player in the game, in slot order; the marker is 0x80.
 function parseDemoTimeline(demoBytes) {
     const HEADER = 13;
     const MARKER = 0x80;
+    const ingame = [0, 1, 2, 3].filter(s => demoBytes[9 + s]);
+    const stride = 4 * Math.max(1, ingame.length);
+    const own = 4 * Math.max(0, ingame.indexOf(demoBytes[8]));
     const ticks = [];
-    let i = HEADER;
-    while (i + 3 < demoBytes.length) {
-        // Check 4-byte-aligned DEMOMARKER
-        if (demoBytes[i] === MARKER) break;
+    for (let i = HEADER; i + stride - 1 < demoBytes.length && demoBytes[i] !== MARKER; i += stride) {
+        const c = i + own;
         ticks.push({
-            forward: (demoBytes[i] << 24 >> 24),    // signed
-            side:    (demoBytes[i+1] << 24 >> 24),
-            angle:   (demoBytes[i+2] << 24 >> 24),
-            buttons: demoBytes[i+3],
+            forward: (demoBytes[c] << 24 >> 24),    // signed
+            side:    (demoBytes[c + 1] << 24 >> 24),
+            angle:   (demoBytes[c + 2] << 24 >> 24),
+            buttons: demoBytes[c + 3],
         });
-        i += 4;
     }
     return ticks;
 }
