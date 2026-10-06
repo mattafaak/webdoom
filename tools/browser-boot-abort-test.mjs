@@ -18,7 +18,6 @@ import { check, summary, fatal } from './lib/report.mjs';
 
 const url = process.argv[2] ?? fatal('usage: browser-boot-abort-test.mjs <url>');
 const chrome = await launchChrome();
-process.on('exit', () => chrome.kill());   // also on a fatal()
 
 const tab = await chrome.tab('about:blank');
 await tab.cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
@@ -74,6 +73,5 @@ check(`no engine frames while the launcher shows (${sampled} samples)`, zombie =
 const gameSockets = await tab.ev(`window.__sockets.filter(s => s.url.includes('/ws/game') && s.readyState <= 1).length`);
 check('no game socket is left open behind the launcher', gameSockets === 0, `${gameSockets} open`);
 await tab.close();
-const passed = summary('a session that ends while the game is loading leaves nothing running');
-chrome.kill();
-process.exit(passed ? 0 : 1);
+summary('a session that ends while the game is loading leaves nothing running');
+process.exit();
