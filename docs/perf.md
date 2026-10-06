@@ -1,1869 +1,360 @@
-# webdoom performance baseline — memory & size audit
+# Performance and memory
 
-Measured at commit 6de6256 (engine state; audit landed as e9e4e61), 2026-07-15.
-All numbers taken on the dev host (alder, i9-12900K) unless noted; zone/heap
-figures are deterministic (same wasm, same allocator, same WAD bytes) and
-host-independent.
+What the shipped artifacts cost today, where the time goes, and how to measure
+any of it again with the tools in this tree. Every figure names its host, the
+build it was taken on and the date. A figure that could not be tied to the
+current tree is not here; `git log -- docs/perf.md` has the older ones.
 
-Per-stage fleet performance numbers live in `tools/golden/bench-baseline.json`.
-The ranked optimization queue arrives with task 2.1.
+The candidates that were tried against these numbers, landed or killed, are in
+[optimization-ledger.md](optimization-ledger.md). Retro-hardware arithmetic that
+builds on the instruction counts below is in [retro.md](retro.md), and the
+core-to-platform contract a no-OS port needs is in [bare-metal.md](bare-metal.md).
 
-> **THE FLEET IN THIS DOCUMENT IS FOUR HOSTS; THE GATE IS THREE.** Every `pi5`
-> column, row and section below is measured evidence from before the
-> **2026-09-11 fleet amendment** (`spec.md` §"Fleet amendment, 2026-09-11: pi5
-> retired, ARM reassigned"), which retired pi5 from the perf gate after it
-> stopped answering. The numbers are kept because history is not discarded and
-> they were true when taken — but nothing in this file should be read as a claim
-> about the *current* fleet, which is wbox, tank and alder.
->
-> What pi5 contributed was also narrower than "ARM reference" suggests:
-> `fleet-bench.sh` ran `bench.mjs` against the **wasm** build, and wasm is
-> architecture-independent by construction, so those rows were a performance
-> sample and never tested ARM codegen, ABI or alignment. The ARM *correctness*
-> half is the `arm-cross` suite leg, on a host that answers.
->
-> The gate itself is the `perf-fleet` leg (`tools/run-tests.sh --perf`), added
-> in round 6. `spec.md` had required it since it was written and no leg existed.
-
-Quantitative claims are enumerated in `docs/claims-index.md`. Run
-`bash tools/archaeology/verify-all.sh --full` to cross-check all
-verified figures (default fast gate covers source constants; `--full`
-adds size stamps and runtime stats); CI runs the fast gate on every
-push. Claims that cannot be automated are marked *(not machine-verified)*
-inline with the reason from `tools/archaeology/claims.json`.
+Hosts: **alder** (i9-12900K, the development host; fast here proves nothing),
+**tank** (i5-8350U) and **wbox** (AMD G-T56N Bobcat, 1.65 GHz, in-order: the
+floor, where a regression blocks).
 
 ---
 
-## 1. wasm section breakdown
+## 1. The budget, and where the time goes
 
-Command: `llvm-objdump -h build/doom.wasm`
-(llvm-objdump from `$EMSDK_DIR/upstream/bin/`, emsdk 6.0.2)
-CI verify (commit-pinned): `node tools/archaeology/wasm-stamp.mjs` (CODE/DATA/heap_base)
-and `node tools/archaeology/stamp-check.mjs` (total size, gzip size)
+DOOM runs its simulation at 35 Hz, so one tic has **28.57 ms**. The wasm engine
+uses a small fraction of that on every host:
 
-| # | Section   | Size (bytes) | Size (KB) | Notes |
-|---|-----------|--------------|-----------|-------|
-| 0 | TYPE      |          232 |      0.2  | function signatures |
-| 1 | IMPORT    |          169 |      0.2  | host imports (emscripten env) |
-| 2 | FUNCTION  |          385 |      0.4  | function index → type mapping |
-| 3 | TABLE     |            7 |      0.0  | indirect call table |
-| 4 | MEMORY    |            6 |      0.0  | initial memory declaration |
-| 5 | GLOBAL    |            9 |      0.0  | wasm globals (stack pointer etc.) |
-| 6 | EXPORT    |          285 |      0.3  | exported symbols |
-| 7 | ELEM      |          284 |      0.3  | indirect call table initializer |
-| 8 | DATACOUNT |            2 |      0.0  | data segment count |
-| 9 | **CODE**  |      281,277 |    274.7  | compiled machine code (TEXT) |
-|10 | **DATA**  |       75,283 |     73.5  | initialized data segments |
-| — | headers   |          244 |      0.2  | wasm magic + section framing |
-| — | **Total** |  **357,978** |  **349.6**| gzip-9: 145,990 bytes (142.6 KB) |
+| host | wasm render, ms per frame (demo1 / demo2 / demo3) | share of 28.57 ms | sim, ms per tic |
+|---|---|---|---|
+| wbox | 0.5675 / 0.4980 / 0.4855 | 1.7–2.0% | 0.067–0.110 |
+| tank | 0.1098 / 0.0982 / 0.0945 | 0.33–0.38% | 0.010–0.019 |
+| alder | 0.0567 / 0.0498 / 0.0484 | 0.17–0.20% | 0.005–0.010 |
 
-**Every number in that table is pinned to commit 6de6256 (2026-07-15), and the
-engine has shrunk by about a sixth since.** The per-section breakdown is why it
-is kept, and the pinned figures are internally consistent with each other, so
-they are not edited row by row — but they are history, not the current build,
-and this paragraph used to state them in the present tense.
+Source: [`tools/golden/bench-baseline.json`](../tools/golden/bench-baseline.json), the reference the perf gate compares
+against — doom.wad attract demos, best of 3, recorded at f402d5c on 2026-07-22
+(a 355,350-byte wasm, before the hybrid build in §2). A fresh alder run on the
+current tree (7f5c682, 2026-10-05, machine shared with other jobs) reads
+0.0607 / 0.0544 / 0.0474 ms, inside the gate's 20% band.
 
-Read the live figures from the tools, which print them on every run:
-`wasm-stamp.mjs` for the sections and `size-ledger.mjs` for the totals. At the
-time of writing they read CODE **217.3 KB** against the pinned 274.7, DATA
-**74.1 KB** against 73.5, raw total **292.9 KB** against 349.6, and gzip-9
-**131.1 KB** against 142.6 — a compression ratio of **2.23×** where the pinned
-table computes 2.45×.
+On wbox the stages split bsp+segs 51%, planes 33%, masked sprites 14%, frame
+setup 2% (means over the three demos). The rank order is the same on every host.
 
-What has not changed is the shape: the CODE section is the dominant cost, DATA
-covers initialized static storage (tables, strings, fixed arrays), and the
-remaining sections together are under 1.4 KB.
+Two consequences shape every optimization decision:
 
-**Closure compiler** (`--closure 1`) and **LTO** (`-flto -O3`) are both active.
-`doom.js`, the ES6 module wrapper, compresses to about 3.6 KB gzip (3,720 bytes
-at the time of writing; `payload-size.mjs` prints it). The pinned figure at
-6de6256 was 3,514 bytes.
-
-*Task-0.5 engine change note*: five zone-stat exports added
-(`web_zone_sample`, `web_zone_hwm`, `web_zone_size`, `web_zone_hwm_reset`,
-`web_heap_base`) to `engine/web/perf.c`; wasm grew by 191 bytes (CODE +156 B,
-EXPORT +30 B, overhead). These exports are kept permanently for task 2.5 and
-2.6 use.
+- **No wasm change is justified as a browser frame-rate win.** Halving wbox's
+  render time saves under 1% of the tic. Wins are claimed in instructions per
+  tic (§5) and in what they buy a bare-metal target, never in browser fps.
+- **The browser side is measured separately** (§6), because palette upload,
+  WebGL, rAF scheduling and audio are invisible to the wasm timers.
 
 ---
 
-## 2. Z_Zone high-water mark per IWAD
+## 2. The shipped artifacts
 
-Zone pool: **4 MB** (hardcoded `ZONESIZE` in `engine/web/web.h`; was 32 MB pre-14.2c).
-Measured by sampling `Z_FreeMemory()` once per unique gametic across all
-attract demos for each IWAD headless (`-nodraw`, `-timedemo`).
+Measured with `node tools/size-budget.mjs` on alder, emsdk 6.0.2, at 7f5c682,
+2026-10-05:
 
-Command: `node tools/zone-measure.mjs`
+| figure | measured | ceiling ([`size-budget.json`](../tools/size-budget.json)) |
+|---|---|---|
+| `build/doom.wasm` | 300,698 B | 307,200 B |
+| `build/synth.wasm` (the AudioWorklet synth) | 21,395 B | 24,576 B |
+| `__heap_base` (stack + DATA + BSS) | 1,512,512 B | 1,572,864 B |
+| cold page load, gzip -9 of the 25 `SHELL_FILES` | 229,486 B | 250,000 B |
+| the same without the engine (JS + CSS + HTML) | 82,220 B | 88,000 B |
 
-### Per-demo peaks
+`build/doom.js`, the ES module wrapper, is 8,774 B. doom.wasm compresses to
+133,762 B with gzip -9 and 123,172 B with brotli at quality 6 (node zlib, same
+date). The ceilings are not exact figures: a change that fits needs no edit,
+and raising one needs its reason in the commit message. The `size-budget` leg
+fails past any of them.
 
-The HWM column is the measurement. The percentage column is **against the
-32 MB zone of the day, which is not what ships** — `ZONESIZE` has been 4 MiB
-since task 14.2c, so multiply each percentage by 8 for the current figure. The
-worst demo, plutonia demo3 at 1.36 MB, is 4.3% of the zone that was and **34%
-of the zone that is**.
+### The wire
 
-| IWAD          | Demo   | Zone HWM (MB) | % of the 32 MB zone (pre-14.2c) |
-|---------------|--------|--------------|-----------|
-| doom.wad      | demo1  |         0.81 |       2.5 |
-| doom.wad      | demo2  |         0.89 |       2.8 |
-| doom.wad      | demo3  |         0.91 |       2.8 |
-| doom.wad      | demo4  |         0.75 |       2.4 |
-| doom2.wad     | demo1  |         0.84 |       2.6 |
-| doom2.wad     | demo2  |         0.84 |       2.6 |
-| doom2.wad     | demo3  |         1.00 |       3.1 |
-| tnt.wad       | demo1  |         0.96 |       3.0 |
-| tnt.wad       | demo2  |         1.29 |       4.0 |
-| tnt.wad       | demo3  |         1.14 |       3.6 |
-| plutonia.wad  | demo1  |         1.25 |       3.9 |
-| plutonia.wad  | demo2  |         1.02 |       3.2 |
-| plutonia.wad  | demo3  |         1.36 |       4.3 |
+`server/serve.js` negotiates `br` > `gzip` > identity for text, JSON and wasm
+bodies of 1 KiB or more, compresses each body once, and answers a matching
+`If-None-Match` with a 304. The service worker is network-first for the shell,
+so a repeat load moves headers only. The 25 shell files are 554,534 B raw and
+212,990 B as the server's brotli sends them (its own parameters, 7f5c682,
+2026-10-05); `http-fuzz` gates the encoding, ETags and 304s. Box art arrives as
+lazy 80×60 thumbnails from `/api/thumb/<file>`, and the WADs are fetched on
+first play, streamed through the service worker and cached.
 
-### Per-IWAD peak (worst demo)
+### Build flags, and why each one
 
-| IWAD         | Peak zone used | % of the 32 MB zone (pre-14.2c) | Verdict |
-|--------------|---------------|-----------------|---------|
-| doom.wad     |      0.91 MB  |            2.8% | |
-| doom2.wad    |      1.00 MB  |            3.1% | |
-| tnt.wad      |      1.29 MB  |            4.0% | |
-| plutonia.wad |      1.36 MB  |            4.3% | **worst** |
+From [`engine/Makefile`](../engine/Makefile). Each row's number is the
+measurement that decided it.
 
-**Finding**: peak zone usage across all attract demos is 1.36 MB out of 32 MB
-allocated — 95.7% of the zone is idle. The zone is over-sized by ~23×
-relative to observed attract-demo usage. Actual gameplay may allocate more
-(more monsters, level-spanning structures) but the 32 MB pool has enormous
-headroom. Task 2.5 (Z_Zone review) and task 2.6 (INITIAL_MEMORY knob sweep)
-should consider reducing `ZONESIZE` to 4–8 MB as a first pass, re-running all
-13 golden demos + interactive playthroughs for confirmation.
-
-`Z_FreeMemory()` counts free + purgeable (tag ≥ PU_PURGELEVEL) blocks as
-free, so the HWM here is the peak of **non-purgeable (irreducible) live
-usage only** — purgeable cache blocks (e.g. textures) are not counted. It
-is a minimum-committed-footprint bound, which slightly understates total
-committed bytes when purgeable caches are large at peak.
+| flag | measured reason | where |
+|---|---|---|
+| `-Oz` per object, `-O3` for the 17 files in `HOT`, link `-O3 -flto` | doom.wasm 355,395 → 299,348 B (−15.8%), gzip −8.7%; alder render and sim inside the noise floor (2026-09-16) | ledger C8 |
+| not whole-program `-Os` / `-Oz` | `-Os`: sim −9.3% on wbox (2026-07-16); `-Oz`: sim −11% on alder (2026-09-16) | ledger K5 |
+| not `-O2` | −2.7% gzip against `-O3`; alder sim +3.4% on one rep, never fleet-benched (2026-07-16) | ledger K5 |
+| `--closure 1` | doom.js 8,264 vs 19,097 B raw, 3,582 vs 6,000 B gzip (2026-07-16); the wasm is unchanged | ledger K5 |
+| `-sINITIAL_MEMORY=32MB`, no growth | worst real WAD combination peaks at 23.06 MiB (§3) | ledger C3 |
+| `-sSTACK_SIZE=1MB` | measured stack peak ≈14 KiB over 13 demos | ledger C7 |
+| `-sMALLOC=emmalloc` | the engine makes two large mallocs (zone, WAD) and few small ones; dlmalloc's extra code buys nothing for that pattern (reasoned, not measured) | — |
 
 ---
 
-## 3. Heap headroom vs 32 MB
+## 3. Linear memory
 
-`INITIAL_MEMORY=32MB` (since task 14.2c; was 64 MB), `ALLOW_MEMORY_GROWTH=0` (Makefile). Memory is a flat
-wasm linear region; the allocator is emmalloc (`-sMALLOC=emmalloc`).
+The wasm memory is a flat 32 MiB (33,554,432 B) with growth off. Layout on the
+7f5c682 build:
 
-Command: `node tools/zone-measure.mjs` (reports `__heap_base` + peak formula)
+| region | size | source |
+|---|---|---|
+| C shadow stack, at the start of memory | 1 MiB | `STACK_SIZE` |
+| static data (DATA + BSS) | 463,936 B (453 KiB) | `__heap_base` − 1 MiB |
+| `__heap_base` | 1,512,512 B (1.44 MiB) | read from the wasm by `size-budget.mjs` |
+| zone pool, one `malloc` | 4 MiB | `ZONESIZE` in `engine/web/web.h` |
+| WAD copies, one `malloc` each | IWAD + optional PWAD | |
 
-### Linear memory layout
+Every byte of `__heap_base` comes out of WAD headroom, which is why it has its
+own ceiling. Peak address for the worst real combinations in the library
+(`__heap_base` + zone + WADs; small allocations excluded):
 
-| Region | Size | Notes |
-|--------|------|-------|
-| C shadow stack | 1 MB | `STACK_SIZE=1MB` in `engine/Makefile` (4 MB until round 10, 2026-09-16; Axis 3 below); lives at start of linear memory |
-| Static data (DATA + BSS) | 453 KB | initialized tables + zero-init; measured via `__heap_base − 1 MB`; was 1,237 KB before the phase-14 BSS diets (14.2d/e/f), then 515 KB until round 10 removed the 64,000-byte untranspose buffer (`web_rowmajor_buf`) |
-| **Stack + static total (`__heap_base`)** | **1.44 MB** | = 1,512,384 bytes; heap begins here |
-| Zone pool (one `malloc(ZONESIZE)`) | 4 MB | `ZONESIZE` in `engine/web/web.h` (32 MB pre-14.2c); `I_ZoneBase()` in `engine/web/i_system.c` |
-| WAD copy (one `malloc(wad.length)`) | up to 16.61 MB | plutonia.wad, worst case |
-| **Peak heap address** | **~22.06 MB** | = heap_base + zone + worst WAD |
-| **Headroom vs 32 MB** | **~9.94 MB** | slack above worst-case single-IWAD load |
+| combination | WAD bytes | peak | headroom under 32 MiB |
+|---|---|---|---|
+| tnt.wad + tnt31.wad | 18,195,736 + 282,000 | 23.06 MiB | 8.94 MiB |
+| doom2.wad + nerve.wad | 14,604,584 + 3,819,855 | 23.01 MiB | 8.99 MiB |
+| plutonia.wad | 17,420,824 | 22.06 MiB | 9.94 MiB |
+| doom.wad + sigil.wad | 12,408,292 + 4,640,210 | 21.70 MiB | 10.30 MiB |
 
-### INITIAL_MEMORY floor experiment
+`hacx.wad` (51 MB) is skipped by the library because it is not a
+vanilla-engine IWAD, so it is not a row here.
 
-Measured `__heap_base` = 1,512,384 B (2026-09-17).  Round 10 took it from
-4,722,048 by dropping the C stack to 1 MB and deleting the 64,000-byte
-untranspose buffer; round 11 added 48 B for the three ints of music state
-`web_music_state` reports to the worklet synth.  Round 12 briefly added 96 B
-for two `printf` format strings and then took them out again: see
-`engine/web/d_net.c`, where the reasoning is recorded.  The short version is
-that a diagnostic in the engine costs a heap stamp and reads as a write below
-the tic-array base to `hostile-server-test`, and the same refusal is already
-loud on the JS side, where a person can read it.  The 4,722,048 figure was the
-18.2a widescreen unwinding, landing 32 B from the 2026-09-11 prediction of
-4,722,016 for a rebuild at 320 — which is what said that change removed
-widescreen and nothing else.  Worst WAD = plutonia.wad, 17,420,824 bytes; zone
-4,194,304 B, so peak = 23,127,512 B ≈ 22.06 MB (claims perf-012/013).
+### The zone
 
-The floor-experiment table below is the original pre-14.2c record (64 MB /
-32 MB-zone era). Task 14.2c re-established the shipping floor at 32 MiB
-(`buffer.byteLength` = 33,554,432 confirmed on the artifact).
+The zone is 4 MiB. Whether that is enough depends on the render path, not the
+sim: with rendering on, composite textures and sprites fill the purgeable cache
+(`PU_CACHE`), and a small zone evicts them. Measured on the freestanding build
+(the same `engine/core`, rendering on) over all 13 demos, alder, 7f5c682,
+2026-10-05:
 
-Tested by rebuilding the link step with each target and running the full
-plutonia demo3 (5,662 tics, worst-case IWAD):
+| zone | worst non-purgeable peak | worst total peak | PU_CACHE purges per demo | sim hashes |
+|---|---|---|---|---|
+| 32 MiB | 1,081,972 B (tnt demo2) | 11,048,348 B (tnt demo3) | 0 | 13/13 identical |
+| 4 MiB | 1,082,340 B (tnt demo2) | fills the zone | 251–1,428 | 13/13 identical |
 
-| INITIAL_MEMORY | plutonia.wad demo3 | Verdict |
-|----------------|-------------------|---------|
-| 64 MB (current) | 5,662 tics, PASS | baseline |
-| **56 MB** | 5,662 tics, PASS | **confirmed floor** |
-| 52 MB | `Aborted(OOM)` at WAD malloc | OOM |
+So 4 MiB is 3.9× the non-purgeable floor and the cache works under eviction
+without changing anything the demos can see. The shipped wasm runs the same
+4 MiB zone, so `render-goldens` checks the pixels at that size on every run.
 
-**Minimum safe `INITIAL_MEMORY`: 56 MB** *(not machine-verified: requires
-emcc INITIAL_MEMORY sweep build; no current CI script)* (2.18 MB margin
-above measured peak; rounded to a convenient 4 MB boundary). This is the
-headline number for bare-metal targets (task 1.5).
+### Renderer limits
 
-**Recommendation for task 2.6 — LANDED, and this is what happened.** The
-recommendation was to take `ZONESIZE` from 32 MB to 4 MB, re-measure, and see
-whether the `INITIAL_MEMORY` floor dropped below 32 MB. Both shipped in task
-14.2c: the zone is 4 MiB and `INITIAL_MEMORY` is 32 MB. The projection here
-(4 MB zone + 16.61 MB WAD + 5.21 MB static = 25.82 MB peak) was close and
-pessimistic; the gated figure today is `perf-059` = 23.06 MB for the worst real
-PWAD combo, 8.94 MB under what ships. The sentence that used to end this
-paragraph — keep `INITIAL_MEMORY=64MB` until 2.6 verifies it — was correct
-advice in July and has been untrue since.
+Three of the renderer's fixed arrays are back at vanilla sizes; solidsegs
+stays doubled. Their peaks over the 13 demos, measured on the freestanding build with the stats flags in §7 (alder,
+7f5c682, 2026-10-05; solidsegs from a scratch counter on 2026-09-17, which
+has no flag in the tree):
 
----
+| limit | size | corpus peak | margin | on overflow |
+|---|---|---|---|---|
+| `MAXVISPLANES` | 128 | 118 (plutonia demo1) | 1.08× | vanilla's `I_Error` |
+| `MAXDRAWSEGS` | 256 | 205 (doom demo4) | 1.25× | the wall seg is not drawn |
+| `MAXOPENINGS` | 320 × 64 = 20,480 | 2,527 (tnt demo3) | 8.1× | clip arrays dropped, fail-soft |
+| `MAXSEGS` (solidsegs) | 64 (vanilla 32) | 17 | 3.8× | the wall is dropped |
 
-## 4. JS payload sizes
-
-Command: `ls -la` + `gzip -9 -c <file> | wc -c`
-(gzip -9 approximates what a web server with compression sends over the wire)
-
-### Files served per page load
-
-| File | Raw (bytes) | gzip-9 (bytes) | gzip-9 (KB) |
-|------|------------|---------------|------------|
-| `build/doom.wasm` | 299,962 | 134,260 | 131.1 |
-| `client/js/lobby.js` | 33,917 | 11,590 | 11.3 |
-| `build/synth.wasm` | 21,359 | 9,063 | 8.9 |
-| `client/js/net.js` | 17,743 | 6,787 | 6.6 |
-| `client/js/input.js` | 18,037 | 6,652 | 6.5 |
-| `client/js/menu.js` | 17,952 | 6,363 | 6.2 |
-| `client/js/main.js` | 16,472 | 6,193 | 6.0 |
-| `client/js/audio.js` | 17,922 | 6,065 | 5.9 |
-| `client/js/wad-import.js` | 12,023 | 4,611 | 4.5 |
-| `client/css/webdoom.css` | 10,370 | 3,892 | 3.8 |
-| `build/doom.js` | 8,774 | 3,720 | 3.6 |
-| `client/js/doomfont.js` | 9,575 | 3,674 | 3.6 |
-| `client/js/fire.js` | 9,371 | 3,478 | 3.4 |
-| `client/js/scrubber.js` | 9,220 | 3,275 | 3.2 |
-| `client/js/demo.js` | 7,291 | 2,737 | 2.7 |
-| `client/js/video.js` | 6,625 | 2,531 | 2.5 |
-| `client/js/music-worklet.js` | 6,983 | 2,502 | 2.4 |
-| `client/js/countdown.js` | 7,068 | 2,407 | 2.4 |
-| `client/js/persist.js` | 5,338 | 2,006 | 2.0 |
-| `client/js/ui.js` | 3,082 | 1,375 | 1.3 |
-| `client/js/perf-marks.js` | 2,252 | 973 | 1.0 |
-| `client/js/idb.js` | 2,214 | 971 | 0.9 |
-| `client/index.html` | 1,732 | 916 | 0.9 |
-| `client/js/wad-cache.js` | 1,517 | 729 | 0.7 |
-| `client/js/wad-library.js` | 1,159 | 580 | 0.6 |
-| **Total (all, raw)** | **547,958** | — | — |
-| **Total (all, gzip-9)** | — | **227,350** | **222** |
-| **JS+CSS+HTML only (raw)** | 217,863 | — | — |
-| **JS+CSS+HTML only (gzip-9)** | — | 80,307 | **78.4** |
-
-The WAD file itself (doom.wad ≈ 11.8 MB, doom2.wad ≈ 13.9 MB, etc.) is
-fetched separately on first play and cached in the browser; it is not part of
-the initial page-load transfer.
-
-**Finding**: the entire deliverable (wasm + JS glue + client JS + CSS +
-HTML) compresses to **222 KB gzip** on the wire, gated by
-`payload-size` (perf-015/perf-016) since round 8. The wasm is
-59% of that. The JS+CSS+HTML surface is **78.4 KB gzip**
-— note that is **2.1x the 35.1 KB this table used to
-claim**, which went stale unnoticed precisely because both figures were
-marked *not machine-verified*: the old table still listed
-`client/js/settings.js`, deleted in round 7, and omitted `wad-import`,
-`demo`, `scrubber`, `idb`, `wad-library`, `ui` and `wad-cache`. (It also
-listed `mus2mid` and `sf2-library`, which round 10 deleted.) The set is
-DERIVED from `sw.js`'s `SHELL_FILES`, so a new shell file needs no edit here.
+The visplane and drawseg margins are thin for community maps. They stay at
+vanilla's size because raising them costs BSS, and therefore WAD headroom: the
+visplane array at 1,024 entries was 581 KiB more.
 
 ---
 
-## The optimization queue
+## 4. Wall-clock per stage: bench.mjs and the perf gate
 
-*Task 2.1 output — evidence-ranked, per-host-aware, honest about gaps.*
-*This section feeds tasks 2.2–2.7. Every rank shows its arithmetic.*
-*Source commit: 16c3354. Measurement date: 2026-07-15.*
+[`tools/bench.mjs`](../tools/bench.mjs) boots the engine in node and runs
+doom.wad demo1–3 twice each: a render pass that reads the per-stage
+accumulators (frame setup, bsp+segs, planes, masked) and a `-nodraw` pass that
+measures sim throughput in tics per second. It keeps the best of N reps.
 
----
+[`tools/fleet-bench.sh`](../tools/fleet-bench.sh) copies `build/doom.{js,wasm}`, `bench.mjs` and the WAD
+to wbox and tank over ssh, runs alder locally, and prints a per-host table. By
+default it then **rewrites** `tools/golden/bench-baseline.json`; with
+`--check` it writes nothing and fails if any host's per-demo `sum_ms` is more
+than 20% above the baseline (`FLEET_TOL` overrides). The tolerance comes from
+four comparison runs: three stayed inside ±3.7% on all nine host/demo pairs,
+and one had a single tank spike past 10%. That check is the `perf-fleet` leg,
+in the opt-in perf tier because it needs wbox and tank awake; it reports zero
+comparisons as a failure, not a pass.
 
-### A. Per-stage ranked costs per host
-
-> **Render variants.** Besides the vanilla path there is one runtime variant,
-> low-detail (`web_set_detail`, gated by `render-low`). The four FastDoom
-> compile-time toggles were retired in round 10 (2026-09-16); their history and
-> measured effect stay in `optimization-ledger.md` §20.3a–d. Every
-> figure in THIS file is the vanilla path unless it says otherwise.
-
-
-Values are averages across doom.wad demo1/demo2/demo3 from
-`tools/golden/bench-baseline.json` (schemaVersion 2, all four hosts
-coherent at commit 16c3354). The stage order within each host is the
-rank order: #1 = most expensive.
-
-Reproduce: `node tools/bench.mjs` on each fleet host; commit-stamped
-results in `tools/golden/bench-baseline.json` (field: `perStage`).
-
-#### Absolute costs (ms/frame avg)
-
-| rank | stage | wbox | tank | pi5 | alder |
-|------|-------|------|------|-----|-------|
-| #1 | bsp+segs | **0.2625** | 0.0549 | 0.0715 | 0.0481 |
-| #2 | planes | **0.1566** | 0.0386 | 0.0494 | 0.0327 |
-| #3 | masked | **0.0637** | 0.0176 | 0.0209 | 0.0164 |
-| #4 | frame-setup | 0.0069 | 0.0012 | 0.0017 | 0.0008 |
-| — | **render total** | **0.4897** | **0.1123** | **0.1435** | **0.0979** |
-| — | sim (ms/tic) | 0.0706 | 0.0158 | 0.0173 | 0.0135 |
-
-Arithmetic: alder bsp average = (0.0451 + 0.0587 + 0.0404) / 3 = 0.0481.
-Same formula for all cells.
-
-#### Stage share of total render (%)
-
-| stage | wbox | tank | pi5 | alder |
-|-------|------|------|-----|-------|
-| bsp+segs | **53.6%** | **48.9%** | **49.8%** | **49.1%** |
-| planes | 32.0% | 34.4% | 34.4% | 33.4% |
-| masked | 13.0% | 15.7% | 14.6% | 16.7% |
-| frame-setup | 1.4% | 1.0% | 1.2% | 0.8% |
-
-Rank order is identical on all four hosts: bsp+segs > planes > masked >
-frame-setup. The proportions are stable (±3 pp) across the fleet.
-
-#### Cross-host ratios (wbox vs. each)
-
-| stage | wbox/alder | wbox/tank | wbox/pi5 |
-|-------|-----------|-----------|---------|
-| bsp+segs | 5.46× | 4.78× | 3.67× |
-| planes | 4.79× | 4.06× | 3.17× |
-| masked | 3.88× | 3.62× | 3.05× |
-| sim | 5.23× | 4.47× | 4.08× |
-
-wbox is ~5× slower than alder on bsp+segs. pi5 is the best ARM result
-and roughly half way between alder and wbox.
+Sim throughput in the baseline (tics per second, `-nodraw`, average of
+demo1–3, f402d5c, 2026-07-22): alder 199,067; tank 98,942; wbox 19,994. The
+alder run on 7f5c682 read 195,166.
 
 ---
 
-### B. The uncomfortable truth: wasm render vs. 35 Hz budget
+## 5. Instructions per tic: the cycle floor
 
-At 35 Hz the per-frame budget is 1000 / 35 = **28.57 ms**.
+Wall-clock on a desktop says little about a 100 MHz target, and it moves with
+whatever else the machine is doing. The freestanding build counts retired
+user-space instructions instead (`PERF_COUNT_HW_INSTRUCTIONS`, kernel
+excluded), per tic and per stage. This is the currency the optimization ledger
+uses.
 
-| host | render total (ms) | % of 28.57 ms budget |
-|------|-------------------|----------------------|
-| wbox | 0.4897 | **1.71%** |
-| pi5 | 0.1435 | 0.50% |
-| tank | 0.1123 | 0.39% |
-| alder | 0.0979 | 0.34% |
+Measured on alder at 7f5c682, 2026-10-05: `fs-doom` (`-m32 -O1`, x86), rendering
+on, all 13 demos, 44,580 tics. Each cell is the mean over that IWAD's demos of
+the per-demo median (p50) instructions per tic:
 
-The wasm render loop is **under 2% of the 35 Hz budget on the weakest
-browser host (wbox)**. The remaining ~98% of each tic is spent elsewhere.
+| IWAD | whole | sim | bsp+segs | planes | masked | sim share |
+|---|---|---|---|---|---|---|
+| doom.wad (4 demos) | 1,226,206 | 60,848 | 533,200 | 432,942 | 144,302 | 5.0% |
+| doom2.wad | 1,359,684 | 82,409 | 580,680 | 396,761 | 173,042 | 6.1% |
+| tnt.wad | 1,358,444 | 52,374 | 560,606 | 522,261 | 140,994 | 3.9% |
+| plutonia.wad | 1,464,397 | 90,145 | 613,508 | 502,556 | 183,109 | 6.2% |
 
-Sim is even less: wbox 0.0706 ms/tic / 28.57 ms = 0.25% of budget.
+Frame setup is 2,558 per tic everywhere. The remainder (`other`: net update,
+bracket overhead) is 27–57 K. The stage counters and the whole-tic counter read
+the same perf fd, so the stages reconcile with the whole to 0.0%.
 
-**What this means for browser play**: the wasm inner loops are not the
-user-visible bottleneck. The JS/browser pipeline — palette conversion and
-WebGL texture upload in `client/js/video.js`, rAF scheduling jitter,
-AudioWorklet mixing — is invisible to the wasm bench harness. MEASURED
-since task 12.2b by `tools/browser-pipeline.mjs` (leg `browser-pipeline`),
-which gates per-stage p99s against a committed per-host baseline.
+doom demo3, the demo the ledger quotes, is p50 **1,121,056**. The highest p99
+is doom demo4 at 2,642,490 (maxima are level-load tics). Repeat runs of one demo
+agree within 0.2% at p50, and with the counter on all 13 per-tic hash streams
+still match the goldens.
 
-A 50% speedup in wasm bsp+segs on wbox saves
-0.2625 ms × 50% = 0.13 ms/frame = 0.46% of budget.
-This is unmeasurable by the user at 35 Hz. The browser play
-experience is dominated by the JS/GPU side, which §C below now measures.
-
-**What this means for the bare-metal future (ESP32/Cortex-M)**:
-A 240 MHz LX7 without PSRAM optimization is projected to spend
-render / 0.24 ≈ 2 ms/frame on render alone (docs/bare-metal.md §7.3),
-out of a 28.57 ms budget. At that scale the wasm stage ranking IS the
-right optimization proxy and the queue matters. PSRAM latency on
-column-stride writes (`screens[0]`, SCREENWIDTH = 320 bytes/step) is
-the primary expected bottleneck; placing `screens[0]` in internal SRAM
-is the primary mitigation (bare-metal.md §7.3).
-
-**Conclusion for queue ordering**: the queue is shaped primarily by the
-bare-metal axis. Browser wins are labelled separately and conditioned
-on the browser-side measurement gap being filled first (Q0 below).
+Render (frame setup, bsp+segs, planes, masked) is 85–91% of a tic and the sim
+4–6%. These are x86 instructions from a `-O1` build, not wasm and not any
+target ISA; [retro.md](retro.md) converts them with its own stated factors.
 
 ---
 
-### C. Browser-side measurement gap — **MEASURED** (task 12.2b)
+## 6. The browser pipeline
 
-The gap described below was open through task 12.2a and is **now closed** by task 12.2b.
-Per-frame profiling was implemented in `client/js/{main,video,music-worklet,audio}.js`
-behind the `?perfmarks=1` query flag and collected via `tools/browser-pipeline.mjs`.
-Results are in §C results — per-frame pass (task 12.2b) below.
+Under `?perfmarks=1` the client records per-frame durations into
+`window.__wd_perf`.
+[`tools/browser-pipeline.mjs`](../tools/browser-pipeline.mjs) drives headless
+Chrome through CDP into E1M1, collects at least 200 frames and 35 input
+samples, and reports p50/p90/p99 per stage:
 
-**Defined** (retained for history): a browser pipeline profile would measure, per rAF frame:
+| stage | what it times |
+|---|---|
+| (a) palette | palette texture upload when the palette changes |
+| (b) upload | framebuffer `texSubImage2D` + draw |
+| (c) raf | frame-to-frame interval, and the whole rAF callback |
+| (d) worklet | the AudioWorklet's `process()` |
+| (e) inputLat | keydown `timeStamp` to `renderer.draw()` returning |
+| (f) opl | music synthesis on the main thread |
 
-- `video.js` blit path: `I_FinishUpdate` palette expansion (64,000
-  indexed-byte → RGBA lookups) + `texSubImage2D` WebGL call latency
-- WebGL state change count and GPU pipeline stall
-- rAF scheduling jitter (deviation from 16.67 ms target at 60 Hz)
-- AudioWorklet mixing budget (OPL synthesis at 140 Hz + PCM mixing)
-- Total JS time between consecutive rAF callbacks
+The committed baseline is `tools/golden/browser-pipeline-alder.json` (eb85484,
+2026-07-22, Chrome 150, two runs of about 4,600 frames each):
 
-**Can `tools/browser-test.mjs` do this cheaply?** It uses Chrome
-DevTools Protocol (CDP) for UI automation (screenshots, key input,
-console error capture) but has no per-frame timing instrumentation.
-Getting accurate per-frame JS breakdowns requires either:
+| stage | run 1 | run 2 |
+|---|---|---|
+| upload p99 | 0.2 ms | 0.2 ms |
+| rAF callback p99 | 1.3 ms | 1.3 ms |
+| rAF interval p50 | 16.7 ms | 16.7 ms |
+| input latency p50 | 9.5 ms | 9.8 ms |
 
-1. Chrome Tracing API (`Tracing.start`/`Tracing.stop`) with
-   `devtools.timeline` category — produces a trace JSON that must be
-   parsed for `FunctionCall` events; non-trivial to extract per-function
-   frame breakdowns without a full trace-viewer pipeline.
-2. Instrumenting `video.js` with `performance.mark`/`performance.measure`
-   around the blit and WebGL calls, then reading via
-   `Performance.getMetrics` or `PerformanceObserver` — works but requires
-   adding measurement code to the client that must be reverted.
-3. Using the `Performance.getMetrics` CDP call for aggregate stats
-   (heap, scripting time, GPU time) — less precise but fast to add.
+Input latency is about half a 60 Hz frame because events land at a random
+phase; the JS pipeline adds under a millisecond of it. Compositing after
+`draw()` is not included.
 
-**Cheap first step**: `cdp('Performance.getMetrics')` is already
-usable within browser-test.mjs's existing CDP infrastructure (the
-`cdp()` helper is defined at line 40). Adding it is literally 2 lines:
-call once before and once after the gameplay loop, diff the `TaskDuration`
-and `ScriptDuration` fields. This yields aggregate JS scripting time —
-not per-frame breakdowns, but a budget sanity-check that costs nothing
-to obtain and should be done before investing in full tracing.
+`tools/pipeline-gate.sh` is the `browser-pipeline` leg: it collects one run,
+and `tools/browser-pipeline-compare.mjs` fails any checked stat that exceeds
+the worse baseline run by more than three times max(the two runs' spread, a
+per-stage floor). Input-latency p99 (n=35) and the worklet stage are not
+compared. Only alder has a baseline; any other host SKIPs by name.
 
-**Verdict**: do the 2-line `Performance.getMetrics` call immediately as
-a sanity check. Full per-frame tracing (option 1, Chrome Tracing API)
-or client-side `performance.mark` instrumentation (option 2) remains
-deferred — add as Q0 in the queue. The queue entries below apply
-unambiguously to the bare-metal axis; their browser applicability is
-flagged NEEDS-Q0 where the JS side might dominate.
+**Audio cannot be measured unattended.** Headless Chrome, and headed Chrome
+under `xvfb-run`, arm the AudioContext and never pull it, because there is no
+output device. Stages (d) and (f) read nothing there. On a desktop session,
+`node tools/browser-pipeline.mjs --headed` reads them.
 
-#### §C results — cheap pass (task 12.2a, 2026-07-17, commit 13ffb9d)
+### Why the synth runs in the AudioWorklet
 
-Measured in task 12.2a via `tools/browser-metrics.mjs`, RETIRED in round 11:
-it booted webdoom headlessly, played 60 s and sampled `Performance.getMetrics`,
-and nothing compared its two committed goldens against anything — an
-ungated measurement with a golden is a file, not a gate.  The per-stage
-successor is `browser-pipeline` (p50/p90/p99 per stage against a committed
-per-host baseline, leg `browser-pipeline`), and `browser-teardown` covers the
-accumulation question this section opened.  The figures below stand as the
-2026-07-17 measurement they were.  Reproduce the successor (alder):
+The music synth used to run on the main thread from a 100 ms timer. Measured in
+node with the same wasm, `mus_intro`, 300 calls of 4,800 frames at 48 kHz after
+10 discarded (2026-09-16):
 
-```
-node tools/browser-pipeline.mjs --json      # starts its own server
-```
+| host | per 100 ms call, p50 / p99 | share of wall time |
+|---|---|---|
+| alder | 1.76 / 1.84 ms | 1.8% |
+| tank | 3.98 / 4.09 ms | 4.0% |
+| wbox | 18.5 / 19.7 ms | 18.6% |
 
+The share was not the problem; the shape was. One synchronous 19 ms call every
+100 ms drops a frame every sixth frame on wbox. `build/synth.wasm` links the
+same `mus_opl.c` and `opl3.c` objects as the engine and renders each 128-frame
+quantum inside the worklet, so none of that is on the main thread now. The
+main-thread path remains only for insecure origins, which have no
+`audioWorklet`. The `opl-mode` leg drives the shipped `client/js/music-worklet.js`
+in node, 128 frames at a time, and requires its output byte-identical to the
+engine's, because no browser here will run `process()` unattended.
 
+### Page load
 
-**Aggregate results** (ScriptDuration, TaskDuration are cumulative CPU seconds;
-LayoutDuration and RecalcStyleDuration are 0 throughout — DOM does not change
-during gameplay):
+`tools/load-budget-test.mjs` (the `load-budget` leg) loads the page twice in
+one Chrome profile and times launcher to running engine. Baseline
+`tools/golden/load-budget-alder.json`, recorded 2026-09-13: cold 371 ms, warm
+331 ms. The budget is the warm figure × 2.5 with a 4 s floor, so it is a
+regression tripwire, not a speed claim. Hosts without a baseline SKIP.
 
-| host | CPU | wall (s) | ScriptDuration (s) | script % of wall | TaskDuration (s) | task % of wall | heap used (MB) |
-|------|-----|----------|-------------------|-----------------|-----------------|----------------|---------------|
-| alder (i9-12900K) | 3.6 GHz P-core | 63.2 | 1.90–1.97 | **3.0–3.1%** | 3.0–3.1 | 4.8–4.9% | 1.86 |
-| wbox (AMD G-T56N Bobcat) | 1.65 GHz | 63.1 | 0.61 | **0.97%** | 1.63 | 2.59% | 1.53 |
+### The launcher fire
 
-(alder run-to-run variance: scriptSec +0.061s between two consecutive runs = 3.2% relative; within normal noise.)
-
-**Key observations**:
-
-1. **Main-thread JS is < 3% of wall on alder, < 1% on wbox** (aggregate).
-   The V8 heap used by webdoom's JS layer is 1.5–1.9 MB — tiny because the
-   wasm engine owns its own 64 MB linear memory outside V8's heap.
-
-2. **LayoutDuration and RecalcStyleDuration deltas are exactly 0** during
-   gameplay on both hosts.  The browser's CSS/layout engine does zero work
-   during active game rendering — the game is drawn entirely in a WebGL
-   canvas and the DOM is static.
-
-3. **wbox shows lower script% than alder** despite being slower.  In headless
-   Chrome (`--headless=new`) without a real vsync source, rAF fires at a
-   rate limited by the CPU's ability to process frames.  On the slow Bobcat
-   (≈ 1.65 GHz), Chrome fires fewer rAF callbacks per second of wall time
-   → fewer `video.js` tic-callback invocations → less ScriptDuration
-   accumulated per second.  This is a headless-measurement artefact:
-   on a real display at 60 Hz the Bobcat would be CPU-bound rather than
-   rAF-rate-limited.
-
-4. **AudioWorklet is not captured**.  `AudioWorkletProcessors: 1` confirms
-   the AudioWorklet is active throughout, but its CPU time runs on a
-   dedicated audio thread and is NOT included in `ScriptDuration`.
-   The OPL synthesis at 140 Hz + PCM mixing cost is unknown from this data.
-
-**Go / no-go verdict for 12.2b per-stage `performance.mark` instrumentation**:
-
-| pipeline stage | aggregate data says | verdict |
-|----------------|---------------------|---------|
-| palette expand (`I_FinishUpdate`) | Subsumed in 3% ScriptDuration total. Total is too small for palette expand alone to be material. | **NEGLIGIBLE** — skip 12.2b for this stage |
-| `texSubImage2D` WebGL upload | Same: total ScriptDuration < 3%, cannot dominate. | **NEGLIGIBLE** — skip 12.2b for this stage |
-| rAF jitter | `Performance.getMetrics` gives no per-frame timing. Cannot assess from aggregate. rAF jitter may still cause audio/video sync issues even with low CPU usage. | **MERITS 12.2b** — aggregate data blind to frame-level jitter |
-| AudioWorklet (OPL + PCM) | Zero contribution to measured ScriptDuration, and NOT because it is off-thread: round 10 found the OPL synth runs on the MAIN thread in a 100 ms timer and measured it as stage (f) `opl`; the worklet only copies samples. | **MERITS 12.2b** — need AudioWorklet-specific instrumentation |
-| input latency | Not assessable from aggregate metrics — `Performance.getMetrics` carries no event-to-present timing; CPU headroom bounds throughput, not queueing delay (event → ticcmd → 35 Hz tic boundary → render → present). | **MERITS 12.2b** |
-
-**Conclusion**: the cheap-pass data closes the budget sanity-check: webdoom's
-entire JS main-thread pipeline consumes < 3% of wall-clock CPU on alder at
-35 Hz / 60 fps.  The three stages that MERIT further measurement (rAF jitter,
-AudioWorklet thread cost, and input latency) require per-frame
-`performance.mark` instrumentation (12.2b) and are NOT addressable with
-aggregate CDP metrics alone.
-12.2b should be scoped to: rAF frame-to-frame interval distribution,
-AudioWorklet timing, and event-to-present latency; ignoring palette expand /
-texSubImage2D (aggregate already rules them out).
-
-#### §C results — per-frame pass (task 12.2b, 2026-07-18, commit 5a71e12)
-
-Measured via `tools/browser-pipeline.mjs`: boots webdoom headlessly with
-`?perfmarks=1`, navigates to E1M1, collects ≥200 rAF frames + ≥35 input-latency
-samples.  Each stage accumulates raw duration arrays in `window.__wd_perf`;
-the collector reads them via CDP `Runtime.evaluate` and emits per-stage
-percentile stats.  Raw golden files: `tools/golden/browser-pipeline-<host>.json`.
-
-Reproduce (alder — run twice and compare for variance):
-```
-node tools/browser-pipeline.mjs --url http://127.0.0.1:8666/ --json
-```
-Reproduce (wbox):
-```
-DOOM_PORT=8672 node ~/.cache/webdoom-pipeline/server/serve.js &
-node ~/.cache/webdoom-pipeline/tools/browser-pipeline.mjs \
-    --url http://127.0.0.1:8672/ --json
-```
-
-**Per-frame results** (all times in ms; alder = two consecutive runs; wbox = one run):
-
-| stage | alder run1 | alder run2 | wbox | notes |
-|-------|-----------|-----------|------|-------|
-| (a) palette upload | p99=0.1 n=2 | p99=0.1 n=2 | p99=5.3 n=63 | WebGL2: 256×1 RGB texSubImage2D when paletteDirty; very rare on alder (static scene); more frequent on wbox due to combat flashes. All negligible vs 35 Hz budget. |
-| (b) FB upload (texSubImage2D) | p50=0 p99=0.2 max=0.3 | p50=0 p99=0.2 max=0.3 | p50=0.1 p99=6.5 max=7.3 | 320×200 R8 upload every frame. alder: sub-ms always. wbox: p99 spike 6.5 ms (Bobcat cache pressure) but p50=0.1 ms. |
-| (c) rAF jitter (interval) | p50=16.7 p99=16.8 max=66.7 | p50=16.7 p99=16.8 max=50.1 | p50=200 p99=500 max=683 | alder headless: locked at 16.7 ms (60 fps) — tight; max=50–67 ms is 1–3 dropped frames (OS jitter). wbox: rAF rate-limited at ~5 fps (200 ms) because Bobcat cannot complete one frame faster. |
-| (c) rAF callback duration | p50=0.2 p99=0.8 max=10.9 | p50=0.2 p99=0.9 max=10.9 | p50=2.4 p99=30.6 max=239 | Total JS rAF callback. alder: 0.2 ms median — well within 16.7 ms frame budget. wbox: 2.4 ms median; p99 30 ms dominated by wasm engine time, not JS overhead. |
-| (d) AudioWorklet | n=0 | n=0 | n=0 | **Headless limitation**: `AudioContext` did not arm in headless Chrome — CDP key events are not trusted user activations for `AudioContext.resume()`. Worklet instrumentation (`music-worklet.js` + `audio.js`) is implemented and functional; requires interactive session to collect. |
-| (e) input latency | p50=8.3 p99=35.5 n=35 | p50=8.4 p99=60.6 n=35 | p50=101.6 p99=3396 n=35 | **keydown `event.timeStamp` → `renderer.draw()` returns** (GPU upload submitted; compositing not waited). alder p50 ≈ 8–9 ms ≈ half the 16.7 ms frame interval (expected for random-phase events). wbox p50 ≈ 100 ms ≈ half the 200 ms rAF interval (frame-rate-limited). p99 tails are OS scheduling spikes. |
-
-**Key observations (12.2b)**:
-
-1. **(a) and (b) confirmed negligible**: per-frame percentiles back the 12.2a
-   aggregate ruling.  Palette upload is sub-ms and rare; FB upload is sub-ms
-   at p50 on both hosts.  No action needed — the JS blit path is not a
-   bottleneck at either clock speed.
-
-2. **rAF jitter on alder is excellent**: p50/p90/p99 ≈ 16.7 ms; jitter is
-   sub-millisecond at p99.  The rare max (50–67 ms) is 1–3 dropped frames
-   from OS interrupts, not a structural issue.  On a display-synced real
-   session the rAF is vsync-locked and jitter would be even tighter.
-
-3. **AudioWorklet is unmeasured (headless limitation — §C residual, task 15.2)**:
-   The instrument is implemented and posted-timing messages are wired through
-   `audio.js`.  Verified disposition (2026-07-19): headless Firefox (152.0.6)
-   was tested alongside headless Chrome during task 15.2 — Firefox headless
-   also does NOT arm AudioContext without a real user gesture; worklet n=0 in
-   Firefox headless is identical to Chrome headless.  The headless limitation
-   is browser-independent, not a Chrome quirk.  Collecting worklet timing
-   requires an interactive session where `AudioContext.resume()` can arm.
-   **Deferred with owner**: requires interactive run; no automated CI path
-   exists without a trusted user-activation API (none available in either
-   browser's headless mode).  Residual remains open as a future interactive
-   profiling task.
-
-4. **Input latency tracks frame interval, not JS cost**: alder p50 ≈ 8 ms
-   (half of 16.7 ms frame) is exactly what you'd expect for events landing
-   at a random phase.  This is **not** JS overhead; it is the irreducible
-   quantization latency of a 35 Hz-synced rAF loop.  Reducing it would
-   require sub-tic input processing (engine change) or higher render rate.
-   The JS pipeline itself adds < 1 ms to this (rAF callback duration p50 =
-   0.2 ms).  **Measurement scope**: event firing → GPU upload call; actual
-   display presentation adds compositing pipeline time (typically 1–3 ms
-   additional in non-headless Chrome).
-
-5. **wbox interpretation**: wbox's 200 ms rAF interval is a headless artefact
-   (Bobcat CPU cannot sustain 60 fps without vsync pacing).  On a real 35 Hz
-   display the game would tic-limit at 28.6 ms/frame and upload/rAF numbers
-   would be much smaller.  The wbox per-frame data characterises the absolute
-   worst case, not the play experience.
-
-**Measurement scope precision (input latency)**:
-Exact tic-consumption attribution (event → tic that processed it → first
-render after that tic) was not implemented because it requires engine changes
-(`_web_input_event` → tic boundary tracking exported to JS).  The measured
-quantity is `keydown.event.timeStamp → renderer.draw() returns` — this is
-event-to-next-rAF-draw latency, not event-to-display.  Compositing pipeline
-adds ≈ 1–3 ms further in real Chrome (not measured here).
+`client/js/fire.js` runs a 64×40 grid at about 16 Hz and pauses while the
+engine runs: 0.0078 ms per tick on alder and 0.072 ms on wbox in a node
+microbench (2026-07-16), against a 1 ms budget. `browser-fire` fails above
+0.5 ms on alder as a gross-regression guard.
 
 ---
 
-### D. Within bsp+segs: attribution reasoning
+## 7. How to measure
 
-`bsp+segs` times `R_RenderBSPNode` (the BSP walk) and
-`R_StoreWallRange` → `R_RenderSegLoop` (wall column draws) together,
-because the draw calls are interleaved with the BSP recursion.
+All commands run from the repository root. Build first:
+`source tools/emsdk-env.sh && make -C engine`.
 
-The dominant sub-cost is **`R_DrawColumn`** calls from
-`R_RenderSegLoop`. Each visible wall fragment from x1 to x2 invokes
-the column-draw inner loop (renderer.md §7.2) for each column in the
-range:
+**Sizes.** `node tools/size-budget.mjs` prints all five figures and fails past
+a ceiling. For a section breakdown, `llvm-objdump -h build/doom.wasm` (from
+`$EMSDK_DIR/upstream/bin/`).
 
-```
-for dc_x in [x1, x2]:
-    dest = ylookup[dc_yl] + columnofs[dc_x]
-    // inner loop: dc_yh - dc_yl + 1 iterations, each:
-    *dest = dc_colormap[dc_source[(frac >> FRACBITS) & 127]]
-    dest += SCREENWIDTH  // 320-byte stride → cache miss per pixel
-    frac += fracstep
-```
-
-The `dest += SCREENWIDTH` write is the **primary cache-miss source**:
-each pixel write is 320 bytes past the previous, one new cache line
-(64 bytes) per pixel on typical hardware. For a 200-row column at 1:1
-scale: 200 cache-line misses per column draw.
-
-**MEASURED (task 2.2): R_DrawColumn and R_DrawSpan call counts per frame**
-— see the results below (714.8 and 147.8 calls/frame, gated as `perf-034`
-and `perf-035`). The procedure that produced them, for re-running it:
-1. `long web_perf_col_calls, web_perf_span_calls` in `engine/web/perf.c`
-   with KEEPALIVE getters, reset in `web_perf_reset()` (shipped).
-2. Increment `web_perf_col_calls` at the top of `R_DrawColumn`;
-   increment `web_perf_span_calls` at the top of `R_DrawSpan`.
-3. Rebuild wasm; run `node tools/bench.mjs doom.wad 1` on each host.
-4. Record counts; compute avg column pixels (= sum of (dc_yh−dc_yl+1)
-   per call if a pixel counter is added, or derive from render time).
-5. **Revert all engine changes**; rebuild to pristine 16c3354;
-   verify 13/13 sim goldens + 13/13 render goldens before committing
-   anything but docs.
-
-Corrected call-count estimate from renderer.md §4.4/§6.7 (UNVERIFIED —
-measure per the §D procedure above before citing these numbers):
-- Walls (`R_RenderSegLoop`, renderer.md §4.4): ~30–50 drawsegs/frame,
-  each covering ~5–15 columns on average with 1 tier = **~250–450**
-  R_DrawColumn calls from wall draw alone.
-- Sprites (`R_DrawVisSprite` loop, renderer.md §6.7): width varies
-  widely (weapon psprite ~60 cols; small enemy ~10 cols; tall close
-  enemy ~100 cols); 5–15 visible sprites × 10–100 cols each ≈
-  **~250–2,000** calls.
-- Sky (renderer.md §9): one R_DrawColumn per column of the sky
-  visplane, up to 320 columns = **~100–300** calls.
-- Estimate at the time: ~1,000–3,000 R_DrawColumn calls/frame. SUPERSEDED
-  by the measurement below: **714.8**. (An earlier 15,000–25,000 figure was
-  an arithmetic error, conflating pixels-per-column with calls-per-column.)
-
-**R_DrawSpan** (floor/ceiling spans) is cheaper per call than
-R_DrawColumn because its `dest++` writes are sequential (horizontal
-row) — cache-friendly. The `ds_source` flat-texture reads are random
-within a 4096-byte flat (likely L1-resident). This explains why planes
-is only 32% of render despite floor/ceiling covering more pixels than
-walls in typical open spaces.
-
----
-
-### E. Sim: rank or dismiss
-
-wbox sim = 0.0706 ms/tic; at 35 Hz = 0.0706/28.57 = **0.25% of budget**.
-
-Headless sim throughput from v1 bench: wbox 21,107 tics/s
-= 35/21107 × 100 = **0.17% CPU** at 35 Hz. The render-pass measurement
-confirms: sim is negligible. (Reproduce: `tools/golden/bench-baseline.json`
-field `v1.frameThroughput`)
-
-**Risk vs. reward**: the sim is the frozen surface (playsim.md §16).
-Any change to:
-- `P_Random()` call sequence (ordering of any sim action)
-- thinker list traversal order
-- `P_BlockLinesIterator` / `P_BlockThingsIterator` iteration order
-- `P_TraverseIntercepts` sort order
-
-...would desync all 13 golden demos. The cross-validation against 44,580
-Chocolate Doom tics *(the reference build is `tools/build-choco-reference.sh`;
-re-run with `demo-test.mjs --cross <binary>`)* provides zero tolerance
-for any behavioral divergence.
-
-**Verdict for task 2.4**: measure-first / likely-skip. The 0.25%
-budget contribution makes any win unmeasurable at the system level.
-The risk of a hidden sim-behavior change is disproportionate to the
-reward. Only pursue 2.4 if Q0 (browser profile) reveals that the JS
-sim invocation overhead (not the wasm sim cost) is significant — an
-unlikely finding given the 0.25% wasm figure.
-
----
-
-### F. Zone and memory knobs (2.5 / 2.6)
-
-These are **memory wins, not speed wins**. On browser hosts the current
-64 MB INITIAL_MEMORY loads instantly; on bare-metal every MB costs flash
-or PSRAM capacity.
-
-Findings from perf.md §2 and §3:
-
-These were written against the pre-14.2c build (64 MB linear memory, 32 MB
-zone). Both reductions have since landed, so read the first three as the
-argument that produced today's 32 MB / 4 MiB rather than as open proposals.
-
-- Peak non-purgeable zone usage across all 13 demo playthroughs:
-  **1.36 MB** (plutonia.wad demo3). The 32 MB zone of the day was **23×
-  oversized**; against the 4 MiB that ships it is 34%.
-- INITIAL_MEMORY floor: **56 MB** (tested; 52 MB aborts at WAD malloc) — on the
-  64 MB-era layout, before the three BSS diets and the 4 MiB zone.
-- Reducing ZONESIZE to **4 MB** would put peak usage at 34% of zone —
-  comfortable headroom for purgeable cache. Projected INITIAL_MEMORY
-  with 4 MB zone + 16.61 MB WAD + 5.21 MB static = **25.82 MB**. **Landed:**
-  32 MB ships, and the gated worst PWAD combo is 23.06 MB.
-- `WEB_ZONE_POOL_SIZE` in `engine/web/perf.c` duplicated `ZONESIZE` in
-  `engine/web/i_system.c`. **Resolved in task 2.5**: both now read
-  `ZONESIZE` from `engine/web/web.h` (single define, no compile-time guard
-  needed because the value is used in the same translation units that include
-  web.h).
-
-**Risk**: zone size reduction is safe iff all 13 demo passes complete.
-The four-client net hash test (net gate) must also pass (zone backs
-thinker allocations that multiply with player count).  Render-gate
-failures appeared at both 4 MB and 8 MB in task 2.5 testing but were
-caused by the `dc_texheight` OOB reads (fixed in tasks 3.1/3.2), not
-PU_CACHE pressure.  **Task 13.2a re-trial (2026-07-18) on post-3.2 master
-confirms both 4 MiB and 8 MiB pass all three gates (sim, render, net)
-with zero failing goldens** — see Q2 task 13.2a re-trial subsection above.
-
----
-
-### G. The ranked optimization queue
-
-Ordered by expected impact on the weakest capable target (wbox for
-browser, LX7/PSRAM for bare-metal). Effort: S < 1 day, M 1–3 days,
-L > 3 days.
-
-#### Q0 — Measure the browser pipeline (prerequisite)
-
-**closed by task 12.2b.** Measure the browser pipeline before claiming any browser-fps win from wasm changes. Answered: §C below. The JS pipeline is ≤ 0.9 ms p99 per frame on alder, rAF callback median 0.2 ms.
-
-#### Q1 — Column/span inner loops (task 2.2)
-
-**landed, and smaller than hoped.** Column/span inner loops (task 2.2). Unroll-4 landed at −3.5% render on wbox; hoisting alone was +0.6%, inside noise. The results, with the A/B/C interleave they came from, are immediately below.
-
-##### Task 2.2 results (measured 2026-07-15, commit after 99f9e28)
-
-**Step 1 — Call counts (doom.wad demo1, 1710 frames, build with -DWEB_PERF_COL_STATS):**
-
-Reproduce: `node tools/archaeology/runtime-stat-verify.mjs` (WEB_PERF_COL_STATS build)
-
-| function | calls/frame | avg px/call | px/frame |
-|----------|------------|------------|---------|
-| R_DrawColumn (all variants) | 714.8 | 47.9 | 34,203 |
-| R_DrawSpan | 147.8 | 168.2 | 24,854 |
-
-Avg column height 47.9 px → 4-wide unroll covers ~11 full iterations + 0–3 scalar tail.
-Avg span length 168.2 px → 4-wide span unroll would cover ~42 iterations per call.
-
-**Step 2 — Codegen finding:** emcc -O3 with global `dc_colormap`/`dc_source` pointers
-**reloads them from globals on every pixel** (C aliasing: compiler cannot prove no write
-through another pointer between iterations). Verified in LLVM IR (`llvm-dis` output):
-`%43 = load ptr, ptr @dc_colormap, align 4` appears inside the loop body. Hoisting
-these into `const` locals before the loop eliminates the reload entirely. The hoist is
-correct on all targets regardless of whether the unroll wins.
-
-**Step 3 — Strict A/B/C interleaved bench on wbox (3 reps each, same session):**
-
-Variant A = 035ceaa binary (true baseline, freshly built).
-Variant B = hoist + 4-wide unroll (task 2.2 candidate).
-Variant C = hoist-only (no unroll), isolated contribution of the pointer hoist.
-Each rep is one 3-demo sweep; interleave order: A B C A B C A B C.
-Noise bar = max spread across reps within a single variant.
-
-| variant | transform | bsp+segs avg | bsp spread (noise) | total render avg |
-|---------|-----------|-------------|-------------------|-----------------|
-| A | none (baseline) | 0.2652 ms | 0.0013 ms | 0.4927 ms |
-| C | hoist-only | 0.2667 ms | 0.0075 ms | 0.4932 ms |
-| B | hoist + unroll-4 | 0.2558 ms | 0.0034 ms | 0.4851 ms |
-
-Per-rep detail (bsp+segs avg across demo1/demo2/demo3):
-
-| rep | A | B | C |
-|-----|---|---|---|
-| 1 | 0.2649 | 0.2567 | 0.2647 |
-| 2 | 0.2660 | 0.2570 | 0.2715 |
-| 3 | 0.2647 | 0.2536 | 0.2640 |
-
-**Hoist-only verdict (C vs A):** C avg 0.2667 vs A avg 0.2652 = +0.6% — within noise.
-C spread (0.0075) is 5.8× larger than A spread (0.0013). No measurable win from hoist
-alone on the Bobcat. The hoist is retained: it provably removes two aliasing-blocked
-global reloads per pixel (confirmed in LLVM IR) and is universally correct across all
-targets, but it does not move numbers on wbox by itself.
-
-**Unroll-4 verdict (B vs A):** B avg 0.2558 vs A avg 0.2652 = **-0.0094 ms = -3.5%**
-*(not machine-verified: historical experiment requiring specific commit
-comparison; no current CI script)*.
-All 3 B reps are below all 3 A reps — the difference is 7× the A noise bar and is
-clearly separable from drift. On the Bobcat (in-order CPU), unrolling reduces the
-branch-taken + pointer-advance overhead from 1-per-pixel to 1-per-4-pixels; this is
-the dominant effect, not the ILP from independent texture reads. **KEEP unroll.**
-
-Total render B vs A: 0.4851 vs 0.4927 ms = **-1.5%** *(not machine-verified:
-same historical experiment)*.
-
-*Killed:* **R_DrawSpan: 4-wide u32 packing (4 palette bytes into one i32.store)**
-- Pack four `ds_colormap[ds_source[spot]]` bytes into one `uint32_t` word and write with
-  a single unaligned store (valid in wasm; no hardware penalty on x86). Sequential
-  `dest++` writes mean alignment is only guaranteed every 4 pixels if ds_x1 ≡ 0 (mod 4).
-- Result on wbox (measured in earlier fleet run): planes +7.9% across demos
-  (demo1 +10.1%, demo2 +6.8%, demo3 +5.9%). Wider loop body adds code-size pressure
-  on Bobcat's 32 KB L1 icache; V8 JIT compiles the wider body less efficiently.
-- **KILLED** — wbox regression.
-
-*Assessed, not prototyped:* **wasm SIMD (v128 for R_DrawSpan 8-wide / R_DrawColumn)**
-- R_DrawSpan: the flat-texture reads (`ds_source[spot]`) require a *gather* — 8 independent
-  random byte addresses per SIMD lane. wasm v128 has no native gather; emulation via 8
-  separate `v128.load8_lane` instructions negates any throughput gain. The scalar u32-packing
-  already regressed on wbox; SIMD gather overhead would be worse.
-- R_DrawColumn: the bottleneck is the 320-byte-stride column write. No SIMD instruction
-  can batch non-contiguous vertical pixels into a contiguous store without transposing the
-  entire framebuffer — a larger architectural change outside 2.2 scope.
-- **ASSESSED, NOT WORTH IT**: gather emulation overhead eats the win for spans;
-  stride-320 writes can't be SIMD-batched without framebuffer transposition.
-
-**Final fleet results (wbox only from A/B interleave; other hosts from final fleet run):**
-
-| stage | A (035ceaa) | B (hoist+unroll) | delta | verdict |
-|-------|------------|-----------------|-------|---------|
-| bsp+segs | 0.2652 ms | 0.2558 ms | **-3.5%** | **win** |
-| planes | 0.1564 ms | 0.1587 ms | +1.5% | within noise |
-| **total render** | **0.4927 ms** | **0.4851 ms** | **-1.5%** | **win** |
-
-wbox total render drops from 1.72% of the 28.57 ms / 35 Hz budget to 1.70%. The
-improvement is in headless CI throughput and bare-metal fps, not user-visible browser fps.
-
-#### Q2 — Memory footprint reduction (tasks 2.5 + 2.6)
-
-**landed (2.5 zone SSOT, 2.6 knob sweep).** Memory footprint. ZONESIZE is 4 MiB and INITIAL_MEMORY 32 MB today; the flags sweep is §Q2 further down and concluded no flag change was justified. The task-2.5 conclusion that kept 32 MB is banner-marked below, superseded by the 13.2a re-trial.
-
-##### Task 2.5 results — ZONESIZE reduction attempt (measured 2026-07-15)
-
-Zone size was reduced to 4 MB and 8 MB; all tests gated on:
-(a) `node tools/demo-test.mjs` (sim, 13/13), (b) `node tools/demo-test.mjs --render`
-(render, 13/13), (c) `node tools/net-test.mjs {2,4}` (net hash).
-
-**Critical finding: the §2 HWM measurements (-nodraw) do not represent render-path
-cache pressure.**  `zone-measure.mjs` runs demos with `-nodraw` (sim only), measuring
-only non-purgeable allocations (thinkers, maps, sprites, etc.).  With rendering enabled,
-composite textures, sprites, and rendering structures fill the purgeable cache (PU_CACHE)
-at a far higher rate than the 1.36 MB non-purgeable HWM suggests.
-
-| ZONESIZE | sim gate (13/13) | render gate | net gate | verdict |
-|----------|-----------------|-------------|----------|---------|
-| 4 MB | PASS (0 OOM) | 10 failures (+7 vs 32 MB baseline) | not run | FAIL — render cache pressure |
-| 8 MB | PASS (0 OOM) | 6 failures (+3 vs 32 MB baseline) | not run | FAIL — render cache pressure |
-| **32 MB** | **PASS** | **PASS 13/13** | **PASS 2p+4p** | **SHIP** |
-
-Master (0bb3a9c) passes all 13 render goldens pixel-identical on a clean build.
-The task 2.5 candidate likewise passes 13/13 render on a clean build (confirmed
-by bisecting: the only change that shifted render output was a new BSS global;
-removing the new global restored 13/13).
-
-**Lead follow-up experiments (post-review, on master)** — the initial bisect
-blamed the task 2.2 R_DrawColumn unroll; that attribution is WRONG. Two
-controlled experiments settle it: (1) master + a 16-byte BSS probe global
-(`__heap_base` 5,461,072 → 5,461,088) fails the SAME three render goldens at
-the SAME tics (tnt-demo1 tic 1684, plutonia-demo1 tic 5909, plutonia-demo3
-tic 1469); (2) the same probed build with `r_draw.c` reverted wholesale to
-pre-2.2 (035ceaa) STILL fails identically. The heap-layout sensitivity
-therefore predates task 2.2 and lives elsewhere in the engine — signature
-consistent with a vanilla-inherited out-of-window texture read
-(Tutti-Frutti/Medusa family) whose overrun bytes depend on heap layout.
-**Consequence: the render goldens are LAYOUT-PINNED** — any change that
-grows/shrinks BSS or shifts allocations will spuriously fail exactly these
-three goldens without any real render change. Treat such a failure as a
-layout shift first; root-cause hunt assigned to task 3.1 (a native ASan
-demo run will pinpoint the exact OOB read).
-
-**Resolution (task 3.1)** — root cause identified and fixed. The OOB read
-is in `R_DrawColumn` / `R_DrawColumnLow`: the hardcoded `& 127` mask allowed
-the column sampler to read past the end of composite texture column buffers
-for textures shorter than 128 px (e.g. 64 px walls). Fix: added `dc_texheight`
-(default 128) set by each caller (`R_RenderSegLoop`, `R_DrawPlanes`) to the
-actual texture height so the mask becomes `& (dc_texheight - 1)`. Secondary
-fixes: `sprnames[NUMSPRITES+1]` NULL sentinel (R_InitSpriteDefs OOB scan),
-`finetangent` index clamped to `[0, FINEANGLES/2-1]` (r_segs.c:266
-off-by-one at 90-degree walls), and `P_SpawnMapThing` type-0 guard.
-BSS-probe acceptance test passed: master + 16-byte BSS probe passes all 13
-render goldens, confirming the layout sensitivity is eliminated. Render
-goldens regolded for all 13 demos.
-
-**Resolution (task 3.2) — unpinning COMPLETE.** Two additional dc_texheight
-residuals were identified and fixed that the task 3.1 BSS-probe did not expose:
-
-1. `R_RenderMaskedSegRange` (r_segs.c) never called `R_RenderSegLoop`, so
-   `dc_texheight` was stale from the previous wall/plane draw; mid-textures
-   shorter than 128 px caused OOB reads into zone heap. Fix: set
-   `dc_texheight = textureheight[texnum] >> FRACBITS` before the column loop.
-
-2. `R_DrawMaskedColumn` (r_things.c) applied `& 127` to all sprite post reads;
-   when a post top is off-screen, negative `frac` indexed past the post data
-   into adjacent zone memory. Fix: `dc_texheight = column->length | 1` per post.
-
-Both probes now pass 13/13: BSS probe (heap +32 bytes) and RODATA probe
-(~53-byte string literal, heap +~53 bytes). All 13 render goldens regolded.
-The `dc_texheight` pinning is now complete across all call sites; WASM layout
-changes no longer cause spurious render-golden failures.
-
-**Hypothesis for 4 MB / 8 MB render failures (recorded for task 3.1/3.2)**:
-The pixel divergences at small zone sizes are consistent with a PU_CACHE
-use-after-purge hazard.  When the zone is small enough to actually evict
-PU_CACHE texture blocks, a cached column pointer (`dc_source`) may be reused
-after the zone has freed and reallocated that block for a different purpose.
-The data at that address is now different, producing wrong pixel values at
-specific tics.  Evidence: doom.wad shows **0 sim-path purges at 8 MB** yet
-still fails the render gate at 8 MB — confirming the render path's texture
-cache pressure (not sim-path purging) is the trigger.  This is a latent
-vanilla DOOM bug that never manifests at 32 MB because nothing purges.
-Investigation deferred to tasks 3.1 and 3.2.
-
-**Purge events at smaller zone sizes (sim path, -nodraw; measured via prototype counter build):**
-
-| ZONESIZE | doom.wad | doom2.wad | tnt.wad | plutonia.wad |
-|----------|----------|-----------|---------|--------------|
-| 4 MB | 254–265/demo | 660–811/demo | 967–1174/demo | 910–1082/demo |
-| 8 MB | 0/demo | 63–83/demo | 285–324/demo | 251–281/demo |
-| 32 MB | 0/demo | 0/demo | 0/demo | 0/demo |
-
-doom.wad shows 0 purges at 8 MB (sim path) but still fails the render gate at 8 MB
-— confirming that the render path fills the texture cache far beyond the sim-only
-measurement.  The true cache floor for the render path is between 8 MB and 32 MB.
-
-**Conclusion (task 2.5) — SUPERSEDED.  The engine ships ZONESIZE 4 MiB
-(`perf-008` = 4,194,304 B).**  Read task 13.2a immediately below before acting on
-this paragraph: it re-ran the same gates after tasks 3.1/3.2 and falsified the
-purge-pressure hypothesis this conclusion rests on.  The paragraph is kept
-because the purge table above it is real data, and because the conclusion was
-correct given what was known in July; it is banner-marked because it sat here
-unmarked, twenty-two lines above its own refutation, saying "stays at 32 MB"
-about a build that ships 4.
-
-The reasoning of the day: ZONESIZE stays at **32 MB** until a render-path
-measurement (with rendering enabled) characterises the actual peak.  The §2
-non-purgeable HWM (1.36 MB) is a lower bound on zone usage, not the safe floor
-for a rendering build.  The PSRAM economy (bare-metal) argument for a smaller
-zone is valid but requires measuring actual texture cache peak with `-nodraw`
-off before committing a reduction.
-
-##### Task 13.2a re-trial — ZONESIZE 4/8 MiB post-3.2 (measured 2026-07-18)
-
-Tasks 3.1 and 3.2 eliminated the `dc_texheight` OOB reads that caused render goldens
-to be layout-pinned to heap layout.  With that fix in place on master (f434699), the
-4 MiB and 8 MiB zone sizes were re-tested against all three gates using out-of-tree
-builds (`build-z4/`, `build-z8/`) via `EXTRA_CFLAGS=-DZONESIZE=<N>` and a new
-`--build-dir` flag added to `tools/net-test.mjs` (the only harness code change).
-
-| ZONESIZE | sim gate (13/13) | render gate (13/13) | net gate (4-client) | verdict |
-|----------|-----------------|---------------------|---------------------|---------|
-| 4 MiB | **PASS** | **PASS — 0 failures** | **PASS** | **SAFE post-3.2** |
-| 8 MiB | **PASS** | **PASS — 0 failures** | **PASS** | **SAFE post-3.2** |
-
-No failing goldens at either zone size.  Shipping build (`build/doom.wasm`) md5 was
-unchanged throughout (5d3464dcf58ced7ca6c1f1a044244393).
-
-**Conclusion (task 13.2a)**: 4 MiB is demo-proven safe post-3.2 — the task 2.5
-render failures were the OOB reads (`dc_texheight` heap-layout pinning), not
-PU_CACHE use-after-purge.  The purge-pressure hypothesis (recorded above) is now
-falsified for the 13-IWAD attract-demo set: with OOB reads eliminated, 4 MiB passes
-13/13 render goldens pixel-identical.  **The recommended first-pass zone for
-bare-metal bring-up is 4 MiB** (see bare-metal.md §2.2).  A ZONESIZE change in
-the shipping build is a 14.x candidate; 13.2b (below) provides the render-ON HWM
-data that quantifies the purgeable cache peak and makes the 4 MiB recommendation
-defensible.
-
-##### Task 13.2b — Render-ON zone HWM + purge pressure (measured 2026-07-18)
-
-Flag-guarded instrumentation (`-DWEB_PERF_ZONE_STATS`) added to `engine/core/z_zone.c`
-tracks live non-purgeable (np) and purgeable (p) bytes at every `Z_Malloc`, `Z_Free`,
-and `Z_ChangeTag` call, plus purge events (PU_CACHE evictions in `Z_Malloc`).
-Vehicle: `tools/freestanding/fs-doom` (render path active, 13/13 golden demos).
-Two passes each at ZONESIZE = 32 MiB (baseline) and 4 MiB (production target).
-Results in `tools/golden/zone-stats.json`.
-
-**Byte-identity proof**: flag-off wasm built from modified source →
-md5 = `5d3464dcf58ced7ca6c1f1a044244393` (shipping) — confirmed.
-
-Reproduce: `bash tools/freestanding/zone-stats.sh`
-
-**Render-ON HWM at 32 MiB zone:**
-
-| demo | tics | hwm_np (MiB) | hwm_p (MiB) | hwm_total (MiB) |
-|------|------|-------------|------------|----------------|
-| doom-demo1 | 1710 | 0.557 | 4.844 | 5.341 |
-| doom-demo2 | 2347 | 0.726 | 4.979 | 5.646 |
-| doom-demo3 | 3863 | 0.683 | 4.859 | 5.479 |
-| doom-demo4 | 818 | 0.533 | 4.833 | 5.310 |
-| doom2-demo1 | 1205 | 0.644 | 7.700 | 8.297 |
-| doom2-demo2 | 2001 | 0.649 | 7.659 | 8.294 |
-| doom2-demo3 | 4471 | 0.663 | 7.759 | 8.357 |
-| tnt-demo1 | 4531 | 0.677 | 9.540 | 10.157 |
-| tnt-demo2 | 3653 | **0.981** | 9.479 | 10.398 |
-| tnt-demo3 | 3433 | 0.912 | **9.632** | **10.485** |
-| plutonia-demo1 | 7403 | 0.793 | 9.012 | 9.740 |
-| plutonia-demo2 | 3483 | 0.717 | 8.946 | 9.605 |
-| plutonia-demo3 | 5662 | 0.801 | 8.904 | 9.655 |
-
-Worst non-purgeable HWM: **0.981 MiB** (tnt-demo2).
-Worst total HWM: **10.485 MiB** (tnt-demo3).
-Zero purge events at 32 MiB (expected — zone is never stressed).
-
-**Purge pressure at 4 MiB zone (13/13 sim hash pass, zero golden divergence):**
-
-| demo | purge_count | purged_bytes (MiB) |
-|------|-------------|-------------------|
-| doom-demo1 | 257 | 1.534 |
-| doom-demo2 | 293 | 2.061 |
-| doom-demo3 | 271 | 1.732 |
-| doom-demo4 | 248 | 1.403 |
-| doom2-demo1 | 756 | 4.624 |
-| doom2-demo2 | 710 | 4.560 |
-| doom2-demo3 | 915 | 4.862 |
-| tnt-demo1 | 1235 | 6.957 |
-| tnt-demo2 | 1306 | 7.183 |
-| tnt-demo3 | 1344 | 7.271 |
-| plutonia-demo1 | **1397** | 7.218 |
-| plutonia-demo2 | 1051 | 6.265 |
-| plutonia-demo3 | 1387 | 7.177 |
-
-Purge range at 4 MiB: **248–1,397 evictions/demo**.
-Determinism: counts identical across both passes for all 13 demos.
-
-**The defensible minimum ZONESIZE is 4 MiB**: non-purgeable render-ON HWM = 0.981 MiB
-(tnt-demo2), purgeable working set peaks at 9.6 MiB at 32 MiB zone but the 4 MiB zone
-sustains 248–1,397 PU_CACHE purges/demo with zero golden divergence across all 13 demos.
-4 MiB is 4.1× the non-purgeable floor, providing adequate PU_CACHE working set for all
-13 golden demos despite aggressive eviction pressure.
-
-**What task 2.5 delivered**:
-- `WEB_ZONE_POOL_SIZE` duplicate removed; `ZONESIZE` is now the single define in
-  `engine/web/web.h` (SSOT), consumed by both `i_system.c` and `perf.c`.
-- Dead zone code deleted: `Z_ClearZone` (no callers), `Z_DumpHeap` (no callers),
-  `Z_FileDumpHeap` (sole caller was in `#if 0 // UNUSED`, p_setup.c:612).
-- `zone-measure.mjs` updated to use `web_zone_size()` dynamically (no more
-  hardcoded 32 MB constant in the script).
-- HWM numbers at 32 MB: **identical to §2 baseline** — allocation-pattern neutrality
-  proven.  All gates pass on a clean build: sim 13/13, render 13/13, net 2p+4p.
-- **Note on purge counter**: an instrumentation counter (`web_zone_purge_events`)
-  was prototyped but removed.  Any new BSS global shifts the wasm `__heap_base`
-  by 16 bytes (alignment padding), which alters all allocation addresses and
-  trips the pre-existing heap-layout sensitivity described above (NOT a task
-  2.2 artifact — see the lead follow-up experiments), spuriously failing three
-  layout-pinned render goldens.  The purge measurement data above was obtained
-  from a separate experimental build.  If a persistent purge counter is needed,
-  it must be stored without adding to BSS (e.g., inside `memzone_t` header bytes
-  that don't affect the first free block offset, or in JS-side tracking).
-
-#### Q3 — Visplane management (task 2.3)
-
-**killed on the measurement.** Visplane hash for R_FindPlane (task 2.3). NO-GO: the probe-depth census showed the ceiling is too small to be worth it. Engine reverted to pristine; the numbers are below.
-
-##### Task 2.3 results (measured 2026-07-15, commit after task 2.2)
-
-**Step 1 — Instrumentation**: Added `WEB_PERF_PLANE_STATS` counter block to
-`engine/core/r_plane.c` (same pattern as `WEB_PERF_COL_STATS` in r_draw.c).
-Tracks: `web_perf_findplane_calls` (R_FindPlane invocations), `web_perf_findplane_iters`
-(linear-search comparison iterations), `web_perf_visplane_peak` (max live visplanes in
-any frame). Counters always declared in `perf.h`/`perf.c`; incremented only under
-`-DWEB_PERF_PLANE_STATS`. Getters exported as `_web_perf_findplane_*_get`.
-Measurement script: `tools/plane-measure.mjs`.
-
-**Step 2 — Measured counts** (wbox, 1 rep each, best-rep for doom.wad; built with
-`-DWEB_PERF_PLANE_STATS`):
-
-Reproduce: `node tools/archaeology/runtime-stat-verify.mjs` (WEB_PERF_PLANE_STATS build)
-
-| case | frames | calls/frame | iters/frame | peak visplanes |
-|------|--------|-------------|-------------|----------------|
-| doom demo1 | 1709 | 33.1 | 205.2 | 33 |
-| doom demo2 | 2346 | 34.6 | 128.2 | 39 |
-| doom demo3 | 3862 | 30.3 | 103.3 | 28 |
-| tnt demo2 (heavy) | 3652 | 56.1 | **451.5** | 68 |
-| plutonia demo3 (heavy) | 5661 | 59.1 | 375.7 | 64 |
-
-**Step 3 — Ceiling analysis**:
-
-Worst case is tnt demo2 at 451.5 iterations/frame. Each iteration tests 3 int fields
-(`height`, `picnum`, `lightlevel`) and advances a pointer. Even at a generous 10 ns/iter:
-
-```
-ceiling = 451.5 iters/frame × 10 ns/iter = 4,515 ns/frame = 4.5 µs/frame
-planes stage baseline (wbox) = 156,600 ns/frame
-ceiling fraction = 4.5 / 156.6 = 2.9%
-```
-
-For the doom.wad attract demos (the primary bench baseline): 205.2 iters/frame max →
-ceiling 2.1 µs/frame = **1.3% of the planes stage**.
-
-Peak visplane count across all cases: **68** (tnt demo2). At 68 planes the linear scan
-averages ~6.6 comparisons per call before hitting a match or the end — far from the
-pathological worst case. The hash table would save at most a few comparisons per call.
-
-**Verdict: NO-GO — not worth implementing**.
-
-The hash is structurally sound (prboom-plus chained-hash R_FindPlane is well-understood),
-but the search cost is simply too small to produce a measurable win:
-
-- Ceiling 2.9% on the *heaviest* tested case (tnt demo2). For doom.wad demos: 1.3%.
-- The planes stage itself is 32% of wbox render (0.157 ms/frame). A 2.9% reduction
-  in planes = 0.0045 ms/frame total render change. The task 2.2 noise bar on wbox was
-  ~0.001 ms — the hash ceiling is ~4.5× the noise bar and would likely be buried in it
-  after the hash's own overhead (hash function compute + bucket pointer chase) is subtracted.
-- A hash replaces the linear scan but adds: one multiply + one modulo (or bitmask) for
-  the key, one pointer dereference per bucket chain entry. With chains averaging 1–2
-  entries, the win over a 6.6-comparison linear scan is marginal or negative.
-- The code complexity cost (chain management, bucket sizing, collision handling) is
-  disproportionate to the sub-2% ceiling.
-
-**Engine reverted to pristine** for the final commit (no r_plane.c behaviour change).
-Counter infrastructure (`WEB_PERF_PLANE_STATS` in `perf.h`/`perf.c`) is kept
-permanently — it is useful for future map-specific profiling and 3.x hardening work.
-
-**Openings management assessment**: `openings[]` (r_plane.c) was raised from
-`SCREENWIDTH×64` to `SCREENWIDTH×256` in webdoom. Overflow in a non-`RANGECHECK` build
-is silent (silent pointer overrun). This is a bounds-hardening concern, not a perf
-concern. No further action in task 2.3. → Defer to task 3.2 (bounds hardening).
-
-#### Q4 — Sim hot paths (task 2.4)
-
-**skipped by measurement.** Sim hot paths (task 2.4). Sim is 0.25% of the budget, so profiling dictates nothing. Reopen only on a bare-metal profile that shows sim dominating.
-
-#### Q5 — tank deep-dive (task 2.7)
-
-**document-only.** tank deep-dive (task 2.7). There is no anomaly: tank render is 1.15x alder, and the v1-era “least improved” reading was general i5-vs-i9 headless throughput, not an algorithmic fault.
-
----
-
-### H. What the data did to three task premises
-
-Kept because each is a premise a reader might still hold, and the number that
-killed it. All three tasks are closed.
-
-- **2.2 was framed as a browser-fps win.** wasm render is 1.7% of the budget on
-  wbox, so a 50% speedup saves 0.85% of CPU — nothing a player can see at
-  35 Hz. The work was right and the claim was not: the win is bare-metal fps
-  and headless CI throughput.
-- **2.4 said "sim hot paths as profiling dictates".** Profiling dictates
-  nothing. Sim is 0.25% of the budget, so the conditional was never met.
-- **2.7 called tank "least improved".** Per-stage data resolved it: tank render
-  is 1.15× alder, essentially equivalent. The ~2× figure was general
-  i9-vs-i5 headless throughput (alder 180,370 vs tank 95,463 simFpsNodraw at
-  16c3354 = 1.89×), stable across the FixedDiv change and not an algorithmic
-  fault.
-
-The queue summary that stood here — six rows of effort estimates and DO/SKIP
-verdicts — is gone. Every entry is closed, each Q heading above now states its
-own disposition in a sentence, and a table of S/M/L guesses about finished work
-is the kind of apparatus that makes a document look current when it is not.
-
----
-
-## Q2 — emcc knob sweep (task 2.6)
-
-*Measured at commit 2992e02, 2026-07-16. All builds at emsdk 6.0.2. Size
-measured via `stat` + `gzip -9 -c | wc -c`; section breakdown via
-`$EMSDK_DIR/upstream/bin/llvm-objdump -h build/doom.wasm`. Speed via
-`tools/fleet-bench.sh 1` (1-rep, same-session back-to-back).*
-
-### Axis 1: optimisation level (-O3 / -O2 / -Os)
-
-CFLAGS and LDFLAGS changed together (coherent). Closure and other flags held
-constant at shipped defaults.
-
-#### Size×speed frontier
-
-| config | wasm raw (bytes) | wasm gzip-9 (bytes) | CODE section | DATA section | js raw | js gzip-9 | wbox render avg (ms/frame) | wbox sim fps avg |
-|--------|-----------------|---------------------|-------------|-------------|--------|-----------|---------------------------|-----------------|
-| **A (-O3, SHIPPED)** | 358,194 | 145,926 | 281,457 (274.9 KB) | 75,283 | 8,264 | 3,582 | **0.482** | **19,152** |
-| B (-Os) | 265,554 | 123,875 | 188,554 (184.1 KB) | 75,466 | 8,264 | 3,580 | 0.498 | 17,378 |
-| C (-O2) | 348,959 | 141,970 | (not broken down) | — | 9,513 | — | (alder-only, within noise) | 167,727 (alder) |
-
-(Gzip figures are gzip-9, approximating CDN transfer. `-O2` was only benched
-on alder, 1 rep; not fleet-benched as not a finalist.)
-
-#### -Os analysis
-
--Os shrinks the CODE section from 281,457 to 188,554 bytes (**-33.0%** *(not
-machine-verified: requires separate -Os emcc build; no current CI script)*,
-the entire delta is in compiled machine code; DATA is unchanged at 73.5 KB).
-Wire payload (wasm gzip-9) drops from 145,926 to 123,875 bytes (**-15.1%**
-*(not machine-verified: same -Os build)*, −22 KB). Total payload story:
-142.5 KB → 121.0 KB gzip.
-
-**Speed (wbox, 1-rep fleet bench):**
-
-| demo | -O3 render (ms) | -Os render (ms) | delta |
-|------|----------------|----------------|-------|
-| demo1 | 0.530 | 0.539 | +1.7% |
-| demo2 | 0.467 | 0.488 | +4.5% |
-| demo3 | 0.450 | 0.468 | +4.0% |
-| **avg** | **0.482** | **0.498** | **+3.3%** |
-
-Sim fps (wbox, headless -nodraw): -O3 avg 19,152 vs -Os avg 17,378 = **−9.3%**
-*(not machine-verified: requires -Os build + bench.mjs run; no current CI script)*.
-
-The render regression (+3.3%) is borderline for a 1-rep run (the 2.2 sweep
-established ~0.001 ms noise bar over 3 reps; 1-rep noise is wider). However,
-the sim fps regression (−9.3%, consistent across all three demos) is clearly
-real — V8 JIT-compiles fewer inlined and pre-scheduled code paths when the
-wasm is more compact. The icache benefit of -Os (CODE −33%) does not overcome
-the scheduling loss on wbox's in-order Bobcat core.
-
-**Verdict: KILL.** The decision rule is "wbox speed regression = kill". The
-−9.3% sim fps regression on wbox disqualifies -Os despite the 15% wire-size
-win. Current −O3 flags are confirmed optimal.
-
-*(For bare-metal: the 33% CODE reduction would be significant for small-flash
-ESP32 targets. This is the right tradeoff point to revisit when a bare-metal
-profile shows flash pressure — with full render + net tests at that target.)*
-
-#### -O2 analysis
-
--O2 gives only −2.6% raw / −2.7% gzip vs -O3, with an alder sim fps of
-167,727 vs -O3 162,164 (+3.4%). Not enough size win to justify any speed
-risk; not fleet-benched. **KILL (not worth it).**
-
----
-
-### Axis 2: --closure 0 vs 1
-
-Only `doom.js` is affected by the closure compiler; the wasm binary is
-identical between --closure 0 and --closure 1.
-
-| config | doom.js raw (bytes) | doom.js gzip-9 (bytes) |
-|--------|---------------------|------------------------|
-| --closure 1 (SHIPPED) | 8,264 | 3,582 |
-| --closure 0 | 19,097 | 6,000 |
-
-Closure minification saves 10,833 bytes raw (+131%) and 2,418 bytes gzip
-(+67.5%). Since doom.js is only 3.5 KB on the wire vs wasm 142.5 KB, the
-absolute saving is small (~2.4 KB gzip). No speed effect on wasm.
-
-**Verdict: keep --closure 1.** Consistent with the current Makefile; the
-2.4 KB wire saving is worth the extra build step.
-
----
-
-### Axis 3: STACK_SIZE — 4 MB → 1 MB (landed round 10, 2026-09-16)
-
-The C shadow stack sits at the start of linear memory.  4 MB was very
-conservative for DOOM + emscripten, and this axis said so in 2026-08.
-
-**Static analysis of worst-case call depth (unchanged):**
-
-- **BSP recursion** (`R_RenderBSPNode`): the deepest recursive path in
-  DOOM. Each frame is ~32–64 bytes (node pointer, child bounds checks, a few
-  locals). Maximum BSP tree depth in shipped DOOM maps: ~15 levels. Stack
-  cost: 15 × 64 = ~960 bytes.
-- **P_LoadLevel / P_GroupLines**: iterative, not recursive. Local arrays are
-  modest (pointers + indices).
-- **Measured** (ledger C7, 14.2g): the freestanding build's peak is ≈14 KiB
-  across all 13 demos; the whole harness fits in 128 KiB.  1 MiB leaves a
-  70× margin on the engine alone.
-
-**What kept it at 4 MB, and why that no longer holds:** the fear was that
-moving `__heap_base` would trip three "layout-pinned" render goldens
-(tnt-demo1, plutonia-demo1, plutonia-demo3), which would mean a regold.
-
-Round 10 moved it by 3.2 MB (stack) plus 64,000 B (the untranspose buffer
-`web_rowmajor_buf` went in the same commit; JS reads `screens[0]` in place
-and the GPU swaps the axes) and **13/13 sim, render and low-detail goldens
-did not move**.  The layout dependency those goldens once had was a real
-read past the end of an array, fixed since; nothing in the shipping engine
-depends on where the heap starts.
-
-1. `__heap_base` 4,722,048 → 1,512,384 B (−3,209,664 B), all of it heap
-   headroom: worst PWAD combo peak 26.13 → 23.06 MB under 32 MB.
-2. Wire-transfer size: none (stack is runtime layout, not CODE/DATA);
-   `doom.wasm` 355,883 → 355,395 B from the buffer's removal.
-
-**Verdict: STACK_SIZE=1MB, landed.** Bare-metal targets were already there (C7).
-
----
-
-### Axis 4: INITIAL_MEMORY — worst PWAD combo analysis
-
-Single-IWAD peak was established in §3: 22.06 MB (9.94 MB headroom under
-the 32 MB linear memory: plutonia.wad + 4 MB zone + 1.44 MB static).
-
-**PWAD combos** (both IWAD + PWAD malloc'd simultaneously, from
-`wads/manifest.json`):
-
-| combo | IWAD (bytes) | PWAD (bytes) | combined | total peak (+ zone + static) |
-|-------|-------------|-------------|---------|------------------------------|
-| tnt.wad + tnt31.wad | 18,195,736 | 282,000 | 18,477,736 (17.62 MB) | 1.44 + 4 + 17.62 = **23.06 MB** |
-| doom2.wad + nerve.wad | 14,604,584 | 3,819,855 | 18,424,439 (17.57 MB) | 1.44 + 4 + 17.57 = **23.01 MB** |
-| doom.wad + sigil.wad | 12,408,292 | 4,640,210 | 17,048,502 (16.27 MB) | 1.44 + 4 + 16.27 = **21.70 MB** |
-| plutonia.wad (no PWAD) | 17,420,824 | — | 17,420,824 (16.61 MB) | **22.06 MB** (§3 baseline) |
-
-Worst real combo: **tnt.wad + tnt31.wad** at 23.06 MB peak — fits the 32 MB
-linear memory with 8.94 MB headroom.
-Reproduce (23.06 MB peak): `node tools/archaeology/stamp-check.mjs`
-
-All four rows are gated as of round 8: perf-059 (tnt), perf-059b (doom2+nerve),
-perf-059c (doom+sigil), perf-059d (plutonia). Before that only the first was, and
-the other three read 4.50 while `__heap_base` was 4.81 — stale, and made correct
-by accident by the widescreen revert. The doom.wad + sigil.wad row was still
-wrong when the gate was added: it read 24.77 against 24.76 computed.
-
-Note: `tnt.wad` at 18.20 MB is slightly larger than `plutonia.wad` at
-17.42 MB, making it the worst single IWAD, not plutonia.wad as stated in §3.
-The §3 floor experiment (56 MB) was run with plutonia.wad; tnt.wad would give
-the same PASS/FAIL pattern (56 MB ≥ 54.83 MB with 1.17 MB margin).
-
-**Margin at 64 MB, as analysed then:** 64 − 54.83 = **9.17 MB headroom**
-for the worst PWAD combo; at 56 MB, 56 − 54.83 = **1.17 MB**, tight.
-
-**Verdict then: INITIAL_MEMORY stays at 64 MB. SUPERSEDED — task 14.2c ships 32 MB.**
-
-C3 cut ZONESIZE 32 → 4 MiB and took 28 MB of the floor with it — the very move
-the rationale below defers to "task 3.x". The figures in this subsection are
-therefore historical; the live ones are in §3 and in the PWAD table above
-(worst combo 23.06 MB, 8.94 MB headroom under 32 MB).
-
-The reasoning of the day, for the record: 64 MB gave room for uncharacterised
-allocations without OOM surprises, and the bare-metal case was better served
-by reducing ZONESIZE first — which is exactly what happened.
-
----
-
-### Axis 5: emmalloc vs dlmalloc
-
-Current: `-sMALLOC=emmalloc` (Makefile).
-
-emmalloc is Emscripten's minimal allocator: ~1.5 KB of wasm code, O(n) free
-list traversal, no boundary-tag coalescing. dlmalloc is Doug Lea's full
-allocator: ~8–12 KB of wasm code, O(1) amortised free/malloc, buddy-system
-coalescing.
-
-For DOOM, >99% of heap allocation goes through Z_Zone (the zone allocator),
-which does a single `malloc(ZONESIZE=32MB)` at startup and never calls
-`free` on it. The only direct `malloc` calls are the WAD buffer at startup
-and occasional small temporary buffers. With ≤2 concurrent large malloc calls,
-emmalloc's simpler strategy is correct: dlmalloc's extra 8–10 KB of CODE would
-be wasted for zero measurable benefit.
-
-**Verdict: keep emmalloc.** Correct choice for this allocation pattern; no change.
-
----
-
-### Summary: shipped flags confirmed optimal
-
-All five axes measured. No flag change is justified:
-
-| axis | conclusion | justification |
-|------|-----------|---------------|
-| -O3 vs -Os | **hybrid since round 10** (ledger C8) | whole-program -Os/-Oz kills wbox/alder sim speed; per-object -Oz with the 17 hot files at -O3 does not, and saves 15.8% raw / 8.7% gzip |
-| -O3 vs -O2 | **keep -O3** | -O2: −2.7% gzip, no speed win; trivial size delta |
-| --closure 1 | **keep --closure 1** | -closure 0: +67.5% doom.js gzip, no benefit |
-| STACK_SIZE | **1MB** (round 10) | kept at 4MB for fear of a regold; the goldens did not move when it fell |
-| INITIAL_MEMORY | **32MB since task 14.2c** | worst real PWAD combo peaks at 23.06 MB (`perf-059`), leaving 8.94 MB. The 64 MB this row carried, and its 9.17 MB headroom, were the pre-14.2c figures — in a table headed "shipped flags", three lines above the shipped `-sINITIAL_MEMORY=32MB` |
-| emmalloc | **keep emmalloc** | correct for DOOM's zone-dominant allocation pattern |
-
-The shipped flags (`-Oz` per object, `-O3` on the 17 hot files and at link, `-flto --closure 1 -sINITIAL_MEMORY=32MB
--sSTACK_SIZE=1MB -sMALLOC=emmalloc`) are the measured point on the
-size×speed frontier for browser and bare-metal targets given the current
-constraints. The only actionable future path to a smaller payload is
-reducing ZONESIZE (deferred to task 3.x), which would lower the INITIAL_MEMORY
-floor by ~28 MB and is worth revisiting once the render-path texture cache
-peak is characterised.
-
----
-
-### Axis 1, reopened per object: the hybrid -Oz/-O3 build (round 10, 2026-09-16)
-
-Axis 1 above was a whole-program sweep, and its kill stands: `-Os` for
-every file costs 9.3% sim throughput on wbox and `-Oz` cost 11% on alder
-when re-measured today. What was never tried is the split. The renderer
-(`r_*.c`), the playsim's hot files (`p_map p_maputl p_mobj p_sight p_enemy
-p_tick`), `m_fixed.c`, `tables.c` and the OPL synth compile at `-O3`; the
-other 49 objects at `-Oz`; the link runs `-O3 -flto`. Under LTO the link
-level picks the pipeline, and clang's per-function `minsize` attribute
-survives it, so the cold code stays small while the hot code keeps its
-schedule (`engine/Makefile`, `HOT`).
-
-| build | wasm raw | gzip-9 | alder render µs/frame (demo1/2/3) | alder sim fps avg |
-|-------|----------|--------|-----------------------------------|-------------------|
-| whole `-O3` (before) | 355,395 | 146,751 | 54.6 / 48.6 / 46.2 | 206,697 |
-| hybrid (shipped) | **299,348** | **133,995** | 53.8 / 48.6 / 47.1 | 207,316 |
-| Δ | **−15.8%** | **−8.7%** | −1.5% / −0.1% / +2.0% | +0.3% |
-
-The noise floor was measured in the same sitting: relinking the unchanged
-`-O3` objects and benching again moved render by +0.7…+2.7% and sim by
-−1.4…+1.4%, so every delta in the hybrid row is inside it. Method:
-`node tools/bench.mjs doom.wad 3 --json` on alder, same wad, same reps,
-same host, before and after; the 13 sim, render and low-detail goldens are
-byte-identical. `perf-fleet --check` (wbox, tank) gates the fleet.
-
-
-### The wire: negotiated encoding and revalidation (round 10, 2026-09-16)
-
-Until round 10 the server sent every shell file, the engine and the UI-asset
-payload uncompressed and `no-store`, so every launcher load paid the whole
-tree again. `server/serve.js` now negotiates `br` > `gzip` > identity for
-text, JSON and wasm bodies of 1 KB or more, compressed once per distinct body
-and served from memory, with a content-hash ETag per representation and a
-304 on a matching `If-None-Match`. The service worker is network-first for
-the shell, so revalidation, not hashed immutable URLs, is the lever: a repeat
-load moves headers only.
-
-Measured on alder with `curl -w %{size_download}` over the 24 `SHELL_FILES`
-plus `/api/ui-assets`, same tree, same server:
-
-| load | bytes on the wire |
-|------|-------------------|
-| identity, box art inline (before) | 1,259,266 |
-| `Accept-Encoding: br`, box art inline | 444,440 (−65%) |
-| identity, box art lazy | 530,413 |
-| `Accept-Encoding: br`, box art lazy (shipped) | **209,035 (−83%)** |
-| the seven thumbs, fetched lazily as the list paints | 38,976 (5,568 each) |
-| repeat load with ETags | headers only (304 per file) |
-
-`/api/ui-assets` carried seven full base64 TITLEPICs (730 KB of its 765 KB)
-to draw 80×60 thumbnails; it now names the games that have art (35,484 B,
-18,058 B br) and `/api/thumb/<file>` serves each as 768 bytes of PLAYPAL plus
-80×60 indices, decoded on the server with the client decoder's bounds
-(`wad-content-fuzz` feeds it hostile TITLEPICs), memoised per WAD mtime.
-
-Gated by `http-fuzz` ("the wire" cases: encoded content-length, decode-back,
-`Vary`, per-representation ETag, 304, HTTP/1.0 identity; the thumb route,
-its 404s, its traversal refusal and its invalidation).
-
-
-### The OPL synth on the main thread (round 10 measurement, 2026-09-16)
-
-`audio.js` renders music by calling `_web_music_render` from a 100 ms
-`setInterval` on the main thread, refilling up to 250 ms of audio per call.
-No stage measured it: the pipeline's `worklet` stage reads the AudioWorklet's
-own `process()`, which only copies samples. Stage **(f) opl** now brackets the
-call (`perf-marks.js`, `browser-pipeline.mjs`, `--headed` added).
-
-**What the browser stage can and cannot read unattended.** Headless Chrome,
-and headed Chrome under `xvfb-run`, arm the AudioContext on the harness's key
-event but never drain it — no output device — so the pump renders once
-(12,000 frames, 6.0 ms headed / 9.6 ms headless on alder, first call, JIT
-included) and never again. The steady state needs a real audio device: run
-`node tools/browser-pipeline.mjs --headed` on a desktop session. The number
-the verdict needs was measured in node instead, same wasm, same song
-(`mus_intro`), 300 calls of 4,800 frames at 48 kHz after 10 discarded:
-
-| host | per 100 ms call, p50 / p99 (ms) | ms of synth per second of audio | share of wall time |
-|------|----------------------------------|----------------------------------|--------------------|
-| alder (i9-12900K) | 1.76 / 1.84 | 17.6 | 1.8% |
-| tank (i5-8350U) | 3.98 / 4.09 | 39.9 | 4.0% |
-| wbox (AMD G-T56N) | 18.5 / 19.7 | 186 | 18.6% |
-
-OPL3 is within 3% of OPL2 on every host. The cost is not the share, it is
-the SHAPE: one synchronous 4 ms (tank) or 19 ms (wbox) call on the main
-thread every 100 ms, which at 60 Hz is a dropped frame every sixth frame on
-wbox and a quarter of a frame on tank, in a burst the rAF budget cannot
-absorb. The plan's threshold was 5% of a 16.7 ms frame at p99 on tank
-(0.83 ms); tank reads 4.09.
-
-**Verdict: built in round 11 (ledger NC6).** `build/synth.wasm` — the same
-`mus_opl.c` and `opl3.c` objects the engine links, as a standalone reactor —
-runs inside the AudioWorklet and renders each 128-frame quantum there. The
-per-call figures above are what left the main thread: on wbox a 19.7 ms burst
-every 100 ms, gone from the frame budget entirely. The main-thread `BufferSink`
-path is kept for insecure origins, which have no `AudioContext.audioWorklet`.
-
-Two things the build taught, recorded because they change what the numbers
-mean:
-
-- **No audio device, no `process()`.** Headless Chrome and headed Chrome under
-  `xvfb-run` both arm the context, fetch and instantiate the module, report
-  `{ready:true, playing:1}` — and never call `process()`. So the browser leg
-  `browser-music-worklet` asserts the wiring and an EMPTY main-thread `opl`
-  stage, and the samples are gated in node by `opl-mode` gate 7, which drives
-  the shipped `client/js/music-worklet.js` 128 frames at a time and requires
-  byte-identity with the engine over 690 quanta.
-- **`opl2-ref.f32` renders a chip that is not sequencing.** The engine
-  registers the title song on the FIRST `web_frame()`, and gates 2/3 render
-  straight after `callMain` — `playing=0, events=0, noteons=0`. That golden
-  pins the OPL core's reset/init/render path, not the MUS sequencer or the
-  GENMIDI instruments. The new gates take a frame first and assert note-ons on
-  both sides, so equality cannot compare two silences.
-
-
-## PSX fire launcher background — perf note
-
-*Added at commit f6d6c0a (launcher: PSX DOOM fire background), 2026-07-16.*
-
-The PSX fire effect (`client/js/fire.js`) runs in JS on a 64×40 indexed-byte
-grid (cellular automaton, 37-entry DOOM fire ramp, nearest-neighbour
-upscaled to fill the canvas). It is decoupled from the game loop at ~16 Hz
-via `setInterval(62 ms)` and pauses automatically when the engine is running.
-
-**Measured CPU cost across the fleet** (node microbench of `_setSource +
-_simulate + _draw` pixel-fill — excludes the 2560-px `putImageData` blit,
-which is browser-composited and negligible; best-of-10 × 2000 ticks,
-2026-07-16):
-
-| host | ms/tick |
-|------|---------|
-| alder (i9-12900K) | 0.0078 |
-| pi5 (Cortex-A76)  | 0.0222 |
-| **wbox (G-T56N)** | **0.0722** |
-
-*(not machine-verified: fire.js timing requires browser/JS benchmark
-harness; no current CI script)*
-
-**wbox is measured at 0.072 ms/tick — ~14× under the < 1 ms budget.** This is
-hardware, not extrapolation. The alder→wbox ratio here (9.3×) is consistent
-with the wasm fleet ratios in `bench-baseline.json`. In-browser tick cost is
-slightly higher (adds `putImageData`), but the sim is the dominant term and
-the budget holds with an order of magnitude to spare. The CI perf guard in
-`tools/browser-fire-test.mjs` (0.5 ms on alder) is only a gross-regression
-tripwire, not the budget itself.
-
-The noise-table pre-computation (8192 entries, generated once at init) replaced
-per-cell `Math.random()` calls in the hot loop, cutting cost ~4× vs the naive
-implementation.
-
-**Why this matters for perf tracking**: the fire effect is the first
-intentionally expensive client-side JS background task added to webdoom. Its
-cost is JS-side (not wasm) and is the kind of load the browser-pipeline
-section (§C above) measures. It stays well under the
-1 ms/tick ceiling; it provides a concrete data point on JS background overhead.
-
----
-
-## Appendix: reproduction commands
+**Per-stage wall-clock, one host.** `bench.mjs` loads `doom.js`, `doom.wasm`
+and the WAD from its own directory, so stage them together:
 
 ```sh
-# wasm section sizes
-llvm-objdump -h build/doom.wasm          # uses emsdk llvm-objdump
-
-# zone HWM + heap headroom
-node tools/zone-measure.mjs              # requires wads/lib/ symlink
-
-# INITIAL_MEMORY floor test (link only, reuses existing .o files):
-#   cd engine && emcc -O3 -flto [flags] -sINITIAL_MEMORY=56MB [...] -o /tmp/doom-56mb.js
-#   node -e "..." /tmp/doom-56mb.js      # run demo3 of worst IWAD
-
-# JS payload sizes
-for f in build/doom.js build/doom.wasm client/js/*.js client/css/*.css client/sw.js; do
-    echo "$(stat -c%s $f) $(gzip -9 -c $f | wc -c)  $f"
-done
-
-# sim gate
-node tools/demo-test.mjs                 # 13/13 must pass
-
-# render gate
-node tools/demo-test.mjs --render        # 13/13 must pass
+d=$(mktemp -d); cp build/doom.js build/doom.wasm tools/bench.mjs wads/lib/doom.wad "$d"
+(cd "$d" && node bench.mjs doom.wad 3 --json)
 ```
 
----
+**Per-stage wall-clock, the fleet.** `bash tools/fleet-bench.sh --check`
+compares against the baseline without writing it; this is what
+`tools/run-tests.sh --perf --only perf-fleet` runs. `bash tools/fleet-bench.sh 3`
+records a new baseline — do that only on purpose, with the reason in the commit.
 
-## The cycle floor (13.1a)
+**Instructions per tic.** `make -C tools/freestanding`, then:
 
-Measured at commit 689dac8 (master after task 12.2b), 2026-07-17, on alder
-(i9-12900K).  All numbers are **user-space retired x86-64 instructions**
-(`PERF_COUNT_HW_INSTRUCTIONS`, `exclude_kernel=1`, `exclude_hv=1`) measured by
-the freestanding `fs-doom` binary with `WD_CYCLES=1` environment variable.
-Cross-ISA conversion factors (arm64, riscv, etc.) have no owner —
-NOT claimed here.
-
-Reproduce:
-```bash
-make -C tools/freestanding
-bash tools/freestanding/cycle-floor.sh   # runs all 13 demos × 2 passes
-cat tools/golden/cycle-floor.json        # machine-readable output
+```sh
+d=$(mktemp -d); ln -s "$PWD/wads/lib/doom.wad" "$d/doomu.wad"
+WD_CYCLES=1 tools/freestanding/fs-doom "$d/doomu.wad" -timedemo demo3 \
+    -cycles cycles.json -attrib attrib.json -sim "$d/doom-demo3.json"
+python3 tools/native-sanitize/compare.py tools/golden "$d" sim
 ```
 
-### Per-IWAD headline (mean instr/tic, averaged over all demos for that IWAD)
+`-cycles` writes whole-tic mean/p50/p99/max, `-attrib` the per-stage split and
+`-sim` the per-tic hash stream. doom.wad goes in under the name `doomu.wad`, as
+`tools/freestanding/run-check.sh` does it: demo4 exists only in the Ultimate
+IWAD, and the goldens were recorded that way. The other IWADs need no rename.
+`WD_DETAIL=1` measures the low-detail renderer.
 
-| IWAD         | mean instr/tic | worst-demo p99 | max variance |
-|--------------|----------------|----------------|-------------|
-| doom.wad     |      1,218,022 |      2,693,222 |       8.1%  |
-| doom2.wad    |      1,305,794 |      2,303,684 |       6.6%  |
-| tnt.wad      |      1,307,707 |      2,441,358 |       3.6%  |
-| plutonia.wad |      1,353,868 |      2,471,568 |       9.9%  |
+**Zone and renderer-limit peaks.** These counters compile in only on request.
+Make does not track flags, so clean before and after:
 
-**Worst-case demo**: `doom-demo4` — p99 = **2,693,222 instr/tic**
-
-### Per-demo table (mean of 2 passes, p50 / p99 / max from averaged pass data)
-
-| demo             | tics  |    mean |     p50 |     p99 |      max |  var% |
-|------------------|-------|---------|---------|---------|----------|-------|
-| doom-demo1       | 1,710 | 1,126,482 | 1,288,509 | 1,720,210 |  6,201,113 |  5.1% |
-| doom-demo2       | 2,347 | 1,100,697 | 1,150,277 | 1,920,401 | 26,862,640 |  2.3% |
-| doom-demo3       | 3,863 | 1,108,430 | 1,149,976 | 1,760,500 | 31,182,732 |  8.1% |
-| doom-demo4       |   818 | 1,536,480 | 1,336,799 | 2,693,222 | 27,582,008 |  4.3% |
-| doom2-demo1      | 1,205 | 1,348,071 | 1,466,177 | 1,826,212 | 31,492,490 |  5.3% |
-| doom2-demo2      | 2,001 | 1,185,939 | 1,291,713 | 2,000,047 | 15,120,135 |  1.8% |
-| doom2-demo3      | 4,471 | 1,383,371 | 1,430,090 | 2,303,684 | 23,584,551 |  6.6% |
-| tnt-demo1        | 4,531 | 1,168,582 | 1,212,116 | 1,880,404 | 10,991,660 |  1.4% |
-| tnt-demo2        | 3,653 | 1,383,215 | 1,461,143 | 2,157,134 | 18,396,296 |  2.2% |
-| tnt-demo3        | 3,433 | 1,371,324 | 1,462,298 | 2,441,358 |  9,620,990 |  3.6% |
-| plutonia-demo1   | 7,403 | 1,429,655 | 1,506,502 | 2,471,568 | 42,146,942 |  1.3% |
-| plutonia-demo2   | 3,483 | 1,346,436 | 1,555,838 | 2,136,296 | 16,189,345 |  9.9% |
-| plutonia-demo3   | 5,662 | 1,285,514 | 1,345,960 | 2,153,451 | 37,330,560 |  3.6% |
-
-### Variance note (honest, do not hide)
-
-The expectation for hardware instruction counters was < 1% run-to-run
-variance.  **Actual variance: 1.3% – 9.9%**, averaging ~4.7% across the corpus.
-
-The likely cause is that `PERF_COUNT_HW_INSTRUCTIONS` with `exclude_kernel=1`
-counts user-space instructions including OS-serviced paths that run in user
-mode (vDSO `clock_gettime()` calls from DOOM's `I_GetTime()` timing loop,
-user-space portions of context-switch return, etc.).  DOOM's `TryRunTics()`
-calls `I_GetTime()` once per frame even in timedemo mode; when the machine is
-under load these calls can accumulate extra iterations of the OS-determined
-waiting path.
-
-**Consequence**: use p50 (the median per-tic delta) as the more stable metric
-rather than mean.  p50 values are consistent within 1-3% across the two passes
-(verified in `tools/golden/cycle-floor.json`, `pass1` vs `pass2` fields).
-The `max` values in the table represent single tics with unusually heavy work
-(level-load boundary frames or AI state transitions) and should not be used as
-a steady-state floor.
-
-**Sim identity**: all 13 demos ran with `WD_CYCLES=1` and produced bit-identical
-per-tic state hashes vs the committed goldens (13/13 pass, verified via
-`run-check.sh`).  The instruction-counting path does not perturb the simulation.
-
-**Machine note**: these numbers are on alder (i9-12900K, P-core, 3.6 GHz
-base / 5.2 GHz boost, CachyOS).  Bare-metal ARM counts will differ; no task
-handles cross-ISA conversion.  The x86-64 floor here is the reference baseline
-for any optimisation effort that counts instructions as the currency.
-
----
-
-## The cycle floor, attributed (13.1b)
-
-Measured at the same commit on alder (i9-12900K), 2026-07-18.
-Same measurement method as 13.1a (`WD_CYCLES=1`, `PERF_COUNT_HW_INSTRUCTIONS`,
-`exclude_kernel=1`, `exclude_hv=1`) plus a new `-attrib` flag that reads the
-same perf fd inside stage brackets (sim, frame, bsp, planes, masked) so each
-tic's instruction budget is split by subsystem.
-
-**Rendering ON** — no `-nodraw`; render stages are meaningful.
-13.1a also ran without `-nodraw`, so sum(staged) should approximately reconstruct
-13.1a whole-program counts within the documented 1.3–9.9% run-to-run variance.
-
-Reproduce:
-```bash
-make -C tools/freestanding
-bash tools/freestanding/cycle-attrib.sh   # runs all 13 demos × 2 passes
-cat tools/golden/cycle-attribution.json   # machine-readable output
+```sh
+make -C tools/freestanding clean
+make -C tools/freestanding EXTRA_CFLAGS="-DWEB_PERF_ZONE_STATS -DFS_ZONE_SIZE_OVERRIDE='(4*1024*1024)'"
+tools/freestanding/fs-doom wads/lib/tnt.wad -timedemo demo2 -zonestats zone.json
+make -C tools/freestanding clean && make -C tools/freestanding
 ```
 
-### Design: how stage brackets accumulate instruction deltas
+`-DWEB_PERF_PLANE_STATS`, `-DWEB_PERF_DRAWSEG_STATS` and
+`-DWEB_PERF_OPENINGS_STATS` print `visplane_peak`, `drawseg_peak` and
+`opening_peak` on stderr at demo end. The default build is unaffected by any
+of them.
 
-`tools/freestanding/perf.c` now implements `web_perf_now()` to read
-`fs_perf_instr_fd` (the same `perf_event_open` fd used by the per-tic floor
-counter) and return the cumulative instruction count as a `double`.  The stage
-brackets in `d_main.c` and `r_main.c` — unchanged — do:
+**Browser.** `node tools/browser-pipeline.mjs --json` (starts its own server;
+`--url` to use a running one, `--headed` for the audio stages).
+`bash tools/pipeline-gate.sh` compares against this host's baseline.
+`node tools/load-budget-test.mjs --record` records a load baseline for a new
+host.
 
-```c
-t0 = web_perf_now();   // cumulative instruction count at bracket entry
-<stage work>
-t1 = web_perf_now();
-web_perf_sim_us += t1 - t0;  // accumulates instruction delta, not µs
-```
-
-At each tic boundary `i_main.c` snapshots the accumulators to compute per-tic
-stage deltas.  `other = whole-tic − sum(sim+frame+bsp+planes+masked)` absorbs
-inter-bracket overhead (NetUpdate calls, the `web_perf_now()` reads themselves,
-loop bookkeeping).  **Zero engine/core changes** — only the freestanding shim
-layer is modified.
-
-### Reconciliation
-
-Reconciliation arithmetic: sum(stages + other) − whole ≡ 0 by construction
-(all counters read from the same perf fd).  Measured delta across all 13 demos,
-both passes: **0.0000%**.  The `other` bucket is non-negative (clamped) and
-accounts for ~2–4% of whole.
-
-### Per-IWAD stage table (instr/tic p50)
-
-| IWAD         |      sim |    frame |      bsp |   planes |   masked |    other |    whole |  sim% |
-|--------------|----------|----------|----------|----------|----------|----------|----------|-------|
-| doom.wad     |   58,355 |    2,566 |  494,338 |  402,167 |  138,866 |   26,020 |1,230,745 |  4.7% |
-| doom2.wad    |   79,722 |    2,566 |  625,558 |  386,720 |  177,182 |   45,954 |1,394,586 |  5.7% |
-| tnt.wad      |   48,686 |    2,566 |  592,945 |  491,389 |  139,849 |   45,247 |1,377,217 |  3.4% |
-| plutonia.wad |   86,515 |    2,566 |  645,904 |  487,225 |  184,224 |   50,971 |1,493,854 |  5.9% |
-
-*(p50 = median per-tic instructions across all demos in that IWAD; averaged across the demos in each group)*
-
-> **Correction (task 14.4):** the doom.wad `bsp` cell (494,338) and `other` cell (26,020)
-> do not reproduce from the committed `cycle-attribution.json` under any recorded aggregation
-> (mean of doom.wad per-demo bsp p50s = 558,834; per-demo values 489,382 / 512,230 / 525,543 /
-> 708,180; median 518,886). All other cells reproduce exactly. Verdict: transcription/method
-> error at 13.1b write time — the JSON artifact is authoritative. Superseded by the 14.4
-> regenerated baseline (post-phase-14 engine): doom.wad bsp mean-of-p50s = 503,704 (−9.9%),
-> all-13-demo bsp mean = 551,615 (was 602,197 in the 13.1b artifact, −8.4%).
-
-### Sim-vs-render split (the retro atlas question)
-
-**Sim alone** is **3.4–5.9% of whole-program instructions** per IWAD (p50).
-Render (frame+bsp+planes+masked combined) is **87–91%**.
-
-For a 32X-class CPU running tic-exact at 35 Hz, the sim budget is:
-
-| IWAD         | sim p50 (instr/tic) | sim instr/s @ 35 Hz |
-|--------------|--------------------|--------------------|
-| doom.wad     |             58,355 |           2,042,425 |
-| doom2.wad    |             79,722 |           2,790,270 |
-| tnt.wad      |             48,686 |           1,704,010 |
-| plutonia.wad |             86,515 |           3,028,025 |
-
-These are **x86-64 user-space retired instructions**.  Cross-ISA instruction
-density ratios (x86-64 → SH2 / 68000 / ARM7) have no owner: 13.5 closed
-without them.
-With typical ISA density factors of 1.5–3×, the SH2 at 23 MHz (32X) would need
-roughly 3–9 million SH2 instructions/s to replicate the sim — well within the
-23 MIPS budget, but heavily dependent on the actual ISA translation and memory
-access patterns.  **The x86-64 p50 floor is the reference; do not cite the
-SH2/68000 budget without a cross-ISA calibration nobody owns.**
-
-### Stage shares of whole-program (p50 basis, doom.wad average)
-
-| stage | instr/tic p50 | share |
-|-------|--------------|-------|
-| bsp+segs | ~494,000 | **40.1%** |
-| planes | ~402,000 | **32.7%** |
-| masked | ~139,000 | **11.3%** |
-| sim | ~58,000 | **4.7%** |
-| other | ~26,000 | **2.1%** |
-| frame setup | ~2,600 | **0.2%** |
-
-Stage rank order (bsp > planes > masked > sim) is identical to the wall-clock
-rank from `bench-baseline.json` (§A above).
-
-### Per-demo table (p50 instr/tic)
-
-| demo             | tics  |   sim |  frame |    bsp | planes | masked |  other |   whole |
-|------------------|-------|-------|--------|--------|--------|--------|--------|---------|
-| doom-demo1       | 1,710 | 69,527 | 2,566 | 489,382 | 492,025 | 168,337 | 34,202 | 1,308,725 |
-| doom-demo2       | 2,347 | 52,237 | 2,566 | 512,230 | 433,316 |  90,458 | 21,191 | 1,152,806 |
-| doom-demo3       | 3,863 | 45,053 | 2,566 | 525,543 | 362,443 |  82,444 | 24,202 | 1,131,368 |
-| doom-demo4         | 818 | 66,606 | 2,561 | 708,180 | 320,882 | 214,226 | 24,685 | 1,330,084 |
-| doom2-demo1      | 1,205 | 93,885 | 2,566 | 657,336 | 428,958 | 145,328 | 41,528 | 1,467,873 |
-| doom2-demo2      | 2,001 | 69,782 | 2,566 | 587,247 | 378,483 | 121,219 | 44,196 | 1,291,081 |
-| doom2-demo3      | 4,471 | 75,501 | 2,566 | 632,092 | 353,674 | 264,999 | 52,139 | 1,424,804 |
-| tnt-demo1        | 4,531 | 14,813 | 2,566 | 615,881 | 344,622 | 100,483 | 44,754 | 1,192,569 |
-| tnt-demo2        | 3,653 | 62,091 | 2,566 | 559,598 | 583,458 | 191,276 | 41,054 | 1,490,365 |
-| tnt-demo3        | 3,433 | 69,155 | 2,566 | 603,357 | 546,088 | 127,789 | 50,043 | 1,448,718 |
-| plutonia-demo1   | 7,403 | 66,592 | 2,566 | 683,646 | 501,867 | 182,613 | 50,081 | 1,527,652 |
-| plutonia-demo2   | 3,483 | 81,515 | 2,566 | 587,464 | 636,095 | 215,644 | 51,396 | 1,610,917 |
-| plutonia-demo3   | 5,662 | 111,439 | 2,566 | 666,602 | 323,713 | 154,416 | 51,437 | 1,342,994 |
-
-### Caveats
-
-- **x86-64 ISA only** (`-m32 -O1` freestanding build, not wasm `-O3`).
-  Instruction counts reflect x86-64 retired instructions; the wasm build
-  generates a different instruction stream.  Cross-ISA is unowned.
-- **Run-to-run variance**: inherited from 13.1a (1.3–9.9%).  Stage p50 values
-  are stable within ~2–4% across the two measurement passes.
-- **`web_perf_now()` overhead**: each stage boundary reads the perf fd
-  (`read()` syscall), adding a small constant to the `other` bucket (~24–52K
-  instructions/tic observed).  This is ~2% of whole-program and does not
-  distort any stage value.
-- **frame count vs. tic count**: render stages accumulate once per
-  `R_RenderPlayerView` call.  In timedemo mode there is one render per tic;
-  these numbers are per-tic and per-frame equivalently.
-- **Sim identity confirmed**: both normal mode and `WD_CYCLES=1 -attrib` mode
-  produce 13/13 bit-identical per-tic state hashes vs. committed goldens.
-  Attribution does not perturb the simulation.
-
----
-
-## Phase 14 optimization candidates
-
-The 13.1b attribution is the scoreboard for Phase 14 (vanilla-exact optimization,
-floor-driven). The ranked candidate ledger — with all five required fields per row
-(mechanism, predicted Δinstr/tic, axis, magic-data policy, kill rule) — is at:
-
-**[docs/optimization-ledger.md](optimization-ledger.md)**
-
-16 candidates evaluated; 7 survivors (14.2a–14.2g); 9 killed (including the
-verbatim Plans.md kill-list).  Wins are claimed in 13.1 units (instructions/tic)
-and CI/bare-metal throughput, NEVER browser fps (render = 1.71% of budget on wbox,
-per 12.2b; the framing error is documented in retrospective.md).
-
-## Phase 14: what the memory diets moved (2026-07-18)
-
-> **Dated. Every figure here is superseded** — `__heap_base` is 1,512,384 B
-> today, not 4,721,456 — and the release gate's own table of results has been
-> dropped, because every row of it (fuzz, invariants, the three golden sets,
-> net lockstep, verify-all, size-ledger, lint, freestanding, the fleet bench) is
-> a live suite leg that reports its own verdict on every run. A frozen copy of
-> what those legs said on one afternoon in July is not evidence anybody can use.
-> What is kept is the arithmetic of the transition itself, because several
-> passages above and below refer to "pre-14.2c" figures and this is where the
-> before and after are written down.
-
-| metric | phase start (14.2c-era) | phase 14 release | Δ |
-|--------|-------------------------|------------------|---|
-| `__heap_base` | 5,525,296 B | 4,721,456 B | −803,840 B |
-| BSS diets (14.2d/e/f) | — | — | −594,944 − 86,016 − 122,880 = −803,840 B |
-| wasm linear memory | 64 MiB | 32 MiB | −50% |
-| zone pool | 32 MiB | 4 MiB | −87.5% |
-| worst single-IWAD peak | 53.82 MB | 25.12 MB | fit 32 MiB with 6.88 MB spare |
-| worst PWAD-combo peak (tnt+tnt31) | 54.83 MB | 26.12 MB | fit 32 MiB with 5.88 MB spare |
-
-The `__heap_base` delta equals the three BSS diets exactly. The phase's own
-+64 KiB of additions — `web_rowmajor_buf` and friends — predate the 5,525,296
-measurement, so they are already inside the "phase start" column rather than
-missing from the reconciliation.
-
-Two later movements, for anyone reading the column above as current: round 10
-took `STACK_SIZE` from 4 MiB to 1 MiB, and round 11's work took `__heap_base`
-to its present 1,512,384 B. The worst PWAD-combo peak is `perf-059` = 23.06 MB,
-gated, leaving 8.94 MB under the 32 MiB that ships.
-
----
-
-## §19.3 Replay Scrubber — Seek Latency
-
-Task 19.3 introduces `web_seek_demo(N)`: re-sims the demo from tic 0 to tic
-N with `nodrawers=1` (pure sim, no rendering), then restores the renderer.
-Latency is dominated by simulation throughput, not I/O.
-
-### Algorithm
-
-```
-web_play_demo_buf(ptr)   // parse header, zone-copy once (PU_STATIC)
-web_set_singletics(1)    // exact 1-tic-per-frame counting
-web_seek_demo(N):
-  demo_p = demobuffer + 13   // rewind to first tic (no new Z_Malloc)
-  G_InitNew(skill, ep, map)  // P_SetupLevel → Z_FreeTags(PU_LEVEL)
-  nodrawers = 1
-  for i in 0..N: D_DoomFrame()   // sim only, ~100–5000× realtime
-  nodrawers = 0
-web_wipe_skip(); web_frame()     // one final rendering frame
-```
-
-Zone invariant: `web_zone_hwm` is flat across repeated seeks (confirmed by
-`node tools/demo-seek-test.mjs` zone HWM test — HWM unchanged after 3 seeks).
-
-### Measured latency (devbox — x86_64, Node.js 22, doom.wasm)
-
-| Seek target | Latency | Speed |
-|-------------|---------|-------|
-| tic 1       | 0.2 ms  | ~150× realtime |
-| tic 30      | 0.2 ms  | ~4400× realtime |
-| tic 59      | 0.4 ms  | ~4000× realtime |
-
-Extrapolated worst case: a seek is bounded by ONE demo, and the longest in the
-matrix is **plutonia-demo1 at 7,403 tics** — so **~0.05 s on devbox** at
-~0.007 ms/tic.
-
-This line used to read "44,580 tics, the longest attract demo in the test matrix
-— tnt-demo1", which is wrong twice.  44,580 is the THIRTEEN-demo corpus total,
-used that way in six other documents; tnt-demo1 is 4,531 tics and is not even
-the longest.  Nothing seeks across demos, so the corpus total was never a seek
-bound, and every extrapolation from it — here and on wbox below — was 6.02×
-overstated.  Per-demo tic counts come from the goldens themselves
-(`tools/golden/<demo>.json`).
-
-### Wbox measurement (AMD G-T56N, measured 2026-07-22)
-
-Measured via `node tools/demo-seek-test.mjs` on wbox (bundle: doom.js/wasm +
-doom.wad rsynced, Node v24):
-
-```
-seek-to-1: 2.4 ms  (~12× realtime)
-seek-to-30: 2.5 ms  (~343× realtime)
-seek-to-59: 2.9 ms  (~591× realtime)
-```
-
-The three measurements are wbox's; the extrapolation from them is not.  At
-0.048 ms/tic the longest single demo (plutonia-demo1, 7,403 tics) is
-**≈ 0.36 s on wbox** — the slowest host in the fleet, seeking to the end of the
-longest demo it can seek within.  The figure this section carried for a year was
-2.2 s, which is 44,580 × 0.048: the whole corpus, not a seek.
-
-Still 36× better than the 15.5 estimate (~13 s), because 15.5's ~100× figure
-included rendering while `web_seek_demo` runs sim-only (`nodrawers=1`).  Seek
-equivalence also PASSes on wbox (cross-host confirmation of the DoD hash
-equality).
-
-### Equivalence guarantee
-
-`node tools/demo-seek-test.mjs` asserts:
-
-- `web_seek_demo(N)` state hash == linear-playback-at-N hash (N ∈ {1, 30, 59}).
-- Intentional off-by-one (seek to N-1) produces a diverging hash (red-proof).
-- Zone HWM is flat after seek 1 (no per-seek heap growth).
+**Comparing two builds.** Same host, same flags, same demos and reps on both
+sides, interleaved where possible, and state all of it. Measure the noise first:
+relinking the same objects and benching twice moved alder's render by
++0.7…+2.7% and sim by ±1.4% (2026-09-16), so a difference inside that is no
+difference. The kill rule a new candidate is judged by is in
+[optimization-ledger.md](optimization-ledger.md#the-kill-rule).
