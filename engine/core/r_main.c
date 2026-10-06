@@ -421,7 +421,13 @@ R_PointToDist
 	dy = temp;
     }
 	
-    angle = (tantoangle[ FixedDiv(dy,dx)>>DBITS ]+ANG90) >> ANGLETOFINESHIFT;
+    // webdoom: a viewpoint exactly on the point makes FixedDiv(0,0) return
+    // MAXINT, which indexes far past tantoangle[]; Chocolate Doom guards it
+    // the same way (udm1.wad)
+    if (dx != 0)
+	angle = (tantoangle[ FixedDiv(dy,dx)>>DBITS ]+ANG90) >> ANGLETOFINESHIFT;
+    else
+	angle = 0;
 
     // use as cosine
     dist = FixedDiv (dx, finesine[angle] );	

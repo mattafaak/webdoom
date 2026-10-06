@@ -57,6 +57,11 @@
 //                    R_DrawPSprite.  A regression guard only -- the old engine
 //                    computed an off-screen x from the garbage and drew
 //                    nothing, in both engines.
+//   view-on-vertex   the player stands exactly on v1 of a wall it faces.
+//                    R_PointToDist took FixedDiv(0, 0) -- MAXINT -- and
+//                    indexed tantoangle[] with it (wasm: memory access out
+//                    of bounds).  Real maps do this: Plutonia MAP15's
+//                    deathmatch starts and an armor bonus on TNT MAP05.
 //
 // One limit is reached by a real map rather than a crafted one:
 //
@@ -169,6 +174,17 @@ function solidsegsFull() {
     return { lumps, tics: idle(10) };
 }
 
+// ── the viewpoint on a wall's start vertex ───────────────────────────────────
+// A wall from the player's own spot to the south-east, faced from its start:
+// the player looks east, so the wall is inside the view.
+function viewOnVertex() {
+    const lumps = map([ROOM], ({ wall }) => {
+        wall(512, 512, 900, 200, 0);
+        wall(0, 0, 0, 1024, 0); wall(0, 1024, 1024, 1024, 0); wall(1024, 1024, 1024, 0, 0); wall(1024, 0, 0, 0, 0);
+    }, [{ x: 512, y: 512, angle: 0, type: 1 }]);
+    return { lumps, tics: idle(10) };
+}
+
 // ── sprites without the patch a view needs ───────────────────────────────────
 function iwadLump(name) {
     const d = loadWad('doom2.wad');
@@ -273,6 +289,7 @@ const RENDERED = [
     ['masked-openings', maskedOpenings],
     ['solidsegs-full', solidsegsFull],
     ['weapon-no-frame', weaponNoFrame],
+    ['view-on-vertex', viewOnVertex],
 ];
 for (const [name, build] of RENDERED) await renders(name, build());
 
