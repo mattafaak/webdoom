@@ -29,6 +29,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { readGolden } from './lib/golden.mjs';
 import { join } from 'node:path';
 import { root } from './lib/util.mjs';
+import { pwad, buildMap } from './lib/mapkit.mjs';
 
 const buildDirIdx = process.argv.indexOf('--build-dir');
 const buildDir = buildDirIdx >= 0 ? process.argv[buildDirIdx + 1] : 'build';
@@ -482,6 +483,72 @@ console.log('\n── demo-verify-test: Gate D — a rejected header leaves no t
         ok(`Gate D: none leaked a zone block (${leaked} did)`, leaked === 0);
         ok('Gate D: a good header still replays after the hostile run',
            play(hdr()) === 0 && doom._web_state_hash() === baseHash);
+    }
+}
+
+// ── Gate E — a well-formed header naming a level this WAD cannot start ───────
+//
+// Gate D's headers fail on their own fields.  A header can also be well
+// formed and name a level the loaded WAD lacks (doom2.wad stops at MAP32), a
+// deathmatch on a level with fewer than four deathmatch starts, or a co-op
+// player the level has no start for.  Each passed every check above and made
+// G_InitNew I_Error -- W_GetNumForName, G_DeathMatchSpawnPlayer,
+// P_SetupLevel -- which aborts the module from inside web_play_demo_buf, so
+// the player saw an engine error instead of a refused demo.  The level is a
+// tools/lib/mapkit.mjs room loaded as MAP01, with a start for player 1 only.
+//
+// RED-PROOF: delete the level block from web_play_demo_buf's header checks,
+// rebuild, and the first hostile header aborts the module.
+console.log('\n── demo-verify-test: Gate E — a level the WAD cannot start ─────────────');
+{
+    const doomJs = join(root, buildDir, 'doom.js');
+    const wadPath = join(root, 'wads/lib/doom2.wad');
+    if (!existsSync(doomJs) || !existsSync(wadPath)) {
+        console.log(`  SKIP  Gate E: ${buildDir}/doom.js or doom2.wad absent`);
+    } else {
+        const ROOM = { floor: 0, ceil: 128, floorpic: 'FLOOR4_8', ceilpic: 'CEIL3_5', light: 192 };
+        const room = buildMap({
+            vertices: [[0, 0], [0, 512], [512, 512], [512, 0]], sectors: [ROOM],
+            sides: [0, 1, 2, 3].map(() => ({ sector: 0, mid: 'STARTAN3' })),
+            lines: [0, 1, 2, 3].map(i => ({ v1: i, v2: (i + 1) % 4, front: i })),
+            things: [{ x: 256, y: 128, angle: 90, type: 1 }],
+        });
+        const createDoom = (await import(doomJs)).default;
+        let aborted = null;
+        const doom = await createDoom({ noInitialRun: true, print() {}, printErr() {}, onDoomError: m => { aborted = m; } });
+        for (const [name, bytes] of [['doom2.wad', readFileSync(wadPath)],
+                                     ['room.wad', pwad([['MAP01', Buffer.alloc(0)], ...room])]]) {
+            const p = doom._malloc(bytes.length);
+            doom.HEAPU8.set(bytes, p);
+            doom.ccall('web_register_file', 'null', ['string', 'number', 'number'], [name, p, bytes.length]);
+        }
+        doom.callMain(['-iwad', 'doom2.wad', '-file', 'room.wad', '-nodraw']);
+        doom._web_set_singletics(1);
+        const hdr = ({ map = 1, dm = 0, ingame = [1, 0, 0, 0] } = {}) => {
+            const b = Buffer.alloc(13 + 4 * ingame.filter(Boolean).length + 1);
+            b.set([109, 2, 1, map, dm, 0, 0, 0, 0, ...ingame]);
+            b[b.length - 1] = 0x80;
+            return b;
+        };
+        // -1 refused, 0 accepted, or the I_Error that aborted the module
+        const play = bytes => {
+            const p = doom._malloc(bytes.length);
+            doom.HEAPU8.set(bytes, p);
+            try { return doom._web_play_demo_buf(p, bytes.length); }
+            catch (e) { return `aborted: ${aborted ?? String(e.message ?? e).split('\n')[0]}`; }
+        };
+        ok('Gate E: a header for MAP01 with player 1 is accepted', play(hdr()) === 0);
+        const baseHash = doom._web_state_hash();
+        for (const [label, bytes] of [
+            ['MAP33 (doom2.wad stops at MAP32)',                 hdr({ map: 33 })],
+            ['deathmatch on MAP01, which has no deathmatch start', hdr({ dm: 1 })],
+            ['co-op player 2 on MAP01, which starts player 1 only', hdr({ ingame: [1, 1, 0, 0] })],
+        ]) {
+            const rc = play(bytes);
+            ok(`Gate E: ${label} is refused (${rc})`, rc === -1);
+        }
+        ok('Gate E: the refusals left the engine as it was, and a good header still replays',
+           doom._web_state_hash() === baseHash && play(hdr()) === 0);
     }
 }
 

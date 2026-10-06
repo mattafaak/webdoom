@@ -17,6 +17,7 @@
 #include <stddef.h>
 #include <emscripten.h>
 
+#include <stdio.h>  /* sprintf */
 #include <string.h> /* memcpy */
 
 #include "doomdef.h"  /* VERSION, MAXPLAYERS */
@@ -27,7 +28,10 @@
 #include "z_zone.h"   /* Z_Malloc, PU_STATIC */
 #include "info.h"     /* states, mobjinfo: what G_InitNew changes for -fast */
 #include "m_fixed.h"
-#include <stdlib.h> /* malloc, free */
+#include <stdlib.h>   /* malloc, free */
+#include "w_wad.h"    /* W_CheckNumForName, W_CacheLumpNum (the map check) */
+#include "doomdata.h" /* ML_THINGS, mapthing_t */
+#include "m_swap.h"   /* SHORT */
 
 /* Internal demo buffer pointers defined in g_game.c */
 extern byte* demobuffer;
@@ -226,6 +230,61 @@ EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr, int len)
     if (hdr_console < 0 || hdr_console >= MAXPLAYERS ||
         !hdr_ingame[hdr_console])
         return -1;
+
+    // A level the WAD lacks, or one without a start for every player the
+    // header names, makes G_InitNew I_Error (W_GetNumForName,
+    // G_DeathMatchSpawnPlayer, P_SetupLevel).  Name the level as G_InitNew
+    // and P_SetupLevel will, with the same clamps, and count its starts as
+    // P_LoadThings will: it stops at the first Doom II monster outside
+    // commercial games.
+    {
+        char name[9];
+        int ep = episode, mp = map, lump, n, k, type, dm = 0, have = 0;
+        mapthing_t* mt;
+
+        if (gamemode == commercial)
+            sprintf (name, "map%02i", mp);
+        else
+        {
+            if (gamemode == retail)
+            {
+                if (ep > 4)
+                {
+                    sprintf (name, "E%iM1", ep);
+                    if (W_CheckNumForName (name) < 0)
+                        ep = 4;
+                }
+            }
+            else if (gamemode == shareware)
+                ep = ep > 1 ? 1 : ep;
+            else
+                ep = ep > 3 ? 3 : ep;
+            sprintf (name, "E%cM%c", '0' + ep, '0' + (mp > 9 ? 9 : mp));
+        }
+        lump = W_CheckNumForName (name);
+        if (lump < 0 || lump + ML_THINGS >= numlumps)
+            return -1;
+        mt = W_CacheLumpNum (lump + ML_THINGS, PU_CACHE);
+        n = W_LumpLength (lump + ML_THINGS) / sizeof (mapthing_t);
+        for (k = 0; k < n; k++)
+        {
+            type = SHORT (mt[k].type);
+            if (gamemode != commercial &&
+                (type == 68 || type == 64 || type == 88 || type == 89 ||
+                 type == 69 || type == 67 || type == 71 || type == 65 ||
+                 type == 66 || type == 84))
+                break;
+            if (type == 11)
+                dm++;
+            else if (type >= 1 && type <= MAXPLAYERS)
+                have |= 1 << (type - 1);
+        }
+        if (hdr_deathmatch && dm < 4)
+            return -1;
+        for (k = 0; k < MAXPLAYERS; k++)
+            if (!hdr_deathmatch && hdr_ingame[k] && !(have & 1 << k))
+                return -1;
+    }
 
     /* ---- the header is good; only now touch the engine ---- */
 
