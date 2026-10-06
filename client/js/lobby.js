@@ -287,6 +287,7 @@ function enterGame({ wads, args = [], net = null, record = false, after = null }
     if (record) recOverlay.show();
     bootDoom({ wads, args, net, record, onQuit: toLauncher })
         .then(doom => {
+            if (!doom) return;             // the launcher took over during the boot
             if (record) recOverlay.arm(doom, wads[0].file);
             after?.(doom);
         })
@@ -389,7 +390,8 @@ function enterMultiplayer() {
     lobby
         .on('inprogress', m => { ipSummary = m; show('inprogress', inProgressScreen); })
         .on('roster', m => { roster = m; show('lobby', lobbyScreen); })
-        .on('full', m => resetToLauncher(m.reason))
+        // once a launch is booting, the lobby has nothing left to refuse
+        .on('full', m => { if (!booted) resetToLauncher(m.reason); })
         .on('countdown', m => { if (!booted) countdown.show(m.n); })
         .on('launch', async m => {
             if (booted) return;

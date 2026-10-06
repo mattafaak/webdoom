@@ -212,6 +212,8 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
         restoreOnFailure(canvas);
         throw err;
     }
+    // the launcher took over while this was loading: start nothing
+    if (released) return null;
 
     loading.set('BOOTING…', 1);
 
@@ -236,21 +238,27 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
     // -record here rather than a pre-boot call: G_RecordDemo needs the zone
     // allocator, which D_DoomMain initialises first
     doom.callMain([...pwads, ...args, ...(record ? ['-record', 'webdemo'] : [])]);
-    if (net?.spectate) {
-        loading.show('SPECTATING — CATCHING UP');
-        await relay.catchUp(net.frontier ?? 0, (done, total) =>
-            loading.set('SPECTATING — CATCHING UP', total ? Math.min(1, done / total) : 0));
-    } else if (net?.join) {
-        // re-simulate the streamed history to the frontier, then watch a live
-        // player until our slot spawns (the engine snaps the view back then)
-        loading.show('JOINING — CATCHING UP');
-        await relay.catchUp(net.frontier ?? 0, (done, total) =>
-            loading.set('JOINING — CATCHING UP', total ? Math.min(1, done / total) : 0));
-        const anchor = doom._web_first_ingame();
-        if (anchor >= 0 && anchor !== net.slot) doom._web_set_console(anchor);
-    } else {
-        relay?.go();
+    try {
+        if (net?.spectate) {
+            loading.show('SPECTATING — CATCHING UP');
+            await relay.catchUp(net.frontier ?? 0, (done, total) =>
+                loading.set('SPECTATING — CATCHING UP', total ? Math.min(1, done / total) : 0));
+        } else if (net?.join) {
+            // re-simulate the streamed history to the frontier, then watch a live
+            // player until our slot spawns (the engine snaps the view back then)
+            loading.show('JOINING — CATCHING UP');
+            await relay.catchUp(net.frontier ?? 0, (done, total) =>
+                loading.set('JOINING — CATCHING UP', total ? Math.min(1, done / total) : 0));
+            const anchor = doom._web_first_ingame();
+            if (anchor >= 0 && anchor !== net.slot) doom._web_set_console(anchor);
+        } else {
+            relay?.go();
+        }
+    } catch (err) {
+        if (released) return null;     // the session ended under the catch-up
+        throw err;
     }
+    if (released) return null;
     window.doomAudio = createAudio(doom);
     disposers.push(() => window.doomAudio?.stop?.());
     window.webdoom = { doom };              // debug/test handle
