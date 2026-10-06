@@ -1,11 +1,8 @@
 // The replay scrubber ("demo as video"): a range input and an input timeline
 // strip under the canvas.  Seeking calls web_seek_demo(N), which re-sims from
-// tic 0 -- no keyframes -- so the worst case is the whole demo: the longest one
-// in the matrix is plutonia-demo1 at 7,403 tics, measured ~0.36 s on the
-// slowest fleet host (wbox; docs/perf.md §19.3).  This comment and the tooltip
-// below both said "~2.2 s for 44,580 tics" until round 13.  44,580 is the
-// thirteen-demo CORPUS total and nothing seeks across demos, so the figure a
-// user was reading was 6x the real worst case.
+// tic 0 -- no keyframes -- so the worst case is one whole demo: the longest is
+// plutonia-demo1 at 7,403 tics, about 50 ms to its end on alder (docs/perf.md,
+// "Replay seek").  Nothing seeks across demos.
 // Demo tic format (vanilla .lmp, 4 bytes): forwardmove, sidemove, angleturn/8,
 // buttons (bit 0 fire, 1 use, 2 strafe, 3 speed, 4-7 weapon slots).
 // JS only: no engine writes, determinism safe.
@@ -68,7 +65,7 @@ export function createScrubberUI(doom, demoBytes, { container = document.body, s
     scrubber.setAttribute('aria-label', 'Demo scrubber');
     const latencyNote = el('span', 'note', {
         textContent: '↩ re-sim/tic',
-        title: 'Seek re-sims from tic 0. The longest demo is 7,403 tics, measured at ~0.36 s on the slowest fleet host (wbox). See docs/perf.md §19.3.',
+        title: 'Seek re-sims from tic 0. The longest demo is 7,403 tics; a seek to its end takes about 50 ms on a desktop.',
     });
 
     scrubRow.appendChild(label);

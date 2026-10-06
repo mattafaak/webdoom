@@ -30,7 +30,7 @@ const swActive = () => typeof navigator !== 'undefined' &&
 // without one (one store per WAD, never two).  onProgress(got, total|0): the
 // caller owns the display, since a stack is fetched in parallel.
 //
-// The bytes land in the wasm heap and nowhere else (round 10): with a known
+// The bytes land in the wasm heap and nowhere else: with a known
 // content-length each chunk is written straight into a heap block, so a
 // 12-18 MB WAD is never held as a JS array for the session.  Returns
 // {ptr, len} in `doom`'s heap.
@@ -326,18 +326,12 @@ export async function bootDoom({ wads, saves = null, args = [], net = null, onQu
                 doom._web_frame();
                 scrubberHandle?.onFrame?.();
             }
-            // INSIDE the same try as the engine call, deliberately.  These
-            // three lines sat after the catch, so a throw from the frame hook,
-            // the palette read or the GL draw killed the rAF loop with no
-            // endSession at all: no status message, #landing still hidden, the
-            // canvas still visible, input listeners still attached and the
-            // relay socket still holding its server slot -- the ws-001 silent
-            // wedge, in the one loop that exists to prevent it.
-            //
-            // browser-rafdeath injects by patching doom._web_frame, which is
-            // the statement that WAS covered, so the gate proved the guarded
-            // line was guarded and said nothing about these.  It injects here
-            // now as well.
+            // INSIDE the same try as the engine call, deliberately: a throw
+            // from the frame hook, the palette read or the GL draw must reach
+            // endSession like an engine throw, or the rAF loop dies with the
+            // canvas up, input attached and the relay socket holding its
+            // server slot.  browser-rafdeath-draw injects here, and
+            // browser-rafdeath into _web_frame.
             window._doomFrameHook?.();      // test seam: per-frame hash collection
             const v = doom._web_palette_version();
             renderer.draw(fbView, palView, v !== palVersion);

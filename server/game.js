@@ -31,7 +31,7 @@ const SEND_BACKLOG_CAP = envInt('WEBDOOM_SEND_BACKLOG', 4 * 1024 * 1024);
 // because drop-in and spectator catch-up replay it whole; a ring would hand
 // a joiner a prefix and desync it silently.  So it stops growing at the cap
 // and those two features refuse past it; live play continues.  It lives in
-// 1,024-tic slabs (round 10): one Buffer object per tic cost ~460 B of RSS
+// 1,024-tic slabs: one Buffer object per tic cost ~460 B of RSS
 // each (28.8 MB for the 63,000-tic cap, measured after GC); the slabs hold
 // the same bundles in 8.1 MB, and a view is made only while one is sent.
 const MAX_HISTORY_TICS = envInt('WEBDOOM_MAX_HISTORY_TICS', 35 * 60 * 30);

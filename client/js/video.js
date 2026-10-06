@@ -2,11 +2,11 @@
 // an R8 texture and palettized in the fragment shader (palette flashes
 // cost a 256x1 texture upload, nothing more). Canvas2D fallback included.
 //
-// The framebuffer is column-major (screens[0][x*200 + y], since 14.2a) and
+// The framebuffer is column-major (screens[0][x*200 + y]) and
 // is uploaded exactly as the engine holds it: a 200-wide, 320-tall texture
 // whose row x is screen column x.  The shader samples it with the axes
-// swapped, so the transpose costs nothing anywhere (round 10; the engine
-// used to untranspose 64,000 bytes per displayed frame into a second buffer).
+// swapped, so the transpose costs nothing anywhere: no 64,000-byte copy per
+// displayed frame.
 //
 // Per-frame timing is collected when window.__wd_perf is set (enabled by the
 // ?perfmarks=1 query flag in main.js).  The perf object must be initialised
@@ -37,7 +37,7 @@ export function createRenderer(canvas) {
     if (!gl) return createRenderer2D(canvas);
 
     const prog = gl.createProgram();
-    const _shaders = [];    // for dispose() (task 23.7b); deleteProgram only DETACHES
+    const _shaders = [];    // for dispose(); deleteProgram only DETACHES
     for (const [type, src] of [[gl.VERTEX_SHADER, VS], [gl.FRAGMENT_SHADER, FS]]) {
         const sh = gl.createShader(type);
         _shaders.push(sh);
@@ -57,7 +57,7 @@ export function createRenderer(canvas) {
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
     // Create a texture bound to the given unit with nearest-neighbour params.
-    const _textures = [];   // for dispose() (task 23.7b)
+    const _textures = [];   // for dispose()
     const mkTex = unit => {
         const t = gl.createTexture();
         _textures.push(t);

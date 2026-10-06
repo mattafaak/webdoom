@@ -292,6 +292,15 @@ engine runs: 0.0078 ms per tick on alder and 0.072 ms on wbox in a node
 microbench (2026-07-16), against a 1 ms budget. `browser-fire` fails above
 0.5 ms on alder as a gross-regression guard.
 
+### Replay seek
+
+`web_seek_demo(N)` re-sims the demo from tic 0 with drawing off and no
+keyframes, so a seek costs the sim time of N tics, and the worst case is the
+end of the longest demo: plutonia-demo1, 7,403 tics. Five seeks to tic 7,400
+in one Node process on alder (Node 26.10, build at ba09f5f, 2026-10-06, load
+average about 3): 58.4, 48.7, 48.4, 48.0 and 47.3 ms. `demo-seek` checks that
+a seek lands where linear replay does, not how fast it gets there.
+
 ---
 
 ## 7. How to measure

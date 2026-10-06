@@ -74,7 +74,7 @@ async function flushDirect(doom, iwad) {
 // dirty (a write-through that failed is retried, which it never was before).
 // .doomrc is rewritten by M_SaveDefaults on every sync, so it is compared
 // byte for byte to the last copy stored instead of hashed with the six
-// savegames every three seconds (round 10).
+// savegames every three seconds.
 export function startSync(doom, iwad, intervalMs = 3000) {
     const dirty = new Set();
     // The engine has already said "game saved" when a write here fails, so

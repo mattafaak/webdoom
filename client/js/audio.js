@@ -217,8 +217,7 @@ export function createAudio(doom) {
                 // that never leaves the screen during play is how people learn
                 // to ignore the status line, including the messages that matter.
                 // ui.js's own convention: "an informational message clears
-                // itself; an error (no ttl) stays".  This one was miscategorised
-                // from the day it landed (16.4).
+                // itself; an error (no ttl) stays".
                 setStatus(`music: compatibility mode (${reason})`, 8000);
             } catch (fallbackErr) {
                 console.warn('music fallback sink failed:', fallbackErr);
@@ -241,7 +240,7 @@ export function createAudio(doom) {
         window.addEventListener(evt, arm, { once: false, capture: true });
     // Browsers suspend AudioContexts when a tab is hidden. Resume on reveal
     // so audio is live again the moment the player returns without needing
-    // a fresh user gesture. Named ref so stop() can remove it (ws-007).
+    // a fresh user gesture. Named ref so stop() can remove it.
     // For BufferSink: re-anchor schedClock so a long-hidden tab doesn't
     // fire its accumulated backlog in one burst when the context resumes.
     const onVisible = () => {

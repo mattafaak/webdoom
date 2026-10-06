@@ -106,15 +106,13 @@ export function loadSettings() {
     catch { return defaultSettings(); }
     const s = sanitizeSettings(stored);
     // Migrations read the RAW stored object, because they are statements about
-    // what was SAVED.  The pre-freelook one used to test `!s.mouseY` on the
-    // merged object, where mouseY is always 'off' from the defaults -- so it
-    // was dead from the day mouseY gained a default, and a legacy 1993-style
-    // preference silently became 'off'.
+    // what was SAVED.  On the merged object mouseY is always set (the
+    // defaults say 'off'), so a test there could never see a legacy 1993-style
+    // preference.
     if (stored.mouseMove === true && stored.mouseY === undefined) s.mouseY = 'move';
-    // task 17.2b: a stored opl3:true with no musicBackend is a pre-17.2b
-    // preference; promote it.  Reading the RAW object is why round 11 could
-    // drop `opl3` from the defaults and the schema without losing it -- the
-    // bool was live only here; everywhere else it was written and never read.
+    // A stored opl3:true with no musicBackend is an older preference; promote
+    // it.  `opl3` is no longer in the defaults or the schema, so only the RAW
+    // object still carries it.
     if (stored.opl3 === true && stored.musicBackend === undefined) s.musicBackend = 'opl3';
     return s;
 }

@@ -2,8 +2,8 @@
 // cursor, logo, palette), served as one JSON payload the client decodes.
 // Box art is NOT in it: /api/ui-assets names the games that have art and
 // /api/thumb/<file> serves each one lazily as an 80x60 index thumb with its
-// palette (5,568 bytes) -- until round 10 the payload carried seven full
-// base64 TITLEPICs (730 KB) to draw 80x60 thumbnails.
+// palette (5,568 bytes), so the payload carries no full TITLEPICs (seven of
+// them were 730 KB).
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -39,19 +39,15 @@ function cacheKey(wadDir, manifest) {
     return parts.join('|');
 }
 
-// The WAD header and directory were read with no validation at all.  This is
-// the OPERATOR's own wads/lib, not network input -- so the realistic cause is a
-// truncated download or a wrong file, not an attacker -- but the consequences
-// were out of proportion to that (task 23.3), and both were reproduced:
+// The WAD header and directory are validated.  This is the OPERATOR's own
+// wads/lib, not network input -- the realistic cause is a truncated download
+// or a wrong file -- but unchecked, the consequences are out of proportion:
 //
-//   * a file shorter than the 12-byte header threw RangeError out of
-//     lumpsOf(), through uiAssets(), and out of the /api/ui-assets request
-//     handler -- which is an uncaught exception in a Node request listener, so
-//     the SERVER PROCESS EXITS.  One corrupt WAD takes the game down for
-//     everyone on the LAN.
-//   * numlumps = 0x7FFFFFFF sent the loop spinning; still running when killed
-//     at 20 s.  The event loop is blocked throughout, so the server answers
-//     nobody.
+//   * a file shorter than the 12-byte header throws RangeError out of the
+//     /api/ui-assets request handler, an uncaught exception in a Node request
+//     listener, so the server process exits for everyone on the LAN;
+//   * numlumps = 0x7FFFFFFF spins the loop with the event loop blocked, so the
+//     server answers nobody.
 //
 // A corrupt WAD should cost its own box art, not the server.
 function lumpsOf(path, wanted) {

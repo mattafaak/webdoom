@@ -54,14 +54,10 @@ export async function loadDoomFont() {
         for (let x = 0; x < w; x++) {
             let o = v.getUint32(8 + 4 * x, true);
             for (;;) {
-                // The terminator is ONE byte.  This demanded two before
-                // reading it, so a column whose 0xff is the last byte of the
-                // lump was called truncated -- and it is the last byte in 24
-                // of doom.wad's 63 STCFN glyphs, measured.  No pixels were
-                // lost (the flag fires after the column's posts are drawn),
-                // but the flag was wrong on every boot and nothing read it,
-                // so nobody found out for the life of the project.  Making it
-                // loud (round 6) surfaced it on the first run.
+                // The terminator is ONE byte, and only it is required here:
+                // a column's 0xff is the last byte of the lump in 24 of
+                // doom.wad's 63 STCFN glyphs, so demanding two bytes would
+                // call those columns truncated.
                 if (o < 0 || o >= bytes.length) { truncated = true; break; }
                 const top = bytes[o];
                 if (top === 0xff) break;

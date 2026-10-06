@@ -7,9 +7,8 @@
 //            a reactor) and RENDERS the music itself, one call per 128-frame
 //            quantum.  Nothing crosses the thread boundary per frame.
 //   SINK   — no wasm: interleaved stereo chunks are pushed from the main
-//            thread's 100 ms pump and drained here, which is what this file
-//            did before round 11.  Kept as the tier for a secure origin where
-//            the fetch of synth.wasm failed.
+//            thread's 100 ms pump and drained here.  The tier for a secure
+//            origin where the fetch of synth.wasm failed.
 //
 // Why the synth moved here (ledger NC6): `web_music_render` ran on the MAIN
 // thread from a 100 ms timer, measured at 1.84 ms p99 per call on alder, 4.09
