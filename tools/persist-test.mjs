@@ -4,15 +4,14 @@
 import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
 import { startServer } from './lib/server.mjs';
+import { check, summary, fatal } from './lib/report.mjs';
 const chrome = await launchChrome();
 const url = process.argv[2] ?? (await startServer()).url;
 const tab = await chrome.tab(url);
 const { cdp, ev, key } = tab;
 // every console line, exceptions marked, so the tail below can be filtered
 const logs = tab.logs;
-const fail = m => { console.error('FAIL:', m); chrome.kill(); process.exit(1); };
-
-const bootSP = async () => { if (!await tab.bootSP(30)) fail('boot timeout'); };
+const bootSP = async () => { if (!await tab.bootSP(30).catch(e => fatal(e.message))) fatal('boot timeout'); };
 
 await bootSP();
 // menu → new game → E1M1
@@ -33,13 +32,13 @@ const inIdb = await ev(`(async () => {
     return v ? v.length : 0;
 })()`);
 console.log('savegame bytes in IndexedDB:', inIdb);
-if (!inIdb) fail('save never synced to IndexedDB');
+check('the savegame synced to IndexedDB', inIdb > 0, 'save never synced to IndexedDB');
 
 await cdp('Page.reload');
 await bootSP();
 const restored = await ev(`window.webdoom.doom['fileMap']?.get('doomsav0.dsg')?.length ?? 0`);
 console.log('savegame bytes restored after reload:', restored);
-if (!restored) fail('savegame not restored after reload');
+check('the savegame is restored into the engine after a reload', restored > 0, 'savegame not restored after reload');
 // ── Phase 2b: Load Game slot visibility (task 16.1) ──────────────────────────
 // After reload the six Load-Game slots must be populated via the web bridge
 // (M_ReadSaveStrings → Web_FileLen / Web_FileCopyN).  Slot 0 was saved above
@@ -53,7 +52,7 @@ await key('F3', 0x72);   // open Load Game menu (menuactive → 1)
 await sleep(400);
 const menuOpenedAfterF3 = await ev(`window.webdoom?.doom?.ccall('web_menu_active','number',[],[]) === 1`);
 console.log('menu active after F3:', menuOpenedAfterF3);
-if (!menuOpenedAfterF3) fail('Load Game menu did not open after F3 (web_menu_active !== 1)');
+check('F3 opens the Load Game menu', menuOpenedAfterF3, 'web_menu_active !== 1');
 await key('Enter', 13);  // select slot 0
 // poll up to 2 s for menuactive to drop to 0 (slot was selectable → loaded)
 let slotLoaded = false;
@@ -64,7 +63,8 @@ for (let i = 0; i < 20; i++) {
     }
 }
 console.log('load-game slot 0 selectable (menuactive cleared):', slotLoaded);
-if (!slotLoaded) fail('Load Game slot 0 was not selectable after reload — menuactive did not clear (M_ReadSaveStrings bridge not working)');
+check('Load Game slot 0 is selectable after a reload', slotLoaded,
+      'menuactive did not clear (M_ReadSaveStrings bridge not working)');
 
 // ── Phase 4: quit-within-3s durability (task 16.2) ───────────────────────────
 // Scenario: player saves, then quits before the 3-second sync interval fires.
@@ -81,7 +81,7 @@ await sleep(3000);   // wait for map to load
 // Verify write-through is wired: check that doom.onFileWrite is a function
 const hasOnFileWrite = await ev(`typeof window.webdoom?.doom?.onFileWrite === 'function'`);
 console.log('doom.onFileWrite wired:', hasOnFileWrite);
-if (!hasOnFileWrite) fail('doom.onFileWrite not wired — write-through missing');
+check('doom.onFileWrite is wired (write-through)', hasOnFileWrite, 'write-through missing');
 
 // Save to slot 1: F2, arrow-down (slot 1), Enter, type 'b', Enter
 await key('F2', 0x71);
@@ -105,7 +105,8 @@ const inIdbWriteThrough = await ev(`(async () => {
     d.close(); return v ? v.length : 0;
 })()`);
 console.log('savegame bytes in IDB via write-through (< 3s after save):', inIdbWriteThrough);
-if (!inIdbWriteThrough) fail('write-through did not persist doomsav1.dsg within 500ms — doom.onFileWrite not working');
+check('write-through stores doomsav1.dsg in IndexedDB within 500 ms', inIdbWriteThrough > 0,
+      'doom.onFileWrite not working');
 
 // Now trigger quit immediately (simulating "Quit Game → Y" within 3s of save).
 // The interval has NOT fired (< 3s since save).  The final flush in onQuit
@@ -118,8 +119,7 @@ await cdp('Page.reload');
 await bootSP();
 const restoredAfterQuickQuit = await ev(`window.webdoom.doom['fileMap']?.get('doomsav1.dsg')?.length ?? 0`);
 console.log('savegame bytes restored after quit-within-3s:', restoredAfterQuickQuit);
-if (!restoredAfterQuickQuit) fail('save lost after quit-within-3s — write-through or final flush broken');
-console.log('quit-within-3s test: PASS');
+check('a save survives a quit within 3 s', restoredAfterQuickQuit > 0, 'write-through or final flush broken');
 
 // ── Phase 2d: a save as big as the engine writes comes back ──────────────────
 // Saves are sized from the level, so a map with thousands of monsters writes
@@ -139,8 +139,7 @@ await cdp('Page.reload');
 await bootSP();
 const bigRestored = await ev(`window.webdoom.doom['fileMap']?.get('doomsav2.dsg')?.length ?? 0`);
 console.log('a 1,056,607-byte save restored after reload:', bigRestored);
-if (bigRestored !== BIG) fail(`a ${BIG}-byte save, which the engine can write, was not restored (got ${bigRestored} bytes)`);
-console.log('big-save test: PASS');
+check('a save past 1 MB, which the engine can write, is restored after a reload', bigRestored === BIG, `got ${bigRestored} bytes`);
 
 // ── Phase 2c: a save the browser will not store is not silent ─────────────────
 // The engine prints "game saved" before IndexedDB has the bytes; when the
@@ -153,8 +152,8 @@ await key('c', 67); await key('Enter', 13);
 await sleep(1500);
 const failNotice = await ev(`window.__wdLastStatus ?? ''`);
 console.log('status after a refused save:', JSON.stringify(failNotice));
-if (!/would not store your save/.test(failNotice)) fail('a save IndexedDB refused was silent: the player believes it was kept');
-console.log('refused-save test: PASS');
+check('a save IndexedDB refuses is reported to the player', /would not store your save/.test(failNotice),
+      'the refusal was silent: the player believes it was kept');
 
 // ── Phase 3: teardown test (ws-008) ──────────────────────────────────────────
 // Set up an unhandled-rejection listener, trigger doom.onQuit() to stop the
@@ -166,8 +165,8 @@ await sleep(4500);  // wait > the 3 s interval to catch any orphaned firing
 const urjRaw = await ev(`JSON.stringify(window.__urj)`);
 const urjList = JSON.parse(urjRaw ?? '[]');
 const badRej = urjList.filter(r => /wasm|RuntimeError|abort|sync|save/i.test(r));
-if (badRej.length) fail(`unhandled rejections after quit: ${badRej.join(', ')}`);
-console.log(`teardown test: ${urjList.length} total unhandled rejections, ${badRej.length} wasm/sync related — OK`);
+console.log(`teardown test: ${urjList.length} total unhandled rejections, ${badRej.length} wasm/sync related`);
+check('no wasm/sync unhandled rejection after quit (the sync interval stopped)', badRej.length === 0, badRej.join(', '));
 
-console.log('PASS — savegame survives a page reload; load slots visible; quit-within-3s durable; a save past 1 MB is restored; a refused save is reported; interval stops cleanly on quit');
-chrome.kill(); process.exit(0);
+summary('savegame survives a page reload; load slots visible; quit-within-3s durable; a save past 1 MB is restored; a refused save is reported; interval stops cleanly on quit');
+process.exit();
