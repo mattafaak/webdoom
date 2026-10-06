@@ -66,17 +66,22 @@ function refuse(ws, log = null, why = '') {
     try { ws.terminate(); } catch { /* already gone */ }
 }
 
-// The one way to send.  ws.send() queues in the Node heap once the kernel
-// buffers are full, so a peer that stops reading would pull everything sent to
-// it -- a history burst, every live bundle, every roster -- into server
-// memory.  Past SEND_BACKLOG_CAP it is refused instead.  Returns whether the
-// data was queued.
-function sendTo(ws, data, log, who) {
+// Whether anything more may be queued to this peer.  ws.send() and ws.pong()
+// queue in the Node heap once the kernel buffers are full, so a peer that
+// stops reading would pull everything sent to it -- a history burst, every
+// live bundle, every roster, every pong -- into server memory.  Past
+// SEND_BACKLOG_CAP it is refused instead.
+function canSend(ws, log, who) {
     if (ws.readyState !== 1) return false;
     if (ws.bufferedAmount > SEND_BACKLOG_CAP) {
         refuse(ws, log, `${who}: not reading (${ws.bufferedAmount} B queued) — dropping`);
         return false;
     }
+    return true;
+}
+// The one way to send.  Returns whether the data was queued.
+function sendTo(ws, data, log, who) {
+    if (!canSend(ws, log, who)) return false;
     ws.send(data);
     return true;
 }
@@ -91,7 +96,8 @@ function safeWs(ws, log, tag) {
 
 // Per-connection rate guard over a tumbling window (a burst may straddle a
 // boundary and reach 2× the cap; legitimate play never approaches it).
-// Refuses the socket on a flood and returns false.
+// Counts messages and pings alike.  Refuses the socket on a flood and
+// returns false.
 function rateOk(ws) {
     const now = Date.now();
     if (!ws._rateTs || now - ws._rateTs >= RATE_WINDOW_MS) {
@@ -539,9 +545,13 @@ export function createGame(log = console.log, servedWads = () => []) {
     // maxPayload: lobby frames are small JSON, relay frames 12 bytes; the
     // spectate endpoint has no message handler at all.  perMessageDeflate
     // off: compressing 12-byte latency-critical packets only adds delay.
-    const lobbyWss    = new WebSocketServer({ noServer: true, maxPayload: 1024, perMessageDeflate: false });
-    const gameWss     = new WebSocketServer({ noServer: true, maxPayload: 64,   perMessageDeflate: false });
-    const spectateWss = new WebSocketServer({ noServer: true, maxPayload: 64,   perMessageDeflate: false });
+    // autoPong off: ws would answer every ping itself, outside the rate guard
+    // and the send backlog cap, so a peer flooding pings and never reading
+    // grew the heap without bound; `capped` answers them instead.
+    const opts = maxPayload => ({ noServer: true, maxPayload, perMessageDeflate: false, autoPong: false });
+    const lobbyWss    = new WebSocketServer(opts(1024));
+    const gameWss     = new WebSocketServer(opts(64));
+    const spectateWss = new WebSocketServer(opts(64));
     for (const [wss, tag] of [[lobbyWss, 'lobby'], [gameWss, 'game'], [spectateWss, 'spectate']])
         wss.on('error', err => log(`${tag}Wss error: ${err?.message ?? err}`));
 
@@ -554,6 +564,7 @@ export function createGame(log = console.log, servedWads = () => []) {
         }
         connCount++;
         ws.on('close', () => connCount--);
+        ws.on('ping', data => { if (rateOk(ws) && canSend(ws, log, what)) ws.pong(data); });
         connect(ws, req);
     });
     capped(lobbyWss,    'lobby',    ws => lobbyConnect(ws));
