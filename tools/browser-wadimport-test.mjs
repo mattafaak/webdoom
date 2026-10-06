@@ -19,48 +19,22 @@
 // Chrome flags: --disable-gpu (NOT --use-angle=swiftshader, which crashes in
 // this container per env notes).
 //
-// Not wired into run-tests.sh — that is task 16.5's job.
-//
 // Usage: node tools/browser-wadimport-test.mjs [url]
-import { join } from 'node:path';
 import { launchChrome } from './lib/cdp.mjs';
 import { startServer } from './lib/server.mjs';
 import { sleep } from './lib/util.mjs';
+import { check, summary, fatal } from './lib/report.mjs';
 
-const srv = process.argv[2] ? null : await startServer();
-const BASE_URL = process.argv[2] ?? srv.url;
+const BASE_URL = process.argv[2] ?? (await startServer()).url;
 // a fresh profile per run (launchChrome), so the SW cache is always cold on entry
 const chrome = await launchChrome({ gpu: 'none' });
-const cleanup = code => { srv?.stop(); chrome.kill(); process.exit(code); };
-process.on('SIGINT',  () => cleanup(1));
-process.on('SIGTERM', () => cleanup(1));
-const openTab = tabUrl => chrome.tab(tabUrl);
 
-// Wait for the lobby menu to appear (indicates lobby.js IIFE completed).
-// The poll, the selector and the error-status check are tab.waitForMenu() in
-// tools/lib/cdp.mjs; this wrapper is only this file's FAILURE POLICY.  Keeping
-// the policy local is the point: the shared primitive returns false on timeout,
-// and these call sites ignore the return value, so adopting it bare would have
-// turned every timeout into a silent continue.
-async function waitForMenu(tab, label = 'tab', timeoutSecs = 30) {
-    let ok;
-    try { ok = await tab.waitForMenu(timeoutSecs); }
-    catch (e) { console.error(`FAIL: ${label}: ${e.message}`); cleanup(1); }
-    if (ok) return;
-    const s = await tab.ev(`document.getElementById('status')?.textContent`);
-    console.error(`FAIL: ${label}: lobby menu did not appear within ${timeoutSecs}s (status: "${s}")`);
-    cleanup(1);
-}
-
-// Wait for SW controller (insecure origins skip this).
-async function waitForSW(tab, label = 'tab', timeoutSecs = 20) {
-    for (let i = 0; i < timeoutSecs * 2; i++) {
-        const ctrl = await tab.ev(`!!navigator.serviceWorker?.controller`);
-        if (ctrl) return;
-        await sleep(500);
-    }
-    // SW may not be available on plain http — not fatal, just log
-    console.log(`  ${label}: SW not controlling within ${timeoutSecs}s (expected on insecure origin)`);
+// The launcher menu or the end of the run: nothing below can be measured
+// without it.
+async function menuOrFatal(label, secs = 30) {
+    if (!await tab.waitForMenu(secs).catch(e => fatal(`${label}: ${e.message}`)))
+        fatal(`${label}: lobby menu did not appear within ${secs}s ` +
+              `(status: "${await tab.ev(`document.getElementById('status')?.textContent`)}")`);
 }
 
 // ── Synthetic WAD factory ─────────────────────────────────────────────────────
@@ -87,9 +61,10 @@ function makeSyntheticPWAD(lumpName = 'TESTLUMP') {
 }
 
 // ── Session ───────────────────────────────────────────────────────────────────
-const tab = await openTab(BASE_URL);
-await waitForSW(tab, 'tab', 15);
-await waitForMenu(tab, 'tab');
+const tab = await chrome.tab(BASE_URL);
+// insecure origins have no service worker, so this one is not fatal
+if (!await tab.waitForSW(15)) console.log('  tab: SW not controlling within 15s (expected on insecure origin)');
+await menuOrFatal('tab');
 
 // ── [1] Malformed-corpus rejection tests ─────────────────────────────────────
 console.log('[1] Malformed-corpus rejection tests...');
@@ -171,37 +146,17 @@ const corpusResult = await tab.ev(`
     })()
 `);
 
-if (!corpusResult) {
-    console.error('FAIL: malformed-corpus evaluate returned null');
-    cleanup(1);
-}
+if (!corpusResult) fatal('malformed-corpus evaluate returned null');
 let corpus;
-try { corpus = JSON.parse(corpusResult); } catch {
-    console.error('FAIL: malformed-corpus result is not JSON:', corpusResult);
-    cleanup(1);
-}
-if (corpus.fatal) {
-    console.error(`FAIL: ${corpus.fatal}`);
-    cleanup(1);
-}
-let corpusOk = true;
-for (const r of corpus) {
-    if (!r.passed) {
-        console.error(`  FAIL [${r.desc}]: ${r.error ?? `expected WadError, got ${r.type}: ${r.msg}`}`);
-        corpusOk = false;
-    } else {
-        console.log(`  ok  [${r.desc}]: WadError("${r.msg}")`);
-    }
-}
-if (!corpusOk) { cleanup(1); }
+try { corpus = JSON.parse(corpusResult); } catch { fatal(`malformed-corpus result is not JSON: ${corpusResult}`); }
+if (corpus.fatal) fatal(corpus.fatal);
+for (const r of corpus)
+    check(`[${r.desc}]: WadError("${r.msg}")`, r.passed, r.error ?? `expected WadError, got ${r.type}: ${r.msg}`);
 
-// Check no uncaught exceptions from corpus tests
-if (tab.errors.length > 0) {
-    console.error(`FAIL: uncaught JS exceptions during corpus tests: ${tab.errors.join('; ')}`);
-    cleanup(1);
-}
-console.log(`  ok  malformed corpus: all ${corpus.length} inputs handled, zero uncaught exceptions`);
-if (corpus.length < 12) { console.error(`FAIL: only ${corpus.length} corpus cases ran`); cleanup(1); }
+// no uncaught exceptions from the corpus
+check(`malformed corpus: all ${corpus.length} inputs handled, zero uncaught exceptions`,
+      tab.errors.length === 0, `uncaught JS exceptions during corpus tests: ${tab.errors.join('; ')}`);
+if (corpus.length < 12) fatal(`only ${corpus.length} corpus cases ran`);
 
 // ── [2] Import flow — synthetic PWAD via DataTransfer drop ───────────────────
 // Exercises the real drag-drop path (DataTransfer → landing drop event →
@@ -213,10 +168,7 @@ const pwadBytes = Array.from(makeSyntheticPWAD());  // array of numbers for JSON
 
 // RED-PROOF check: on master window.__wd.handleWadImport is undefined (feature absent).
 const hasImportFn = await tab.ev(`typeof window.__wd.handleWadImport === 'function'`);
-if (!hasImportFn) {
-    console.error('FAIL: window.__wd.handleWadImport not available (feature not implemented)');
-    cleanup(1);
-}
+if (!hasImportFn) fatal('window.__wd.handleWadImport not available (feature not implemented)');
 
 // Synthesise a DataTransfer drop event on #landing.
 // Chrome headless supports `new DataTransfer()` construction.
@@ -251,10 +203,7 @@ const importStatus = await tab.ev(`
     })()
 `);
 
-if (!importStatus?.startsWith('Imported:')) {
-    console.error(`FAIL: import did not succeed — status: "${importStatus}"`);
-    cleanup(1);
-}
+if (!importStatus?.startsWith('Imported:')) fatal(`import did not succeed — status: "${importStatus}"`);
 console.log(`  import succeeded: "${importStatus}"`);
 
 // Navigate to SINGLE PLAYER → CHOOSE GAME and verify entry appears.
@@ -271,11 +220,7 @@ const entryVisible = await tab.ev(`
         return found ? 'found' : 'not found in: ' + rows.map(r => r.dataset.label).join(', ');
     })()
 `);
-if (entryVisible !== 'found') {
-    console.error(`FAIL: testmod entry not visible in CHOOSE GAME screen: ${entryVisible}`);
-    cleanup(1);
-}
-console.log('  ok  testmod entry visible in CHOOSE GAME screen');
+check('testmod entry visible in CHOOSE GAME screen', entryVisible === 'found', entryVisible);
 
 // ── [3] SP boot with imported PWAD ────────────────────────────────────────────
 console.log('[3] SP boot with imported PWAD...');
@@ -290,47 +235,29 @@ const bootStarted = await tab.ev(`
         return 'clicked';
     })()
 `);
-if (bootStarted !== 'clicked') {
-    console.error(`FAIL: could not click testmod entry: ${bootStarted}`);
-    cleanup(1);
-}
+if (bootStarted !== 'clicked') fatal(`could not click testmod entry: ${bootStarted}`);
 
 // Wait for engine to boot (canvas visible, status empty) — up to 120s
 // (doom.wad is ~12MB, needs to download then engine initialise).
-let booted = false;
-for (let i = 0; i < 240; i++) {
-    await sleep(500);
+const booted = await tab.waitFor(async () => {
     const s = await tab.ev(`document.getElementById('status')?.textContent`);
-    if (s?.startsWith('engine error') || s?.startsWith('cannot')) {
-        console.error(`FAIL: engine error during SP boot: "${s}"`);
-        cleanup(1);
-    }
-    const running = await tab.ev(
-        `!document.getElementById('screen').hidden && ` +
-        `document.getElementById('status')?.textContent === ''`,
-    );
-    if (running) { booted = true; break; }
-}
-if (!booted) {
-    const s = await tab.ev(`document.getElementById('status')?.textContent`);
-    console.error(`FAIL: engine did not boot within 120s (status: "${s}")`);
-    cleanup(1);
-}
-console.log('  ok  SP booted with testmod.wad as active PWAD');
+    if (s?.startsWith('engine error') || s?.startsWith('cannot')) fatal(`engine error during SP boot: "${s}"`);
+    return tab.inGame();
+}, { timeout: 120000, every: 500 });
+if (!booted)
+    fatal(`engine did not boot within 120s (status: "${await tab.ev(`document.getElementById('status')?.textContent`)}")`);
+check('SP booted with testmod.wad as active PWAD', booted);
 
 // Verify the local WAD was served from IDB, not the server (it's not on the server).
 // We can infer this from the boot succeeding — fetchWad would have thrown
 // "wad fetch failed: testmod.wad" if it tried the network.
-console.log('  ok  testmod.wad served from local IDB (network fetch would have 404\'d)');
+check('testmod.wad served from local IDB (network fetch would have 404\'d)', booted);
 
 // Check no new uncaught exceptions during boot.
 const bootErrors = tab.errors.filter(e =>
     !e.includes('storage.persist') && !e.includes('IndexedDB'),
 );
-if (bootErrors.length > 0) {
-    console.error(`FAIL: uncaught exceptions during SP boot: ${bootErrors.join('; ')}`);
-    cleanup(1);
-}
+if (bootErrors.length > 0) fatal(`uncaught exceptions during SP boot: ${bootErrors.join('; ')}`);
 
 // ── [4] Reload survival ────────────────────────────────────────────────────────
 console.log('[4] Reload survival: page reload → local library persists...');
@@ -338,7 +265,7 @@ console.log('[4] Reload survival: page reload → local library persists...');
 // Reload the tab (CDP Page.reload)
 await tab.cdp('Page.reload');
 await sleep(2000);
-await waitForMenu(tab, 'reload-tab', 60);
+await menuOrFatal('reload-tab', 60);
 
 // After reload, check if testmod.wad entry still appears in the game list.
 const afterReload = await tab.ev(`
@@ -351,11 +278,8 @@ const afterReload = await tab.ev(`
         return found ? 'found' : 'not found in: ' + rows.map(r => r.dataset.label).join(', ');
     })()
 `);
-if (afterReload !== 'found') {
-    console.error(`FAIL: testmod entry not present after reload — IDB did not persist: ${afterReload}`);
-    cleanup(1);
-}
-console.log('  ok  testmod entry still present after page reload (IDB survived)');
+check('testmod entry still present after page reload (IDB survived)', afterReload === 'found',
+      `IDB did not persist: ${afterReload}`);
 
 // ── [5] The library is not the engine's file registry ────────────────────────
 // (a) A WAD named like one the server offers is refused, not shadowed.  Every
@@ -400,18 +324,18 @@ const lib = await tab.ev(`(async () => {
              refused: results.filter(r => !r.startsWith('Imported:')).slice(0, 2),
              last: 'libfill' + (want - 1) };
 })()`);
-if (!lib || lib.fatal) { console.error(`FAIL: ${lib?.fatal ?? 'library case returned nothing'}`); cleanup(1); }
-const libFails = [];
+if (!lib || lib.fatal) fatal(lib?.fatal ?? 'library case returned nothing');
+const aFails = [], bFails = [];
 if (!(lib.clash.startsWith('Rejected:') && lib.clash.includes('already offers')))
-    libFails.push(`(a) importing a second ${lib.victim}: status "${lib.clash}", want a refusal naming the served WAD`);
+    aFails.push(`importing a second ${lib.victim}: status "${lib.clash}", want a refusal naming the served WAD`);
 if (lib.clashStored !== 0)
-    libFails.push(`(a) ${lib.clashStored} library entr${lib.clashStored === 1 ? 'y' : 'ies'} named ${lib.victim} stored beside the served one`);
+    aFails.push(`${lib.clashStored} library entr${lib.clashStored === 1 ? 'y' : 'ies'} named ${lib.victim} stored beside the served one`);
 if (lib.imported !== lib.want)
-    libFails.push(`(b) ${lib.imported} of ${lib.want} imports past ${lib.before} entries succeeded; refused: ${JSON.stringify(lib.refused)}`);
+    bFails.push(`${lib.imported} of ${lib.want} imports past ${lib.before} entries succeeded; refused: ${JSON.stringify(lib.refused)}`);
 // and the merge at startup keeps them all
 await tab.cdp('Page.reload');
 await sleep(2000);
-await waitForMenu(tab, 'reload-tab-2', 60);
+await menuOrFatal('reload-tab-2', 60);
 const lastListed = await tab.ev(`
     (() => {
         document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]')?.click();
@@ -419,21 +343,17 @@ const lastListed = await tab.ev(`
         return rows.some(r => r.dataset.label?.toLowerCase() === ${JSON.stringify(lib.last)});
     })()
 `);
-if (!lastListed) libFails.push(`(b) after a reload, ${lib.last} is not in CHOOSE GAME`);
-for (const f of libFails) console.error(`  FAIL ${f}`);
-if (libFails.length) cleanup(1);
-console.log(`  ok  (a) a second ${lib.victim} is refused: "${lib.clash}"`);
-console.log(`  ok  (b) ${lib.want} imports past ${lib.before} entries (the old cap was 40), all listed after a reload`);
+if (!lastListed) bFails.push(`after a reload, ${lib.last} is not in CHOOSE GAME`);
+check(`(a) a second ${lib.victim} is refused: "${lib.clash}"`, aFails.length === 0, aFails.join('; '));
+check(`(b) ${lib.want} imports past ${lib.before} entries (the old cap was 40), all listed after a reload`,
+      bFails.length === 0, bFails.join('; '));
 
 // Final uncaught-exception sweep
 const finalErrors = tab.errors.filter(e =>
     !e.includes('storage.persist') && !e.includes('IndexedDB'),
 );
-if (finalErrors.length > 0) {
-    console.error(`FAIL: uncaught JS exceptions: ${finalErrors.join('; ')}`);
-    cleanup(1);
-}
+if (finalErrors.length > 0) fatal(`uncaught JS exceptions: ${finalErrors.join('; ')}`);
 
 tab.close();
-console.log('PASS — malformed corpus clean, import→entry→boot→reload all verified, a served name refused, the library past 40');
-cleanup(0);
+summary('malformed corpus clean, import→entry→boot→reload all verified, a served name refused, the library past 40');
+process.exit();
