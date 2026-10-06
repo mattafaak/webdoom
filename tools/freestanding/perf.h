@@ -19,16 +19,9 @@ extern double web_perf_masked_us;
 extern long   web_perf_frame_count;
 extern long   web_perf_tic_count;
 
-extern long   web_perf_col_calls;
-extern long   web_perf_span_calls;
-extern long   web_perf_col_pixels;
-extern long   web_perf_span_pixels;
-
-extern long   web_perf_findplane_calls;
-extern long   web_perf_findplane_iters;
 extern long   web_perf_visplane_peak;
-extern long   web_perf_drawseg_peak;    /* task 14.2e: peak drawsegs used in any frame */
-extern long   web_perf_opening_peak;   /* task 14.2f: peak openings used in any frame */
+extern long   web_perf_drawseg_peak;    /* peak drawsegs used in any frame */
+extern long   web_perf_opening_peak;   /* peak openings used in any frame */
 
 // Instruction-counter fd shared between perf.c and i_main.c.
 // Set to the perf_event_open fd by i_main.c when WD_CYCLES=1; -1 otherwise.
@@ -38,7 +31,7 @@ extern int    fs_perf_instr_fd;
 // fs_perf_instr_fd, or 0.0 if no fd is open.
 double web_perf_now(void);
 
-// task 13.2b: render-ON zone HWM + purge-pressure counters.
+// Zone high-water and purge counters (-DWEB_PERF_ZONE_STATS).
 // Defined in z_zone.c when compiled with -DWEB_PERF_ZONE_STATS.
 // i_main.c reads them directly at demo end; no EMSCRIPTEN_KEEPALIVE here.
 #ifdef WEB_PERF_ZONE_STATS

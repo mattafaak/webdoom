@@ -16,9 +16,9 @@ WEB_SRC  := $(filter-out $(SYNTH_ONLY),$(wildcard web/*.c))
 SRC      := $(CORE_SRC) $(WEB_SRC)
 
 # Optional extra compile-time defines for instrumented builds.
-# Usage: make EXTRA_CFLAGS="-DWEB_PERF_COL_STATS -DWEB_PERF_PLANE_STATS ..."
+# Usage: make EXTRA_CFLAGS="-DWEB_PERF_PLANE_STATS -DWEB_PERF_SPECHIT_STATS ..."
 #        make EXTRA_CFLAGS="..." BUILD=../build-x OUT=../build-x/doom.js
-# The unflagged default build is byte-unaffected by these declarations.
+# The flags are listed in engine/web/perf.h; the default build sets none.
 EXTRA_CFLAGS ?=
 
 # Per-object optimisation level.  The renderer, the

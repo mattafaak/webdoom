@@ -17,8 +17,8 @@
 
 CC      := gcc
 # Optional extra compile-time defines for instrumented builds.
-# Usage: make EXTRA_CFLAGS="-DWEB_PERF_DRAWSEG_STATS"  (task 14.2e: drawseg peak)
-#        make EXTRA_CFLAGS="-DWEB_PERF_OPENINGS_STATS" (task 14.2f: openings peak)
+# Usage: make EXTRA_CFLAGS="-DWEB_PERF_DRAWSEG_STATS"  (drawseg peak)
+#        make EXTRA_CFLAGS="-DWEB_PERF_OPENINGS_STATS" (openings peak)
 EXTRA_CFLAGS ?=
 CFLAGS  := -m32 -O1 -g \
             -std=gnu89 -DNORMALUNIX \

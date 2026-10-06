@@ -15,41 +15,18 @@ extern double web_perf_masked_us; // R_DrawMasked (sprites + midtextures)
 extern long web_perf_frame_count; // frames rendered (for per-frame averages)
 extern long web_perf_tic_count;   // G_Ticker calls (for per-tic averages)
 
-// task 2.2 call-count counters — always declared; incremented only when
-// r_draw.c is compiled with -DWEB_PERF_COL_STATS.  Exported via
-// web_perf_col_calls_get() / web_perf_span_calls_get() so bench scripts can
-// harvest them without modifying bench.mjs.
-// web_perf_col_pixels / web_perf_span_pixels count total pixels drawn.
-extern long web_perf_col_calls;   // R_DrawColumn + variants call count
-extern long web_perf_span_calls;  // R_DrawSpan call count
-extern long web_perf_col_pixels;  // total pixels drawn by column funcs
-extern long web_perf_span_pixels; // total pixels drawn by span func
+// Peak counters, always declared and updated only in a build compiled with
+// the matching flag: -DWEB_PERF_PLANE_STATS (r_plane.c),
+// -DWEB_PERF_DRAWSEG_STATS (r_bsp.c), -DWEB_PERF_OPENINGS_STATS (r_plane.c),
+// -DWEB_PERF_TELEPORT_STATS (p_telept.c), -DWEB_PERF_SPECHIT_STATS (p_map.c).
+extern long web_perf_visplane_peak;  // peak live visplanes in any frame
+extern long web_perf_drawseg_peak;   // peak drawsegs used in any frame
+extern long web_perf_opening_peak;   // peak openings used in any frame
+extern long web_perf_teleport_calls; // successful player teleports
+extern long web_perf_spechit_peak;   // peak numspechit in any tic
 
-// task 2.3: R_FindPlane probe-depth counters — always declared; incremented
-// only when r_plane.c is compiled with -DWEB_PERF_PLANE_STATS.  Exported via
-// web_perf_findplane_*_get() getters so bench scripts can harvest them.
-extern long web_perf_findplane_calls; // calls to R_FindPlane (all frames)
-extern long web_perf_findplane_iters; // linear-search comparison iterations
-extern long web_perf_visplane_peak;   // peak live visplanes seen in any frame
-extern long
-    web_perf_drawseg_peak; // task 14.2e: peak drawsegs used in any frame
-extern long
-    web_perf_opening_peak; // task 14.2f: peak openings used in any frame
-
-// task 6.2: teleport counter — always declared; incremented only when
-// p_telept.c is compiled with -DWEB_PERF_TELEPORT_STATS.  Byte-unaffected in
-// the default build because the variable is zeroed and the getter just returns
-// it.
-extern long web_perf_teleport_calls; // successful player teleports per demo
-
-// task 6.2: numspechit peak tracker — always declared; updated only when
-// p_map.c is compiled with -DWEB_PERF_SPECHIT_STATS.
-extern long web_perf_spechit_peak; // peak numspechit observed in any tic
-
-// task 13.2b: render-ON zone HWM + purge-pressure counters.
-// Defined in z_zone.c when compiled with -DWEB_PERF_ZONE_STATS; absent
-// otherwise so the default build is byte-identical to shipping.
-// Getters (EMSCRIPTEN_KEEPALIVE) are defined in perf.c under the same guard.
+// Zone high-water and purge counters, defined in z_zone.c only when compiled
+// with -DWEB_PERF_ZONE_STATS (the freestanding build prints them).
 #ifdef WEB_PERF_ZONE_STATS
 extern long web_perf_zone_live_np;      // current non-purgeable live bytes
 extern long web_perf_zone_live_p;       // current purgeable live bytes
@@ -58,11 +35,6 @@ extern long web_perf_zone_hwm_p;        // HWM purgeable
 extern long web_perf_zone_hwm_total;    // HWM total (np + p)
 extern long web_perf_zone_purge_count;  // Z_Malloc PU_CACHE evictions
 extern long web_perf_zone_purged_bytes; // total bytes evicted
-long web_perf_zone_hwm_np_get (void);
-long web_perf_zone_hwm_p_get (void);
-long web_perf_zone_hwm_total_get (void);
-long web_perf_zone_purge_count_get (void);
-long web_perf_zone_purged_bytes_get (void);
 #endif
 
 // High-resolution µs timestamp.  Wraps emscripten_get_now() * 1000.

@@ -10,15 +10,8 @@ double web_perf_masked_us;
 long   web_perf_frame_count;
 long   web_perf_tic_count;
 
-long   web_perf_col_calls;
-long   web_perf_span_calls;
-long   web_perf_col_pixels;
-long   web_perf_span_pixels;
-
-long   web_perf_findplane_calls;
-long   web_perf_findplane_iters;
 long   web_perf_visplane_peak;
-long   web_perf_drawseg_peak; /* task 14.2e / 18.1 */
-long   web_perf_opening_peak; /* task 14.2f / 18.1 */
+long   web_perf_drawseg_peak;
+long   web_perf_opening_peak;
 
 double web_perf_now (void) { return 0.0; }

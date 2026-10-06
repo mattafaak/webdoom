@@ -43,18 +43,6 @@ rcsid[] = "$Id: r_draw.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 // State.
 #include "doomstat.h"
 
-// webdoom task 2.2: call/pixel counters for R_DrawColumn / R_DrawSpan.
-// Compile with -DWEB_PERF_COL_STATS to enable; zero overhead otherwise.
-// perf.h lives in engine/web/ — include it only when the stats flag is set
-// so that an unflagged build of engine/core/ has no dependency on engine/web/.
-#ifdef WEB_PERF_COL_STATS
-#include "perf.h"
-#define PERF_COL_INC(count)  do { web_perf_col_calls++;  web_perf_col_pixels  += (count)+1; } while(0)
-#define PERF_SPAN_INC(count) do { web_perf_span_calls++; web_perf_span_pixels += (count)+1; } while(0)
-#else
-#define PERF_COL_INC(count)  ((void)0)
-#define PERF_SPAN_INC(count) ((void)0)
-#endif
 
 
 // ?
@@ -149,8 +137,6 @@ void R_DrawColumn (void)
 	|| dc_yh >= SCREENHEIGHT)
 	I_Error ("R_DrawColumn: %i to %i at %i", dc_yl, dc_yh, dc_x);
 #endif
-
-    PERF_COL_INC(count);
 
     // Framebuffer destination address.
     // Use ylookup LUT to avoid multiply with ScreenWidth.
@@ -310,8 +296,6 @@ void R_DrawColumnLow (void)
 	I_Error ("R_DrawColumn: %i to %i at %i", dc_yl, dc_yh, dc_x);
     }
 #endif
-
-    PERF_COL_INC(count);
 
     // Blocky mode: double to screen x (0..SCREENWIDTH-1) via LOCAL var.
     // 14.2b: do NOT modify the global dc_x — callers iterate dc_x in
@@ -672,8 +656,6 @@ void R_DrawSpan (void)
 
     // We do not check for zero spans here?
     count = ds_x2 - ds_x1;
-
-    PERF_SPAN_INC(count);
 
     // Convert to total pixel count (original do-while ran count+1 times).
     count++;

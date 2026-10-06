@@ -22,12 +22,6 @@ double web_perf_frame_us  = 0.0;
 
 long web_perf_frame_count      = 0;
 long web_perf_tic_count        = 0;
-long web_perf_col_calls        = 0;
-long web_perf_span_calls       = 0;
-long web_perf_col_pixels       = 0;
-long web_perf_span_pixels      = 0;
-long web_perf_findplane_calls  = 0;
-long web_perf_findplane_iters  = 0;
 long web_perf_visplane_peak    = 0;
 long web_perf_drawseg_peak     = 0;
 long web_perf_opening_peak     = 0;
