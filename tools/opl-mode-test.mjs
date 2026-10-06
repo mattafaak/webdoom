@@ -350,4 +350,45 @@ for (const [mode, name] of [[0, 'OPL2'], [1, 'OPL3']]) {
                 'survives), and same-pointer replay, on the real synth.wasm (4 assertions)');
 }
 
+// Gate 9: a song the sequencer refuses must not bring back the one before it.
+//
+// S_ChangeMusic stops the old song -- releasing its lump to PU_CACHE, where
+// the zone may reuse it -- and then plays the new one.  A level-music lump in
+// MIDI format (common in source-port PWADs) is refused.  The sequencer kept
+// pointing at the released lump, so pausing and unpausing the game started the
+// old song again, read from memory the engine had given back.  After a stop
+// there must be nothing to resume.
+{
+    const pwad = lumps => {
+        let off = 12; const at = [];
+        for (const [, d] of lumps) { at.push(off); off += d.length; }
+        const b = new Uint8Array(off + 16 * lumps.length), dv = new DataView(b.buffer);
+        b.set([0x50, 0x57, 0x41, 0x44]); dv.setInt32(4, lumps.length, true); dv.setInt32(8, off, true);
+        lumps.forEach(([n, d], i) => {
+            b.set(d, at[i]); const o = off + 16 * i;
+            dv.setInt32(o, at[i], true); dv.setInt32(o + 4, d.length, true);
+            for (let j = 0; j < n.length; j++) b[o + 8 + j] = n.charCodeAt(j);
+        });
+        return b;
+    };
+    const midi = new Uint8Array(64); midi.set([0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6]);   // "MThd"
+    const d = await bootEngine('build', [['doomu.wad', loadWad('doom.wad')], ['midi.wad', pwad([['D_E1M1', midi]])]]);
+    d.callMain(['-file', 'midi.wad']);
+    d._web_set_singletics(1);
+    // drawing off: the renderer's NetUpdate would drain the key events on
+    // wall-clock time instead of on these tics
+    d._web_set_nodraw(1);
+    const frames = n => { for (let i = 0; i < n; i++) { d._web_wipe_skip(); d._web_frame(); } };
+    const key = k => { d._web_input_event(0, k, 0, 0); frames(2); d._web_input_event(1, k, 0, 0); frames(2); };
+    const fail = m => { console.error(`FAIL: gate 9: ${m}`); process.exit(1); };
+    frames(3);
+    if (!d._web_music_debug(0)) fail('the title song is not playing, so nothing below is measured');
+    for (const k of [27, 13, 13, 13]) key(k);          // New Game into E1M1, whose music is refused
+    frames(10);
+    if (d._web_music_debug(0)) fail('the MIDI level music was accepted, so the refusal path was not reached');
+    key(0xff); frames(3); key(0xff); frames(3);        // pause, unpause
+    if (d._web_music_debug(0)) fail('unpausing resumed the title song from its released lump');
+    console.log('gate 9 PASS: a refused song leaves silence; unpause resumes nothing (3 assertions)');
+}
+
 console.log('PASS: OPL2/OPL3 mode toggle verified; synth.wasm identical on real music');

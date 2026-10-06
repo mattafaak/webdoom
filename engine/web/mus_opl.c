@@ -529,16 +529,9 @@ EMSCRIPTEN_KEEPALIVE void web_set_opl_mode (int mode)
 }
 
 // Returns 1 when it has TAKEN the buffer (it keeps `data` and reads through it
-// until the next call), 0 when it has declined and touched nothing.
-//
-// The return value is the ownership signal, and it exists because the caller
-// used to have to infer one.  synth_main.c decides whether to free the caller's
-// block or the previous one, and it read that decision back out of
-// web_music_debug(0) -- the `playing` flag, through a DEBUG accessor.  That
-// worked, and it was one added early return away from silently freeing the
-// wrong block: any refusal path that left `playing` true, or any later reason
-// for `playing` to be false on an accepted song, would have flipped the
-// ownership of a live pointer with nothing to notice it.
+// until the next call), 0 when it has declined it.  A decline stops the
+// current song but leaves it loaded, so an unpause resumes it; synth_main.c
+// relies on that to know which block to free.
 int mus_play (void* data, int len, int loop)
 {
     unsigned short scorestart, scorelen;
@@ -578,21 +571,17 @@ int mus_play (void* data, int len, int loop)
     return 1;
 }
 
+// Stopping forgets the song: the engine releases its lump to PU_CACHE right
+// after (S_StopMusic), so nothing may read it again -- not even an unpause
+// after the next song is refused.
 void mus_stop (void)
 {
     playing = false;
     all_notes_off ();
+    mus = NULL;
+    ev = ev_start = ev_end = NULL;
 }
 
-// NOTE what `mus != NULL` means after a REFUSAL.  mus_play declines a bad
-// header without touching `mus`, so the previous song is still pointed at while
-// `playing` is false -- the refused song is silence, and then the first
-// mus_pause(0) sets playing = true and the OLD song resumes from where it
-// stopped.  That is the behaviour, it is not obviously wrong (the alternative
-// is permanent silence), and it is written down here because nothing else says
-// it: a caller that refuses a song and later unpauses gets audio back without
-// having asked for any.  Clearing `mus` on refusal would change it, and is a
-// deliberate non-change rather than an oversight.
 void mus_pause (int pause)
 {
     if (pause)
