@@ -1,15 +1,13 @@
 #!/usr/bin/env node
 // firefox-frame-test.mjs — Firefox renders an actual DOOM frame (promises rme-002).
 //
-// README says "Runs in stock Chrome / Edge / Firefox". Chromium is gated by 19
-// CDP legs; Firefox was gated only by `firefox-smoke`, which asserts a Firefox
-// UA fetched the page and /api/wads was requested -- the HTML parsed and JS ran.
-// It asserts NO rendered frame, and spec.md recorded that limit on the grounds
-// that "there is no CDP equivalent for Firefox in this repo and geckodriver is
-// not present".
+// README says "Runs in stock Chrome / Edge / Firefox". Chromium is gated by the
+// CDP legs; this is Firefox's leg.  First, from the server's own request log,
+// it asserts that a Firefox UA fetched the page and that /api/wads was
+// requested -- the HTML parsed and JS ran -- so a run that renders nothing
+// still says how far it got.  Then it asserts a frame.
 //
-// geckodriver is still absent, and the CDP half is now WRONG IN THE OTHER
-// DIRECTION: Firefox 155 does not speak CDP at all -- `--remote-debugging-port`
+// geckodriver is absent, and Firefox 155 does not speak CDP at all -- `--remote-debugging-port`
 // serves WebDriver BiDi ("WebDriver BiDi listening on ws://..."), and /json/list
 // 404s. So this drives BiDi directly: session.new, browsingContext.navigate,
 // script.evaluate, input.performActions, browsingContext.captureScreenshot.
@@ -44,13 +42,17 @@ const FF     = process.env.FIREFOX_BIN ?? '/usr/bin/firefox';
 const sleep  = ms => new Promise(r => setTimeout(r, ms));
 
 // Spawn our own server unless a URL was given, so the leg is self-contained.
-// tools/lib/server.mjs allocates a free port and POLLS it ready.  This was
-// port 8694 after a 1,200 ms sleep, which restates the 12.2b stale-server
-// lesson rather than applying it: a fixed port is exactly what an orphan from
-// an earlier run is already listening on, and a sleep cannot tell them apart.
+// tools/lib/server.mjs allocates a free port and polls it ready, so an orphan
+// from an earlier run cannot answer in its place.  The server logs every
+// request, and the first two checks read that log; a server this test did not
+// start has no log it can read.
+const reqs = [];
 let srv = null;
 if (!url) {
-    srv = await startServer();
+    srv = await startServer({
+        env: { LOG_REQUESTS: '1' },
+        onStderr: t => { for (const line of t.split('\n')) if (line.trim()) reqs.push(line); },
+    });
     url = srv.url;
 }
 
@@ -73,6 +75,8 @@ process.on('exit', () => {
     try { srv?.stop(); } catch { /* gone */ }
 });
 const fail = msg => { console.error(`FAIL: ${msg}`); cleanup(1); };
+let bad = 0, checks = 0;
+const check = (ok, msg) => { checks++; console.log(`${ok ? 'PASS' : 'FAIL'} ${msg}`); if (!ok) bad++; };
 
 // ── BiDi ─────────────────────────────────────────────────────────────────────
 let ws = null;
@@ -152,6 +156,19 @@ if (blank.stats.colours > 4 || blank.stats.variedPct > 5)
 // predicate simply never becomes true (status is '' from the first paint, so
 // waiting on status alone waits forever).
 await must('browsingContext.navigate', { context, url, wait: 'complete' });
+
+// ── the page loaded and its JS ran, from the server's side ───────────────────
+if (srv) {
+    const wadsHits = () => reqs.filter(l => l.includes('/api/wads')).length;
+    for (let i = 0; i < 30 && !wadsHits(); i++) await sleep(500);
+    const ua = reqs.filter(l => /Firefox\//.test(l)).length;
+    check(ua > 0, `a Firefox UA fetched the page (${ua} UA hits in the server's request log)`);
+    check(wadsHits() > 0, `/api/wads was requested: the page's JS ran (${wadsHits()} requests)`);
+} else {
+    console.log(`note: ${url} is not this test's server, so its request log cannot be read; `
+              + 'the UA and /api/wads checks run only against the server this test starts');
+}
+
 let booted = false, clicked = false;
 for (let i = 0; i < 80; i++) {
     await sleep(500);
@@ -205,8 +222,6 @@ await sleep(900);
 const menu = await shot('firefox-menu.png');
 
 // ── assertions ───────────────────────────────────────────────────────────────
-let bad = 0;
-const check = (ok, msg) => { console.log(`${ok ? 'PASS' : 'FAIL'} ${msg}`); if (!ok) bad++; };
 
 // Headless Firefox has no WebGL at all on this host, so the client would fall
 // back to canvas2D and this gate would silently prove the wrong path.
@@ -221,8 +236,8 @@ check(frameA.b64 !== frameB.b64,
       `the picture moves on its own after ${movedAfterMs} ms (the engine is running, not a stuck first paint)`);
 check(menu.b64 !== frameB.b64, 'Escape reached the engine and changed the screen (input works)');
 
-if (bad) { console.log(`firefox-frame: ${bad} of 6 assertions failed`); cleanup(1); }
+if (bad) { console.log(`firefox-frame: ${bad} of ${checks} assertions failed`); cleanup(1); }
 console.log(`PASS — firefox-frame: Firefox rendered a real frame via ${kind} ` +
-            `(${frameA.stats.colours} colours, ${frameA.stats.variedPct}% varied, 6 assertions); ` +
+            `(${frameA.stats.colours} colours, ${frameA.stats.variedPct}% varied, ${checks} assertions); ` +
             `screenshots in ${outdir}`);
 cleanup(0);
