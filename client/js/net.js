@@ -122,53 +122,70 @@ export function connectLobby(baseUrl, WS = WebSocket) {
 //                0xFF -> mark every slot fabricated, as a spectator must, so
 //                        the engine's consistancy check is bypassed (the sim
 //                        is still bit-identical, verified by _web_state_hash)
-function makeBundlePump(doom, numplayers, fabOverride) {
+//
+// Bundles queue here and reach the engine in tic order, no faster than its
+// 35-tic ring can hold them: a hidden tab stops the sim but not the socket.
+// The relay sends every tic once and in order, so a gap, or a backlog past
+// BACKLOG_MAX, cannot be recovered from; the session ends with that reason
+// (`lose`) instead of desyncing.
+const BACKLOG_MAX = 35 * 30;    // 30 s of tics
+
+function makeBundlePump(doom, numplayers, fabOverride, lose, lostReason) {
     const scratch = doom._web_net_scratch();
     const ingamePtr = doom._malloc(8);
-    if (!ingamePtr) throw new Error('out of memory for the per-tic ingame ring');
 
-    let live = false;               // once true, bundles just fill netcmds
-    const queue = [];               // bundles awaiting go()/catchUp
+    let live = false;               // go()/catchUp done: offer bundles as they come
+    let next = -1;                  // the tic the next bundle must carry
+    let disposed = false;
+    const queue = [];               // validated bundles the engine has not taken
 
-    // Push one sealed bundle into the engine (netcmds + per-tic ingame ring).
-    const deliver = data => {
+    const accept = data => {
         const b = new Uint8Array(data);
         if (b.length !== 6 + CMD_SIZE * numplayers) return;
         const tic = new DataView(b.buffer, b.byteOffset).getUint32(0, true);
-        // Mirrors the engine guard in web_net_bundle: a u32 >= 2^31 lands in C
-        // as a negative int and indexes before the tic-ring arrays.  The engine
-        // is the load-bearing check (a bare-metal port inherits it); this keeps
-        // a hostile frame from crossing the boundary at all.
+        // the engine refuses these too; this keeps them off the queue
         if (tic >= 0x7FFFFFFF) return;
-        const ingameMask = b[4];
-        const fabMask = fabOverride ?? b[5];
-        for (let i = 0; i < numplayers; i++) {
-            doom.HEAPU8[ingamePtr + i] = (ingameMask >> i) & 1;
-            doom.HEAPU8.set(
-                b.subarray(6 + i * CMD_SIZE, 6 + (i + 1) * CMD_SIZE),
-                scratch + i * CMD_SIZE,
-            );
-        }
-        doom._web_net_bundle(tic, scratch, ingamePtr, fabMask);
+        if (next >= 0 && tic < next) return;            // a repeat
+        if (next >= 0 && tic > next) return lose(`the game server skipped tic ${next}`);
+        if (queue.length >= BACKLOG_MAX) return lose('fell too far behind the game');
+        next = tic + 1;
+        queue.push({ tic, b });
     };
 
-    const drain = () => { live = true; for (const d of queue.splice(0)) deliver(d); };
+    // Hand the oldest queued bundle to the engine: 1 taken, 0 no room yet.
+    const deliverOne = () => {
+        const { tic, b } = queue[0];
+        for (let i = 0; i < numplayers; i++) {
+            doom.HEAPU8[ingamePtr + i] = (b[4] >> i) & 1;
+            doom.HEAPU8.set(b.subarray(6 + i * CMD_SIZE, 6 + (i + 1) * CMD_SIZE), scratch + i * CMD_SIZE);
+        }
+        const rc = doom._web_net_bundle(tic, scratch, ingamePtr, fabOverride ?? b[5]);
+        if (rc === 0) return 0;
+        queue.shift();
+        if (rc < 0) lose(`the game server sent an invalid tic (${tic})`);
+        return 1;
+    };
+
+    // Give the engine every queued bundle its ring has room for.  main.js
+    // calls this before each frame, so a backlog drains as the sim catches up.
+    const offer = () => {
+        if (disposed || !live) return;
+        while (queue.length && !lostReason() && deliverOne()) { /* next */ }
+    };
 
     return {
-        onmessage: ev => {
-            if (live) deliver(ev.data);
-            else queue.push(ev.data);   // buffered until go()/catchUp drains it
+        onmessage: ev => { if (!disposed) { accept(ev.data); offer(); } },
+        offer,
+
+        // Non-join: start delivery. Call once callMain has run.
+        go() { live = true; offer(); },
+
+        dispose() {
+            if (disposed) return;
+            disposed = true;
+            queue.length = 0;
+            doom._free(ingamePtr);
         },
-
-        // Non-join: start live delivery (bundles fill netcmds; the rAF loop's
-        // TryRunTics paces them). Call once callMain has run.
-        go: drain,
-
-        // The per-tic ingame ring is the one _malloc this module makes, and it
-        // was never freed.  Bounded by the engine instance, which bootDoom
-        // recreates per game, so it never accumulated across sessions -- but an
-        // allocation with no matching free is a habit, not a size.
-        dispose() { doom._free(ingamePtr); },
 
         // Join in progress: replay the streamed history (and any live bundles
         // that arrive meanwhile) UNPACED — one web_replay_tic per bundle — up
@@ -178,28 +195,23 @@ function makeBundlePump(doom, numplayers, fabOverride) {
         async catchUp(frontier, onProgress, onCaughtUp) {
             const CHUNK = 512;      // replay this many tics before yielding
             // No progress for this long means the stream is not coming back.
-            // Generous: a real catch-up over a slow LAN link still advances
-            // several tics a second, so this only fires when nothing arrives.
             const STALL_MS = 15000;
             const yieldToNet = () => new Promise(r => setTimeout(r, 0));
-            // `frontier` arrives in the `launch`/`inprogress` frame and was
-            // used unchecked.  The loop below has no exit but reaching it.
             if (!Number.isInteger(frontier) || frontier < 0 || frontier > 0x7FFFFFFF)
                 throw new Error(
                     `refusing catch-up: frontier ${JSON.stringify(frontier)} is not a plausible tic`);
-            // THE LOOP HAD NO WAY OUT BUT SUCCESS.  Neither attachRelay nor
-            // attachSpectate installs onclose/onerror, so a socket that died
-            // mid-catch-up -- or a frontier the stream can never reach, which
-            // a hostile server could simply assert -- turned this into a
-            // setTimeout(0) hot loop pegging a core forever, with
-            // "JOINING — CATCHING UP" on screen and no way out but a reload.
-            // bootDoom never resolved either, so enterGame's .catch never ran.
+            const ended = () => {
+                if (disposed) throw new Error('the session ended during catch-up');
+                if (lostReason()) throw new Error(lostReason());
+            };
             let lastTic = -1;
             let lastMoved = Date.now();
             for (;;) {
                 let n = 0;
                 while (queue.length) {
-                    deliver(queue.shift());     // netcmds for this tic
+                    ended();
+                    if (!deliverOne()) throw new Error('catch-up: the engine refused the next tic');
+                    ended();
                     doom._web_replay_tic();      // advance the sim one tic
                     if (++n >= CHUNK) {
                         onProgress?.(doom._web_gametic(), frontier);
@@ -207,9 +219,10 @@ function makeBundlePump(doom, numplayers, fabOverride) {
                         n = 0;
                     }
                 }
+                ended();
                 const at = doom._web_gametic();
                 onProgress?.(at, frontier);
-                if (at >= frontier && !queue.length) break;
+                if (at >= frontier) break;
                 if (at !== lastTic) { lastTic = at; lastMoved = Date.now(); }
                 else if (Date.now() - lastMoved > STALL_MS)
                     throw new Error(
@@ -219,20 +232,20 @@ function makeBundlePump(doom, numplayers, fabOverride) {
             }
             doom._web_end_catchup();
             onCaughtUp?.();
-            drain();
+            live = true;
+            offer();
         },
     };
 }
 
-// The setup both attach* functions do, in the order they must do it.
+// The setup both attach* functions do, in the order they must do it: validate
+// the shape BEFORE anything sizes on it, open the socket, set binaryType, fold
+// the slots into a player mask, call _web_net_setup, then push the names (a
+// ccall per player that must land after _web_net_setup and before any tic).
 //
-// They had this as two copies: validate the shape BEFORE anything sizes on it,
-// open the socket, set binaryType, fold the slots into a player mask, call
-// _web_net_setup, then push the names.  Two copies of a sequence whose ORDER is
-// load-bearing is a drift waiting to happen -- the names loop in particular is
-// a ccall per player that has to land after _web_net_setup and before any tic
-// arrives.  The callers differ in exactly two things, which are the arguments:
-// the URL, and which slot becomes consoleplayer.
+// The socket's close or error ends the session through `lose`, unless quit()
+// closed it.  Callers learn of it through the returned object's onLost, which
+// fires at once if the loss came before it was assigned.
 function attachCommon(doom, url, { numplayers, slots, names }, WS, consoleSlotOf) {
     slots = checkNetShape(numplayers, slots);   // before anything sizes on it
     const ws = new WS(url);
@@ -244,7 +257,22 @@ function attachCommon(doom, url, { numplayers, slots, names }, WS, consoleSlotOf
     names?.forEach((n, i) => {
         if (n) doom.ccall('web_set_player_name', null, ['number', 'string'], [i, n]);
     });
-    return { ws, slots, ingameSlots, mask };
+
+    let quitting = false, lostReason = null, onLost = null;
+    const lose = reason => {
+        if (quitting || lostReason) return;
+        lostReason = reason;
+        try { ws.close(); } catch { /* already closed */ }
+        onLost?.(reason);
+    };
+    ws.onclose = ev => lose(ev?.reason || 'the connection to the game server was lost');
+    ws.onerror = () => lose('the connection to the game server failed');
+    const control = {
+        get onLost() { return onLost; },
+        set onLost(fn) { onLost = fn; if (lostReason) fn?.(lostReason); },
+    };
+    const quit = pump => { quitting = true; try { ws.close(); } catch { /* closed */ } pump.dispose(); };
+    return { ws, slots, ingameSlots, mask, lose, lostReason: () => lostReason, control, quit };
 }
 
 // Call before doom.callMain(): configures the engine for the session and
@@ -252,7 +280,7 @@ function attachCommon(doom, url, { numplayers, slots, names }, WS, consoleSlotOf
 // occupied lobby slots (sparse: color choice = slot choice); the bundle
 // is always numplayers wide with phantoms marked not-ingame.
 export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, names = null, jitterMs = 5 }, WS = WebSocket) {
-    const { ws } = attachCommon(doom, `${baseUrl}/ws/game?slot=${slot}`,
+    const { ws, lose, lostReason, control, quit } = attachCommon(doom, `${baseUrl}/ws/game?slot=${slot}`,
                                 { numplayers, slots, names }, WS, () => slot);
     // Jitter buffer depth (tics behind the sealed frontier, one tic =
     // 28.6ms). Size it to network JITTER, never to mean RTT: in lockstep
@@ -274,14 +302,15 @@ export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, nam
     };
 
     // A player reads fabMask from the wire.
-    const pump = makeBundlePump(doom, numplayers, null);
+    const pump = makeBundlePump(doom, numplayers, null, lose, lostReason);
     ws.onmessage = pump.onmessage;
 
-    return {
+    return Object.assign(control, {
         go: pump.go,
+        offer: pump.offer,
         catchUp: (frontier, onProgress) => pump.catchUp(frontier, onProgress),
-        quit() { ws.close(); pump.dispose(); },
-    };
+        quit: () => quit(pump),
+    });
 }
 
 // Spectate: receive-only observer. Connects to /ws/spectate (no slot param),
@@ -298,7 +327,7 @@ export function attachSpectate(doom, baseUrl, { numplayers, slots = null, names 
     // Use the first ingame slot as consoleplayer. A phantom (not-ingame) slot
     // leaves players[consoleplayer].mo NULL, which corrupts sound-listener
     // arithmetic and diverges consistancy[] from the veteran simulation.
-    const { ws, ingameSlots } = attachCommon(doom, `${baseUrl}/ws/spectate`,
+    const { ws, lose, lostReason, control, quit } = attachCommon(doom, `${baseUrl}/ws/spectate`,
                                              { numplayers, slots, names }, WS,
                                              ing => ing[0] ?? 0);
     doom._web_net_set_delay(2);
@@ -309,18 +338,19 @@ export function attachSpectate(doom, baseUrl, { numplayers, slots = null, names 
 
     // Spectators pass fabMask=0xFF (all slots "fabricated"); see makeBundlePump.
     const FAB_ALL = 0xFF;
-    const pump = makeBundlePump(doom, numplayers, FAB_ALL);
+    const pump = makeBundlePump(doom, numplayers, FAB_ALL, lose, lostReason);
     ws.onmessage = pump.onmessage;
 
-    return {
+    return Object.assign(control, {
+        offer: pump.offer,
         catchUp: (frontier, onProgress) => pump.catchUp(frontier, onProgress, () => {
             // Park the view on the first live player so the status bar renders
             // against a valid player slot (phantom slots have no HUD state).
             const anchor = doom._web_first_ingame();
             if (anchor >= 0) doom._web_set_console(anchor);
         }),
-        quit() { ws.close(); pump.dispose(); },
-    };
+        quit: () => quit(pump),
+    });
 }
 
 // Engine argv for a launch message — identical on every client.

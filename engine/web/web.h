@@ -35,10 +35,11 @@ void web_net_setup (int player, int numplayers, int ingamemask);
 // ─────────────────────────────────────────────────────────────────────────────
 
 // cmds must point to at least `numplayers` ticcmd_t, ingame to at least
-// `numplayers` bytes.  tic is validated internally (0 <= tic < INT_MAX) because
-// it arrives from the network; the two POINTERS are the caller's
-// responsibility.
-void web_net_bundle (int tic, ticcmd_t* cmds, byte* ingame, int fabmask);
+// `numplayers` bytes; the two POINTERS are the caller's responsibility.  tic is
+// validated internally because it arrives from the network: 1 = stored,
+// 0 = beyond the ring (gametic + BACKUPTICS or later; offer it again once the
+// sim has advanced), -1 = never valid (negative, INT_MAX, or already run).
+int web_net_bundle (int tic, ticcmd_t* cmds, byte* ingame, int fabmask);
 
 // out must point to at least 5 ints; it takes no size and cannot check.
 void web_demo_state (int* out);

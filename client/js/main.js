@@ -230,6 +230,8 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
         : net ? attachRelay(doom, baseWsUrl, net) : null;
     doom.netQuit = () => { try { relay?.quit?.(); } catch { /* already closed */ } };   // D_QuitNetGame
     disposers.push(() => relay?.quit?.());
+    // the server dropped us, the game ended, or the stream broke
+    if (relay) relay.onLost = reason => endSession(reason);
 
     // -record here rather than a pre-boot call: G_RecordDemo needs the zone
     // allocator, which D_DoomMain initialises first
@@ -308,6 +310,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
                 }
             } else {
                 input.frame();
+                relay?.offer();             // bundles the engine's ring has room for now
                 doom._web_frame();
                 scrubberHandle?.onFrame?.();
             }

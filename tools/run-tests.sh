@@ -573,6 +573,7 @@ leg spectate-inject build,wad  "spectator injection is a no-op"        -- node t
 leg spectate-fuzz   build,wad  "hostile clients against /ws/spectate (23.6)" -- node tools/spectate-fuzz-test.mjs
 leg edge            build,wad  "drop-in edge cases"                    -- node tools/edge-test.mjs
 leg churn           build,wad  "connect/disconnect churn"              -- node tools/churn-test.mjs
+leg net-hidden      build,wad  "a hidden tab survives 3 s in lockstep; told when dropped" -- node tools/net-hidden-test.mjs
 
 # ── demo tooling ─────────────────────────────────────────────────────────────
 leg demo-seek       build,wad  "scrubber seek == linear replay (19.3)" -- node tools/demo-seek-test.mjs

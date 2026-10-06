@@ -111,37 +111,35 @@ EMSCRIPTEN_KEEPALIVE void web_net_set_delay (int tics)
 //
 // web_net_bundle
 // JS delivers one sealed tic: every live player's ticcmd, in slot order.
-// Bundles always arrive in tic order (the relay guarantees it).
 // fabmask: bit N set = slot N's cmd was fabricated by the relay (stalled
 // client) and carries no valid consistancy checksum.
+//
+// The ring holds the tics [gametic, gametic + BACKUPTICS).  A bundle beyond
+// it would overwrite a tic that has not run yet -- a hidden tab stops the sim
+// while the socket keeps delivering -- so it is refused with 0 and the caller
+// offers it again after the sim has advanced.  -1 refuses a tic that can
+// never be valid.  1 means it was stored.
 //
 static byte fabricated[BACKUPTICS];
 static byte
     ingamering[BACKUPTICS];  // per-tic ingame mask, applied at the sim tic
 int web_joinTic[MAXPLAYERS]; // gametic each slot went live (consistancy skip)
 
-EMSCRIPTEN_KEEPALIVE void web_net_bundle (int tic, ticcmd_t* cmds, byte* ingame,
-                                          int fabmask)
+EMSCRIPTEN_KEEPALIVE int web_net_bundle (int tic, ticcmd_t* cmds, byte* ingame,
+                                         int fabmask)
 {
     int i;
     byte mask = 0;
 
-    // `tic` comes off the wire as a u32 (net.js: getUint32) and lands here in a
-    // signed int, so anything >= 2^31 arrives NEGATIVE -- and C's % keeps the
-    // sign, so `tic % BACKUPTICS` indexes BEFORE these arrays.  Reproduced
-    // 2026-09-11 against the shipping build: a bundle with tic 0xFFFFFFFF wrote
-    // 8 bytes below slot 0 of netcmds, and 0xFFFFFFE0 wrote 256 bytes below --
-    // the offset is under the sender's control.
-    //
-    // On the deployment spec.md names as primary -- plain HTTP on a LAN or
-    // tailnet -- anything that can answer ws://host:8666/ws/game can send it.
-    // The guard lives here rather than only in net.js because this is the
-    // core<->platform boundary a bare-metal port inherits.
-    //
-    // tic == INT_MAX is refused too: `nettics[i] = tic + 1` below would
-    // overflow, which is undefined behaviour rather than merely wrong.
-    if (tic < 0 || tic >= 0x7FFFFFFF)
-        return;
+    // tic arrives as a u32 in a signed int, so >= 2^31 is negative and C's %
+    // keeps the sign: it would index before these arrays, by an offset the
+    // sender chooses.  INT_MAX would overflow nettics[i] = tic + 1.  Checked
+    // here and not only in net.js, because this is the boundary a bare-metal
+    // port inherits.
+    if (tic < 0 || tic >= 0x7FFFFFFF || tic < gametic)
+        return -1;
+    if (tic - gametic >= BACKUPTICS)
+        return 0;
 
     fabricated[tic % BACKUPTICS] = (byte) fabmask;
     for (i = 0; i < web_numplayers; i++)
@@ -158,6 +156,7 @@ EMSCRIPTEN_KEEPALIVE void web_net_bundle (int tic, ticcmd_t* cmds, byte* ingame,
     // join/leave at a per-client-variable moment and desync. Stash the mask
     // per tic instead.
     ingamering[tic % BACKUPTICS] = mask;
+    return 1;
 }
 
 //
@@ -202,6 +201,10 @@ void NetUpdate (void)
     // A hidden tab stops rAF; on return, resume instead of fast-forwarding.
     if (newtics > TICRATE)
         newtics = 1;
+    // Meanwhile the relay sealed those tics without us, so commands for them
+    // would be discarded: build from the tic the sim is on instead.
+    if (netgame && maketic < gametic)
+        maketic = gametic;
 
     for (i = 0; i < newtics; i++)
     {
@@ -373,6 +376,10 @@ void TryRunTics (void)
     for (i = 0; i < MAXPLAYERS; i++)
         if (playeringame[i] && nettics[i] < lowtic)
             lowtic = nettics[i];
+
+    // a roster with nobody in it seals nothing the sim may run
+    if (lowtic == MAXINT)
+        lowtic = gametic;
 
     if (netgame)
     {
