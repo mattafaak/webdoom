@@ -22,6 +22,7 @@ import { join } from 'node:path';
 import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
 import { startServer } from './lib/server.mjs';
+import { check, summary } from './lib/report.mjs';
 
 const srvUrl  = process.argv[2] ?? (await startServer()).url;
 const outdir  = process.argv[3] ?? '/tmp';
@@ -29,40 +30,16 @@ const TARGET_TICKS = 50;   // 13 + 50*4 + 1 = 214 bytes — well below FRAGMENT_
 
 // a hidden tab's rAF is throttled, and Tab B replays under a frame hook
 const chrome = await launchChrome({ flags: ['--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
-const cleanup = code => { chrome.kill(); process.exit(code); };
 
-async function openTab(url) {
-    const tab = await chrome.tab(url);
-    return {
-        cdp: tab.cdp, eval: tab.ev, errors: tab.errors,
-        click: label => tab.click(label, 20),
-        shot: async file => {
-            const { result } = await tab.cdp('Page.captureScreenshot', { format: 'png' });
-            writeFileSync(join(outdir, file), Buffer.from(result.data, 'base64'));
-        },
-    };
-}
-
-// Poll until fn() returns truthy or timeout.
-async function waitFor(fn, timeoutMs = 60000, intervalMs = 200) {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-        const v = await fn();
-        if (v) return v;
-        await sleep(intervalMs);
-    }
-    throw new Error('waitFor timed out');
-}
-
-// ── Test assertions ───────────────────────────────────────────────────────────
-
-let passes = 0;
-let failures = 0;
-const fail = msg => { failures++; console.log(`  FAIL  ${msg}`); };
-const pass = msg => { passes++;  console.log(`  PASS  ${msg}`); };
-function ok(label, cond, detail = '') {
-    if (cond) pass(label);
-    else       fail(`${label}${detail ? ' — ' + detail : ''}`);
+const shot = async (tab, file) => {
+    const { result } = await tab.cdp('Page.captureScreenshot', { format: 'png' });
+    writeFileSync(join(outdir, file), Buffer.from(result.data, 'base64'));
+};
+// Every step below needs the one before it, so a wait that times out ends the
+// run (the catch below reports it) rather than letting the next step proceed.
+async function until(tab, fn, timeoutMs = 60000, intervalMs = 200) {
+    if (!await tab.waitFor(fn, { timeout: timeoutMs, every: intervalMs })) throw new Error('waitFor timed out');
+    return true;
 }
 
 // ── Main test body ────────────────────────────────────────────────────────────
@@ -73,54 +50,54 @@ let tabA, tabB, tabC, tabD;
 try {
     // ── Tab A: wait for SW, navigate SINGLE PLAYER → RECORD & SHARE… → game ──
 
-    tabA = await openTab(srvUrl);
+    tabA = await chrome.tab(srvUrl);
     await sleep(2500);
 
     // Wait for service worker to control the page.
-    await waitFor(() => tabA.eval(`!!navigator.serviceWorker.controller`), 20000);
+    await until(tabA, () => tabA.ev(`!!navigator.serviceWorker.controller`), 20000);
 
     // Navigate: SINGLE PLAYER → RECORD DEMO: ON → doom.wad game entry.
-    const spOk = await tabA.click('SINGLE PLAYER');
-    ok('Tab A: SINGLE PLAYER menu item found', spOk);
+    const spOk = await tabA.click('SINGLE PLAYER', 20);
+    check('Tab A: SINGLE PLAYER menu item found', spOk);
 
     // RECORD DEMO is a value row on the game list: one click turns it ON and
     // the row says so.  Asserting the label is what makes this a test of the
     // switch rather than of "a row containing RECORD took a click".
     await sleep(500);
-    const recOk = await waitFor(async () => tabA.eval(
+    const recOk = await until(tabA, async () => tabA.ev(
         `(() => { const r = document.querySelector('#dmenu .row[data-label^="RECORD DEMO:"]');
                   return r ? (r.click(), true) : false; })()`), 10000, 300);
-    ok('Tab A: RECORD DEMO row clicked', recOk);
+    check('Tab A: RECORD DEMO row clicked', recOk);
     await sleep(300);
-    const recLabel = await tabA.eval(
+    const recLabel = await tabA.ev(
         `document.querySelector('#dmenu .row[data-label^="RECORD DEMO:"]')?.dataset.label`);
-    ok(`Tab A: RECORD DEMO reads ON (${recLabel})`, recLabel === 'RECORD DEMO: < ON >');
+    check(`Tab A: RECORD DEMO reads ON (${recLabel})`, recLabel === 'RECORD DEMO: < ON >');
 
     // Still on the game list: click doom.wad's entry.
 
     await sleep(400);
-    const doomOk = await waitFor(async () => {
+    const doomOk = await until(tabA, async () => {
         // Try common title strings for doom.wad
         for (const label of ['DOOM', 'ULTIMATE DOOM', 'THE ULTIMATE DOOM', 'ULTIMATE DOOM (V1.9)']) {
-            const hit = await tabA.eval(
+            const hit = await tabA.ev(
                 `(() => { const r = document.querySelector('#dmenu .row[data-label*=${JSON.stringify(label)}]');
                           return r ? (r.click(), true) : false; })()`);
             if (hit) return true;
         }
         return false;
     }, 10000, 500);
-    ok('Tab A: doom.wad game entry clicked (record picker)', doomOk);
+    check('Tab A: doom.wad game entry clicked (record picker)', doomOk);
 
     // Wait for bootDoom to complete: window.webdoom must be set.
-    await waitFor(() => tabA.eval(`typeof window.webdoom?.doom?._web_demo_stop === 'function'`), 60000, 500);
-    pass('Tab A: bootDoom complete, demo bridge available');
+    await until(tabA, () => tabA.ev(`typeof window.webdoom?.doom?._web_demo_stop === 'function'`), 60000, 500);
+    check('Tab A: bootDoom complete, demo bridge available', true);
 
     // Set up frame hook BEFORE enabling singletics.
     // The hook collects per-tic hashes and auto-stops recording after TARGET_TICKS.
     // _recordStartTic is captured so Tab B can wait for the same gametic before
     // collecting — web_state_hash includes the absolute gametic value, so the
     // sequences must be compared at matching gametic positions.
-    await tabA.eval(`
+    await tabA.ev(`
         window._recordHashes    = [];
         window._recordStartTic  = null;
         window._lastTic         = -1;
@@ -150,28 +127,28 @@ try {
         window.webdoom.doom._web_set_singletics(1);
         true
     `);
-    pass('Tab A: frame hook + singletics installed');
+    check('Tab A: frame hook + singletics installed', true);
 
     // Wait for TARGET_TICKS to be collected.
-    await waitFor(() => tabA.eval(`window._demoStopped`), 30000, 200);
-    pass(`Tab A: ${TARGET_TICKS} ticks recorded, demo stopped`);
+    await until(tabA, () => tabA.ev(`window._demoStopped`), 30000, 200);
+    check(`Tab A: ${TARGET_TICKS} ticks recorded, demo stopped`, true);
 
     // Verify demo byte count.
-    const demoSize = await tabA.eval(`window._demoByteCount`);
+    const demoSize = await tabA.ev(`window._demoByteCount`);
     const expectedMin = 13 + TARGET_TICKS * 4 + 1;   // header + ticks + marker
-    ok(`Tab A: demo size >= ${expectedMin} bytes`, demoSize >= expectedMin, `size=${demoSize}`);
+    check(`Tab A: demo size >= ${expectedMin} bytes`, demoSize >= expectedMin, `size=${demoSize}`);
 
     // Collect the recording hash array and the starting gametic.
     // recordStartGamtic is passed to Tab B so it waits for the same gametic
     // before collecting — web_state_hash includes absolute gametic, so both
     // sequences must start at the same position to be comparable.
-    const recordHashes = await tabA.eval(`window._recordHashes.slice()`);
-    ok(`Tab A: collected ${TARGET_TICKS} record hashes`, recordHashes?.length >= TARGET_TICKS,
+    const recordHashes = await tabA.ev(`window._recordHashes.slice()`);
+    check(`Tab A: collected ${TARGET_TICKS} record hashes`, recordHashes?.length >= TARGET_TICKS,
         `got=${recordHashes?.length}`);
-    const recordStartGamtic = await tabA.eval(`window._recordStartTic ?? 0`);
+    const recordStartGamtic = await tabA.ev(`window._recordStartTic ?? 0`);
 
     // Extract demo bytes from wasm heap as base64 for transport.
-    const demoB64 = await tabA.eval(`
+    const demoB64 = await tabA.ev(`
         (function() {
             const doom = window.webdoom.doom;
             const ptr  = doom._web_demo_buf_ptr();
@@ -182,16 +159,16 @@ try {
             return btoa(b);
         })()
     `);
-    ok('Tab A: demo bytes extracted', typeof demoB64 === 'string' && demoB64.length > 0,
+    check('Tab A: demo bytes extracted', typeof demoB64 === 'string' && demoB64.length > 0,
         `b64 length=${demoB64?.length}`);
 
     // Generate the fragment URL (same algorithm as demo.js stopAndShare fragment path).
     // Convert base64 to base64url and construct the URL.
     const b64url = demoB64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const fragmentUrl = `${srvUrl}#demo=${encodeURIComponent(b64url)}&wad=${encodeURIComponent('doom.wad')}`;
-    pass(`Tab A: fragment URL generated (${fragmentUrl.length} chars)`);
+    check(`Tab A: fragment URL generated (${fragmentUrl.length} chars)`, true);
 
-    await tabA.shot('demo-test-tabA.png');
+    await shot(tabA, 'demo-test-tabA.png');
 
     // ── Tab B: open fragment URL, replay, compare hashes ─────────────────────
     // Root-cause: D_DoomFrame returns early when wipeactive=true (GS_DEMOSCREEN→
@@ -208,7 +185,7 @@ try {
     // navigate to fragmentUrl.  The hook — including the wipe_skip call — is
     // active on frame 1, preventing the freeze entirely.
 
-    tabB = await openTab('about:blank');
+    tabB = await chrome.tab('about:blank');
     await sleep(500);
 
     // Pre-install the replay hook.  Page.addScriptToEvaluateOnNewDocument runs
@@ -243,30 +220,30 @@ try {
             }
         };
     ` });
-    pass(`Tab B: replay hook pre-installed (start=${recordStartGamtic} end=${recordStartGamtic + TARGET_TICKS - 1})`);
+    check(`Tab B: replay hook pre-installed (start=${recordStartGamtic} end=${recordStartGamtic + TARGET_TICKS - 1})`, true);
 
     // Navigate to the fragment URL.  The pre-installed hook fires from frame 1.
     await tabB.cdp('Page.navigate', { url: fragmentUrl });
     await sleep(2000);
-    await waitFor(() => tabB.eval(`!!navigator.serviceWorker.controller`), 20000);
+    await until(tabB, () => tabB.ev(`!!navigator.serviceWorker.controller`), 20000);
 
     // Poll for window.webdoom.doom being available (bootDoom complete).
-    await waitFor(() => tabB.eval(`typeof window.webdoom?.doom === 'object'`), 90000, 100);
-    pass('Tab B: bootDoom complete, demo bridge available');
+    await until(tabB, () => tabB.ev(`typeof window.webdoom?.doom === 'object'`), 90000, 100);
+    check('Tab B: bootDoom complete, demo bridge available', true);
 
     // Diagnostic: gametic at this point.  With wipe_skip active from frame 1,
     // gametic should be advancing normally (> 1 and likely close to TARGET_TICKS).
-    const tabBGameticAtBoot = await tabB.eval(`window.webdoom?.doom?._web_gametic?.() ?? -1`);
+    const tabBGameticAtBoot = await tabB.ev(`window.webdoom?.doom?._web_gametic?.() ?? -1`);
     console.log(`  [diag] Tab B gametic after bootDoom detect: ${tabBGameticAtBoot}`);
 
     // Wait for _replayDone.  Timeout is generous: WAD boot (~5 s) + replay to
     // the final expected gametic (~50/60 s ≈ 1 s).
-    await waitFor(() => tabB.eval(`window._replayDone`), 90000, 200);
-    pass(`Tab B: replay advanced to gametic ${recordStartGamtic + TARGET_TICKS - 1}`);
+    await until(tabB, () => tabB.ev(`window._replayDone`), 90000, 200);
+    check(`Tab B: replay advanced to gametic ${recordStartGamtic + TARGET_TICKS - 1}`, true);
 
-    const replayHashes   = await tabB.eval(`window._replayHashes.slice()`);
-    const replayStartTic = await tabB.eval(`window._replayStartTic ?? ${recordStartGamtic}`);
-    ok(`Tab B: collected ${replayHashes?.length} replay hashes`, (replayHashes?.length ?? 0) > 0);
+    const replayHashes   = await tabB.ev(`window._replayHashes.slice()`);
+    const replayStartTic = await tabB.ev(`window._replayStartTic ?? ${recordStartGamtic}`);
+    check(`Tab B: collected ${replayHashes?.length} replay hashes`, (replayHashes?.length ?? 0) > 0);
 
     // Align the two sequences by gametic and compare the overlapping window.
     //   recordHashes[i]  ↔  gametic recordStartGamtic + i
@@ -279,7 +256,7 @@ try {
     const n = Math.max(0, overlapEnd - overlapStart + 1);
     // Full-trace contract: the overlap must cover the whole recording, not
     // merely be non-empty (a 1-tick overlap is not a FULL trace comparison).
-    ok(`Tab B: overlap window is ${n} ticks (gametics ${overlapStart}..${overlapEnd})`, n >= TARGET_TICKS,
+    check(`Tab B: overlap window is ${n} ticks (gametics ${overlapStart}..${overlapEnd})`, n >= TARGET_TICKS,
         `record=[${recordStartGamtic}..${recEnd}] replay=[${replayStartTic}..${repEnd}] (need >= ${TARGET_TICKS})`);
 
     let desynced = -1;
@@ -288,15 +265,13 @@ try {
         const pi = t - replayStartTic;
         if (recordHashes[ri] !== replayHashes[pi]) { desynced = t; break; }
     }
-    if (desynced >= 0) {
-        fail(`Tab B: sim DESYNC at gametic ${desynced} — ` +
-             `record=0x${recordHashes[desynced - recordStartGamtic].toString(16)} ` +
-             `replay=0x${replayHashes[desynced - replayStartTic].toString(16)}`);
-    } else {
-        pass(`Tab B: ${n} ticks — recording and replay hash sequences IDENTICAL`);
-    }
+    check(desynced < 0 ? `Tab B: ${n} ticks — recording and replay hash sequences IDENTICAL`
+                       : `Tab B: sim DESYNC at gametic ${desynced} — ` +
+                         `record=0x${recordHashes[desynced - recordStartGamtic].toString(16)} ` +
+                         `replay=0x${replayHashes[desynced - replayStartTic].toString(16)}`,
+          desynced < 0);
 
-    await tabB.shot('demo-test-tabB.png');
+    await shot(tabB, 'demo-test-tabB.png');
 
     // ── Tab C: WAD ownership check ────────────────────────────────────────────
 
@@ -304,25 +279,25 @@ try {
     // a warning and NOT boot the engine.
     const badWadB64url = b64url;  // same demo bytes, but wrong WAD name
     const badWadUrl = `${srvUrl}#demo=${encodeURIComponent(badWadB64url)}&wad=${encodeURIComponent('nonexistent.wad')}`;
-    tabC = await openTab(badWadUrl);
+    tabC = await chrome.tab(badWadUrl);
     await sleep(2500);
 
-    await waitFor(() => tabC.eval(`!!navigator.serviceWorker.controller`), 20000);
+    await until(tabC, () => tabC.ev(`!!navigator.serviceWorker.controller`), 20000);
     await sleep(3000);   // let lobby.js run parseDemoUrl + ownership check
 
-    const statusText = await tabC.eval(`document.getElementById('status')?.textContent ?? ''`);
+    const statusText = await tabC.ev(`document.getElementById('status')?.textContent ?? ''`);
     const warningShown = statusText.includes('nonexistent.wad') ||
                          statusText.includes('DEMO requires') ||
                          statusText.includes('own this WAD') ||
                          statusText.includes('you must own');
-    ok('Tab C: WAD ownership warning shown for missing WAD', warningShown,
+    check('Tab C: WAD ownership warning shown for missing WAD', warningShown,
         `status="${statusText.slice(0, 80)}"`);
 
     // Engine must NOT have booted (no webdoom object).
-    const noBoot = await tabC.eval(`!window.webdoom`);
-    ok('Tab C: engine did NOT boot for missing WAD (ownership gate)', noBoot);
+    const noBoot = await tabC.ev(`!window.webdoom`);
+    check('Tab C: engine did NOT boot for missing WAD (ownership gate)', noBoot);
 
-    await tabC.shot('demo-test-tabC.png');
+    await shot(tabC, 'demo-test-tabC.png');
 
     // ── Tab D: a demo the engine BOOTS for and then refuses ───────────────────
     //
@@ -349,51 +324,38 @@ try {
         const badB64 = bad.toString('base64')
             .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
         const badUrl = `${srvUrl}#demo=${encodeURIComponent(badB64)}&wad=${encodeURIComponent('doom.wad')}`;
-        tabD = await openTab(badUrl);
-        await waitFor(() => tabD.eval(`!!navigator.serviceWorker.controller`), 20000);
+        tabD = await chrome.tab(badUrl);
+        await until(tabD, () => tabD.ev(`!!navigator.serviceWorker.controller`), 20000);
         // the engine has to boot and then fail, so give it the boot budget
-        await waitFor(() => tabD.eval(`!!window.webdoom?.doom`), 90000, 250).catch(() => {});
-        const booted = await tabD.eval(`!!window.webdoom?.doom`);
-        ok('Tab D: the engine DID boot (this is the post-boot failure path, not the ownership gate)',
+        await tabD.waitFor(() => tabD.ev(`!!window.webdoom?.doom`), { timeout: 90000, every: 250 });
+        const booted = await tabD.ev(`!!window.webdoom?.doom`);
+        check('Tab D: the engine DID boot (this is the post-boot failure path, not the ownership gate)',
            booted);
         await sleep(3000);   // let the after-callback failure settle
 
-        const landingHidden = await tabD.eval(`document.getElementById('landing')?.hidden ?? null`);
-        ok('Tab D: #landing is visible again after a refused replay', landingHidden === false,
+        const landingHidden = await tabD.ev(`document.getElementById('landing')?.hidden ?? null`);
+        check('Tab D: #landing is visible again after a refused replay', landingHidden === false,
            `landing.hidden=${landingHidden}`);
 
-        const canvasHidden = await tabD.eval(`document.getElementById('screen')?.hidden ?? null`);
-        ok('Tab D: the canvas is hidden again', canvasHidden === true,
+        const canvasHidden = await tabD.ev(`document.getElementById('screen')?.hidden ?? null`);
+        check('Tab D: the canvas is hidden again', canvasHidden === true,
            `screen.hidden=${canvasHidden}`);
 
-        const st = await tabD.eval(`window.__wdLastStatus ?? document.getElementById('status')?.textContent ?? ''`);
-        ok('Tab D: the failure is stated on the status line', /demo replay failed/i.test(String(st)),
+        const st = await tabD.ev(`window.__wdLastStatus ?? document.getElementById('status')?.textContent ?? ''`);
+        check('Tab D: the failure is stated on the status line', /demo replay failed/i.test(String(st)),
            `status="${String(st).slice(0, 80)}"`);
 
-        await tabD.shot('demo-test-tabD.png');
+        await shot(tabD, 'demo-test-tabD.png');
     }
 
 } catch (err) {
-    fail(`unexpected error: ${err.message ?? err}`);
+    check(`unexpected error: ${err.message ?? err}`, false);
     console.error(err);
 } finally {
-    // ── Summary ───────────────────────────────────────────────────────────────
-    console.log(`\n  ${passes} passed, ${failures} failed`);
     const anyErrors = [...(tabA?.errors ?? []), ...(tabB?.errors ?? []), ...(tabC?.errors ?? []), ...(tabD?.errors ?? [])];
     if (anyErrors.length)
         console.log('  page errors:', anyErrors.slice(0, 5).join('\n  '));
-    // This leg had no top-level PASS line, so run-tests.sh's headline() fell
-    // through to the last non-empty line and the green row in the committed
-    // baseline reads "[Log.warning] Automatic fallback to software WebGL has
-    // been deprecated" -- a Chrome deprecation notice standing in for a
-    // verdict.  And `0 passed, 0 failed` would have exited 0, so the count
-    // needs a floor as well as a voice.
-    const MIN_ASSERTIONS = 16;
-    if (!failures && passes < MIN_ASSERTIONS) {
-        console.log(`FAIL — browser-demo: only ${passes} assertions ran, expected at least ` +
-                    `${MIN_ASSERTIONS}; a short run is not a pass`);
-        cleanup(1);
-    }
-    if (!failures) console.log(`PASS — browser-demo: ${passes} assertions, demo permalink record -> share -> replay`);
-    cleanup(failures ? 1 : 0);
+    // a run that stopped part way is not a pass, however clean its first steps
+    summary('browser-demo: demo permalink record -> share -> replay', { min: 16 });
+    process.exit();
 }
