@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import { launchChrome } from './lib/cdp.mjs';
 import { startServer } from './lib/server.mjs';
 import { sleep } from './lib/util.mjs';
+import { check, summary, fatal } from './lib/report.mjs';
 
 // the server logs each request; the test counts /wads/ hits per session
 const wadHits = { s1: 0, s2: 0 };
@@ -36,9 +37,6 @@ const srv = await startServer({ env: { LOG_REQUESTS: '1' }, onStderr: chunk => {
 const insecureUrl = `http://insecure.test:${srv.port}/`;
 // a fresh profile per run (launchChrome), so the SW cache is always cold on entry
 const chrome = await launchChrome({ gpu: 'none', flags: ['--host-resolver-rules=MAP insecure.test 127.0.0.1'] });
-const cleanup = code => { srv?.stop(); chrome.kill(); process.exit(code); };
-process.on('SIGINT',  () => cleanup(1));
-process.on('SIGTERM', () => cleanup(1));
 const openTab = tabUrl => chrome.tab(tabUrl);
 
 // Wait for lobby menu (#dmenu .row[data-label="SINGLE PLAYER"]).
@@ -50,11 +48,10 @@ const openTab = tabUrl => chrome.tab(tabUrl);
 async function waitForMenu(tab, label = 'tab', timeoutSecs = 30) {
     let ok;
     try { ok = await tab.waitForMenu(timeoutSecs); }
-    catch (e) { console.error(`FAIL: ${label}: ${e.message}`); cleanup(1); }
+    catch (e) { fatal(`${label}: ${e.message}`); }
     if (ok) return;
     const s = await tab.ev(`document.getElementById('status')?.textContent`);
-    console.error(`FAIL: ${label}: lobby menu did not appear within ${timeoutSecs}s (status: "${s}")`);
-    cleanup(1);
+    fatal(`${label}: lobby menu did not appear within ${timeoutSecs}s (status: "${s}")`);
 }
 
 // Click SP → game and wait for engine canvas + empty status.
@@ -64,10 +61,8 @@ async function bootIntoSP(tab, label = 'tab', timeoutSecs = 90) {
         await sleep(500);
         const s = await tab.ev(`document.getElementById('status')?.textContent`);
         // Allow the degraded-mode notice in status while waiting for menu click
-        if (s?.startsWith('engine error') || s?.startsWith('cannot') || s?.startsWith('Error')) {
-            console.error(`FAIL: ${label}: engine error during SP boot: "${s}"`);
-            cleanup(1);
-        }
+        if (s?.startsWith('engine error') || s?.startsWith('cannot') || s?.startsWith('Error'))
+            fatal(`${label}: engine error during SP boot: "${s}"`);
         if (!clicked) {
             clicked = await tab.ev(`(() => {
                 const sp = document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]');
@@ -88,8 +83,7 @@ async function bootIntoSP(tab, label = 'tab', timeoutSecs = 90) {
         if (running) return;
     }
     const s = await tab.ev(`document.getElementById('status')?.textContent`);
-    console.error(`FAIL: ${label}: engine did not boot within ${timeoutSecs}s (status: "${s}")`);
-    cleanup(1);
+    fatal(`${label}: engine did not boot within ${timeoutSecs}s (status: "${s}")`);
 }
 
 // ── Pre-flight: confirm insecure context ──────────────────────────────────────
@@ -98,11 +92,8 @@ const tabCheck = await openTab(insecureUrl);
 await sleep(1000);
 const swInNav = await tabCheck.ev(`'serviceWorker' in navigator`);
 if (swInNav) {
-    console.error(
-        `FAIL: navigator.serviceWorker exists on ${insecureUrl} — this is NOT an insecure context.` +
-        ' Check --host-resolver-rules and Chrome version.',
-    );
-    cleanup(1);
+    fatal(`navigator.serviceWorker exists on ${insecureUrl} — this is NOT an insecure context.` +
+          ' Check --host-resolver-rules and Chrome version.');
 }
 console.log(`  confirmed: navigator.serviceWorker absent on ${insecureUrl} (insecure context)`);
 
@@ -110,10 +101,8 @@ console.log(`  confirmed: navigator.serviceWorker absent on ${insecureUrl} (inse
 // be visible here (and only here — later sessions assert suppression).
 await waitForMenu(tabCheck, 'tabCheck (pre-flight)');
 const noticeMsg = await tabCheck.ev(`document.getElementById('status')?.textContent`);
-if (!noticeMsg?.includes('cached locally')) {
-    console.error(`FAIL: one-shot plain-HTTP notice not shown on first load (got: "${noticeMsg}")`);
-    cleanup(1);
-}
+check('the one-shot plain-HTTP notice is shown on first load', noticeMsg?.includes('cached locally'),
+      `got: "${noticeMsg}"`);
 console.log(`  one-shot notice on first load: "${noticeMsg}"`);
 tabCheck.close();
 
@@ -127,20 +116,16 @@ await waitForMenu(tab1, 'tab1 (session 1)');
 // must NOT show it again (field report: an every-launch banner reads as an
 // error).
 const degradedMsg = await tab1.ev(`document.getElementById('status')?.textContent`);
-if (degradedMsg?.includes('cached locally')) {
-    console.error(`FAIL: plain-HTTP notice reappeared in session 1 — should be one-shot (got: "${degradedMsg}")`);
-    cleanup(1);
-}
+check('session 1: the plain-HTTP notice is not shown again', !degradedMsg?.includes('cached locally'),
+      `it reappeared — should be one-shot (got: "${degradedMsg}")`);
 console.log(`  session 1: notice suppressed (status: "${degradedMsg}")`);
 
 await bootIntoSP(tab1, 'tab1 (session 1)');
 console.log('  SP booted — checking server WAD hit count...');
 // Flush any buffered stderr output.
 await sleep(500);
-if (wadHits.s1 === 0) {
-    console.error('FAIL: session 1 made zero /wads/ server requests — WAD should have been downloaded');
-    cleanup(1);
-}
+check('session 1: the WAD was downloaded from the server', wadHits.s1 > 0,
+      'session 1 made zero /wads/ server requests');
 console.log(`  session 1: ${wadHits.s1} /wads/ server hit(s) — WAD downloaded from network`);
 tab1.close();
 
@@ -155,22 +140,16 @@ await waitForMenu(tab2, 'tab2 (session 2)');
 
 // One-shot notice must stay suppressed in session 2 as well.
 const degradedMsg2 = await tab2.ev(`document.getElementById('status')?.textContent`);
-if (degradedMsg2?.includes('cached locally')) {
-    console.error(`FAIL: plain-HTTP notice reappeared in session 2 — should be one-shot (got: "${degradedMsg2}")`);
-    cleanup(1);
-}
+check('session 2: the plain-HTTP notice is not shown again', !degradedMsg2?.includes('cached locally'),
+      `it reappeared — should be one-shot (got: "${degradedMsg2}")`);
 
 await bootIntoSP(tab2, 'tab2 (session 2)');
 // Flush any buffered stderr output.
 await sleep(500);
 
-if (wadHits.s2 > 0) {
-    console.error(
-        `FAIL: session 2 made ${wadHits.s2} /wads/ server request(s) — WAD should have come from IDB.` +
-        ' RED-PROOF: on unfixed client session 2 always re-downloads.',
-    );
-    cleanup(1);
-}
+check('session 2: the WAD came from IndexedDB, with no /wads/ request', wadHits.s2 === 0,
+      `session 2 made ${wadHits.s2} /wads/ server request(s).` +
+      ' RED-PROOF: on unfixed client session 2 always re-downloads.');
 console.log(`  session 2: ${wadHits.s2} /wads/ server request(s) — WAD served from IDB cache`);
 
 // Confirm IDB has the WAD stored.
@@ -193,10 +172,8 @@ const idbHasWad = await tab2.ev(`
         } catch (e) { return false; }
     })()
 `);
-if (!idbHasWad) {
-    console.error('FAIL: IDB webdoom-wads store is empty after session 2 (wad was not persisted in session 1)');
-    cleanup(1);
-}
+check('the IDB webdoom-wads store holds the WAD', idbHasWad,
+      'the store is empty after session 2 (wad was not persisted in session 1)');
 console.log('  IDB webdoom-wads store has entries — WAD cached in IndexedDB');
 
 // ── Music fallback assertion (real insecure context, no synthetic forcing) ────
@@ -220,12 +197,12 @@ await sleep(700);
 
 const musicSinkKind = await tab2.ev(`window.doomAudio?.sinkKind()`);
 if (musicSinkKind !== 'buffer') {
-    console.error(`FAIL: music sink on real insecure origin expected 'buffer', got '${String(musicSinkKind)}'`);
     console.error('  doomAudio armed:', await tab2.ev(`window.doomAudio?.armed()`));
     console.error('  doomAudio keys:', await tab2.ev(
         `window.doomAudio ? Object.keys(window.doomAudio).join(',') : 'null'`));
-    cleanup(1);
 }
+check(`the music sink on a real insecure origin is 'buffer'`, musicSinkKind === 'buffer',
+      `got '${String(musicSinkKind)}'`);
 
 const musicRms = await tab2.ev(`(() => {
     const chunk = window.doomAudio?.lastChunk();
@@ -234,22 +211,16 @@ const musicRms = await tab2.ev(`(() => {
     for (let i = 0; i < chunk.length; i++) sum += chunk[i] * chunk[i];
     return Math.sqrt(sum / chunk.length);
 })()`);
-if (musicRms === null || musicRms === undefined || musicRms < 0) {
-    console.error(`FAIL: lastChunk() empty on insecure origin — pump did not run (got ${musicRms})`);
-    cleanup(1);
-}
-if (musicRms < 0.0005) {
-    console.error(`FAIL: music RMS on insecure origin too low: ${Number(musicRms).toFixed(6)} — OPL silent`);
-    cleanup(1);
-}
+check('lastChunk() holds samples: the pump ran', musicRms !== null && musicRms !== undefined && musicRms >= 0,
+      `got ${musicRms}`);
+check('the music is audible: RMS >= 0.0005', musicRms >= 0.0005,
+      `RMS ${Number(musicRms).toFixed(6)} — OPL silent`);
 
 // The written message, not the live element: the compatibility notice has an
 // 8 s ttl, so a live read would be a race against this test's own speed.
 const musicStatus = await tab2.ev(`window.__wdLastStatus ?? document.getElementById('status')?.textContent`);
-if (!musicStatus?.includes('compatibility mode')) {
-    console.error(`FAIL: status should include 'compatibility mode', got '${String(musicStatus)}'`);
-    cleanup(1);
-}
+check(`the status line says 'compatibility mode'`, musicStatus?.includes('compatibility mode'),
+      `got '${String(musicStatus)}'`);
 console.log(`  music sink=${musicSinkKind}  rms=${Number(musicRms).toFixed(5)}  status="${musicStatus}"`);
 
 // ── Sustained playback: the pump must keep pushing past the first backlog. ──
@@ -262,22 +233,15 @@ const sig = async () => tab2.ev(
 const sustainA = await sig();
 await sleep(1500);
 const sustainB = await sig();
-if (sustainA === sustainB) {
-    console.error('FAIL: pump stalled — lastChunk unchanged over 1.5 s (BufferSink starvation)');
-    cleanup(1);
-}
-console.log('  sustained playback confirmed: pump still pushing after 1.5 s');
-console.log('  real insecure context confirmed: BufferSink active, OPL frames non-zero, status visible');
+check('the pump is still pushing after 1.5 s', sustainA !== sustainB,
+      'pump stalled — lastChunk unchanged over 1.5 s (BufferSink starvation)');
 
 // Check for uncaught JS exceptions during both sessions.
 const allErrors = [...tab1.errors, ...tab2.errors].filter(
     e => !/wad-cache|IndexedDB|idb/i.test(e),
 );
-if (allErrors.length > 0) {
-    console.error(`FAIL: uncaught JS exceptions: ${allErrors.join('; ')}`);
-    cleanup(1);
-}
+check('no uncaught JS exceptions in either session', allErrors.length === 0, allErrors.join('; '));
 
 tab2.close();
-console.log('PASS — insecure origin: IDB WAD cache hit + BufferSink music fallback confirmed (no synthetic forcing)');
-cleanup(0);
+summary('insecure origin: IDB WAD cache hit + BufferSink music fallback confirmed (no synthetic forcing)');
+process.exit();
