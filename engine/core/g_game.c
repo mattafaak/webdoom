@@ -1222,19 +1222,28 @@ void G_DoLoadGame (void)
 	 
     length = M_ReadFile (savename, &savebuffer); 
     save_p = savebuffer + SAVESTRINGSIZE;
+    save_end = savebuffer + length;
     
     // skip the description field 
+    if (length < SAVESTRINGSIZE + VERSIONSIZE)
+	return;				// not a savegame
     memset (vcheck,0,sizeof(vcheck)); 
     sprintf (vcheck,"webdm2 %i",VERSION);	/* webdoom savegame format rev */ 
     if (strcmp (save_p, vcheck)) 
 	return;				// bad version 
     save_p += VERSIONSIZE; 
+    if (save_end - save_p < 3 + MAXPLAYERS + 3)
+	I_Error ("Savegame is truncated");
 			 
     gameskill = *save_p++; 
     gameepisode = *save_p++; 
     gamemap = *save_p++; 
     for (i=0 ; i<MAXPLAYERS ; i++) 
 	playeringame[i] = *save_p++; 
+    // webdoom: the player this machine views must be in the saved game
+    if (!playeringame[consoleplayer])
+	I_Error ("Savegame does not match this game: player %d is not in it",
+		 consoleplayer+1);
 
     // load a base level 
     G_InitNew (gameskill, gameepisode, gamemap); 
@@ -1251,7 +1260,7 @@ void G_DoLoadGame (void)
     P_UnArchiveThinkers (); 
     P_UnArchiveSpecials (); 
  
-    if (*save_p != 0x1d) 
+    if (save_p >= save_end || *save_p != 0x1d) 
 	I_Error ("Bad savegame");
     
     // done 

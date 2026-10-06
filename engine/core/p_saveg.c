@@ -34,6 +34,32 @@ rcsid[] = "$Id: p_tick.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 
 byte*		save_p;
 
+// webdoom: the end of the savegame being loaded.  A save is untrusted input
+// -- it may come from another WAD, be cut short or be edited -- so every
+// read is checked against this, and every index read from the file against
+// the array it selects, before either is used.
+byte*		save_end;
+
+extern int	numflats;
+extern int	numtextures;
+
+static void P_SaveNeed (int n)
+{
+    if (save_end - save_p < n)
+	I_Error ("Savegame is truncated");
+}
+
+static void P_SaveBad (char* what, int value)
+{
+    I_Error ("Savegame does not match this game: %s %d", what, value);
+}
+
+static void P_SaveSector (int sector)
+{
+    if ((unsigned) sector >= numsectors)
+	P_SaveBad ("sector", sector);
+}
+
 
 // Pads save_p to a 4-byte boundary
 //  so that the load/save works on SGI&Gecko.
@@ -129,6 +155,7 @@ void P_UnArchivePlayers (void)
 	    continue;
 	
 	PADSAVEP();
+	P_SaveNeed (sizeof(player_t));
 
 	memcpy (&players[i],save_p, sizeof(player_t));
 	save_p += sizeof(player_t);
@@ -138,10 +165,28 @@ void P_UnArchivePlayers (void)
 	players[i].message = NULL;
 	players[i].attacker = NULL;
 
+	// webdoom: these index weaponinfo[], the colormaps and the palettes;
+	// P_DamageMobj caps damagecount at 100, and bonuscount grows by
+	// BONUSADD per pickup
+	if ((unsigned) players[i].readyweapon >= NUMWEAPONS)
+	    P_SaveBad ("ready weapon", players[i].readyweapon);
+	if ((unsigned) players[i].pendingweapon >= NUMWEAPONS
+	    && players[i].pendingweapon != wp_nochange)
+	    P_SaveBad ("pending weapon", players[i].pendingweapon);
+	if ((unsigned) players[i].fixedcolormap > NUMCOLORMAPS)
+	    P_SaveBad ("fixed colormap", players[i].fixedcolormap);
+	if ((unsigned) players[i].damagecount > 100)
+	    P_SaveBad ("damage count", players[i].damagecount);
+	if ((unsigned) players[i].bonuscount > 0xffff)
+	    P_SaveBad ("bonus count", players[i].bonuscount);
+
 	for (j=0 ; j<NUMPSPRITES ; j++)
 	{
 	    if (players[i]. psprites[j].state)
 	    {
+		if ((unsigned) (int) players[i].psprites[j].state >= NUMSTATES)
+		    P_SaveBad ("weapon state",
+			       (int) players[i].psprites[j].state);
 		players[i]. psprites[j].state 
 		    = &states[ (int)players[i].psprites[j].state ];
 	    }
@@ -214,7 +259,14 @@ void P_UnArchiveWorld (void)
     line_t*		li;
     side_t*		si;
     short*		get;
+    int			size;
 	
+    // webdoom: the world has no count of its own; it must fit what is left
+    size = numsectors * 7;
+    for (i=0, li = lines ; i<numlines ; i++,li++)
+	size += 3 + 5 * ((li->sidenum[0] != -1) + (li->sidenum[1] != -1));
+    P_SaveNeed (size * sizeof(short));
+
     get = (short *)save_p;
     
     // do sectors
@@ -226,6 +278,10 @@ void P_UnArchiveWorld (void)
 	sec->oldceilingheight = sec->ceilingheight;
 	sec->floorpic = *get++;
 	sec->ceilingpic = *get++;
+	if ((unsigned) sec->floorpic >= numflats)
+	    P_SaveBad ("flat", sec->floorpic);
+	if ((unsigned) sec->ceilingpic >= numflats)
+	    P_SaveBad ("flat", sec->ceilingpic);
 	sec->lightlevel = *get++;
 	sec->special = *get++;		// needed?
 	sec->tag = *get++;		// needed?
@@ -249,6 +305,12 @@ void P_UnArchiveWorld (void)
 	    si->toptexture = *get++;
 	    si->bottomtexture = *get++;
 	    si->midtexture = *get++;
+	    if ((unsigned) si->toptexture >= numtextures)
+		P_SaveBad ("texture", si->toptexture);
+	    if ((unsigned) si->bottomtexture >= numtextures)
+		P_SaveBad ("texture", si->bottomtexture);
+	    if ((unsigned) si->midtexture >= numtextures)
+		P_SaveBad ("texture", si->midtexture);
 	}
     }
     save_p = (byte *)get;	
@@ -313,6 +375,7 @@ void P_UnArchiveThinkers (void)
     thinker_t*		currentthinker;
     thinker_t*		next;
     mobj_t*		mobj;
+    int			i;
     
     // remove all the current thinkers
     currentthinker = thinkercap.next;
@@ -332,17 +395,36 @@ void P_UnArchiveThinkers (void)
     // read in saved thinkers
     while (1)
     {
+	P_SaveNeed (1);
 	tclass = *save_p++;
 	switch (tclass)
 	{
 	  case tc_end:
+	    // webdoom: every player in the game needs a body
+	    for (i=0 ; i<MAXPLAYERS ; i++)
+		if (playeringame[i] && !players[i].mo)
+		    P_SaveBad ("no mobj for player", i+1);
 	    return; 	// end of list
 			
 	  case tc_mobj:
 	    PADSAVEP();
+	    P_SaveNeed (sizeof(*mobj));
 	    mobj = Z_Malloc (sizeof(*mobj), PU_LEVEL, NULL);
 	    memcpy (mobj, save_p, sizeof(*mobj));
 	    save_p += sizeof(*mobj);
+	    // webdoom: these index states[], mobjinfo[], players[] and
+	    // playeringame[], and opposite[] (DI_NODIR is 8, p_enemy.c)
+	    if ((unsigned) (int) mobj->state >= NUMSTATES)
+		P_SaveBad ("mobj state", (int) mobj->state);
+	    if ((unsigned) mobj->type >= NUMMOBJTYPES)
+		P_SaveBad ("mobj type", mobj->type);
+	    if ((unsigned) (int) mobj->player > MAXPLAYERS
+		|| (mobj->player && !playeringame[(int) mobj->player - 1]))
+		P_SaveBad ("mobj player", (int) mobj->player);
+	    if ((unsigned) mobj->lastlook >= MAXPLAYERS)
+		P_SaveBad ("mobj lastlook", mobj->lastlook);
+	    if ((unsigned) mobj->movedir > 8)
+		P_SaveBad ("mobj movedir", mobj->movedir);
 	    // webdoom: no interpolation streak out of a loaded game
 	    mobj->oldx = mobj->x;
 	    mobj->oldy = mobj->y;
@@ -350,6 +432,9 @@ void P_UnArchiveThinkers (void)
 	    mobj->oldangle = mobj->angle;
 	    mobj->state = &states[(int)mobj->state];
 	    mobj->target = NULL;
+	    // webdoom: a raw pointer from the file, as target is; Chocolate
+	    // Doom drops it too
+	    mobj->tracer = NULL;
 	    if (mobj->player)
 	    {
 		mobj->player = &players[(int)mobj->player-1];
@@ -536,6 +621,7 @@ void P_UnArchiveSpecials (void)
     // read in saved thinkers
     while (1)
     {
+	P_SaveNeed (1);
 	tclass = *save_p++;
 	switch (tclass)
 	{
@@ -544,9 +630,11 @@ void P_UnArchiveSpecials (void)
 			
 	  case tc_ceiling:
 	    PADSAVEP();
+	    P_SaveNeed (sizeof(*ceiling));
 	    ceiling = Z_Malloc (sizeof(*ceiling), PU_LEVEL, NULL);
 	    memcpy (ceiling, save_p, sizeof(*ceiling));
 	    save_p += sizeof(*ceiling);
+	    P_SaveSector ((int) ceiling->sector);
 	    ceiling->sector = &sectors[(int)ceiling->sector];
 	    ceiling->sector->specialdata = ceiling;
 
@@ -559,9 +647,11 @@ void P_UnArchiveSpecials (void)
 				
 	  case tc_door:
 	    PADSAVEP();
+	    P_SaveNeed (sizeof(*door));
 	    door = Z_Malloc (sizeof(*door), PU_LEVEL, NULL);
 	    memcpy (door, save_p, sizeof(*door));
 	    save_p += sizeof(*door);
+	    P_SaveSector ((int) door->sector);
 	    door->sector = &sectors[(int)door->sector];
 	    door->sector->specialdata = door;
 	    door->thinker.function.acp1 = (actionf_p1)T_VerticalDoor;
@@ -570,9 +660,15 @@ void P_UnArchiveSpecials (void)
 				
 	  case tc_floor:
 	    PADSAVEP();
+	    P_SaveNeed (sizeof(*floor));
 	    floor = Z_Malloc (sizeof(*floor), PU_LEVEL, NULL);
 	    memcpy (floor, save_p, sizeof(*floor));
 	    save_p += sizeof(*floor);
+	    P_SaveSector ((int) floor->sector);
+	    // the two types that end by setting floorpic (T_MoveFloor)
+	    if ((floor->type == donutRaise || floor->type == lowerAndChange)
+		&& (unsigned) floor->texture >= numflats)
+		P_SaveBad ("flat", floor->texture);
 	    floor->sector = &sectors[(int)floor->sector];
 	    floor->sector->specialdata = floor;
 	    floor->thinker.function.acp1 = (actionf_p1)T_MoveFloor;
@@ -581,9 +677,11 @@ void P_UnArchiveSpecials (void)
 				
 	  case tc_plat:
 	    PADSAVEP();
+	    P_SaveNeed (sizeof(*plat));
 	    plat = Z_Malloc (sizeof(*plat), PU_LEVEL, NULL);
 	    memcpy (plat, save_p, sizeof(*plat));
 	    save_p += sizeof(*plat);
+	    P_SaveSector ((int) plat->sector);
 	    plat->sector = &sectors[(int)plat->sector];
 	    plat->sector->specialdata = plat;
 
@@ -596,9 +694,11 @@ void P_UnArchiveSpecials (void)
 				
 	  case tc_flash:
 	    PADSAVEP();
+	    P_SaveNeed (sizeof(*flash));
 	    flash = Z_Malloc (sizeof(*flash), PU_LEVEL, NULL);
 	    memcpy (flash, save_p, sizeof(*flash));
 	    save_p += sizeof(*flash);
+	    P_SaveSector ((int) flash->sector);
 	    flash->sector = &sectors[(int)flash->sector];
 	    flash->thinker.function.acp1 = (actionf_p1)T_LightFlash;
 	    P_AddThinker (&flash->thinker);
@@ -606,9 +706,11 @@ void P_UnArchiveSpecials (void)
 				
 	  case tc_strobe:
 	    PADSAVEP();
+	    P_SaveNeed (sizeof(*strobe));
 	    strobe = Z_Malloc (sizeof(*strobe), PU_LEVEL, NULL);
 	    memcpy (strobe, save_p, sizeof(*strobe));
 	    save_p += sizeof(*strobe);
+	    P_SaveSector ((int) strobe->sector);
 	    strobe->sector = &sectors[(int)strobe->sector];
 	    strobe->thinker.function.acp1 = (actionf_p1)T_StrobeFlash;
 	    P_AddThinker (&strobe->thinker);
@@ -616,9 +718,11 @@ void P_UnArchiveSpecials (void)
 				
 	  case tc_glow:
 	    PADSAVEP();
+	    P_SaveNeed (sizeof(*glow));
 	    glow = Z_Malloc (sizeof(*glow), PU_LEVEL, NULL);
 	    memcpy (glow, save_p, sizeof(*glow));
 	    save_p += sizeof(*glow);
+	    P_SaveSector ((int) glow->sector);
 	    glow->sector = &sectors[(int)glow->sector];
 	    glow->thinker.function.acp1 = (actionf_p1)T_Glow;
 	    P_AddThinker (&glow->thinker);

@@ -24,6 +24,12 @@
 // engine that saved must keep running, and the save must put the player back
 // where he stood and replay.
 //
+// Last, a save is untrusted input: one from another WAD, one cut short, and
+// the doom2 fixture with single bytes flipped across its length.  Each must
+// be refused at the load tic by the savegame checks (an I_Error naming the
+// savegame), or load and run; none may trap.  Before the checks existed the
+// loader trusted every count, index and pointer in the file.
+//
 // usage: node tools/save-compat-test.mjs [--build-dir DIR]
 //        node tools/save-compat-test.mjs --record   (writes the fixtures; only
 //          from the build whose saves are being frozen, never to make a red go away)
@@ -190,10 +196,75 @@ if (!RECORD) {
     }
 }
 
+// VACUITY-EXEMPT R3: boot() is the one bootEngine call site, but every save
+// below is loaded by tryLoad into an engine of its own, so no case can
+// silence the next.
+// Load `bytes` as doomsav0.dsg: { refused } if an I_Error ends the load tic,
+// { ran } if the game then runs 35 tics, { later } for a clean I_Error after
+// that, { trapped } for anything else.
+async function tryLoad(c, bytes) {
+    const { step } = await boot(c, ['-loadgame', '0', '-nodraw'],
+        new Map([['doomsav0.dsg', new Uint8Array(bytes)]]), { strict: false });
+    const why = e => String(e.message ?? e).split('\n')[0];
+    try { step(1); }
+    catch (e) { return e instanceof EngineError ? { refused: why(e) } : { trapped: why(e) }; }
+    try { step(35); }
+    catch (e) { return e instanceof EngineError ? { later: why(e) } : { trapped: why(e) }; }
+    return { ran: true };
+}
+
+const CHECKED = /^Savegame (is truncated|does not match this game)/;
+const shown = r => r.refused ?? r.later ?? r.trapped ?? 'loaded and ran';
+
+if (!RECORD) {
+    const doom2 = CASES.find(c => c.name === 'doom2-map01');
+    const fixture = readFileSync(join(root, 'tools/golden/save-doom2-map01.dsg'));
+
+    // Master Levels' Attack replaces MAP01, so its save names a map doom2.wad
+    // also has -- with other geometry under it.
+    const attack = { name: 'attack-map01', wad: 'doom2.wad', engineName: 'doom2.wad', pwad: 'attack.wad', warp: ['1'] };
+    let foreign = null;
+    try {
+        const { doom, step, tap } = await boot(attack, ['-warp', '1', '-skill', '3', '-nodraw'], new Map(), { strict: false });
+        step(5);
+        tap(KEY_F2); tap(KEY_ENTER); tap('a'.charCodeAt(0)); tap(KEY_ENTER);
+        for (let i = 0; i < 10 && !doom.fileMap.has('doomsav0.dsg'); i++) step(1);
+        foreign = doom.fileMap.get('doomsav0.dsg') ?? null;
+    } catch (e) { foreign = null; }
+    if (check('hostile save: Attack MAP01 saved through the menu', foreign, 'no save written')) {
+        const r = await tryLoad(doom2, foreign);
+        check(`hostile save: Attack's ${foreign.length}-byte save loaded into plain doom2 is refused`,
+              CHECKED.test(r.refused ?? ''), shown(r));
+    }
+
+    const cut = fixture.subarray(0, Math.floor(fixture.length * 0.6));
+    const rc = await tryLoad(doom2, cut);
+    check(`hostile save: the doom2 fixture cut to ${cut.length} of ${fixture.length} B is refused`,
+          CHECKED.test(rc.refused ?? ''), shown(rc));
+
+    // Every 7th byte from the end of the header, inverted.  Most land in
+    // fields any value of which is legal; the point is that none traps.
+    const FLIPS = [];
+    for (let at = 50; at < fixture.length; at += 7) FLIPS.push(at);
+    const tally = { refused: 0, ran: 0, later: 0, trapped: 0 };
+    const traps = [];
+    for (const at of FLIPS) {
+        const b = Buffer.from(fixture);
+        b[at] ^= 0xff;
+        const r = await tryLoad(doom2, b);
+        const kind = Object.keys(r)[0];
+        tally[kind]++;
+        if (r.trapped || (r.refused && !/savegame/i.test(r.refused))) traps.push(`byte ${at}: ${shown(r)}`);
+    }
+    check(`hostile save: ${FLIPS.length} byte-flipped fixtures, none traps `
+          + `(${tally.refused} refused, ${tally.ran} ran, ${tally.later} stopped later by I_Error, ${tally.trapped} trapped)`,
+          traps.length === 0 && tally.refused > 0, traps.slice(0, 6).join('; ') || 'nothing was refused');
+}
+
 if (RECORD) {
     writeFileSync(EXPECTED, JSON.stringify(recorded, null, 2) + '\n');
     summary(`save-compat fixtures recorded from ${recorded.source} (${CASES.length} cases)`);
 } else {
     summary(`savegames from ${expected.source} load in this build (${CASES.length} cases), `
-            + `and ${BIG.length} UV big-level saves round-trip`);
+            + `${BIG.length} UV big-level saves round-trip, hostile saves are refused`);
 }
