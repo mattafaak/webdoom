@@ -365,27 +365,18 @@ export function createGame(log = console.log, servedWads = () => []) {
                 log(`game: ${COLORS[slot]} live — dropping in at tic ${p.joinAt}`);
             }
             if (tic < session.tic || tic > session.tic + 512) return;  // sealed or absurd
-            // AFTER the range check, deliberately.  `lastSeen` is read in
-            // exactly two places, both in sealSweep, and both ask it about a
-            // LAGGARD -- a player missing cmds[session.tic].  So the question
-            // it has to answer is "when did this player last give us a cmd we
-            // could use", not "when did it last send bytes".
-            //
-            // Refreshed before the check, any 12-byte frame kept the clock
-            // fresh, so a player sending tic 0xFFFFFFFF ten times a second was
-            // never past DROP_MS and never past GRACE_MS while never
-            // populating p.cmds: sealSweep returned at the grace check on every
-            // 50 ms pass and session.tic stopped advancing FOR EVERYONE, with
-            // no drop, no fabrication and no log line.  One peer, well under
-            // the rate cap, denying the whole session indefinitely.  The
-            // accidental form is a client whose maketic falls behind and keeps
-            // sending sealed tics -- same freeze, no malice.
-            //
-            // This is also what the file header already promised: silent past
-            // the grace window means your last cmd is duplicated, past the drop
-            // window means you are out.  Neither could happen before.
-            p.lastSeen = Date.now();
             p.cmds.set(tic, buf.subarray(4));
+            // `lastSeen` is read only by sealSweep, and only about a LAGGARD --
+            // a player missing cmds[session.tic] -- so it records when this
+            // player last left that tic filled, not when it last sent bytes.
+            // A frame that skips the owed tic (a sealed one, one past the
+            // window, or any future tic while the current one is empty) is
+            // not progress, however often it arrives: counting it would keep a
+            // peer inside GRACE_MS forever, never fabricated for and never
+            // dropped, with the seal frozen for everyone.  An honest client
+            // sends sequential tics over TCP, so its frames always fill or
+            // follow the current one.
+            if (p.cmds.has(session.tic)) p.lastSeen = Date.now();
             seal();
         });
         ws.on('close', () => {
