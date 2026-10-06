@@ -38,7 +38,7 @@ shipped, gated feature that the contract never claimed at all.
 | Music: the in-engine OPL2/OPL3 sequencer from the IWAD's own GENMIDI, on the audio thread | `opl-mode`, `browser-music-worklet`, `browser-music-fallback` |
 | **Low-detail render mode** (runtime `web_set_detail`), pixel-exact against its own goldens | `render-low` |
 | **A freestanding core** with no OS, and an N64 correctness leg | `freestanding-sim`, `ro-wad`, `arm-cross`, `n64-demos` |
-| **The gate machinery itself**: claims, promises, doc drift, status drift, the census | `doc-drift`, `claims-index`, `promises-index`, `status-drift`, `docs-index`, `gate-census`, `web-contract` |
+| **The engine's derived figures reproduce**, the artifact fits its ceilings, and the platform contract matches the exports | `archaeology`, `size-budget`, `web-contract` |
 | **Teardown**: play → quit → play accumulates nothing | `browser-teardown` |
 | **CI** on Node 20/24/26 | `.github/workflows/ci.yml` (quick tier) |
 

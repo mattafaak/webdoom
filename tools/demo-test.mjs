@@ -61,7 +61,7 @@ for (let i = 2; i < process.argv.length; i++) {
 // Provenance for anything this run records (task 21.3).  Recording from a dirty
 // tree without a stated reason is refused: a regold asserts the NEW output is
 // correct, and the reason belongs in the artifact.
-const { provenance, recordReason } = await import('./golden-provenance.mjs');
+const { provenance, recordReason } = await import('./lib/golden.mjs');
 const RECORD_REASON = record ? recordReason(process.argv) : null;
 const PROV = () => provenance('demo-test.mjs', buildDir, RECORD_REASON);
 

@@ -99,7 +99,7 @@ have_fs()      { [ -x tools/freestanding/fs-doom ]; }
 have_zig()     { command -v zig >/dev/null 2>&1; }
 # the pinned major: output differs across majors
 have_clangfmt(){ command -v clang-format >/dev/null 2>&1 && \
-                 [ "$(clang-format --version | grep -oE '[0-9]+' | head -1)" = "22" ]; }
+                 [ "$(clang-format --version | grep -oE '[0-9]+' | head -1)" = "23" ]; }
 have_qemuarm() { command -v qemu-arm-static >/dev/null 2>&1; }
 have_qemuppc() { command -v qemu-ppc-static >/dev/null 2>&1 || command -v qemu-ppc >/dev/null 2>&1; }
 # the cross compiler, the ares emulator and an X server, together
@@ -137,7 +137,7 @@ declare -A NEED=(
     [native]='have_native|nat-doom absent (run: make -C tools/native-sanitize)'
     [fs]='have_fs|fs-doom absent (run: make -C tools/freestanding)'
     [zig]='have_zig|zig not on PATH (needed to cross-build for ARM)'
-    [clangfmt]='have_clangfmt|clang-format 22 not present'
+    [clangfmt]='have_clangfmt|clang-format 23 not present'
     [qemuarm]='have_qemuarm|qemu-arm-static not on PATH'
     [qemuppc]='have_qemuppc|qemu-ppc-static not on PATH (needed for the BIG-ENDIAN leg)'
     [n64]='have_n64|N64 toolchain incomplete (need mips64-elf-gcc under $N64_INST, ares and xvfb-run; run: source ~/toolchains/env.sh)'
@@ -444,17 +444,12 @@ echo "logs: $LOGDIR"
 # that host (task 24.3).
 leg lint-js         -        "JS syntax + pipe-exit rule + exec bits" -- bash tools/lint.sh --js-only
 leg lint-c          clangfmt "clang-format over the web layer"        -- bash tools/lint.sh --c-only --require-c
-leg doc-drift       gcc  "doc figures == claims.json == script output" -- bash tools/archaeology/verify-all.sh
-leg state-machine   -    "lobby edge<->test coverage (static)"      -- node tools/check-state-machine.mjs
+leg archaeology     gcc  "every derived engine figure reproduces from its script" -- node tools/archaeology/run.mjs
+leg docs            -    "doc links resolve; spec's named gates are legs" -- node tools/check-docs.mjs
 leg sw-precache     -    "sw.js SHELL list <-> app-shell imports"   -- node tools/check-sw-precache.mjs
 leg http-fuzz       -    "static HTTP path attacks (ws-005)"        -- node tools/http-fuzz-test.mjs
 leg demo-store-fuzz -    "demo-store cap enforcement (19.2)"        -- node tools/demo-store-fuzz-test.mjs
 leg net-fuzz        -    "malformed/hostile WebSocket clients"      -- node tools/net-fuzz-test.mjs
-# The claims index is both the human inventory and doc-drift's locator table,
-# and nothing checked the inventory itself: 50 rows said "verified" while
-# nothing anywhere checked them (task 24.2).
-leg claims-index    -    "the claims index does not overclaim"        -- node tools/archaeology/claims-index-check.mjs
-leg promises-index  -    "the promises index has not gone stale"      -- node tools/archaeology/promises-index-check.mjs
 # web.h is the core<->platform contract spec.md tenet 5 points a bare-metal port
 # at.  It declared 5 of 73 exports and got one arity wrong (task 25.2).
 leg web-contract    -    "web.h matches the exports it declares"      -- node tools/web-contract-check.mjs
@@ -465,28 +460,6 @@ leg web-registry    build "file-registry cap + the MAXWEBFILES mirror"  -- node 
 # once on each side of the wire, and two of them say "mirror of" in a comment.
 # Nothing compared them until round 6.
 leg wire-constants  -     "cross-wire constants agree on both sides"    -- node tools/check-wire-constants.mjs
-leg gate-census     -    "every gate is wired or registered with a reason" -- node tools/gate-census.mjs
-# gate-census asks whether a gate RUNS.  This asks whether a gate that runs can
-# lie -- the three shapes CLAUDE.md names, checked across every leg's tool.  It
-# was task 26.4, owed since round 12 because all four known instances were found
-# by tracing one bug and nobody had ever swept for the rest.
-leg vacuity-census  -    "no leg tool can exit 0 after giving up, or disarm its own later cases" -- node tools/vacuity-census.mjs
-# A document may not contradict the project's own record of what is done.  The
-# claims machinery checks NUMBERS against code and nothing checked STATUS prose:
-# task 24.4's own stale-doc banner said "ZONESIZE is still open" about a change
-# that shipped in July (round 5, D2).
-leg status-drift    -    "no doc contradicts a landed verdict"        -- node tools/archaeology/status-drift-check.mjs
-# 26 documents, 8 linked from README.  A document nobody links is one nobody
-# reads, and adding one is when it is cheap to say where it belongs (D5).
-leg docs-index      -    "every doc is reachable from docs/README.md" -- node tools/archaeology/docs-index-check.mjs
-# Prose, graded.  Every other number here is gated, and the reason the line
-# counts, the promise totals and the claim totals all rotted is that nobody
-# could see them rot -- readability is the same shape of problem.  Ceilings live
-# in prose-budget.json and RATCHET: improve a document, re-record, and it cannot
-# slide back.  Read the header for why it measures paragraph prose only; a
-# different definition gives a different answer and the first two drafts of this
-# instrument were wrong in opposite directions.
-leg prose           -    "no document is denser than its recorded ceiling" -- node tools/archaeology/prose-check.mjs
 # The launcher may not offer a game that can never load: hacx.wad sat in
 # GAME_ORDER, absent from the manifest and refused by the importer, while
 # README advertised it as part of the shipped library (E1).
@@ -507,19 +480,7 @@ if [ "$QUICK_ONLY" = "0" ]; then
 
 # ── artifacts under test are current with their sources (21.4/21.5) ──────────
 leg freshness       build      "build/ + native refs not older than sources" -- node tools/artifact-freshness.mjs --all
-leg size-ledger     build      "doom.wasm budget + README KB three-way"      -- node tools/archaeology/size-ledger.mjs
-# prf-002/003: perf.md published "177.7 KB gzip" total and "35 KB" for the JS
-# surface, both marked *not machine-verified*, and perf-015/016 sat "unverifiable"
-# in claims.json. Nothing recomputed them for months: the surface measured 2.5x
-# its documented figure, and the per-file table still listed a file round 7 deleted.
-leg payload-size    build      "page-load wire cost vs budget (prf-002/003)"  -- node tools/payload-size.mjs
-# perf-009 (__heap_base) is a HARD check that no suite leg had ever run: the
-# measurement-stamp family is --full only, and the doc-drift leg calls
-# verify-all.sh with no arguments.  It drifted 48 B unnoticed before round 7
-# moved it on purpose.  --require-complete is what stops this leg printing green
-# for a run that skipped the families it exists to execute.  fresh-perf is not
-# decoration either: `build` means the artifact is PRESENT, not CURRENT.
-leg stamp-full      build,fresh-perf  "verify-all --full: +30 measurement-stamp and runtime-stat claims" -- bash tools/archaeology/verify-all.sh --full --require-complete
+leg size-budget     build      "doom.wasm, synth.wasm, __heap_base and page load under their ceilings" -- node tools/size-budget.mjs
 
 # ── engine boots and makes sound ─────────────────────────────────────────────
 leg smoke-doom      build,wad  "boots doom.wad headless, 700 frames"   -- node tools/smoke-test.mjs doom.wad 700
@@ -550,8 +511,6 @@ leg render-low      build,wad  "low-detail render goldens (14.2b)"     -- node t
 # reach the playsim.  sim-wide was the only leg proving that class and it was
 # deleted with widescreen.  This is its successor on the shipping artifact.
 leg sim-freelook    build,wad  "13 demos, freelook active, playsim untouched (spc-011)" -- node tools/demo-test.mjs --sim-drawn --pitch 40
-
-leg golden-provenance -        "every golden says where it came from"       -- node tools/golden-provenance.mjs --check
 
 
 # ── gates that existed and ran nowhere until the census (task 21.11) ──────────

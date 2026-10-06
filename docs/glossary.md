@@ -5,9 +5,7 @@ without introduction: DOOM's own terms, and the handful this project invented.
 The second is the key to the identifier schemes, because there are fifteen of
 them and only one used to say what its prefix meant.
 
-Nothing here is a claim. Every figure in this repository lives in
-[claims-index.md](claims-index.md) or [promises-index.md](promises-index.md),
-and this file deliberately states none, so it cannot go stale.
+Nothing here is a claim: this file states no figures, so it cannot go stale.
 
 ---
 
@@ -61,12 +59,9 @@ the repository.
 | **regold** | Replacing a golden with current output. Sometimes correct, often a way to make a real bug permanent, and never done to make a change pass. |
 | **red-proof** | Deliberately breaking the fix and confirming the gate fails. A gate that has never been seen to fail is not known to work. |
 | **vacuous gate** | A gate that passes without checking anything: no WADs, an empty input set, a skipped stage. This project treats one as a defect in its own right, which is why legs print the count they verified. |
-| **the cascade** | What an engine or Makefile change drags with it: reformat, rebuild four wasm trees and two native references, restamp the heap and size figures, regenerate the payload table. Running it afterwards is how a full suite run goes red. |
+| **the cascade** | What an engine or Makefile change drags with it: reformat, then rebuild the wasm trees and the native references before the full suite runs. Skipping it is how a full run goes red on a stale artifact. |
 | **the ledger** | [optimization-ledger.md](optimization-ledger.md) — every optimisation considered, with its mechanism, its measurement, the rule it was judged against, and whether it landed or was killed. A killed candidate with a number is worth as much as a landed one. |
 | **the fleet** | The machines measurements are taken on. Named in `spec.md`; a figure without a host is not a measurement. |
-| **soft / hard** (a claim) | A hard claim is checked against its document. A soft one is checked against the manifest and the script only, with the reason recorded — usually that the value is not stated in prose in a form a regex can find. |
-| **locator** | The `file:line` column in the claim and promise indexes, saying where a claim lives. `claims-index-check.mjs --reanchor` repairs drifted ones. |
-| **needle** | A literal substring `doc-drift.mjs` requires to be present near a claim, so a reworded sentence cannot silently detach a number from its context. |
 
 ---
 
@@ -75,10 +70,10 @@ the repository.
 Fifteen schemes are live. They do not overlap in meaning and several reuse the
 same letters, which is the reason this section exists.
 
-### Quantitative claims — [claims-index.md](claims-index.md)
+### Claim identifiers
 
-Every one is an entry in `tools/archaeology/claims.json` with a value, a type
-and a reproducer. Read the counts from `claims-summary.mjs`, not from here.
+Figures in the documents carry these. The `ea-`, `rdr-`, `ps-` and `fmt-` ones
+that derive from the engine or a WAD are reproduced by `tools/archaeology/run.mjs`.
 
 | prefix | covers |
 |--------|--------|
@@ -92,9 +87,9 @@ and a reproducer. Read the counts from `claims-summary.mjs`, not from here.
 | `readme-` | the one figure quoted in `README.md` |
 | `md-tic-` | the Chocolate Doom cross-validation tic count |
 
-### Published promises — [promises-index.md](promises-index.md)
+### Promise identifiers
 
-Qualitative and behavioural claims, each with a disposition rather than a value.
+Older documents cite these for qualitative and behavioural promises.
 
 | prefix | covers |
 |--------|--------|
@@ -112,7 +107,7 @@ Qualitative and behavioural claims, each with a disposition rather than a value.
 | `F1`–`F7` | [divergence-atlas.md](divergence-atlas.md) | a behavioural fork from vanilla, and why it is sanctioned |
 | `Q1`–`Q10` | [playsim.md](playsim.md) §15 | a vanilla quirk, with its demo evidence |
 | `T01`–`T31` | [state-machine.md](state-machine.md) | a transition in the lobby state machine, each mapped to a test |
-| `FINDING-N` | [claims-index.md](claims-index.md), [bare-metal.md](bare-metal.md) | an audit finding about the evidence itself |
+| `FINDING-N` | [bare-metal.md](bare-metal.md) | an audit finding about the evidence itself |
 | `N.M` | [Plans.md](../Plans.md) | a task. The letter suffix is a sub-task; `cc:完了` means done, `cc:TODO` open |
 | round numbers | everywhere | a working pass over the whole repository. Closed rounds are one line each at the bottom of `Plans.md`; `git log --grep '^docs: record round'` finds each close-out |
 

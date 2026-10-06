@@ -70,12 +70,11 @@ if [ -x "$prog" ]; then ok
 else note "ExecStart program is not on THIS host: $prog (expected on the deployment host)"; fi
 if [ -n "$script" ] && [ -f "$script" ]; then ok; else bad "ExecStart script not in this repo: ${script:-<none>}"; fi
 
-# 4. WorkingDirectory must name a directory whose basename is this repo's, so a
-#    unit pointing at someone else's checkout is caught.  The absolute path is
-#    deliberately NOT asserted: it is correct only on the author's box.
+# 4. WorkingDirectory must be absolute (systemd rejects a relative one).  Where
+#    it points is the deployment host's business: a clone or worktree under
+#    another name is not a broken unit.
 wd=$(grep -E '^WorkingDirectory=' "$UNIT" | head -1 | cut -d= -f2-)
-if [ "$(basename "$wd")" = "$(basename "$PWD")" ]; then ok
-else bad "WorkingDirectory basename '$(basename "$wd")' != repo dir '$(basename "$PWD")'"; fi
+case "$wd" in /*) ok ;; *) bad "WorkingDirectory '$wd' is not an absolute path" ;; esac
 
 # 5. The env the unit pins must agree with the server's own defaults, or the
 #    unit silently serves somewhere else than every doc says.

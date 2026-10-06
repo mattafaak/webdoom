@@ -6,16 +6,11 @@ are what keep it small.
 ## The short version
 
 1. `bash tools/run-tests.sh` before you open anything. It needs a WAD
-   library, a built engine and Chrome. The whole thing, with the N64 leg,
-   the perf tier and `--require-complete`, took **9 min 59 s** on alder
-   (i9-12900K, 24 threads) on 2026-09-17 at `--jobs 6`: 83 of 83 legs,
-   nothing skipped.
-
-   Use `--jobs 6`. The sweep that picked it ran the same 82 legs at 3, 6
-   and 10 and got 10 min 42 s, 9 min 37 s and 9 min 24 s, with identical
-   verdict tables in all three arms. Six is where the curve flattens. On a
-   host with fewer cores, try 3. The runner prints its own time at the
-   end, and that number applies to your host rather than to this one.
+   library, a built engine and Chrome. Use `--jobs 6`: on a 24-thread host
+   the whole thing takes about ten minutes, most of it the N64 leg, and a
+   sweep of 3, 6 and 10 jobs gave identical verdicts with the curve
+   flattening at 6. On a host with fewer cores, try 3. The runner prints
+   its own time at the end.
 2. A change to the simulation must be **tic-identical**: 13/13 demo
    goldens, byte for byte. If it is not, it is wrong, however good it
    looks.
@@ -28,7 +23,7 @@ are what keep it small.
 WAD_SRC=host:~/doom-wads tools/fetch-wads.sh   # your own IWADs; none ship here
 source tools/emsdk-env.sh && make -C engine    # build the wasm engine
 node server/serve.js                           # http://127.0.0.1:8666/
-bash tools/run-tests.sh --quick                # 19 legs, no WAD or browser needed
+bash tools/run-tests.sh --quick                # no WAD, build or browser needed
 ```
 
 `tools/run-tests.sh --list` prints every leg and what it needs. A leg that

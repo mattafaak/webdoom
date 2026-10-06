@@ -14,9 +14,8 @@
 //
 // The same hole existed one level up: `run-tests.sh` built the variant trees
 // but never build/, so every gate that loads
-// build/doom.js — smoke, sim goldens, render goldens, size-ledger, music, seek,
-// verify — validated whatever artifact a human last left there.  size-ledger
-// ran at line 17, before any compilation at all.
+// build/doom.js — smoke, sim goldens, render goldens, music, seek, verify —
+// validated whatever artifact a human last left there.
 //
 // This is failure mode #2 from the project's own list: a value that reports
 // itself is not the value that is in force.  A gate must know the provenance of
@@ -98,7 +97,6 @@ export const ARTIFACTS = {
     // passed over in silence. Present-and-stale is always a failure.
     ...Object.fromEntries([
         ['build-invariants', 'WEBDOOM_INVARIANTS', 'demo-visible invariant asserts'],
-        ['build-perf',       'WEB_PERF_*_STATS',   'instrumented build for verify-all --full runtime-stat claims'],
     ].map(([dir, define, desc]) => [dir, {
         desc:     `${desc} (-D${define})`,
         path:     `${dir}/doom.wasm`,
@@ -106,12 +104,7 @@ export const ARTIFACTS = {
         dirs:     [['engine/core', true], ['engine/web', false]],
         files:    ['engine/Makefile'],
         optional: true,
-        rebuild:  dir === 'build-perf'
-            ? 'source tools/emsdk-env.sh && make -C engine EXTRA_CFLAGS="-DWEB_PERF_COL_STATS '
-              + '-DWEB_PERF_PLANE_STATS -DWEB_PERF_SPECHIT_STATS -DWEB_PERF_TELEPORT_STATS '
-              + '-DWEB_PERF_DRAWSEG_STATS -DWEB_PERF_OPENINGS_STATS" '
-              + 'BUILD=../build-perf OUT=../build-perf/doom.js'
-            : `bash tools/build-toggle.sh ${define} ${dir}`,
+        rebuild:  `bash tools/build-toggle.sh ${define} ${dir}`,
     }])),
 };
 
@@ -204,7 +197,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     for (const n of names) {
         // An optional variant that was never built on this host is uninvolved,
         // not stale.  Named and counted, never silent -- and only when the user
-        // asked for everything: `artifact-freshness build-perf` is someone
+        // asked for everything: `artifact-freshness build-invariants` is someone
         // asking about that tree specifically, and "absent" is the answer.
         const explicit = !(args.includes('--all') || args.length === 0);
         if (ARTIFACTS[n].optional && !explicit && !inspect(n).exists) {

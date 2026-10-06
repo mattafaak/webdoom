@@ -288,7 +288,7 @@ int main (void)
         printf ("FAIL  %d proof assertion(s) failed\n", failures);
     }
 
-    /* CLAIMS_JSON for verify-all.sh:
+    /* CLAIMS_JSON for tools/archaeology/run.mjs:
      *   ea-042: product bound (2^62 expressed as integer)
      *   ea-043: rounding asymmetry difference = 1 (for spot-check a=-1, b=3) */
     printf ("CLAIMS_JSON {\"ea-042\":\"%.0f\",\"ea-043\":\"1\"}\n",

@@ -19,7 +19,7 @@ extern jmp_buf      fs_demo_jmp;
 // task 13.2b: FS_ZONE_SIZE is defined here so both i_system.c (which allocates
 // the arena) and i_main.c (which reports it in -zonestats output) see the same
 // value.  Override at compile time with -DFS_ZONE_SIZE_OVERRIDE=(N) to sweep
-// different zone sizes without editing source (used by zone-stats.sh).
+// different zone sizes without editing source.
 #ifdef FS_ZONE_SIZE_OVERRIDE
 #define FS_ZONE_SIZE FS_ZONE_SIZE_OVERRIDE
 #else

@@ -1,6 +1,6 @@
 // tools/n64/d_net_n64.c — N64 single-player netcode stub.
 //
-// Mirrors tools/rp2040/d_net_rp2040.c and tools/freestanding/d_net.c.
+// Mirrors tools/freestanding/d_net.c.
 // Single-player: consoleplayer 0, no network peers.
 // TryRunTics uses I_GetTime() (libdragon timer) for tic scheduling.
 //

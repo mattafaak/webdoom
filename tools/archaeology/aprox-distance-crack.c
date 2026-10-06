@@ -258,7 +258,7 @@ int main (void)
 
     printf ("\naprox-distance-crack: %d/5 passed\n", 5 - failures);
 
-    /* CLAIMS_JSON for verify-all.sh */
+    /* CLAIMS_JSON for tools/archaeology/run.mjs */
     printf ("CLAIMS_JSON {\"ea-015\":\"+%.1f%%\",\"ea-016\":\"+%.1f%%\","
             "\"ea-017\":\"%.1f%%\","
             "\"ea-044\":\"+41.4%%\",\"ea-045\":\"11.81%%\"}\n",

@@ -285,7 +285,7 @@ int main (int argc, char* argv[])
                 failures, mismatches);
     }
 
-    /* CLAIMS_JSON for verify-all.sh to pick up.
+    /* CLAIMS_JSON for tools/archaeology/run.mjs to pick up.
      *   ea-004: proof threshold 2^37 = 137438953472 (mismatch impossible below)
      *   ea-005: guard-edge pairs checked
      *   ea-006: mismatches found (expected: 0) */

@@ -14,21 +14,13 @@
 # runs the --quick tier and the summary step below states plainly what it did
 # not cover.
 #
-# The quick tier is NOT simply "every leg that needs no WAD, no build and no
-# browser", which is what this comment used to say.  Two things make that false:
-# `golden-provenance` declares no prerequisite at all and still sits below the
-# tier gate (it reads only committed tools/golden/*.json), and `lint-c` and
-# `doc-drift` do have prerequisites -- clang-format pinned to major 22, and gcc.
-# On ubuntu-latest `lint-c` SKIPs (no clang-format 22) and `web-registry` SKIPs
-# (no built engine).  The exact run/skip split is NOT typed here any more: it
-# said "12 legs run and 1 skipped" against an 18-leg quick tier, a predicted
-# number nothing computed and nobody could check from a dev box.  The runner
-# prints its own totals and every SKIP carries its reason; read those.
+# Some quick legs still have prerequisites: `lint-c` needs clang-format at the
+# pinned major (23), `archaeology` needs gcc, and `web-registry` needs a built
+# engine.  On ubuntu-latest the first and last SKIP, each with its reason; the
+# runner prints its own totals.
 #
-# The full suite (84 legs at the time of writing -- `tools/run-tests.sh --list`
-# prints the current number, and the runner now asserts its own total against
-# that registry) still runs on a host with the WAD library, a built engine and
-# Chrome:  bash tools/run-tests.sh --require-complete
+# The full suite (`tools/run-tests.sh --list`) runs on a host with the WAD
+# library, a built engine and Chrome:  bash tools/run-tests.sh --require-complete
 # To have CI run it too, add a self-hosted runner with those prerequisites and
 # a second job with `runs-on: self-hosted`; nothing else changes.
 
@@ -124,8 +116,9 @@ jobs:
             echo '- netplay 2p/4p, drop-in, spectator, churn, mixed-width'
             echo '- the differential fuzzer and the adversarial ASan map gate'
             echo '- the freestanding and 32-bit-ARM cross-architecture legs'
-            echo '- the 22 browser legs and the browser-pipeline baseline'
-            echo '- three colormap verifier families inside doc-drift (it reports this itself)'
+            echo '- the browser legs and the browser-pipeline baseline'
+            echo '- the size budget, savegame compatibility, and the N64 leg'
+            echo '- the WAD-reading archaeology reproducers (the leg reports this itself)'
             echo '- the two build-output paths in sw-precache (/engine/doom.js, doom.wasm)'
             echo
             echo 'Legs that ran but could not check everything say so in their own'

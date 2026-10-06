@@ -2,21 +2,13 @@
 # tools/freestanding/be-check.sh — build fs-doom-be then run the 13-demo
 # golden suite under qemu-ppc-static and compare per-tic state hashes.
 #
-# Status: RESOLVED for the demo corpus.  BE-NOTES.md §RESOLUTION (2026-07-18)
-# root-caused the PPC divergence to `char` signedness — PowerPC's ABI defaults
-# char unsigned — and adding `-fsigned-char` gives 13/13 bit-identical.  The
-# per-site audit (explicit `signed char` at each dependent use) is still future
-# work, so -fsigned-char remains a port requirement rather than a fix.
+# PowerPC's ABI makes `char` unsigned, and the core depends on it being signed
+# in places, so the build passes -fsigned-char: with it the corpus is 13/13
+# bit-identical.  An audit of each dependent use is still undone, so the flag is
+# a port requirement rather than a fix.
 #
-# It still exits non-zero when hashes do not match; that is the point and the
-# exit must not be masked.  What is no longer true is "permanently red".
-#
-# NOT in tools/gates-not-in-suite.json, and must not be re-added: the suite RUNS
-# this file.  The `arm-cross` leg invokes arm-check.sh, whose last line is
-# `exec bash "$SCRIPT_DIR/be-check.sh"`, and that leg is green at 13/13.  The
-# registry carried it for years under the PPC invocation's caveat, describing
-# the whole file as out-of-suite; gate-census's registeredButReachable check
-# exists to catch exactly that and could not see the $SCRIPT_DIR reference.
+# The `be-cross` leg runs this in its PPC default; `arm-cross` runs it through
+# arm-check.sh with the target overridden to 32-bit ARM.
 #
 # TARGET-GENERIC despite the name.  The script was written for the big-endian
 # PPC rung (13.3a) and the "be-" prefix is historical; the target, the qemu

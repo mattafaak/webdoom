@@ -2,11 +2,11 @@
 
 A slim, modern DOOM port for the browser, built directly from the
 [id-Software/DOOM](https://github.com/id-Software/DOOM) `linuxdoom-1.10`
-source. 293 KB of wasm, zero client install, zero-config multiplayer.
+source. Under 300 KB of wasm, zero client install, zero-config multiplayer.
 
 - Runs in stock Chrome and Firefox (WASM + WebGL2 + WebAudio), and in Edge,
-  which is Chromium and is therefore not separately tested — see
-  `docs/promises-index.md` rme-002
+  which is Chromium and is therefore not separately tested (`spec.md`,
+  Browser matrix)
 - Uncapped framerate with 35 Hz-exact game logic (Crispy-style
   interpolation; "vanilla mode" toggle under OPTIONS on the launcher menu)
 - Modern controls: pointer-lock mouse, WASD, rebindable keys, analog
@@ -67,24 +67,15 @@ re-probes. `tools/deploy.sh --check` reports drift and changes nothing.
 | `client/`      | vanilla-JS shell: lobby, WebGL2 renderer, input, audio, service worker |
 | `server/`      | Node ≥ 20, single process, single port; only dep `ws` |
 | `tools/`       | emsdk pin, WAD fetch/identify, test suites, bench harness, native sanitizer target |
-| `docs/`        | 33 documents — **[the index](docs/README.md)** lists every one. Start with the [glossary](docs/glossary.md) if a term is doing work you cannot see. The ones most people want: [netcode](docs/netcode.md), [renderer](docs/renderer.md), [playsim](docs/playsim.md), [formats](docs/formats.md), [bare-metal](docs/bare-metal.md), [perf](docs/perf.md), [state-machine](docs/state-machine.md), [engine-archaeology](docs/engine-archaeology.md) |
+| `docs/`        | reference documents — **[the index](docs/README.md)** lists every one. Start with the [glossary](docs/glossary.md) if a term is doing work you cannot see. The ones most people want: [netcode](docs/netcode.md), [renderer](docs/renderer.md), [playsim](docs/playsim.md), [formats](docs/formats.md), [bare-metal](docs/bare-metal.md), [perf](docs/perf.md), [state-machine](docs/state-machine.md), [engine-archaeology](docs/engine-archaeology.md) |
 
 ## Tests
 
 ```sh
-tools/run-tests.sh            # everything: 84 legs, one at a time
-tools/run-tests.sh --jobs 6   # the same legs six at a time, identical verdicts
-                              # 83 of 83 pass in 9 min 59 s on alder (i9-12900K,
-                              # 24 threads), --perf --require-complete, nothing
-                              # skipped, 2026-09-17.
-                              #
-                              # 6 came from a sweep over the 82 legs that
-                              # existed that morning, same verdicts in all three
-                              # arms: 3 -> 10 min 42 s, 6 -> 9 min 37 s,
-                              # 10 -> 9 min 24 s.  3->6 saves 65 s; 6->10 saves
-                              # 13 more for twice the browsers.  The floor is
-                              # n64-demos, 434 s of it on its own.
-                              # The runner prints its own time; your host is not alder.
+tools/run-tests.sh            # everything, one leg at a time
+tools/run-tests.sh --jobs 6   # the same legs six at a time, identical verdicts;
+                              # about 10 min on a 24-thread host, most of it the
+                              # N64 leg.  The runner prints its own time.
 tools/run-tests.sh --quick    # no WADs, no build, no browser — what CI runs
 tools/run-tests.sh --list     # the leg registry
 ```
@@ -95,11 +86,11 @@ leg whose prerequisites are absent is a SKIP **with its reason**, counted in
 that table, and `--require-complete` turns any skip into a failure.
 
 **What CI covers.** Game data is not distributable, so the GitHub runner has no
-IWADs and runs the `--quick` tier — lint, the doc-drift gate, the state-machine
-and precache checks, the gate census, and the three fuzz suites. Everything that
-needs a WAD, a built engine or a browser (the sim and render goldens, netplay,
-the ASan and cross-architecture legs, the 22 browser legs) runs locally and says
-so. The workflow prints the list it did not cover.
+IWADs and runs the `--quick` tier: lint, the archaeology reproducers, the
+precache, wire and contract checks, the doc-link check, and the three fuzz
+suites. Everything that needs a WAD, a built engine or a browser (the sim and
+render goldens, netplay, the ASan and cross-architecture legs, the browser legs)
+runs locally and says so. The workflow prints the list it did not cover.
 
 Three legs deserve a sentence the registry cannot give them:
 

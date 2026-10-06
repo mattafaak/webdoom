@@ -104,21 +104,6 @@ imports: $(OUT)
 clean:
 	rm -rf obj $(OUT) $(OUT_DIR)
 
-# cycles: the same binary as 'all'; instruction counting is activated at
-# runtime by setting WD_CYCLES=1 and passing -cycles <out.json>.
-# cycle-floor.sh runs all 13 golden demos through the counting build and emits
-# tools/golden/cycle-floor.json with per-demo instruction stats.
-cycles: $(OUT)
-	@echo "Built $(OUT) — run with WD_CYCLES=1 -cycles <out.json> to measure."
-
-cycle-floor: $(OUT)
-	@bash cycle-floor.sh
-
-# cycle-attrib: per-subsystem instruction attribution (13.1b).
-# Runs all 13 demos twice with -attrib and emits tools/golden/cycle-attribution.json.
-cycle-attrib: $(OUT)
-	@bash cycle-attrib.sh
-
 # ro-wad-check: 13.2c read-only-WAD proof (XIP feasibility).
 # Runs all 13 demos with WD_RO_WAD=1: WAD blob mprotect(PROT_READ) after load.
 # Any engine write into the blob → SIGSEGV → FAIL with faulting address.
@@ -137,4 +122,4 @@ check-stack-1m: $(OUT)
 	@echo "14.2g stack gate: ulimit -s $(STACK_LIMIT_KB) KiB active"
 	@bash -c 'ulimit -s $(STACK_LIMIT_KB) && echo "ulimit -s active = $$(ulimit -s) KiB" && bash run-check.sh $(WAD_DIR) $(OUT_DIR)'
 
-.PHONY: all check check-all imports clean cycles cycle-floor cycle-attrib ro-wad-check check-stack-1m
+.PHONY: all check check-all imports clean ro-wad-check check-stack-1m

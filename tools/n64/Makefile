@@ -262,7 +262,7 @@ size: $(OUT_ELF)
 	    grep " [bB] " | sort -k2 -rn | head -10 || true
 
 # Boot-log target: run ares headless and capture ISViewer UART to
-# ares-boot-raw.log (untracked). ares-boot.log is curated, committed evidence.
+# ares-boot-raw.log (untracked).
 # xvfb-run is used in headless CI environments (no display server).
 # Timeout: 15 s is sufficient for D_DoomMain banner to appear.
 ARES        ?= ares
@@ -280,9 +280,7 @@ boot-log: $(OUT_ROM)
 	        $(ARES) --system "Nintendo 64" --no-file-prompt $(OUT_ROM) \
 	        >ares-uart.tmp 2>&1 || true; \
 	fi
-	@# ares writes ISViewer output to stdout. Raw capture goes to
-	@# ares-boot-raw.log; ares-boot.log is CURATED evidence (committed) and is
-	@# deliberately not clobbered by a run.
+	@# ares writes ISViewer output to stdout.
 	@cp ares-uart.tmp ares-boot-raw.log
 	@echo "--- ares UART output ---"
 	@cat ares-boot-raw.log
@@ -293,9 +291,6 @@ boot-log: $(OUT_ROM)
 	    echo "BOOT LOG: D_DoomMain banner not detected (see ares-boot-raw.log)"; \
 	fi
 
-# NOTE: ares-boot.log is committed evidence required by the 20.4b DoD, so it is
-# deliberately NOT removed here — `make clean` used to delete it, which silently
-# destroyed a tracked file. Only build outputs and scratch files go.
 clean:
 	rm -rf $(OBJ_DIR) $(OUT_ELF) $(OUT_ELF).stripped $(OUT_ROM) \
 	       ares-uart.tmp

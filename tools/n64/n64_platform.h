@@ -1,7 +1,7 @@
 // tools/n64/n64_platform.h — N64 (MIPS R4300i) libdragon platform shim header.
 //
 // PURPOSE: minimum definitions for compiling engine/core against the N64
-// libdragon platform shim.  Mirrors the role of tools/rp2040/rp2040_platform.h
+// libdragon platform shim.  Mirrors the role of tools/freestanding/fs_platform.h
 // in the RP2040 bring-up, adapted for MIPS/libdragon bare-metal.
 //
 // SCOPE (20.4b): software rasterizer only; RDP deferred to 20.5.
@@ -23,7 +23,7 @@
 // ── Zone pool size ────────────────────────────────────────────────────────────
 // N64 has 4 MB RDRAM (8 MB with Expansion Pak).  Zone sits in RDRAM.
 // 512 KB is the footprint-build token: above the 262 KB non-purgeable peak
-// (tools/golden/zone-stats.json) but keeps the full ROM under 4 MB.
+// but keeps the full ROM under 4 MB.
 // A real deployment needs at least 2 MB for gameplay + map loading.
 // Override: make N64_ZONE_KB=2048
 #ifndef N64_ZONE_KB

@@ -17,7 +17,7 @@ SRC      := $(CORE_SRC) $(WEB_SRC)
 
 # Optional extra compile-time defines for instrumented builds.
 # Usage: make EXTRA_CFLAGS="-DWEB_PERF_COL_STATS -DWEB_PERF_PLANE_STATS ..."
-#        make EXTRA_CFLAGS="..." BUILD=../build-perf OUT=../build-perf/doom.js
+#        make EXTRA_CFLAGS="..." BUILD=../build-x OUT=../build-x/doom.js
 # The unflagged default build is byte-unaffected by these declarations.
 EXTRA_CFLAGS ?=
 

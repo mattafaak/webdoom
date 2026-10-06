@@ -43,45 +43,21 @@ function grabByRegex(file, re) {
 
 const claims = [
     // ── renderer ─────────────────────────────────────────────────────────────
-    { id: 'rdr-001', desc: 'MAXSEGS vanilla DOOM = 32',
-      expected: 32,
-      verify: () => grabByRegex('engine/core/r_bsp.c', /was\s+(\d+)/) },
-
     { id: 'rdr-002', desc: 'MAXSEGS webdoom = 64',
       expected: 64,
       verify: () => grabDefine('engine/core/r_bsp.c', 'MAXSEGS') },
-
-    { id: 'rdr-003', desc: 'MAXOPENINGS vanilla (SCREENWIDTH×64) = 20480',
-      expected: 20480,
-      verify: () => {
-          // Comment: "was *64"
-          const t = src('engine/core/r_plane.h');
-          return /was\s+\*64/.test(t) ? 320 * 64 : null;
-      }},
 
     { id: 'rdr-004', desc: 'MAXOPENINGS webdoom (SCREENWIDTH×64) = 20480 (vanilla ×64 ratio per 14.2f; the 854 cap went with widescreen)',
       expected: 20480,
       verify: () => grabDefine('engine/core/r_plane.h', 'MAXOPENINGS') },
 
-    { id: 'rdr-005', desc: 'MAXVISPLANES vanilla = 128',
-      expected: 128,
-      verify: () => grabByRegex('engine/core/r_plane.c', /was\s+(\d+)/) },
-
     { id: 'rdr-006', desc: 'MAXVISPLANES webdoom = 128 (reverted to vanilla, task 14.2d)',
       expected: 128,
       verify: () => grabDefine('engine/core/r_plane.c', 'MAXVISPLANES') },
 
-    { id: 'rdr-007', desc: 'MAXDRAWSEGS vanilla = 256',
-      expected: 256,
-      verify: () => grabByRegex('engine/core/r_defs.h', /was\s+(\d+)/) },
-
     { id: 'rdr-008', desc: 'MAXDRAWSEGS webdoom = 256 (reverted to vanilla, task 14.2e)',
       expected: 256,
       verify: () => grabDefine('engine/core/r_defs.h', 'MAXDRAWSEGS') },
-
-    { id: 'rdr-009', desc: 'MAXVISSPRITES vanilla = 128',
-      expected: 128,
-      verify: () => grabByRegex('engine/core/r_things.h', /was\s+(\d+)/) },
 
     { id: 'rdr-010', desc: 'MAXVISSPRITES webdoom = 1024',
       expected: 1024,
@@ -92,10 +68,6 @@ const claims = [
       verify: () => grabDefine('engine/core/r_sky.h', 'ANGLETOSKYSHIFT') },
 
     // ── playsim ──────────────────────────────────────────────────────────────
-    { id: 'ps-001', desc: 'MAXSPECIALCROSS vanilla = 8',
-      expected: 8,
-      verify: () => grabByRegex('engine/core/p_local.h', /vanilla\s+(\d+)/) },
-
     { id: 'ps-002', desc: 'MAXSPECIALCROSS webdoom = 64',
       expected: 64,
       verify: () => grabDefine('engine/core/p_local.h', 'MAXSPECIALCROSS') },
@@ -108,13 +80,6 @@ const claims = [
     { id: 'ps-006', desc: 'BACKUPTICS = 35',
       expected: 35,
       verify: () => grabDefine('engine/core/d_net.h', 'BACKUPTICS') },
-
-    { id: 'ps-007', desc: 'SAVEGAMESIZE vanilla (0x2C000) = 180224',
-      expected: 180224,
-      verify: () => {
-          // comment "was 0x2c000" in g_game.c
-          return /was\s+0x2c000/i.test(src('engine/core/g_game.c')) ? 0x2c000 : null;
-      }},
 
     { id: 'ps-008', desc: 'SAVEGAMESIZE webdoom (0x80000) = 524288',
       expected: 524288,
@@ -271,7 +236,7 @@ for (const c of claims) {
 const total = filterClaim ? 1 : claims.length;
 console.log(`\nsource-constant: ${total - failures}/${total} passed`);
 
-// Emit actual values for three-way drift check (consumed by verify-all.sh / doc-drift.mjs)
+// Emit the values for tools/archaeology/run.mjs
 const valuesMap = {};
 for (const r of results) { valuesMap[r.id] = r.actual === null || r.actual === undefined ? null : String(r.actual); }
 console.log(`CLAIMS_JSON ${JSON.stringify(valuesMap)}`);

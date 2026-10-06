@@ -2,10 +2,6 @@
 
 Every document in this project, with a line saying what it is for.
 
-**33 documents**, about 15,700 lines. That is 18 top-level files beside this
-index, 8 in `archive/`, 5 hardware bring-ups in subdirectories, and id
-Software's 2 originals.
-
 New here? Read in this order: the root `README.md`, then `CONTRIBUTING.md`,
 then `spec.md`'s tenets, then come back to this page. Keep
 [glossary.md](glossary.md) open — this project has a lot of vocabulary and
@@ -52,8 +48,6 @@ section heading rather than at the top.
 
 | document | what it is |
 |---|---|
-| [claims-index.md](claims-index.md) | every quantitative claim in the archaeology docs, with its status and reproducer |
-| [promises-index.md](promises-index.md) | every qualitative promise in README and spec, with its disposition — including the ones with no gate |
 | [web-scrutiny.md](web-scrutiny.md) | the ws-NNN review ledger: 14 findings, each with a disposition |
 
 ## Hardware bring-ups
@@ -66,8 +60,6 @@ Read the banner first — all three carry a dated status.
 | [n64/DEMO-GATE-STATUS.md](n64/DEMO-GATE-STATUS.md) | the N64 sim-hash gate: 13/13, 44,580 tics bit-identical, wired as leg `n64-demos` |
 | [n64/BRING-UP.md](n64/BRING-UP.md) | libdragon bring-up notes; superseded by the above for gate status |
 | [n64/MIPS-ABI-LANDMINES.md](n64/MIPS-ABI-LANDMINES.md) | the ABI audit done before any MIPS code was written |
-| [386/BRING-UP.md](386/BRING-UP.md) | 86Box harness; the scoreboard (20.6b) is judged pursuable and unstarted |
-| [rp2040/BRING-UP.md](rp2040/BRING-UP.md) | RP2040; parked on arithmetic — the build is 4.00× over SRAM |
 
 ## Archive
 
@@ -87,21 +79,6 @@ round-13 move); the five `Plans-*` files are closed
 task tables that made the front door look like a planning directory. They
 are the record of how each initiative actually went, and `Plans.md` links
 them from its first paragraph.
-
-## About this index
-
-Every file under `docs/` appears here, and
-`tools/archaeology/docs-index-check.mjs` fails if one does not, so a new
-document cannot be born orphaned. The checker also grades the document count
-above, the root README's copy of it, and the line figure on every **long**
-entry — all three had gone stale while every gate stayed green.
-
-Two things this page got wrong, kept because the shape recurs. The count line
-once read "26 documents" while the checker's own PASS line said "all 32
-documents under docs/" in the same breath: both true about different sets, with
-neither saying which set it meant. And six lines of that story used to stand
-between a reader and the first link on the page, which is the other failure —
-a document narrating its own repairs instead of doing its job.
 
 ## Not webdoom's
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tools/lint.sh — webdoom lint/format gate
 #
-# Pinned clang-format major version: 22
+# Pinned clang-format major version: 23
 # (clang-format output varies across major versions; on mismatch we
 #  warn and skip C checks rather than failing CI on someone else's machine)
 #
@@ -57,7 +57,7 @@ JS_COUNT_NOTE=""
 # C formatting via clang-format
 # ---------------------------------------------------------------------------
 
-PINNED_MAJOR=22
+PINNED_MAJOR=23
 
 if [ "$DO_C" = "0" ]; then
     C_CHECKED=1   # not this leg's job; the other half owns it
@@ -117,9 +117,6 @@ else
                 tools/native-sanitize
                 tools/freestanding
                 tools/n64
-                tools/baremetal
-                tools/rp2040
-                tools/wide-experiment
             )
             UNDECLARED=()
             while IFS= read -r f; do
@@ -210,6 +207,12 @@ fi
 # resolves at run time or not at all.
 # ---------------------------------------------------------------------------
 if ! node "$REPO_ROOT/tools/check-heredoc-lang.mjs"; then
+    ERRORS=1
+fi
+
+# A test tool that can exit 0 after giving up, or whose first hostile case can
+# silence the rest (see tools/check-test-exits.mjs).
+if ! node "$REPO_ROOT/tools/check-test-exits.mjs"; then
     ERRORS=1
 fi
 
