@@ -266,6 +266,26 @@ if (!await openOptions()) fatal('OPTIONS screen would not open — nothing below
     checkWith('binding a key another action holds swaps the two, losing neither',
         binds.automap === 'KeyW' && binds.forward === before,
         `automap=${JSON.stringify(binds.automap)} forward=${JSON.stringify(binds.forward)} (forward should be the old automap key ${JSON.stringify(before)})`);
+
+    // (e) AN ENTER WHOSE KEYUP NEVER ARRIVES MUST NOT ARM A CAPTURE LATER.
+    // Focus can leave while Enter is held, and its keyup is then lost.  The
+    // capture waits for a keyup; if any key's keyup arms it, Escape's does
+    // here, on the screen Escape went back to, and the next key pressed is
+    // bound to a row that is no longer on screen.
+    await hoverRow('TURN LEFT');
+    await sleep(100);
+    const bindsBefore = JSON.stringify((await stored()).binds ?? {});
+    await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    await sleep(120);
+    await key('Escape', 27);                    // CONTROLS -> OPTIONS
+    const leftControls = await ev(`!document.querySelector('#dmenu .row[data-label^="MOVE FORWARD"]')`);
+    await key('q', 81);
+    await sleep(250);
+    const bindsAfter = JSON.stringify((await stored()).binds ?? {});
+    checkWith('CONTROL: Escape after a keyup-less Enter left CONTROLS', leftControls === true,
+        `CONTROLS still shown = ${!leftControls}`);
+    checkWith('an Enter whose keyup was lost arms nothing: the next key rebinds no row',
+        bindsAfter === bindsBefore, `binds ${bindsBefore} -> ${bindsAfter}`);
 }
 
 // ── 5. there is no engine behind this screen, and the binds reach it ─────────
@@ -436,5 +456,5 @@ checkWith('no uncaught exception while abusing the OPTIONS surface',
 // screen has more surface, so the floor goes up rather than down: 30 cases
 // before the exception sweep above.
 summary('browser-options: hostile localStorage, partial binds, reset defaults, rebind capture, boot round trip, a11y, the MUSIC row',
-        { min: 31 });
+        { min: 33 });
 process.exit();

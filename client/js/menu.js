@@ -219,21 +219,43 @@ export function createMenu(font, host, opts = {}) {
     // arm on the following keyup; and the capture listener is capture-phase
     // with stopPropagation, so the arrows and Escape do not reach this menu
     // while it is armed.
+    //
+    // That keyup can be lost (focus leaves while Enter is held), and a capture
+    // armed by whatever key comes up next -- on another screen, or in the game
+    // -- would swallow the next press and rebind a row nobody is looking at.
+    // So it arms only on Enter's own keyup, while the menu is visible and the
+    // same row of the same screen is still selected, and the wait is dropped
+    // on blur and on every screen change.
+    let pendingArm = null;          // the keyup listener waiting to arm
+    function dropPendingArm() {
+        if (!pendingArm) return;
+        window.removeEventListener('keyup', pendingArm, true);
+        window.removeEventListener('blur', dropPendingArm);
+        pendingArm = null;
+    }
     function armCapture(item, viaKeydown) {
-        if (capture) return;
+        if (capture || pendingArm) return;
         const arm = () => {
             capture = { item, label: item.label, cancel: item.capture(() => { capture = null; render(); }) };
             render();
         };
-        if (viaKeydown) window.addEventListener('keyup', function once() {
-            window.removeEventListener('keyup', once, true);
-            arm();
-        }, true);
+        if (viaKeydown) {
+            const on = screen(), row = sel;
+            pendingArm = e => {
+                if (e.code !== 'Enter') return;
+                const still = !hidden && screen() === on && sel === row;
+                dropPendingArm();
+                if (still) arm();
+            };
+            window.addEventListener('keyup', pendingArm, true);
+            window.addEventListener('blur', dropPendingArm);
+        }
         else arm();
         render();
     }
 
     function back() {
+        dropPendingArm();
         if (capture) { capture.cancel(); capture = null; render(); return; }
         if (stack.length <= 1) return;
         // a screen with onBack owns its exit (e.g. leaving the lobby
@@ -280,7 +302,8 @@ export function createMenu(font, host, opts = {}) {
             // jumps a column; on a plain single-column item it does nothing
             case 'ArrowLeft':  if (item?.cycle) item.cycle(-1); else if (multiCol) sel = Math.max(0, sel - col); break;
             case 'ArrowRight': if (item?.cycle) item.cycle(1);  else if (multiCol) sel = Math.min(n - 1, sel + col); break;
-            case 'Enter':     activate(true); break;
+            // a held Enter activates once: its auto-repeats are not presses
+            case 'Enter':     if (!e.repeat) activate(true); break;
             case 'Escape': case 'Backspace': back(); break;
             default: return;
         }
@@ -301,9 +324,9 @@ export function createMenu(font, host, opts = {}) {
 
     return {
         // replace the whole stack (initial/root screen)
-        reset(s) { stack.length = 0; stack.push(s); sel = 0; entry = null; onTransition?.('reset'); render(); },
+        reset(s) { dropPendingArm(); stack.length = 0; stack.push(s); sel = 0; entry = null; onTransition?.('reset'); render(); },
         // descend into a screen
-        push(s) { if (screen()) screen().sel = sel; stack.push(s); sel = 0; entry = null; onTransition?.('push'); render(); },
+        push(s) { dropPendingArm(); if (screen()) screen().sel = sel; stack.push(s); sel = 0; entry = null; onTransition?.('push'); render(); },
         // re-render current screen after data changes (roster updates — NOT a
         // screen transition; no flare, no onTransition)
         // A roster update must not move the cursor onto a different ACTION.
@@ -321,7 +344,7 @@ export function createMenu(font, host, opts = {}) {
             else if (sel >= items.length) sel = Math.max(0, items.length - 1);
             render();
         },
-        hide() { hidden = true; stopBlink(); render(); },
+        hide() { dropPendingArm(); hidden = true; stopBlink(); render(); },
         show() { hidden = false; startBlink(); render(); },
         // pop n screens without onBack side effects (picker flows)
         unwind(n = 1) {

@@ -6,7 +6,6 @@ behind the current state live in `spec.md` and `docs/`.
 
 ## Client
 
-- A lost Enter keyup can arm a key rebind.
 - Each `ping()` replaces the lobby's single `pong` handler, so two pings in
   flight would take each other's replies. The one caller sends them one at a
   time, and a lost ping gives up after 3 s.
