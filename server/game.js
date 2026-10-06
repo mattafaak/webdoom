@@ -39,8 +39,15 @@ const SLAB_TICS = 1024;
 const RATE_CAP_PER_SEC = envInt('WEBDOOM_RATE_CAP', 300);
 const RATE_WINDOW_MS = 1000;
 
-// player names arrive from the network
-const cleanName = n => String(n ?? '').replace(/[^A-Za-z0-9 _-]/g, '').trim().slice(0, 10);
+// Lobby fields arrive from the network as whatever JSON the sender chose.
+// String() and unary + call an object's own toString/valueOf, and one that is
+// not callable throws -- inside the 'message' listener, where a throw wedges
+// that socket's receiver for good.  So only a string or number is coerced;
+// anything else reads as absent.
+const prim = v => typeof v === 'string' || typeof v === 'number';
+const str = v => prim(v) ? String(v) : '';
+const num = v => prim(v) ? +v : NaN;
+const cleanName = n => str(n).replace(/[^A-Za-z0-9 _-]/g, '').trim().slice(0, 10);
 
 const defaultParams = () => ({
     wad: 'doom.wad', episode: 1, map: 1, skill: 3, mode: 'coop',
@@ -144,6 +151,7 @@ export function createGame(log = console.log, servedWads = () => []) {
             if (!rateOk(ws)) return;
             let m;
             try { m = JSON.parse(raw); } catch { return; }
+            if (!m || typeof m !== 'object') return;
             if (m.t === 'ping') { reply({ t: 'pong', t0: m.t0 }); return; }
 
             if (slot < 0) {     // observer of a live game
@@ -171,7 +179,7 @@ export function createGame(log = console.log, servedWads = () => []) {
                 cast(roster());
             } else if (m.t === 'slot') {
                 // color choice IS slot choice (the engine colors by slot)
-                const want = +m.slot;
+                const want = num(m.slot);
                 if (want >= 0 && want < MAXPLAYERS && !lobby.has(want) && want !== slot) {
                     lobby.set(want, lobby.get(slot));
                     lobby.delete(slot);
@@ -183,7 +191,7 @@ export function createGame(log = console.log, servedWads = () => []) {
                 const p = { ...params, ...m.params };
                 // a sanitised filename says nothing about whether this server
                 // HAS it: an unserved name keeps the current one, and says so
-                const wantWad = String(p.wad).replace(/[^a-z0-9_.-]/g, '');
+                const wantWad = str(p.wad).replace(/[^a-z0-9_.-]/g, '');
                 let served = [];
                 try { served = servedWads() ?? []; }
                 catch (e) { log(`lobby: cannot read the WAD library (${e?.message ?? e}) — refusing every wad change`); }
@@ -192,14 +200,14 @@ export function createGame(log = console.log, servedWads = () => []) {
                     log(`lobby: refusing wad "${wantWad}" — not in this server's library; keeping "${params.wad}"`);
                 params = {
                     wad: wadOk ? wantWad : params.wad,
-                    episode: Math.max(1, Math.min(9, +p.episode || 1)),
-                    map: Math.max(1, Math.min(32, +p.map || 1)),
-                    skill: Math.max(1, Math.min(5, +p.skill || 3)),
+                    episode: Math.max(1, Math.min(9, num(p.episode) || 1)),
+                    map: Math.max(1, Math.min(32, num(p.map) || 1)),
+                    skill: Math.max(1, Math.min(5, num(p.skill) || 3)),
                     mode: ['coop', 'deathmatch', 'altdeath'].includes(p.mode) ? p.mode : 'coop',
                     nomonsters: !!p.nomonsters,
                     fast: !!p.fast,
                     respawn: !!p.respawn,
-                    timer: [0, 5, 10, 15, 20, 30].includes(+p.timer) ? +p.timer : 0,
+                    timer: [0, 5, 10, 15, 20, 30].includes(num(p.timer)) ? num(p.timer) : 0,
                 };
                 cast(roster());
             } else if (m.t === 'start' && lobby.size >= 1) {
