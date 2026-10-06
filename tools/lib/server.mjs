@@ -41,7 +41,11 @@ export async function startServer({ port = null, env = {}, servePath = join(root
             process.exitCode = 1;
         }
     });
-    const stop = () => { stopping = true; try { proc.kill(); } catch { /* gone */ } };
+    const stop = () => {
+        stopping = true;
+        process.off('exit', stop);      // a file that starts many servers would pile these up
+        try { proc.kill(); } catch { /* gone */ }
+    };
     process.on('exit', stop);
 
     const deadline = Date.now() + readyMs;
