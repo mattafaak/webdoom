@@ -1,216 +1,195 @@
-# webdoom JS lobby state machine
+# webdoom lobby state machine
 
-JS-layer only. The wasm engine's `m_menu.c` is a separate concern;
-this doc covers the `client/js/lobby.js` + `menu.js` + `countdown.js`
-state machine that controls what the browser shows from page-load through
-in-game.
+This is the launcher's state machine: what the browser shows from page load
+until the engine is running, and how it gets back. It lives in
+`client/js/lobby.js`, `menu.js` and `countdown.js`. The engine's own menus
+(`m_menu.c`, inside wasm) are a separate machine; see the boundary note at the
+end. The network side of the multiplayer states is in [netcode.md](netcode.md).
 
----
+Each transition has a T-id. Tests cite these ids in their assertion messages,
+so a failing test names the edge it broke.
 
 ## State encoding
 
-State is not a single variable — it is read from the combination of four
-module-scope values in `lobby.js` plus two UI objects:
+There is no single state variable. The state is read from four module-scope
+values in `lobby.js` and two UI objects:
 
-| variable / object | what it encodes |
-|-------------------|-----------------|
-| `booted` (boolean) | false = launcher side; true = engine is running |
-| `lobby` (null \| ws api) | null = no multiplayer WebSocket |
-| `roster` (null \| msg) | latest `roster` message (pre-game lobby data) |
-| `ipSummary` (null \| msg) | latest `inprogress` summary (live game; drop-in path) |
-| `menu.current()?.id` + `menu.depth()` | which screen the menu stack shows |
-| `#countdown` hidden state | whether the countdown overlay is visible |
+| value | what it encodes |
+|---|---|
+| `booted` (boolean) | false: the launcher is showing. true: an engine is booting or running |
+| `lobby` (null or socket api) | null: no `/ws/lobby` connection |
+| `roster` (null or message) | the latest `roster` (a lobby is forming) |
+| `ipSummary` (null or message) | the latest `inprogress` (a game is already live) |
+| `menu.current()?.id`, `menu.depth()` | which launcher screen is on top of the menu stack |
+| `#countdown` | whether the countdown overlay is visible |
 
----
+`booted` is set by `enterGame()` before `bootDoom()` starts, so a second boot
+cannot begin while one is in flight. `resetToLauncher()` clears all four values.
 
 ## States
 
-| # | State | `booted` | `lobby` | `roster` | `ipSummary` | menu screen | countdown |
-|---|-------|----------|---------|----------|-------------|-------------|-----------|
-| 1 | **LANDING** | false | null | null | null | root (depth 1) | hidden |
-| 2 | **SP-PICK** | false | null | null | null | sp-game-pick (depth ≥ 2) | hidden |
-| 3 | **SP-LOADING** | false | null | null | null | hidden (loading panel) | hidden |
+| # | state | `booted` | `lobby` | `roster` | `ipSummary` | screen | countdown |
+|---|---|---|---|---|---|---|---|
+| 1 | **LANDING** | false | null | null | null | `root` (depth 1) | hidden |
+| 2 | **SP-PICK** | false | null | null | null | `sp` (depth ≥ 2) | hidden |
+| 3 | **SP-LOADING** | true | null | null | null | hidden (loading bar) | hidden |
 | 4 | **IN-GAME-SP** | true | null | null | null | hidden | hidden |
-| 5 | **MP-LOBBY** | false | live | set | null | id='lobby' (depth ≥ 2) | hidden |
-| 6 | **MP-PARAMS** | false | live | set | null | picker screen (depth ≥ 3) | hidden |
-| 7 | **MP-COUNTDOWN** | false | live | set | null | visible (lobby still shown) | visible |
-| 8 | **MP-LOADING** | true* | live | set | null | hidden | visible (GO) / hidden |
-| 9 | **IN-GAME-MP** | true | live | null | null | hidden | hidden |
-| 10 | **DROP-IN-OFFER** | false | live | null | set | id='inprogress' | hidden |
-| 11 | **DROP-IN-LOADING** | true* | live | null | set | hidden | hidden |
-| 12 | **OPTIONS** | false | null | null | null | options (depth 2) | hidden |
-| 13 | **OPTIONS-KEYS** | false | null | null | null | controls (depth 3) | hidden |
-| 14 | **MP-CONNECTING** | false | live | null | null | id='connecting' (depth 2) | hidden |
+| 5 | **MP-LOBBY** | false | live | set | null | `lobby` (depth ≥ 2) | hidden |
+| 6 | **MP-PARAMS** | false | live | set | null | a picker (depth ≥ 3) | hidden |
+| 7 | **MP-COUNTDOWN** | false | live | set | null | `lobby`, still shown | visible |
+| 8 | **MP-LOADING** | true | live | set | null | hidden | GO, then hidden |
+| 9 | **IN-GAME-MP** | true | closed | – | – | hidden | hidden |
+| 10 | **DROP-IN-OFFER** | false | live | null | set | `inprogress` | hidden |
+| 11 | **DROP-IN-LOADING** | true | live | null | set | hidden (catch-up bar) | hidden |
+| 12 | **OPTIONS** | false | null | null | null | `options` (depth 2) | hidden |
+| 13 | **OPTIONS-KEYS** | false | null | null | null | `controls` (depth 3) | hidden |
+| 14 | **MP-CONNECTING** | false | live | null | null | `connecting` (depth 2) | hidden |
 
-\* `booted` is set to `true` in the `launch` event handler before `bootDoom()` is called.
-
----
+In IN-GAME-MP the lobby socket has been closed (the game runs on `/ws/game` or
+`/ws/spectate`), and `roster` and `ipSummary` keep whatever they held until the
+return to the launcher clears them. Nothing reads them in game.
 
 ## Transitions
 
-### User-action transitions
+### User actions
 
-| ID | From | To | Trigger |
-|----|------|----|---------|
-| T01 | LANDING | SP-PICK | click SINGLE PLAYER |
+| ID | from | to | trigger |
+|---|---|---|---|
+| T01 | LANDING | SP-PICK | SINGLE PLAYER |
 | T02 | SP-PICK | LANDING | ESC / back (stack pop) |
-| T03 | SP-PICK | SP-LOADING | click a game title → `bootDoom()` starts |
-| T06 | IN-GAME-SP | LANDING | Quit Game → Y → `onQuit` → `returnToMenu()` |
-| T07 | LANDING | MP-LOBBY | click MULTIPLAYER → MP-CONNECTING at once; `roster` replaces it |
-| T08 | LANDING | DROP-IN-OFFER | click MULTIPLAYER while a game is live → MP-CONNECTING; `inprogress` replaces it |
-| T09 | MP-LOBBY | MP-PARAMS | click GAME / MAP / RULES (MODE and SKILL step in place, no screen) |
-| T10 | MP-PARAMS | MP-LOBBY | ESC / back from picker |
-| T11 | MP-LOBBY | LANDING | ESC / back on lobby → `leaveLobby()` |
-| T12 | DROP-IN-OFFER | LANDING | ESC / back on inprogress → `leaveLobby()` |
-| T13 | MP-LOBBY | MP-COUNTDOWN | click START GAME → server sends `countdown` 3/2/1 |
-| T17 | IN-GAME-MP | LANDING | Quit Game → Y → `onQuit` → `returnToMenu()` |
-| T18 | DROP-IN-OFFER | DROP-IN-LOADING | click DROP IN → `lobby.send({t:'join'…})` → server welcome+launch |
-| T31 | DROP-IN-OFFER | IN-GAME-MP | click SPECTATE → `bootDoom({net:{spectate:true}})`, receive-only, no slot |
-| T26 | LANDING | OPTIONS | click OPTIONS |
+| T03 | SP-PICK | SP-LOADING | pick a game → `enterGame()` |
+| T06 | IN-GAME-SP | LANDING | Quit Game → Y → `onQuit` → `toLauncher()` |
+| T07 | LANDING | MP-LOBBY | MULTIPLAYER → MP-CONNECTING at once; `roster` replaces it |
+| T08 | LANDING | DROP-IN-OFFER | MULTIPLAYER while a game is live → MP-CONNECTING; `inprogress` replaces it |
+| T09 | MP-LOBBY | MP-PARAMS | GAME / MAP / RULES (MODE and SKILL step in place, no screen) |
+| T10 | MP-PARAMS | MP-LOBBY | ESC / back from a picker |
+| T11 | MP-LOBBY | LANDING | ESC / back → `toLauncher()` |
+| T12 | DROP-IN-OFFER | LANDING | ESC / back → `toLauncher()` |
+| T13 | MP-LOBBY | MP-COUNTDOWN | START GAME → server sends `countdown` 3, 2, 1 |
+| T17 | IN-GAME-MP | LANDING | Quit Game → Y → `onQuit` → `toLauncher()` |
+| T18 | DROP-IN-OFFER | DROP-IN-LOADING | DROP IN → `{t:'join'}` → server `welcome` + `launch` with `join` |
+| T31 | DROP-IN-OFFER | IN-GAME-MP | SPECTATE → `enterGame()` with `spectate`, receive-only, no slot |
+| T26 | LANDING | OPTIONS | OPTIONS |
 | T27 | OPTIONS | LANDING | ESC / back (stack pop) |
-| T28 | OPTIONS | OPTIONS-KEYS | click CONTROLS |
-| T29 | OPTIONS-KEYS | OPTIONS | ESC / back — and ESC during a rebind capture cancels the capture INSTEAD, without popping |
+| T28 | OPTIONS | OPTIONS-KEYS | CONTROLS |
+| T29 | OPTIONS-KEYS | OPTIONS | ESC / back; ESC during a rebind capture cancels the capture instead, without popping |
 
-### Server-event transitions
+MP-CONNECTING has its own back action: ESC there calls `toLauncher()` and
+closes the socket, because a connection with no screen would hold a colour
+slot nobody can see.
 
-| ID | From | To | Server message |
-|----|------|----|----------------|
+### Server events
+
+| ID | from | to | event |
+|---|---|---|---|
 | T04 | SP-LOADING | IN-GAME-SP | `bootDoom()` resolves |
-| T14 | MP-COUNTDOWN | MP-LOADING | server `launch` → `menu.hide()` + `bootDoom()` starts |
-| T15 | MP-LOADING | IN-GAME-MP | `bootDoom()` resolves |
-| T19 | DROP-IN-LOADING | IN-GAME-MP | catch-up done, relay goes live |
+| T14 | MP-COUNTDOWN | MP-LOADING | server `launch` → GO, `enterGame()` |
+| T15 | MP-LOADING | IN-GAME-MP | `bootDoom()` resolves; the lobby socket closes |
+| T19 | DROP-IN-LOADING | IN-GAME-MP | catch-up reaches the frontier; the relay goes live |
 | T30 | MP-LOBBY | LANDING | server `full` → `resetToLauncher(reason)`; the same handler serves MP-CONNECTING and DROP-IN-OFFER |
 
-### Failure transitions
+### Failures
 
-| ID | From | To | Failure event |
-|----|------|----|---------------|
-| T05 | SP-LOADING | LANDING | `bootDoom()` rejects (WAD fetch / engine fail) |
-| T16 | MP-LOADING | LANDING | `bootDoom()` rejects — **guard added** (see below) |
-| T20 | DROP-IN-LOADING | LANDING | `bootDoom()` rejects — **guard added** (same catch) |
-| T21 | MP-LOBBY | LANDING | WebSocket `close` event (unexpected) |
-| T22 | DROP-IN-OFFER | LANDING | WebSocket `close` event (unexpected) |
-| T23 | MP-COUNTDOWN | LANDING | WebSocket `close` event mid-countdown — **guard added** |
-| T24 | MP-PARAMS | LANDING | WebSocket `close` event while picker is open |
-| T25 | MP-COUNTDOWN | LANDING | ESC → `menu.back()` → `lobbyScreen.onBack` → `leaveLobby()` — **guard added** |
+| ID | from | to | event |
+|---|---|---|---|
+| T05 | SP-LOADING | LANDING | `bootDoom()` rejects (WAD fetch or engine failure) |
+| T16 | MP-LOADING | LANDING | `bootDoom()` rejects |
+| T20 | DROP-IN-LOADING | LANDING | `bootDoom()` rejects, including a stalled or refused catch-up |
+| T21 | MP-LOBBY | LANDING | lobby socket closes unexpectedly: "lobby connection lost" |
+| T22 | DROP-IN-OFFER | LANDING | lobby socket closes unexpectedly |
+| T23 | MP-COUNTDOWN | LANDING | lobby socket closes mid-countdown; the overlay is reset |
+| T24 | MP-PARAMS | LANDING | lobby socket closes while a picker is open |
+| T25 | MP-COUNTDOWN | LANDING | ESC → `toLauncher()`; the overlay is reset |
+| T32 | IN-GAME-MP | LANDING | the game socket closes or errors, the relay skips a tic, or the bundle backlog overflows; the reason is shown |
+| T33 | IN-GAME-SP, IN-GAME-MP | LANDING | engine error (`I_Error`) or a throw in the frame loop; "engine error: …" is shown |
+| T34 | MP-COUNTDOWN | LANDING | the `launch` carries params the client refuses; the refusal is shown |
 
----
+T16 and T20 share one catch in `enterGame()`. Every failure goes through
+`resetToLauncher(reason)`, which ends any running engine first, then clears the
+launcher state, resets the countdown, shows the root menu and writes the
+reason to the status line.
 
-## Impossible-state analysis
+## States that cannot occur
 
-| Impossible state | Can it be represented? | Prevented by? |
-|-----------------|----------------------|---------------|
-| **Countdown visible after ESC mid-countdown** — user presses ESC during 3/2/1, `leaveLobby()` runs, but countdown overlay stays because `lobby` is nulled before the async `close` event, so the `closed` handler's T23 guard `if (!lobby) return` fires first | YES — `countdown.show()` was called and `leaveLobby()` previously had no `countdown.reset()` call | **BUG (now fixed)**: `leaveLobby()` now calls `countdown.reset()` directly (T25 guard). *Lesson: the T23 guard in the `closed` handler is bypassed by the deliberate-leave early-return; guarding must also sit in the synchronous exit path.* |
-| **Countdown visible with no lobby (unexpected ws close)** — countdown overlay showing after ws disconnects mid-countdown | YES — same `countdown.show()` left active | **BUG (now fixed)**: `closed` handler calls `countdown.reset()` (T23 guard). |
-| **`booted=true` after MP WAD / engine failure** — engine flag stuck, menu hidden, user cannot retry | YES — `booted` is set before `bootDoom()`; the MP `.catch()` only called `status()`, not a reset | **BUG (now fixed)**: MP launch `.catch()` now resets `booted=false`, calls `countdown.reset()`, `menu.show()`, `menu.reset(rootScreen())`, closes lobby (T16/T20 guard). The SP path already had this fix (3.4). |
-| **Two lobby screens on the menu stack** (roster + inprogress simultaneously) | Theoretically possible if both `roster` and `inprogress` events arrived | NOT reachable: the server sends exactly one of `roster` (no active session) or `inprogress` (session live) at connect time. `enterMultiplayer()` also checks `ipSummary` vs `roster` before pushing the screen. |
-| **START enabled with zero players** | YES as a UI affordance — START GAME row is always shown | Server-side guard: `if (m.t === 'start' && lobby.size >= 1) startGame()`. Client never guards it; server does. |
-| **DROP IN clickable while already booted** | Would re-enter `bootDoom()` with `booted=true` | `dropIn()` has an explicit guard: `if (booted \|\| ipSlot < 0) return`. |
-| **Double launch** — `launch` event processed when `booted` is already `true` | YES if ws delivers a duplicate launch frame | Launch handler guards: `if (booted) return`. |
-| **Params changed mid-countdown** — lobby picker still accessible while countdown ticks | YES — the lobby screen is not hidden during countdown; pickers can be opened | Server drops all `params` messages once `startGame()` runs: `if (session) return`. No client guard needed. |
-| **Stale roster after ws close** | Would show wrong player list if `roster` not cleared | `closed` handler sets `roster = null`; `leaveLobby()` does too. |
-| **`inprogress` event updating menu while in-game** | Server could theoretically push `inprogress` to a booted client | Harmless: `menu` is already hidden; the only effect is updating `ipSummary` in memory. No user-visible issue. |
+| state | how it is prevented |
+|---|---|
+| countdown still visible after ESC or a socket close mid-countdown | `resetToLauncher()` calls `countdown.reset()` on every exit. `lobby` is nulled before `close()`, so the `closed` handler can tell a deliberate leave from a dropped connection, and the overlay is cleared on the synchronous path, not only in that handler |
+| `booted` stuck true after a failed boot | the one catch in `enterGame()` calls `resetToLauncher()`, which clears `booted` |
+| two lobby screens on the stack | the server sends exactly one of `roster` or `inprogress` at connect, and each handler only refreshes its own screen or replaces CONNECTING |
+| START with zero players | the START row is always shown, and the server starts a game only when `lobby.size >= 1` |
+| DROP IN while booted | `dropIn()` returns at once if `booted` or no slot is chosen |
+| a second boot from a duplicate `launch` | the `launch` handler and `enterGame()` both return if `booted` |
+| params changed mid-countdown | the pickers stay reachable, but the server ignores `params` once a session exists |
+| a stale roster after leaving | `resetToLauncher()` nulls `roster` and `ipSummary` |
+| a launcher keypress booting a second engine over a live one | `resetToLauncher()` ends the running session before it clears `booted` |
 
----
-
-## Mermaid state diagram
+## Diagram
 
 ```mermaid
 stateDiagram-v2
     [*] --> LANDING
 
-    LANDING --> SP_PICK        : click SINGLE PLAYER (T01)
-    SP_PICK --> LANDING        : ESC / back (T02)
-    SP_PICK --> SP_LOADING     : click game title (T03)
-    SP_LOADING --> IN_GAME_SP  : bootDoom resolves (T04)
-    SP_LOADING --> LANDING     : WAD / boot failure (T05)
-    IN_GAME_SP --> LANDING     : Quit Game (T06)
+    LANDING --> SP_PICK        : SINGLE PLAYER (T01)
+    SP_PICK --> LANDING        : ESC (T02)
+    SP_PICK --> SP_LOADING     : pick a game (T03)
+    SP_LOADING --> IN_GAME_SP  : boot resolves (T04)
+    SP_LOADING --> LANDING     : boot fails (T05)
+    IN_GAME_SP --> LANDING     : Quit Game (T06) / engine error (T33)
 
-    LANDING --> OPTIONS        : click OPTIONS (T26)
-    OPTIONS --> LANDING        : ESC / back (T27)
-    OPTIONS --> OPTIONS_KEYS   : click CONTROLS (T28)
-    OPTIONS_KEYS --> OPTIONS   : ESC / back (T29)
+    LANDING --> OPTIONS        : OPTIONS (T26)
+    OPTIONS --> LANDING        : ESC (T27)
+    OPTIONS --> OPTIONS_KEYS   : CONTROLS (T28)
+    OPTIONS_KEYS --> OPTIONS   : ESC (T29)
 
-    LANDING --> MP_LOBBY       : click MULTIPLAYER + roster (T07)
-    LANDING --> DROP_IN_OFFER  : click MULTIPLAYER + inprogress (T08)
+    LANDING --> MP_LOBBY       : MULTIPLAYER + roster (T07)
+    LANDING --> DROP_IN_OFFER  : MULTIPLAYER + inprogress (T08)
 
-    MP_LOBBY --> MP_PARAMS     : click GAME/MAP/RULES (T09)
+    MP_LOBBY --> MP_PARAMS     : GAME/MAP/RULES (T09)
+    MP_PARAMS --> MP_LOBBY     : ESC (T10)
+    MP_LOBBY --> LANDING       : ESC (T11) / socket close (T21) / full (T30)
+    MP_PARAMS --> LANDING      : socket close (T24)
 
-    MP_PARAMS --> MP_LOBBY     : ESC / back (T10)
-    MP_LOBBY --> LANDING       : ESC → leaveLobby (T11)
-    MP_PARAMS --> LANDING      : ws close (T24)
+    DROP_IN_OFFER --> LANDING  : ESC (T12) / socket close (T22)
+    DROP_IN_OFFER --> DROP_IN_LOADING : DROP IN (T18)
+    DROP_IN_OFFER --> IN_GAME_MP      : SPECTATE (T31)
+    DROP_IN_LOADING --> IN_GAME_MP    : caught up (T19)
+    DROP_IN_LOADING --> LANDING       : boot fails (T20)
 
-    DROP_IN_OFFER --> LANDING  : ESC → leaveLobby (T12)
-    DROP_IN_OFFER --> IN_GAME_MP : click SPECTATE (T31)
+    MP_LOBBY --> MP_COUNTDOWN  : START GAME (T13)
+    MP_COUNTDOWN --> MP_LOADING : launch (T14)
+    MP_COUNTDOWN --> LANDING   : socket close (T23) / ESC (T25) / launch refused (T34)
+    MP_LOADING --> IN_GAME_MP  : boot resolves (T15)
+    MP_LOADING --> LANDING     : boot fails (T16)
 
-    MP_LOBBY --> MP_COUNTDOWN  : click START GAME (T13)
-    MP_COUNTDOWN --> MP_LOADING    : server launch (T14)
-    MP_LOADING --> IN_GAME_MP  : bootDoom resolves (T15)
-    MP_LOADING --> LANDING     : WAD / boot failure — guarded (T16)
-
-    IN_GAME_MP --> LANDING     : Quit Game (T17)
-
-    DROP_IN_OFFER --> DROP_IN_LOADING : click DROP IN (T18)
-    DROP_IN_LOADING --> IN_GAME_MP    : catch-up done (T19)
-    DROP_IN_LOADING --> LANDING       : WAD / boot failure — guarded (T20)
-
-    MP_LOBBY --> LANDING       : ws close (T21)
-    MP_LOBBY --> LANDING       : server full (T30)
-    DROP_IN_OFFER --> LANDING  : ws close (T22)
-    MP_COUNTDOWN --> LANDING   : ws close — guarded (T23)
-    MP_COUNTDOWN --> LANDING   : ESC → leaveLobby — guarded (T25)
+    IN_GAME_MP --> LANDING     : Quit Game (T17) / relay lost (T32) / engine error (T33)
 ```
 
----
+## Which test drives each edge
 
-## Edge → test coverage
+| edges | leg |
+|---|---|
+| T01, T02, T06–T13, T16, T20–T25, T30 | `browser-lobby` |
+| T03, T04 | `browser-sp` |
+| T05 | `browser-resilience` |
+| T14, T15, T17 | `browser-net` |
+| T18, T19, T31 | `browser-join` |
+| T26–T29 | `browser-options` |
+| T32 | `net-hidden` (Node clients: a client the relay drops is told the session is over) |
+| T33 | `browser-ierror`, `browser-rafdeath` |
+| T34 | `launch-args`, `hostile-lobby` (the refusal, below the UI) |
 
-| Edge ID | Transition | Test | File |
-|---------|-----------|------|------|
-| T01 | LANDING → SP-PICK | `lobby-menu-nav` | browser-lobby-test.mjs |
-| T02 | SP-PICK → LANDING | `lobby-menu-nav` | browser-lobby-test.mjs |
-| T03 | SP-PICK → SP-LOADING | `sp-boot` | browser-test.mjs (existing) |
-| T04 | SP-LOADING → IN-GAME-SP | `sp-boot` | browser-test.mjs (existing) |
-| T05 | SP-LOADING → LANDING (WAD fail) | `1-wad-fetch-failure` | browser-resilience-test.mjs (existing) |
-| T06 | IN-GAME-SP → LANDING | `sp-quit` | browser-lobby-test.mjs |
-| T07 | LANDING → MP-LOBBY | `lobby-menu-nav` | browser-lobby-test.mjs |
-| T08 | LANDING → DROP-IN-OFFER | `drop-in-offer-esc` | browser-lobby-test.mjs |
-| T09 | MP-LOBBY → MP-PARAMS | `lobby-menu-nav` | browser-lobby-test.mjs |
-| T10 | MP-PARAMS → MP-LOBBY | `lobby-menu-nav` | browser-lobby-test.mjs |
-| T11 | MP-LOBBY → LANDING (ESC) | `lobby-menu-nav` | browser-lobby-test.mjs |
-| T12 | DROP-IN-OFFER → LANDING (ESC) | `drop-in-offer-esc` | browser-lobby-test.mjs |
-| T13 | MP-LOBBY → MP-COUNTDOWN | `mp-countdown-ws-close` | browser-lobby-test.mjs |
-| T14 | MP-COUNTDOWN → MP-LOADING | `mp-launch-flow` | browser-net-test.mjs (existing) |
-| T15 | MP-LOADING → IN-GAME-MP | `mp-launch-flow` | browser-net-test.mjs (existing) |
-| T16 | MP-LOADING → LANDING (WAD fail) | `mp-launch-wad-fail` | browser-lobby-test.mjs |
-| T17 | IN-GAME-MP → LANDING | `mp-launch-flow` | browser-net-test.mjs (existing) |
-| T18 | DROP-IN-OFFER → DROP-IN-LOADING | `drop-in-full` | browser-join-test.mjs (existing) |
-| T19 | DROP-IN-LOADING → IN-GAME-MP | `drop-in-full` | browser-join-test.mjs (existing) |
-| T20 | DROP-IN-LOADING → LANDING (WAD fail) | `mp-launch-wad-fail` (same catch path as T16; drop-in entry point not independently driven — identical catch block) | browser-lobby-test.mjs |
-| T21 | MP-LOBBY → LANDING (ws close) | `mp-lobby-ws-close` | browser-lobby-test.mjs |
-| T22 | DROP-IN-OFFER → LANDING (ws close) | `drop-in-offer-ws-close` | browser-lobby-test.mjs |
-| T23 | MP-COUNTDOWN → LANDING (ws close) | `mp-countdown-ws-close` | browser-lobby-test.mjs |
-| T24 | MP-PARAMS → LANDING (ws close) | `mp-lobby-ws-close` | browser-lobby-test.mjs |
-| T25 | MP-COUNTDOWN → LANDING (ESC) | `mp-countdown-esc` | browser-lobby-test.mjs |
-| T26 | LANDING → OPTIONS | `options-open` | browser-options-test.mjs |
-| T27 | OPTIONS → LANDING | `options-back` | browser-options-test.mjs |
-| T28 | OPTIONS → OPTIONS-KEYS | `controls-open` | browser-options-test.mjs |
-| T29 | OPTIONS-KEYS → OPTIONS | `controls-back` | browser-options-test.mjs |
-| T30 | MP-LOBBY → LANDING (server full) | `mp-lobby-full` | browser-lobby-test.mjs |
-| T31 | DROP-IN-OFFER → IN-GAME-MP (SPECTATE) | `spectate` | browser-join-test.mjs (existing) |
-
-Coverage: **31 / 31 edges** covered.
-
----
+T20 is driven through the same catch as T16; the drop-in entry point is not
+driven separately. T32 and T34 are checked at the client library, not by
+clicking through the launcher.
 
 ## Boundary note
 
-The engine's `m_menu.c` is wasm, driven by the game loop. It handles the
-in-game menus (New Game, Options, Load/Save, Quit). That state machine is
-not in scope here. The boundary is `bootDoom()` returning: after that call
-resolves, `m_menu.c` is live and the JS lobby layer steps back (menu
-hidden, lobby WS stays open for tic relay). Callbacks crossing the boundary
-back from engine to JS: `onQuit` (→ `returnToMenu()`), `onDoomError`,
-`netQuit`, `onFileWrite` (persist.js), and the five audio hooks
-`sfxStart`/`sfxStop`/`sfxPlaying`/`sfxUpdate`/`musicEvent` (audio.js).
+Once `bootDoom()` resolves, the engine's `m_menu.c` owns the screen: New Game,
+Options, Load/Save, Quit. The launcher steps back, with its menu hidden and
+its lobby socket closed. Calls that cross back from the engine to JS are
+`onQuit` (to `toLauncher()`), `onDoomError`, `netQuit`, `onFileWrite`
+(`persist.js`), and the five audio hooks `sfxStart`, `sfxStop`, `sfxPlaying`,
+`sfxUpdate` and `musicEvent` (`audio.js`).
 
+Two other ways into the engine, IMPORT WAD and a demo permalink, also go
+through `enterGame()` and `resetToLauncher()`, but they are not drawn here.
