@@ -13,7 +13,7 @@ implementation a port can copy from:
 |---|---|---|
 | Browser | `engine/web/` | the shipped port (wasm32) |
 | Hosted freestanding (`fs-doom`) | `tools/freestanding/` | the core on a static arena, a byte-out and a preloaded WAD blob, with no OS file I/O below the shim. 13/13 golden demos bit-identical on x86 `-m32` (leg `freestanding-sim`), 32-bit ARM under qemu (`arm-cross`) and big-endian PowerPC under qemu (`be-cross`) |
-| Nintendo 64 | `tools/n64/` | OS-less on libdragon: 93.75 MHz big-endian MIPS, 4 MiB RDRAM, the IWAD read in place from cartridge space. 13/13 (`n64-demos`; see [n64/DEMO-GATE-STATUS.md](n64/DEMO-GATE-STATUS.md)) |
+| Nintendo 64 | `tools/n64/` | OS-less on libdragon: 93.75 MHz big-endian MIPS, 4 MiB RDRAM, the IWAD read in place from cartridge space. 13/13 (`n64-demos`; see [retro.md](retro.md) §2) |
 
 Code is cited by function name where a line number would go stale.
 
@@ -445,9 +445,9 @@ a 1 MiB stack the floor is **1.44 MiB** (`__heap_base`), and **~1.68 MiB**
 with the screen buffers. That is before the zone and the WAD. The budget
 tables below use these figures.
 
-The N64 build, measured with its toolchain, puts `.data + .bss` at 990,732
-bytes with a 512 KiB zone arena and the 250 KiB screen block inside it
-([n64/BRING-UP.md](n64/BRING-UP.md)).
+The N64 build at `7f5c682`, measured with its toolchain, puts `.data + .bss`
+at 3,373,068 bytes, of which 2,621,440 are the zone arena and 256,000 the
+screen block ([retro.md](retro.md) §2, Memory).
 
 ### 2.2 Zone (heap)
 
@@ -986,7 +986,7 @@ playback path. No display is involved.
 ## 7. ESP32 sketch
 
 Feasibility for this and other targets, with CPU estimates, is in
-[feasibility-atlas.md](feasibility-atlas.md) §3.6.
+[retro.md](retro.md) §4.
 
 ### 7.1 Hardware
 
@@ -1114,9 +1114,9 @@ resolve at link time.
 
 *References*: [engine-archaeology.md](engine-archaeology.md) (trig recipe §1,
 FixedDiv §2, compute versus lookup §7, sound constants §10, table ledger §14),
-[perf.md](perf.md) (wasm sections §1, zone §2, linear memory §3),
+[perf.md](perf.md) (shipped artifacts §2, linear memory and the zone §3),
 [renderer.md](renderer.md) (framebuffer §7.1, column draw §7.2, textures §8),
 [playsim.md](playsim.md) (tic orchestration §1, thinkers and the zone §1.2),
 [formats.md](formats.md) (WAD §1, DMX sound §6, MUS §7, endianness §11),
-[netcode.md](netcode.md), [n64/BRING-UP.md](n64/BRING-UP.md),
+[netcode.md](netcode.md), [retro.md](retro.md),
 [tools/freestanding/IMPORTS.md](../tools/freestanding/IMPORTS.md).
