@@ -12,7 +12,7 @@
 #   tools/run-tests.sh                 # full tier (everything)
 #   tools/run-tests.sh --quick         # no WADs, no build, no browser — clone-safe
 #   tools/run-tests.sh --only ID [...] # run just these legs
-#   tools/run-tests.sh --jobs N        # N legs at a time (round 10); 1 = serial
+#   tools/run-tests.sh --jobs N        # N legs at a time; 1 = serial
 #   tools/run-tests.sh --list          # print the leg registry and exit
 #   tools/run-tests.sh --require-complete   # a SKIP is a failure
 #   tools/run-tests.sh --keep-logs DIR      # keep every leg's full log in DIR
@@ -40,29 +40,12 @@ while [ $# -gt 0 ]; do
         # `alone` (timing-graded -- contention IS the measurement) drains the
         # pool first, while `heavy` (expensive but hash-graded) may overlap.
         #
-        # MEASURED on alder (i9-12900K, 24 threads), 2026-09-17, one tree, 82
-        # legs, --perf --require-complete, N64 toolchain sourced.  Every arm
-        # returned the same table: 82 passed, 0 failed, 0 skipped.
-        #
-        #   --jobs 3   642 s (10 min 42 s)   1,228 leg-seconds, 1.91x packed
-        #   --jobs 6   577 s ( 9 min 37 s)   1,209 leg-seconds, 2.10x packed
-        #   --jobs 10  564 s ( 9 min 24 s)
-        #
-        # 6 is the recommendation: 3->6 saves 65 s, 6->10 saves 13 more for
-        # twice the concurrent browsers.  n64-demos is the floor at 434 s, so
-        # at 6 the whole rest of the suite costs 143 s beside it.
-        #
-        # For the record, because it is the bigger number and it is NOT a
-        # --jobs result: splitting `alone` into `alone`+`heavy` took the same
-        # host from 831 s to 642 s at an unchanged --jobs 3, with one MORE leg
-        # in the run.  Reading 831 -> 577 as "what --jobs 6 bought" would
-        # credit the flag with the tag split's 189 s.
-        #
-        # THE DEFAULT STAYS 1 DELIBERATELY.  Every number above was taken on a
-        # 24-thread box; CI runs this file with no --jobs on a 2-core GitHub
-        # runner, where six concurrent Chromes is an untested configuration and
-        # the timing-graded legs have nowhere to hide.  A default is what an
-        # unmeasured host gets, so it is the conservative one.
+        # 6 is the recommendation on a 24-thread host: the same full table
+        # took 642 s at 3, 577 s at 6 and 564 s at 10, and n64-demos alone is
+        # 434 s of it.  The default stays 1: CI runs this file with no --jobs
+        # on a 2-core runner, where six concurrent Chromes are untested and the
+        # timing-graded legs have nowhere to hide, and a default is what an
+        # unmeasured host gets.
         --jobs)             JOBS="$2"; shift 2 ;;
         # opt-in because it reaches other machines (~30 s), not because it is
         # slow; it SKIPs, named and counted, in the default run
@@ -154,11 +137,8 @@ declare -A NEED=(
     [perf]='have_perf|perf tier not requested (run: tools/run-tests.sh --perf; ~30 s measured, needs wbox and tank up)'
     # not a prerequisite: under --jobs the leg runs with the pool drained
     [alone]='true|'
-    # not a prerequisite either, and NOT `alone`: expensive but not graded on
-    # time, so it may share the machine.  `alone` meant two different things --
-    # "contention would corrupt the measurement" and "this leg is a pig" -- and
-    # the second does not need the pool drained on a 24-core host.  n64-demos
-    # alone was 434 s of an 831 s run with 23 cores idle beside it.
+    # not a prerequisite either, and not `alone`: expensive but not graded on
+    # time, so it may share the machine
     [heavy]='true|'
 )
 need_reason() {   # need_reason <tag> -> why it is unmet
@@ -437,11 +417,10 @@ echo "logs: $LOGDIR"
 
 # ── tier: quick ──────────────────────────────────────────────────────────────
 # Everything here runs on a bare clone: no WADs, no build, no browser.  This is
-# the tier a public CI can actually run (task 24.3).
-# Split so a host without the PINNED clang-format still runs the JS half as a
-# real gate, and has the C half reported as a counted SKIP with its reason,
-# rather than both folded into one green "lint: OK".  Public CI is exactly
-# that host (task 24.3).
+# the tier a public CI can actually run.
+# Lint is two legs so a host without the pinned clang-format, public CI among
+# them, still runs the JS half as a real gate and reports the C half as a
+# counted SKIP with its reason.
 leg lint-js         -        "JS syntax + pipe-exit rule + exec bits" -- bash tools/lint.sh --js-only
 leg lint-c          clangfmt "clang-format over the web layer"        -- bash tools/lint.sh --c-only --require-c
 leg archaeology     gcc  "every derived engine figure reproduces from its script" -- node tools/archaeology/run.mjs
@@ -449,28 +428,25 @@ leg docs            -    "doc links resolve; spec's named gates are legs" -- nod
 leg sw-precache     -    "sw.js SHELL list <-> app-shell imports"   -- node tools/check-sw-precache.mjs
 leg sw-wad-stream   -    "sw.js streams a WAD to the page and caches it behind" -- node tools/sw-wad-stream-test.mjs
 leg audio-stop-race -    "audio stopped while arming starts nothing afterwards" -- node tools/audio-stop-race-test.mjs
-leg http-fuzz       -    "static HTTP path attacks (ws-005)"        -- node tools/http-fuzz-test.mjs
-leg demo-store-fuzz -    "demo-store cap enforcement (19.2)"        -- node tools/demo-store-fuzz-test.mjs
+leg http-fuzz       -    "static HTTP path attacks"                -- node tools/http-fuzz-test.mjs
+leg demo-store-fuzz -    "demo-store cap enforcement"               -- node tools/demo-store-fuzz-test.mjs
 leg net-fuzz        -    "malformed/hostile WebSocket clients"      -- node tools/net-fuzz-test.mjs
 # web.h is the core<->platform contract spec.md tenet 5 points a bare-metal port
-# at.  It declared 5 of 73 exports and got one arity wrong (task 25.2).
+# at, so it must declare what the build exports.
 leg web-contract    -    "web.h matches the exports it declares"      -- node tools/web-contract-check.mjs
 # The registry's bound, and MAXWEBFILES, which is written on both sides of the
-# wire (files.c and lobby.js) and was asserted by nothing.
+# wire (files.c and lobby.js).
 leg web-registry    build "the file registry refuses past its cap"       -- node tools/web-registry-test.mjs
 # COLORS, CMD_SIZE, MAXPLAYERS, FRAGMENT_MAX and MAXWEBFILES each exist twice,
-# once on each side of the wire, and two of them say "mirror of" in a comment.
-# Nothing compared them until round 6.
+# once on each side of the wire.
 leg wire-constants  -     "cross-wire constants agree on both sides"    -- node tools/check-wire-constants.mjs
-# The launcher may not offer a game that can never load: hacx.wad sat in
-# GAME_ORDER, absent from the manifest and refused by the importer, while
-# README advertised it as part of the shipped library (E1).
+# The launcher may not offer a game that can never load: a GAME_ORDER entry
+# absent from the manifest, or one the importer refuses.
 leg menu-reachable  -    "no GAME_ORDER entry is unreachable"         -- node tools/check-menu-reachable.mjs
-# rme-009: README:41 says webdoom.service is a ready systemd unit and nothing
-# checked it -- no boot test, no file validation, not one assertion.
-# `systemd-analyze verify` alone would be a quiet exit-0: on a good unit it
-# exits 0 and prints NOTHING, so it cannot tell a sound unit from a dead check.
-leg service-file    systemd  "webdoom.service is a ready unit (rme-009)" -- bash tools/service-check.sh
+# README says webdoom.service is a ready systemd unit.  `systemd-analyze
+# verify` alone cannot be the check: on a good unit it exits 0 and prints
+# nothing, so it cannot tell a sound unit from a dead check.
+leg service-file    systemd  "webdoom.service is a ready unit" -- bash tools/service-check.sh
 # deploy.sh restarts whatever tree the unit's WorkingDirectory names, so it
 # must refuse to be run from any other; driven through --check only, against a
 # stub systemctl.
@@ -484,7 +460,7 @@ fi
 
 if [ "$QUICK_ONLY" = "0" ]; then
 
-# ── artifacts under test are current with their sources (21.4/21.5) ──────────
+# ── artifacts under test are current with their sources ───────────────────
 leg freshness       build      "build/ + native refs not older than sources" -- node tools/artifact-freshness.mjs --all
 leg size-budget     build      "doom.wasm, synth.wasm, __heap_base and page load under their ceilings" -- node tools/size-budget.mjs
 
@@ -492,120 +468,100 @@ leg size-budget     build      "doom.wasm, synth.wasm, __heap_base and page load
 # callMain([]) and the attract loop at wall-clock pacing, the path a browser
 # takes; the demo goldens replay under -timedemo and do not cover it.
 leg smoke-iwads     build,wad  "boots doom.wad (700 frames) and doom2.wad (1100) headless" -- node tools/smoke-test.mjs doom.wad 700 doom2.wad 1100
-# rme-008: the demo goldens cover the four demo-bearing IWADs. The other 24
+# The demo goldens cover the four demo-bearing IWADs; this covers the other 24
 # entries in wads/manifest.json -- SIGIL, NRFTL, Chex Quest and the 20 Master
-# Levels -- had no automated test of any kind, so a shipped WAD that failed to
-# load would have been found by a player. Target list derived from the manifest.
-leg smoke-pwad      build,wad  "24 ungated library WADs boot and render (rme-008)" -- node tools/smoke-pwad-test.mjs
+# Levels -- so a shipped WAD that fails to load is not found by a player.  The
+# target list is derived from the manifest.
+leg smoke-pwad      build,wad  "24 ungated library WADs boot and render" -- node tools/smoke-pwad-test.mjs
 leg opl-mode        build,wad  "OPL2 byte-identical to ref; OPL3 RMS"  -- node tools/opl-mode-test.mjs doom.wad
 
 # ── the sim-safety gate: an assert names the broken invariant at its call site,
 #    which a golden diff cannot do.  It runs BEFORE the goldens for that reason.
 leg build-invariants emsdk     "compile -DWEBDOOM_INVARIANTS"          -- bash tools/build-toggle.sh WEBDOOM_INVARIANTS build-invariants
-# --sim-drawn, not -nodraw: this is the ONLY leg on the armed build, and until
-# round 8 it ran with the renderer switched off -- so DOOM_ASSERT(doom_in_render_path
-# == 0), the assert written to catch render->sim contamination, had never once run
-# in a process where the renderer executes.  --fractic pins the interpolation
-# fraction, which -timedemo otherwise saturates at FRACUNIT (see demo-test.mjs).
+# --sim-drawn, not -nodraw: this is the only leg on the armed build, and
+# DOOM_ASSERT(doom_in_render_path == 0), the assert that catches render->sim
+# contamination, can only fire in a process where the renderer executes.
+# --fractic pins the interpolation fraction, which -timedemo otherwise
+# saturates at FRACUNIT (see demo-test.mjs).
 leg sim-invariants   wad,fresh-invariants     "13 demos, armed asserts, renderer running, freelook + interpolation active" -- node tools/demo-test.mjs --sim-drawn --smooth --fractic 32768 --pitch 40 --build-dir build-invariants
 
 # ── differential + goldens ───────────────────────────────────────────────────
 leg fuzz-diff       native,wad,heavy "20 mutated demos: wasm == native"      -- node tools/fuzz/run-fuzz.mjs --seeds 20 --parallel 8 --require-native
 leg sim-goldens     build,wad  "13 demos, per-tic gamestate hashes"    -- node tools/demo-test.mjs
 leg render-goldens  build,wad  "13 demos, per-tic framebuffer hashes"  -- node tools/demo-test.mjs --render
-leg render-low      build,wad  "low-detail render goldens (14.2b)"     -- node tools/demo-test.mjs --render --low-detail
-# spc-011: spec.md promises freelook and interpolation are render-side and cannot
-# reach the playsim.  sim-wide was the only leg proving that class and it was
-# deleted with widescreen.  This is its successor on the shipping artifact.
-leg sim-freelook    build,wad  "13 demos, freelook active, playsim untouched (spc-011)" -- node tools/demo-test.mjs --sim-drawn --pitch 40
+leg render-low      build,wad  "low-detail render goldens"            -- node tools/demo-test.mjs --render --low-detail
+# spec.md promises freelook and interpolation are render-side and cannot reach
+# the playsim; this proves it on the shipping artifact.
+leg sim-freelook    build,wad  "13 demos, freelook active, playsim untouched" -- node tools/demo-test.mjs --sim-drawn --pitch 40
 
 
-# ── gates that existed and ran nowhere until the census (task 21.11) ──────────
-# README.md advertises the native ASan/UBSan demo suite as part of the gate set;
-# it was run only by hand.  The freestanding 13/13 check calls itself "the
-# crown-jewel proof for rung 1" and is cited as a landing gate throughout
-# Plans; also hand-run.  demo-verify.mjs is the SHIPPED 19.4 CLI, and its test
-# re-implements the logic rather than importing it, so the CLI's own argv
-# handling, --all mode and size cap were ungated.
+# ── sanitizers, the freestanding core, the shipped demo-verify CLI ───────────
+# README.md advertises the native ASan/UBSan demo suite as part of the gate
+# set, and the freestanding 13/13 check is the proof for rung 1.
+# demo-verify-test imports the CLI's logic; demo-verify-cli runs the CLI
+# itself, so its argv handling, --all mode and size cap are gated too.
 leg native-asan     native,wad,heavy "13 demos under ASan/UBSan (README's claim)"  -- bash tools/native-sanitize/run-all.sh wads/lib tools/native-sanitize/out sim
 leg freestanding-sim fs,wad    "fs-doom 13/13 == vanilla (rung 1 proof)"     -- bash tools/freestanding/run-check.sh
-# its own out dir: under --jobs it ran beside freestanding-sim, both writing
-# per-demo JSON into freestanding/out/, and one read a file mid-write
+# its own out dir: under --jobs it runs beside freestanding-sim, and the two
+# must not write per-demo JSON into one directory
 leg ro-wad          fs,wad     "WAD blob stays read-only over 13 demos (XIP)" -- bash tools/freestanding/ro-wad-check.sh wads/lib tools/freestanding/out-ro
-# The ARM reference, on alder (F4).  spec.md lists pi5 as "ARM reference", but
-# what pi5 ran was node bench.mjs against the WASM build -- a performance
-# sample, and wasm is architecture-independent, so the ARM row never tested ARM
-# codegen, ABI or alignment.  pi5 is also down.  Timings cannot move to alder
-# (emulated cycles are not hardware cycles); correctness can, and it is the
-# half that was missing.  zig cross-builds the freestanding core for 32-bit ARM
-# and qemu-arm-static replays all 13 golden demos.
+# The ARM reference.  wasm is architecture-independent, so only a native build
+# tests ARM codegen, ABI and alignment; emulated cycles are not hardware
+# cycles, so this gates correctness, not timing.  zig cross-builds the
+# freestanding core for 32-bit ARM and qemu-arm-static replays all 13 golden
+# demos.
 leg arm-cross       zig,qemuarm,wad "freestanding core 13/13 on 32-bit ARM" -- bash tools/freestanding/arm-check.sh
-# THE BIG-ENDIAN LEG, and the reason it did not exist until round 13.
-#
-# tools/freestanding/be-check.sh is a 165-line byte-order gate whose DEFAULTS
-# are PowerPC -- that is what tasks 13.3a/13.3b proved 13/13 on, and what
-# docs/bare-metal.md cites.  The suite reached it through exactly one path,
-# arm-check.sh, which execs it after overriding BE_TARGET, QEMU_BE and
-# CROSS_LABEL to little-endian ARM32.  So the only byte-order gate in the
-# project ran in the one configuration that does not test byte order, while
-# its own header said "the suite RUNS this file" (true, and misleading) and
-# gate-census reported it green -- reachability there is a text grep, and the
-# census header says it cannot see tiers or argument overrides.
-#
-# Nothing was broken: run in its own default it passes 13/13 first time.  It
-# was simply never asked.  This is also the only CHEAP big-endian cover in the
-# repo; the other one is n64-demos at 434 s.
+# The big-endian leg.  tools/freestanding/be-check.sh defaults to PowerPC, the
+# target docs/bare-metal.md cites; arm-check.sh execs the same script with
+# little-endian ARM32 overrides, so only this leg tests byte order.  It is the
+# cheap big-endian cover; n64-demos is the other, at about 7 minutes.
 leg be-cross        zig,qemuppc,wad "freestanding core 13/13 on big-endian PowerPC" -- bash tools/freestanding/be-check.sh
 # The N64 rung of the same argument, and the strongest one: a 93.75 MHz
 # big-endian MIPS console, a 12.4 MB WAD read in place out of cartridge space,
-# and the whole 44,580-tic golden set reproduced bit-for-bit.  MEASURED 8m19s
-# for the 13 demos (23:30:40 -> 23:38:59, 2026-09-11) -- the longest leg in the
-# suite by a wide margin, and it is here rather than in the out-of-suite
-# registry because it is now green and a gate nobody runs rots.
+# and the whole 44,580-tic golden set reproduced bit-for-bit.  It is the
+# longest leg by a wide margin (--no-slow skips it) and it is in the suite
+# because a gate nobody runs rots.
 leg n64-demos       n64,wad,slow,heavy "13/13 demo sim-hashes on emulated N64 (~8 min)" -- bash tools/n64/run-n64-demos.sh
-leg demo-verify-cli build,wad  "the shipped 19.4 CLI itself, --all mode"     -- node tools/demo-verify.mjs --all
+leg demo-verify-cli build,wad  "the shipped demo-verify CLI itself, --all mode" -- node tools/demo-verify.mjs --all
 
 # ── netcode determinism ──────────────────────────────────────────────────────
 leg net-2p          build,wad  "2 real wasm clients through the relay" -- node tools/net-test.mjs 2
 leg net-4p          build,wad  "4 real wasm clients through the relay" -- node tools/net-test.mjs 4
 leg join-coop       build,wad  "drop-in determinism, co-op"            -- node tools/join-test.mjs
 leg join-dm         build,wad  "drop-in determinism, deathmatch"       -- node tools/join-test.mjs dm
-leg spectate        build,wad  "spectator catch-up determinism (19.5)" -- node tools/spectate-test.mjs
+leg spectate        build,wad  "spectator catch-up determinism"        -- node tools/spectate-test.mjs
 leg spectate-inject build,wad  "spectator injection is a no-op"        -- node tools/spectate-inject-test.mjs
-# 23.6's open half. `spectate` proves an observer re-simulates the identical
-# world and `spectate-inject` proves it cannot write ticcmds; nothing drove the
-# spectate path with malformed or abusive clients, so every resource cap on it
-# -- MAX_SPECTATORS, maxPayload, the history-cap refusal, the close-handler
-# bookkeeping -- was unasserted.
-leg spectate-fuzz   build,wad  "hostile clients against /ws/spectate (23.6)" -- node tools/spectate-fuzz-test.mjs
+# `spectate` proves an observer re-simulates the identical world and
+# `spectate-inject` proves it cannot write ticcmds; this drives the spectate
+# path with malformed and abusive clients, so every resource cap on it --
+# MAX_SPECTATORS, maxPayload, the history-cap refusal, the close-handler
+# bookkeeping -- is asserted.
+leg spectate-fuzz   build,wad  "hostile clients against /ws/spectate" -- node tools/spectate-fuzz-test.mjs
 leg edge            build,wad  "drop-in edge cases"                    -- node tools/edge-test.mjs
 leg churn           build,wad  "connect/disconnect churn"              -- node tools/churn-test.mjs
 leg net-hidden      build,wad  "a hidden tab survives 3 s in lockstep; told when dropped" -- node tools/net-hidden-test.mjs
 leg launch-args     build,wad  "RULES reach the engine; hostile launch params are refused" -- node tools/launch-args-test.mjs
 
 # ── demo tooling ─────────────────────────────────────────────────────────────
-leg demo-seek       build,wad  "scrubber seek == linear replay (19.3)" -- node tools/demo-seek-test.mjs
-leg demo-verify     build,wad  "13 goldens + doctored + hostile (19.4)" -- node tools/demo-verify-test.mjs
+leg demo-seek       build,wad  "scrubber seek == linear replay"        -- node tools/demo-seek-test.mjs
+leg demo-verify     build,wad  "13 goldens + doctored + hostile"        -- node tools/demo-verify-test.mjs
 leg save-compat     build,wad  "savegames written by 2a6a2de load and replay identically" -- node tools/save-compat-test.mjs
 leg demo-replay     build,wad  "13 IWAD demos through web_play_demo_buf, seek, -fast, two-player" -- node tools/demo-replay-test.mjs
 
 # ── tenet 4: the sanitizer IS the gate ───────────────────────────────────────
 leg adversarial-map native,wad,heavy "30 adversarial maps, 0 ASan/UBSan reports; 34 bad-geometry maps refused at load" -- node tools/fuzz/run-map-fuzz.mjs --adversarial-gate
 
-# The other direction (task 23.8).  Every other fuzz gate points hostile CLIENT
-# at the server; this points a hostile SERVER at the engine, which is the
-# direction that produced the 23.1 out-of-bounds write and had no coverage.
-leg hostile-server  build,wad  "hostile server frames vs the engine (23.8)" -- node tools/hostile-server-test.mjs
-# The same direction, one layer up.  23.8 fuzzes a hostile server into the
-# ENGINE; nothing fuzzed one into the LOBBY JSON path, where the client did a
-# bare JSON.parse on every frame while the server hardened exactly that
-# direction on its own side (round 5, B2).  Needs no WAD and no build: it drives
-# client/js/net.js directly against a fake server.
+# The other direction: every other fuzz gate points a hostile CLIENT at the
+# server; this points a hostile SERVER at the engine.
+leg hostile-server  build,wad  "hostile server frames vs the engine" -- node tools/hostile-server-test.mjs
+# The same direction, one layer up: hostile-server points a hostile server at
+# the ENGINE, this one at the lobby's JSON path.  Needs no WAD and no build: it
+# drives client/js/net.js directly against a fake server.
 leg hostile-lobby   -          "hostile server frames vs the lobby client"  -- node tools/hostile-lobby-test.mjs
-# Hostile lump CONTENT.  wad-import.js validates a WAD's directory well;
-# nothing validated what is inside a lump, and a PWAD lump overrides the
-# IWAD's, so an imported WAD can hand the engine any bytes under a known name.
-leg wad-content-fuzz build,wad "hostile GENMIDI/MUS/TEXTURE1 lump payloads (23.2)" -- node tools/wad-content-fuzz-test.mjs
+# Hostile lump CONTENT.  wad-import.js validates a WAD's directory, not what is
+# inside a lump, and a PWAD lump overrides the IWAD's, so an imported WAD can
+# hand the engine any bytes under a known name.
+leg wad-content-fuzz build,wad "hostile GENMIDI/MUS/TEXTURE1 lump payloads" -- node tools/wad-content-fuzz-test.mjs
 # Limits only a purpose-built map reaches (tools/lib/mapkit.mjs: one
 # subsector, no node builder), each through the loader and a demo.
 leg crafted-maps    build,wad  "purpose-built maps reach engine limits through a demo" -- node tools/fuzz/crafted-maps.mjs
@@ -614,21 +570,12 @@ leg crafted-maps    build,wad  "purpose-built maps reach engine limits through a
 leg hostile-calls   build,wad  "web entry points refuse hostile arguments" -- node tools/hostile-calls-test.mjs
 
 # ── browser suite ────────────────────────────────────────────────────────────
-# One shared server for the 19 legs that only need a page to load.  Started
-# once, torn down by the single EXIT trap, readiness polled rather than slept.
-#
-# THE AGGREGATE SKIP THIS REPLACED
-# -------------------------------
-# These legs used to sit inside `if have_browser && have_build && have_wad`,
-# and the else branch emitted ONE row -- `browser-suite SKIP` -- and incremented
-# SKIPPED once.  So on a host without Chrome or without IWADs the closing line
-# read something like "64 legs: 63 passed, 0 failed, 1 skipped" for a registry
-# of 81, and seventeen legs vanished with nothing naming them.  It looked
-# exactly like a complete run.
-#
-# Now the shared server is a PREREQUISITE (`shared`) like any other, so each leg
-# reports its own SKIP with its own reason and the count is honest.  The
-# coverage check at the end asserts the total against the registry.
+# One shared server for the legs that only need a page to load.  Started once,
+# torn down by the single EXIT trap, readiness polled rather than slept.  The
+# shared server is a prerequisite (`shared`) like any other, so on a host
+# without Chrome, a build or the IWADs each leg reports its own SKIP with its
+# own reason, and the coverage check at the end asserts the total against the
+# registry.
 if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^persist$'; then
     U=http://127.0.0.1:8668/
     if have_browser && have_build && have_wad; then
@@ -637,7 +584,7 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
             # on one lobby would see each other's games
             U=__SHARED_URL__; SHARED_UP=1
         elif serve_start 8668; then SHARED_UP=1; else
-            echo "  note: shared browser server on 8668 did not start — the 19 legs below will each SKIP"
+            echo "  note: shared browser server on 8668 did not start — the legs below will each SKIP"
         fi
     fi
     leg browser-sp            browser,build,wad,shared "title -> menu -> new game -> movement" -- node tools/browser-test.mjs "$U"
@@ -645,34 +592,28 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
     leg browser-join          browser,build,wad,shared "browser drop-in"                       -- node tools/browser-join-test.mjs "$U"
     leg persist               browser,build,wad,shared "settings/keybind persistence"          -- node tools/persist-test.mjs "$U"
         # The third direction of tenet 4: localStorage and the rebind UI are
-        # USER input, and had no gate at all.  Closes the REBIND half of promises
-        # rme-004; the analog twin-stick half is still PARTIAL (a headless runner
-        # has no stick).  This comment said "closes rme-004" flat, contradicting
-        # the promises index, and nothing scans tools/ comments for claims like
-        # that -- which is why it survived.
+        # user input.
     leg browser-options       browser,build,wad,shared "hostile localStorage + the OPTIONS screen" -- node tools/browser-options-test.mjs "$U"
     leg browser-resilience    browser,build,wad,shared "fetch/sw/visibility/gamepad failures" -- node tools/browser-resilience-test.mjs "$U"
     leg browser-boot-abort    browser,build,wad,shared "a session ended mid-boot leaves nothing running" -- node tools/browser-boot-abort-test.mjs "$U"
     leg browser-pwad-session  browser,build,wad,shared "a PWAD game keeps its own saves and demo links" -- node tools/browser-pwad-session-test.mjs "$U"
-        # rme-004's analog half.  browser-resilience covers hotplug only; this
-        # drives a synthetic pad through the deadzone curve and the axis mapping
-        # and reads what the ENGINE's own web_gamepad entry point receives --
-        # the same boundary browser-options uses for a rebound key.
-    leg browser-gamepad       browser,build,wad,shared "analog twin-stick reaches the engine (rme-004)" -- node tools/browser-gamepad-test.mjs "$U"
+        # The analog half of the controls.  browser-resilience covers hotplug
+        # only; this drives a synthetic pad through the deadzone curve and the
+        # axis mapping and reads what the ENGINE's own web_gamepad entry point
+        # receives -- the same boundary browser-options uses for a rebound key.
+    leg browser-gamepad       browser,build,wad,shared "analog twin-stick reaches the engine" -- node tools/browser-gamepad-test.mjs "$U"
     leg browser-lobby         browser,build,wad,shared "lobby state machine, 25 edges"         -- node tools/browser-lobby-test.mjs "$U"
     leg browser-fire          browser,build,wad,shared "PSX fire background + reduced-motion"  -- node tools/browser-fire-test.mjs "$U" /tmp
     leg browser-ierror        browser,build,wad,shared "I_Error surfaces, no wedge"            -- node tools/browser-ierror-test.mjs "$U"
     leg browser-rafdeath      browser,build,wad,shared "rAF death recovery"                    -- node tools/browser-rafdeath-test.mjs "$U"
-    # The same gate at the OTHER injection point.  _web_frame was the one
-    # statement inside the frame loop's try, so injecting only there proved the
-    # guarded line was guarded; the palette read and the GL draw sat after the
-    # catch and killed the loop with no endSession.  Both are inside now, and
-    # both are exercised.
+    # The same gate at the other injection point: the palette read and the GL
+    # draw are inside the frame loop's try as well as _web_frame, and a throw
+    # from either must end the session too.
     leg browser-rafdeath-draw browser,build,wad,shared "rAF death recovery, draw path"         -- node tools/browser-rafdeath-test.mjs "$U" --inject _web_palette_version
-    leg browser-wadimport     browser,build,wad,shared "user WAD import (16.6a)"               -- node tools/browser-wadimport-test.mjs "$U"
-    leg browser-mp-gating     browser,build,wad,shared "local-WAD MP gating (16.6b)"           -- node tools/browser-mp-gating-test.mjs "$U"
+    leg browser-wadimport     browser,build,wad,shared "user WAD import"                       -- node tools/browser-wadimport-test.mjs "$U"
+    leg browser-mp-gating     browser,build,wad,shared "local-WAD MP gating"                   -- node tools/browser-mp-gating-test.mjs "$U"
     leg browser-offline       browser,build,wad,shared "offline single player"                 -- node tools/browser-offline-test.mjs
-    leg browser-demo          browser,build,wad,shared "demo permalink replay (19.2)"          -- node tools/browser-demo-test.mjs "$U"
+    leg browser-demo          browser,build,wad,shared "demo permalink replay"                  -- node tools/browser-demo-test.mjs "$U"
         # On a secure origin the worklet instantiates build/synth.wasm and the
         # main thread renders no music at all (the BufferSink fallback, where
         # there is no AudioWorklet, is browser-insecure's).  It
@@ -680,41 +621,35 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
         # headless or under xvfb -- so the samples are gated by opl-mode's
         # gate 7, which drives the shipped worklet file in node.
     leg browser-music-worklet browser,build,wad,shared "worklet owns the synth; main thread renders none" -- node tools/browser-music-worklet-test.mjs "$U"
-        # play -> quit -> play must accumulate nothing (task 23.7b).  Measured
+        # play -> quit -> play must accumulate nothing.  Measured
         # across three cycles: growth that repeats per cycle is a leak, a one-off
         # difference is not.
     leg browser-teardown  browser,build,wad,shared "play->quit->play x3 leaks nothing"      -- node tools/browser-teardown-test.mjs "$U"
     [ "$SHARED_UP" = "1" ] && [ "$JOBS" -le 1 ] && serve_stop_all
 fi
 
-# These three own their servers (dedicated ports, per the 12.2b stale-server
-# lesson), so they are ordinary legs.
+# These start their own servers, so they need no shared one.
 leg browser-insecure browser "real insecure origin: IDB WAD cache + music fallback" -- node tools/browser-insecure-test.mjs
-# rme-005: "second load is instant". The offline half is gated; "instant" was a
-# performance claim with no gate. This is a REGRESSION gate against a baseline
-# committed per host -- a host without one SKIPs by name, as browser-pipeline does.
-leg load-budget     browser,loadbudget,build,wad,alone "warm load within this host's budget (rme-005)" -- node tools/load-budget-test.mjs
+# "Second load is instant": a regression gate against a baseline committed per
+# host -- a host without one SKIPs by name, as browser-pipeline does.
+leg load-budget     browser,loadbudget,build,wad,alone "warm load within this host's budget" -- node tools/load-budget-test.mjs
 leg browser-pipeline browser,baseline,alone "per-frame JS/GPU cost vs this host's baseline" -- bash tools/pipeline-gate.sh
-# rme-002: the server's request log shows a Firefox UA fetched the page and its
-# JS asked for /api/wads; then the leg asserts a rendered frame.  Firefox 155
+# The server's request log shows a Firefox UA fetched the page and its JS asked
+# for /api/wads; then the leg asserts a rendered frame.  Firefox 155
 # does not speak CDP at all (--remote-debugging-port serves WebDriver BiDi,
 # /json/list 404s), so this drives BiDi. It runs under Xvfb, NOT --headless:
 # measured here, headless Firefox reports webgl2:false AND webgl1:false, the client
 # falls back to createRenderer2D, and the gate would prove a path no user takes.
 # The kind==='webgl2' assertion is what stops that drift passing silently.
-leg firefox-frame   firefox,xvfb,build,wad "Firefox renders a real frame via WebGL2 (rme-002)" -- node tools/firefox-frame-test.mjs
+leg firefox-frame   firefox,xvfb,build,wad "Firefox renders a real frame via WebGL2" -- node tools/firefox-frame-test.mjs
 
 # ── the perf gate (spec.md §Correctness gates) ───────────────────────────────
 #
-# spec.md:55-57 has required this since it was written -- "bench.mjs per-stage
-# numbers on the three live reference hosts; regressions on any host block" --
-# and there was no leg at all.  Neither bench.mjs nor fleet-bench.sh appeared
-# in this file, and gate-census's name heuristic could not see either, so
-# nothing could even report them as orphaned.
-#
-# --check is what makes it a gate rather than a recorder: fleet-bench.sh
-# normally ENDS by rewriting tools/golden/bench-baseline.json, and a gate that
-# rewrites its own reference to match what it just measured cannot fail.
+# spec.md requires "bench.mjs per-stage numbers on the three live reference
+# hosts; regressions on any host block".  --check is what makes it a gate
+# rather than a recorder: fleet-bench.sh otherwise ends by rewriting
+# tools/golden/bench-baseline.json, and a gate that rewrites its own reference
+# to match what it just measured cannot fail.
 leg perf-fleet      perf,build,wad,alone "per-stage render ms on alder+wbox+tank vs baseline" -- bash tools/fleet-bench.sh --check
 
 fi   # QUICK_ONLY
@@ -739,8 +674,8 @@ echo "  ────────────────────────
 
 # ── persist the per-leg table ────────────────────────────────────────────────
 # the only per-leg timing this project produces; kept beside the failing logs.
-# Only a whole-tier run writes it: an --only run used to overwrite it with a
-# handful of legs labelled as the tier.
+# Only a whole-tier run writes it, so an --only run cannot pass off a handful
+# of legs as the tier.
 ELAPSED=$(( $(date +%s) - SUITE_T0 ))
 if [ "${#ONLY[@]}" -eq 0 ]; then
     mkdir -p "$REPO/tools/.suite-logs"
@@ -760,8 +695,7 @@ if [ "$NOTES" -gt 0 ]; then
 fi
 [ "${#ONLY[@]}" -eq 0 ] && printf '  per-leg timings: tools/.suite-logs/last-run.tsv\n'
 
-# A run that executed no legs is not a pass — the shape this whole round exists
-# to remove (failure mode #3).
+# A run that executed no legs is not a pass.
 if [ "$TOTAL" -eq 0 ]; then
     echo "  SUITE VACUOUS: 0 legs ran — check --only ids against --list"
     exit 1

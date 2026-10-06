@@ -6,13 +6,11 @@ import { join } from 'node:path';
 import { root, sleep, freePort } from './util.mjs';
 
 // Who is actually listening on this port?  A free port plus a readiness poll
-// still cannot tell THIS server from one that raced in ahead of it, and that
-// is the 12.2b lesson: a stale server answers just as well and serves a
-// different build.  run-tests.sh has asserted ownership since round 4
-// (assert_port_owned); the shared helper did not, so every leg on it was one
-// race away from measuring somebody else.  No `ss` means "could not verify",
-// which is said out loud rather than passed over -- an unverifiable check that
-// looks like a passing one is the shape this project keeps naming.
+// still cannot tell THIS server from one that raced in ahead of it, and a
+// stale server answers just as well while serving a different build.
+// run-tests.sh asserts ownership the same way (assert_port_owned).  No `ss`
+// means "could not verify", and the caller is told so rather than handed
+// something that looks like a pass.
 function assertOwned(port, pid) {
     let out;
     try { out = execFileSync('ss', ['-tlnpH', `sport = :${port}`], { encoding: 'utf8' }); }
