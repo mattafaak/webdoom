@@ -1,10 +1,10 @@
 // tools/n64/i_sound_n64.c — N64 audio stub.
 //
-// Audio is out of scope for 20.4b (software render boot).
+// There is no N64 audio yet.
 // All stubs return silently; the engine compiles and runs without sound.
 // Future task: wire libdragon's audio subsystem for OPL/MUS playback.
 //
-// Engine/core: 0-diff.  Only tools/n64/ is new.
+// engine/core has no N64-specific changes; the port is tools/n64/.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include "doomtype.h"
 #include "i_sound.h"

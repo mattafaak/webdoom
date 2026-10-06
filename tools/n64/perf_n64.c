@@ -8,7 +8,7 @@
 //
 // Future: use get_ticks_us() from libdragon for per-stage timing.
 //
-// Engine/core: 0-diff.  Only tools/n64/ is new.
+// engine/core has no N64-specific changes; the port is tools/n64/.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include "perf.h"
 
@@ -32,7 +32,7 @@ long web_perf_zone_hwm_p        = 0;
 long web_perf_zone_purge_count  = 0;
 long web_perf_zone_purged_bytes = 0;
 
-// web_perf_now: return 0.0 — stage attribution stubs for 20.4b.
+// web_perf_now: return 0.0 — stage attribution stubs.
 // Future: return (double)get_ticks_us() for per-stage measurements.
 double web_perf_now(void)
 {

@@ -2,10 +2,10 @@
 //
 // The N64 PI bus does not reliably service sub-word (byte/halfword) reads of
 // cartridge address space; only 32-bit-aligned word reads return correct data.
-// Proven in task 20.4c: the same lump name read byte-wise gave "PLPAPA*" while
+// Measured: the same lump name read byte-wise gave "PLPAPA*" while
 // a word read of the identical address gave "PLAYPAL".
 //
-// engine/core is 0-diff, and it reads the cartridge-resident WAD with plain
+// engine/core has no N64-specific changes, and it reads the cartridge-resident WAD with plain
 // byte copies in two places:
 //     w_wad.c:204  strncpy(lump_p->name, fileinfo->name, 8)   // directory
 //     w_wad.c:388  memcpy(dest, (byte*) l->handle, l->size)   // lump data
@@ -22,7 +22,7 @@
 // and KSEG1 forms, but we always dereference the caller's original pointer so
 // an uncached source stays uncached.
 //
-// Engine/core: 0-diff. Only tools/n64/ is new.
+// engine/core has no N64-specific changes; the port is tools/n64/.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <stddef.h>
 #include <stdint.h>

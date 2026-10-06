@@ -8,14 +8,14 @@
 //   5. main() calls D_DoomMain() — engine entry point.
 //
 // The D_DoomMain startup banner is printed via printf() → stderr →
-// ISViewer → ares UART pane.  This is the "boot to banner" DoD milestone.
+// ISViewer → ares UART pane: the first sign a ROM boots.
 //
 // WAD: libdragon DFS (DragonFS) or baked blob in ROM are both viable paths.
 //   This build uses a NULL blob to verify the engine reaches D_DoomMain.
 //   Real deployment: mount DFS, open doom1.wad via dragonfs, pass pointer.
 //
-// Software rasterizer only.  RDP path deferred to 20.5.
-// Engine/core: 0-diff.  Only tools/n64/ is new.
+// Software rasterizer only; there is no RDP path.
+// engine/core has no N64-specific changes; the port is tools/n64/.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 /* Include only the specific libdragon headers we need (not the catch-all
  * <libdragon.h>) to avoid multiple-definition of rdpq_font_load_builtin. */
@@ -32,7 +32,7 @@
 
 /* Argv for D_DoomMain.
  * Without N64_TIMEDEMO: banner-only mode (attract-loop default).
- * With N64_TIMEDEMO="demo1" (etc.): timedemo gate mode (20.4c).
+ * With N64_TIMEDEMO="demo1" (etc.): timedemo gate mode.
  *
  * -nodraw is NOT optional and NOT an optimisation.  The golden this trace is
  * compared against is recorded by tools/demo-test.mjs as
@@ -63,7 +63,7 @@ static const int n64_argc = 1;
  * numlumps lives in w_wad.c.  gametic lives in g_game.c (via doomstat). */
 void D_DoomFrame(void);
 extern int numlumps;
-extern int gametic;   /* per-tic hash gate (20.4c) */
+extern int gametic;   /* per-tic hash gate */
 
 int main(void)
 {
@@ -153,9 +153,8 @@ int main(void)
 #endif
 
     // ── Step 5: engine entry point ───────────────────────────────────────────
-    // D_DoomMain prints the startup title banner (d_main.c:796):
-    //   printf("%s\n", title)  → stderr → ISViewer → ares UART
-    // This is the primary DoD milestone for 20.4b.
+    // D_DoomMain prints the startup title banner (printf("%s\n", title)
+    //   → stderr → ISViewer → ares UART): the first sign a ROM boots.
     if (setjmp(n64_demo_jmp) != 0) {
         // Demo completed via longjmp from I_Error — normal exit path.
         debugf("N64 webdoom: demo completed normally, trace len=%d\n",
@@ -182,7 +181,7 @@ int main(void)
     // just that init succeeded. Video output is i_video_n64's job (still a
     // software-render stub at this milestone); the sim runs regardless.
     //
-    // Per-tic hash recording (20.4c): n64_record_hash() appends
+    // Per-tic hash recording: n64_record_hash() appends
     // fs_state_hash()-equivalent to n64_trace[] once per unique gametic,
     // exactly mirroring the freestanding i_main.c gate loop.
     {

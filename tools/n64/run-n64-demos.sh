@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tools/n64/run-n64-demos.sh — N64 ares sim-hash gate (task 20.4c).
+# tools/n64/run-n64-demos.sh — N64 ares sim-hash gate.
 #
 # Builds N64 ROMs for 13 demos across 4 IWADs, runs each under ares, reads the
 # per-tic sim-hash trace the ROM PRINTS on completion, and compares it against
@@ -12,7 +12,7 @@
 # which is what this script parses.  There is no debugger in the loop: see
 # tools/n64/n64_hash.c for why the GDB-stub extraction path was replaced.
 #
-# DoD: exits 0 iff all 13 traces match golden bit-identically.
+# Exits 0 iff all 13 traces match golden bit-identically.
 # Partial results are reported honestly with the count.
 #
 # Prerequisites:
@@ -24,7 +24,7 @@
 # Usage:
 #   bash tools/gate.sh n64-demos -- bash tools/n64/run-n64-demos.sh
 #
-# Engine/core: 0-diff.  Only tools/n64/ changes.
+# engine/core has no N64-specific changes; the port is tools/n64/.
 
 set -eo pipefail
 

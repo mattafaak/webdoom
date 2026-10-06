@@ -17,10 +17,10 @@
 #   make boot-log         run ares headless, capture UART to ares-boot-raw.log
 #   make clean
 #
-# Override zone size (default 512 KB):
+# Override zone size (default 2,560 KB, set below):
 #   make N64_ZONE_KB=2048
 #
-# engine/core: 0-diff.  Only tools/n64/ and docs/n64/ are new.
+# engine/core has no N64-specific changes; the port is tools/n64/.
 
 N64_INST    ?= $(HOME)/toolchains/n64
 LIBDRAGON   ?= $(HOME)/toolchains/libdragon
@@ -71,7 +71,7 @@ N64_WAD_NAME   ?= doomu.wad
 N64_WAD_LEN    := $(if $(strip $(N64_WAD)),$(shell wc -c < $(N64_WAD) 2>/dev/null || echo 0),0)
 
 # Common flags for both engine/core and N64 shim.
-# ABI landmine mitigations (docs/n64/MIPS-ABI-LANDMINES.md):
+# ABI landmine mitigations (docs/retro.md, "MIPS landmines"):
 #   -fno-strict-aliasing — class 4 landmine mitigation
 #   -fsigned-char        — class 3 landmine mitigation (char signedness)
 #   -Wno-int-to-pointer-cast — class 5 landmine mitigation (lumpinfo handle)
@@ -102,7 +102,7 @@ COMMON_FLAGS := -mabi=o64 -march=vr4300 -mtune=vr4300 \
                 -I$(N64_INST)/mips64-elf/include \
                 -I.
 
-# Timedemo gate (20.4c): bake demo name at compile time for GDB-based trace.
+# Timedemo gate: bake demo name at compile time for GDB-based trace.
 # Usage: make N64_TIMEDEMO=demo1   (or demo2, demo3, demo4)
 # Omit N64_TIMEDEMO for the default banner-only / attract-loop build.
 #
@@ -112,10 +112,8 @@ COMMON_FLAGS := -mabi=o64 -march=vr4300 -mtune=vr4300 \
 # changed a variable nothing read again, and `make N64_TIMEDEMO=demo1` compiled
 # n64_main.c with N64_TIMEDEMO UNDEFINED.  n64_argv then took its 1-element
 # form, `-timedemo` never reached myargv at all, and the ROM ran the ordinary
-# attract loop while the operator believed it was running a timed demo.  That
-# is what DEMO-GATE-STATUS.md diagnosed as "-timedemo does not engage on N64":
-# the flag was never passed.  The assertion below is what makes the difference
-# visible instead of silent.
+# attract loop while the operator believed it was running a timed demo.  The
+# assertion below makes that visible instead of silent.
 ifdef N64_TIMEDEMO
 COMMON_FLAGS += -DN64_TIMEDEMO=\"$(N64_TIMEDEMO)\"
 endif
@@ -159,7 +157,7 @@ LDSCRIPT := $(LIBDRAGON)/n64.ld
 # --wrap,memcpy / --wrap,strncpy route the engine's two cartridge byte-copies
 # (w_wad.c:204 directory names, :388 lump data) through cart_read_n64.c, which
 # rebuilds each byte from aligned word reads. Required because the N64 PI bus
-# corrupts sub-word reads of cartridge space (task 20.4c). RAM→RAM copies fall
+# corrupts sub-word reads of cartridge space. RAM→RAM copies fall
 # straight through to the real libc routine.
 LDFLAGS  := -mabi=o64 -march=vr4300 -mtune=vr4300 \
              -L$(N64_INST)/mips64-elf/lib \

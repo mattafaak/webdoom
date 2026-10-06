@@ -1,4 +1,4 @@
-// tools/n64/n64_hash.c — N64 per-tic simulation state hash (task 20.4c).
+// tools/n64/n64_hash.c — N64 per-tic simulation state hash.
 //
 // PURPOSE: compute fs_state_hash()-equivalent per tic during timedemo
 // playback, accumulate the trace in RDRAM, and expose it for GDB dump via
@@ -18,7 +18,7 @@
 //   4. Python parses the big-endian uint32 dump and compares against
 //      tools/golden/<iwad>-<demo>.json.
 //
-// Engine/core: 0-diff.  All new code is in tools/n64/ only.
+// engine/core has no N64-specific changes; the port is tools/n64/.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 
 #include <debug.h>     /* debugf */

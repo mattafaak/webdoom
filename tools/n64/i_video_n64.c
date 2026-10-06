@@ -1,15 +1,15 @@
-// tools/n64/i_video_n64.c — N64 software rasterizer shim (20.4b).
+// tools/n64/i_video_n64.c — N64 software rasterizer shim.
 //
-// Scope: software rasterizer only.  RDP (hardware-accelerated) path is
-// deferred to 20.5 per the DoD.  The framebuffer lives in RDRAM as a
+// Scope: software rasterizer only; there is no RDP (hardware-accelerated)
+// path.  The framebuffer lives in RDRAM as a
 // palette-index array (screens[0]); no conversion to RGB565 is performed.
 //
 // I_FinishUpdate stores the rendered frame in a static shadow buffer.
 // This confirms the software rasterizer produces output without needing
-// a display or RDP.  On real N64 hardware with a future 20.5 RDP shim,
-// replace n64_display_update() with an RDP palette-expand blit.
+// a display or RDP.  A display path on real hardware would replace
+// n64_display_update() with an RDP palette-expand blit.
 //
-// Engine/core: 0-diff.  Only tools/n64/ is new.
+// engine/core has no N64-specific changes; the port is tools/n64/.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <string.h>
 #include "doomdef.h"
@@ -20,7 +20,7 @@ static byte n64_pal_rgb[768];
 
 // Shadow framebuffer in RDRAM (320×200 palette indices = 64,000 bytes).
 // Sufficient for software rasterizer output validation.
-// Future 20.5 RDP path: convert to RGB565 via n64_pal_rgb and DMA blit.
+// An RDP path would convert to RGB565 via n64_pal_rgb and DMA blit.
 static byte n64_shadow_fb[320 * 200];
 
 // Frame counter: incremented by I_FinishUpdate.
@@ -43,7 +43,7 @@ void I_SetPalette(byte* palette)
 }
 
 // Copy the software-rasterized frame (screens[0]) to RDRAM shadow buffer.
-// RDP 20.5: replace with hardware palette expand + DMA to VI framebuffer.
+// An RDP path would replace this with a hardware palette expand + DMA to the VI framebuffer.
 void I_FinishUpdate(void)
 {
     extern byte* screens[];

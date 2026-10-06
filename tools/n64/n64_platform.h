@@ -4,15 +4,17 @@
 // libdragon platform shim.  Mirrors the role of tools/freestanding/fs_platform.h
 // in the RP2040 bring-up, adapted for MIPS/libdragon bare-metal.
 //
-// SCOPE (20.4b): software rasterizer only; RDP deferred to 20.5.
-//   WAD: NULL blob for footprint build; DFS-backed for real ROM deployment.
+// SCOPE: software rasterizer only; no RDP renderer.
+//   WAD: none in a footprint build; read in place from ROM otherwise.
 //   UART: libdragon debug_init_emulog() → ares ISViewer channel.
-//   Engine/core: 0-diff.  Only tools/n64/ and docs/n64/ are new.
+//   engine/core has no N64-specific changes; the port is tools/n64/.
 //
-// ABI NOTE (docs/n64/MIPS-ABI-LANDMINES.md):
+// ABI NOTE (docs/retro.md, "MIPS landmines"):
 //   libdragon uses -mabi=o64 -march=vr4300 (ILP32, big-endian).
-//   The engine's __BIG_ENDIAN__ swap path is active automatically (GCC
-//   defines __BIG_ENDIAN__ on any big-endian target).  No core changes needed.
+//   mips64-elf-gcc defines __BYTE_ORDER__ and __MIPSEB__ but NOT the legacy
+//   __BIG_ENDIAN__ that m_swap.h tests, so the Makefile passes
+//   -D__BIG_ENDIAN__; without it SHORT()/LONG() are identity and every WAD
+//   field is read byte-reversed.
 //
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #ifndef __N64_PLATFORM_H__
@@ -22,9 +24,9 @@
 
 // ── Zone pool size ────────────────────────────────────────────────────────────
 // N64 has 4 MB RDRAM (8 MB with Expansion Pak).  Zone sits in RDRAM.
-// 512 KB is the footprint-build token: above the 262 KB non-purgeable peak
-// but keeps the full ROM under 4 MB.
-// A real deployment needs at least 2 MB for gameplay + map loading.
+// The Makefile sets N64_ZONE_KB (2,560 by default: 512 KB runs out during the
+// attract demo, whose non-purgeable peak alone is 1,081,972 B; retro.md, §2).
+// This fallback applies only to a build outside that Makefile.
 // Override: make N64_ZONE_KB=2048
 #ifndef N64_ZONE_KB
 #define N64_ZONE_KB 512
@@ -33,7 +35,7 @@
 
 // ── Screen buffer size ────────────────────────────────────────────────────────
 // Software rasterizer: 320×200 palette-index framebuffer.
-// RDP output path is deferred to 20.5.
+// There is no RDP output path.
 #define N64_ALLOCLOW_SIZE (320 * 200 * 4)
 
 // ── UART byte-out primitive ───────────────────────────────────────────────────
@@ -59,7 +61,7 @@ extern jmp_buf      n64_demo_jmp;
 extern boolean smoothrender;
 extern boolean wipeactive;
 
-// ── Sim-hash trace (20.4c) ────────────────────────────────────────────────────
+// ── Sim-hash trace ────────────────────────────────────────────────────
 // n64_record_hash(): append fs_state_hash()-equivalent for the current gametic.
 // n64_demo_complete_halt(): named GDB breakpoint target; fires when trace done.
 // n64_trace[] / n64_trace_len: the accumulated hash array.

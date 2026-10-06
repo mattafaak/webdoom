@@ -12,7 +12,7 @@
 //   (C) Footprint build — NULL / 0: D_DoomMain prints the banner but
 //       W_InitMultipleFiles will call I_Error("W_InitFiles: no files found").
 //
-// Engine/core: 0-diff.  Only tools/n64/ is new.
+// engine/core has no N64-specific changes; the port is tools/n64/.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <string.h>
 
@@ -50,10 +50,9 @@ void n64_register_wad(const byte* data, int len)
     n64_wad_name[sizeof(n64_wad_name) - 1] = '\0';
 
     /* Announce the name COMPILED INTO THIS OBJECT, not the one the build was
-       asked for.  They came apart once and it was invisible: the 20.4c gate
-       force-rebuilt n64_main.o and n64_hash.o between IWADs, but N64_WAD_NAME is
-       baked in HERE, and n64_hash.c does not use it at all -- so the doom2 ROM
-       registered doom2.wad's bytes under the previous build's "doomu.wad".
+       asked for.  N64_WAD_NAME is baked in HERE, not in n64_main.o or
+       n64_hash.o, so a gate that rebuilds only those between IWADs registers
+       the next IWAD's bytes under the previous build's name.
        IdentifyVersion() matched doomu, set gamemode retail, and the run died on
        "W_GetNumForName: E1M9 not found!".  A stale object with a plausible
        constant is not a build error; the only way to see it is to have the

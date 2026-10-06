@@ -4,7 +4,7 @@
 // Single-player: consoleplayer 0, no network peers.
 // TryRunTics uses I_GetTime() (libdragon timer) for tic scheduling.
 //
-// Engine/core: 0-diff.  Only tools/n64/ is new.
+// engine/core has no N64-specific changes; the port is tools/n64/.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <string.h>
 

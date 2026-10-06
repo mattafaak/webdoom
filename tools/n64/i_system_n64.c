@@ -9,14 +9,14 @@
 //   On real hardware this is accurate.  In ares (35 Hz emulated), close enough
 //   for timedemo playback.
 //
-// MEMORY BUDGET (docs/n64/BRING-UP.md §memory):
+// MEMORY BUDGET (docs/retro.md, "Memory"):
 //   4 MB RDRAM total.
-//   Zone arena (N64_ZONE_SIZE): 512 KB default.
+//   Zone arena (N64_ZONE_SIZE): 2,560 KB, set by the Makefile.
 //   Screen buffers (N64_ALLOCLOW_SIZE): 256 KB.
-//   Stack + libdragon runtime: ~64 KB.
-//   Remaining headroom: ~3.2 MB for heap/map data when WAD is in ROM.
+//   .data + .bss measured at 3,373,068 bytes in all, the WAD read in place
+//   from ROM.
 //
-// Engine/core: 0-diff.  Only tools/n64/ is new.
+// engine/core has no N64-specific changes; the port is tools/n64/.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <stdarg.h>
 #include <string.h>
@@ -64,9 +64,8 @@ volatile int n64_timedemo_gametics = 0;
 jmp_buf      n64_demo_jmp;
 
 // ── (a) MEMORY: static zone arena ────────────────────────────────────────────
-// N64_ZONE_SIZE default: 512 KB (RDRAM).  Enough for engine init and demo
-// playback with a baked WAD blob.  See docs/n64/BRING-UP.md §zone-budget.
-// Override: make N64_ZONE_KB=2048
+// N64_ZONE_SIZE comes from the Makefile's N64_ZONE_KB (2,560 KB), enough for
+// the 13 demos; docs/retro.md has the budget.  Override: make N64_ZONE_KB=2048
 static byte n64_arena[N64_ZONE_SIZE] __attribute__((aligned(8)));
 
 byte* I_ZoneBase(int* size)
@@ -77,7 +76,7 @@ byte* I_ZoneBase(int* size)
 
 // ── Screen buffers (V_Init calls I_AllocLow once) ────────────────────────────
 // Software rasterizer: palette-index framebuffer in RDRAM.
-// RDP path (direct colour output) deferred to 20.5.
+// There is no RDP path (direct colour output).
 // 320×200×4 = 256,000 bytes; 8-byte aligned for MIPS lw/sw safety.
 static byte n64_screenbufs[N64_ALLOCLOW_SIZE] __attribute__((aligned(8)));
 
