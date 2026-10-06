@@ -16,12 +16,21 @@
 //                call never returned.  Called before callMain and at the
 //                title screen it must return 0, in a child process with a
 //                timeout; the control is a non-zero hash once a level runs.
+//   argv-at      an argv word starting with '@' (a PWAD the server names
+//                "@x", say).  FindResponseFile took it for a DOS response
+//                file: fopen "succeeded" without a filesystem, the read came
+//                back empty, a NUL went to address 0 through a NULL buffer,
+//                and argv was rebuilt from nothing, dropping -file and -warp.
+//                The PWAD (a room as E1M1) must load and the player stand at
+//                its start, and address 0, painted before callMain, must be
+//                as painted.
 //
 // usage: node tools/hostile-calls-test.mjs [--build-dir DIR]
 // Copyright (C) 2026, GPL-2.0-or-later.
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { bootEngine, loadWad } from './lib/engine.mjs';
+import { pwad, buildMap } from './lib/mapkit.mjs';
 import { buildDirArg } from './lib/util.mjs';
 import { check, summary } from './lib/report.mjs';
 
@@ -102,4 +111,35 @@ if (process.argv.includes('--state-hash-child')) {
           !live.error && live.hash !== 0, live.error ?? 'hash 0 in a level');
 }
 
-summary('the web layer\'s entry points refuse hostile arguments (2 cases + controls)');
+// ── argv-at ──────────────────────────────────────────────────────────────────
+{
+    const room = buildMap({
+        vertices: [[0, 0], [0, 512], [512, 512], [512, 0]],
+        sectors: [{ floor: 0, ceil: 128, floorpic: 'FLOOR4_8', ceilpic: 'CEIL3_5', light: 192 }],
+        sides: [0, 1, 2, 3].map(() => ({ sector: 0, mid: 'STARTAN3' })),
+        lines: [0, 1, 2, 3].map(i => ({ v1: i, v2: (i + 1) % 4, front: i })),
+        things: [{ x: 256, y: 128, angle: 90, type: 1 }],
+    });
+    let err = null;
+    const doom = await bootEngine(BUILD, [['doomu.wad', loadWad('doom.wad')],
+                                          ['room.wad', pwad([['E1M1', Buffer.alloc(0)], ...room])]],
+                                  { onDoomError: m => { err = m; } });
+    doom.HEAPU8.fill(0xa5, 0, 8);
+    let at = '';
+    try {
+        doom.callMain(['-file', 'room.wad', '-warp', '1', '1', '-skill', '3', '-nodraw', '@x']);
+        doom._web_set_singletics(1);
+        for (let f = 0; f < 5; f++) { doom._web_wipe_skip(); doom._web_frame(); }
+        const p = doom._malloc(24);
+        doom._web_demo_state(p);
+        at = `${doom.HEAP32[p / 4 + 1] >> 16},${doom.HEAP32[p / 4 + 2] >> 16}`;
+    } catch (e) {
+        at = err ? `I_Error: ${err}` : `trapped: ${why(e)}`;
+    }
+    const zero = Array.from(doom.HEAPU8.subarray(0, 8), b => b.toString(16)).join(' ');
+    check(`argv-at: -file and -warp survive an '@x' word, the player stands at the PWAD's start (${at})`,
+          at === '256,128', at);
+    check(`argv-at: address 0 is as painted before callMain (${zero})`, zero === 'a5 a5 a5 a5 a5 a5 a5 a5', zero);
+}
+
+summary('the web layer\'s entry points refuse hostile arguments (3 cases + controls)');
