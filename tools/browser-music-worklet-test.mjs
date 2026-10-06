@@ -28,49 +28,21 @@
 import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
 import { startServer } from './lib/server.mjs';
+import { check, summary, fatal } from './lib/report.mjs';
 
 const url = process.argv[2] ?? (await startServer()).url;
 const chrome = await launchChrome({ gpu: 'none' });
-const cleanup = code => { chrome.kill(); process.exit(code); };
 // ?perfmarks=1 installs window.__wd_perf, which is what (iv) reads.
 const tab = await chrome.tab(url + (url.includes('?') ? '&' : '?') + 'perfmarks=1');
 const { ev: evaluate } = tab;
 
-let pass = 0, fail = 0;
-const check = (name, ok, detail) => {
-    if (ok) { pass++; console.log(`  ok   ${name} — ${detail}`); }
-    else    { fail++; console.log(`  FAIL ${name} — ${detail}`); }
-};
+// the detail is part of the label: the value read is the evidence
+const checkWith = (name, ok, detail) => check(`${name} — ${detail}`, ok);
 
-for (let i = 0; i < 30; i++) {
-    if (await evaluate(`!!navigator.serviceWorker.controller`)) break;
-    if (i === 29) { console.error('FAIL: service worker did not take control within 15s'); cleanup(1); }
-    await sleep(500);
-}
+if (!await tab.waitForSW(15)) fatal('service worker did not take control within 15s');
 
 // Boot into single player.
-let booted = false, clicked = false;
-for (let i = 0; i < 60; i++) {
-    await sleep(500);
-    const s = await evaluate(`document.getElementById('status')?.textContent`);
-    if (s?.startsWith('engine error') || s?.startsWith('Error') || s?.startsWith('cannot')) {
-        console.error(`FAIL: ${s}`); cleanup(1);
-    }
-    if (!clicked) {
-        clicked = await evaluate(`(() => {
-            const sp = document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]');
-            if (!sp) return false;
-            sp.click();
-            const g = document.querySelector('#dmenu .row[data-label*="ULTIMATE"]');
-            if (!g) return false;
-            g.click();
-            return true;
-        })()`);
-        continue;
-    }
-    if (await tab.inGame()) { booted = true; break; }
-}
-if (!booted) { console.error('FAIL: never reached a running level — nothing was measured'); cleanup(1); }
+if (!await tab.bootSP(30).catch(e => fatal(e.message))) fatal('never reached a running level — nothing was measured');
 
 // A trusted key event: arm() only runs on a real user gesture.
 await sleep(1500);
@@ -78,29 +50,28 @@ await tab.key('w', 87);
 await sleep(3000);
 
 const armed = await evaluate(`window.doomAudio?.armed?.() ?? false`);
-if (!armed) { console.error('FAIL: the AudioContext never armed — nothing below would mean anything'); cleanup(1); }
+if (!armed) fatal('the AudioContext never armed — nothing below would mean anything');
 
 console.log('secure origin: the worklet owns the synth');
-check('sink is the worklet', (await evaluate(`window.doomAudio.sinkKind()`)) === 'worklet',
+checkWith('sink is the worklet', (await evaluate(`window.doomAudio.sinkKind()`)) === 'worklet',
       `sinkKind=${await evaluate(`window.doomAudio.sinkKind()`)}`);
 
 const live = await evaluate(`window.doomAudio.synthLive()`);
-check('the worklet instantiated build/synth.wasm', live === true, `synthLive=${live}`);
+checkWith('the worklet instantiated build/synth.wasm', live === true, `synthLive=${live}`);
 
 const stats = await evaluate(`window.doomAudio.musicStats()`, { awaitPromise: true });
-check('the worklet reports a ready synth with the sequencer armed',
+checkWith('the worklet reports a ready synth with the sequencer armed',
       !!stats && stats.ready === true && stats.playing === 1,
       stats ? JSON.stringify(stats) : 'no stats (the worklet did not answer)');
 
 const oplN = await evaluate(`window.__wd_perf?.opl?.length ?? -1`);
-check('the main thread rendered no music', oplN === 0,
+checkWith('the main thread rendered no music', oplN === 0,
       oplN < 0 ? 'no __wd_perf — the perfmarks flag did not reach main.js' : `__wd_perf.opl has ${oplN} sample(s)`);
 
 // And stays that way: a surviving pump would fill it within a second.
 await sleep(1500);
 const oplN2 = await evaluate(`window.__wd_perf?.opl?.length ?? -1`);
-check('and still none a second later (no pump is running)', oplN2 === 0, `__wd_perf.opl has ${oplN2} sample(s)`);
+checkWith('and still none a second later (no pump is running)', oplN2 === 0, `__wd_perf.opl has ${oplN2} sample(s)`);
 
-console.log(`\n${fail ? `FAIL — browser-music-worklet: ${fail} of ${pass + fail} assertions failed`
-                      : `PASS — browser-music-worklet: worklet synth live, main thread renders no music (${pass} assertions)`}`);
-cleanup(fail ? 1 : 0);
+summary('browser-music-worklet: worklet synth live, main thread renders no music');
+process.exit();
