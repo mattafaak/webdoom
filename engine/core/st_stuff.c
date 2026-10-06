@@ -1463,7 +1463,7 @@ void ST_Init (void)
 {
     veryfirsttime = 0;
     ST_loadData();
-    /* 14.2a column-major: screens[4] must use the same column stride (SCREENHEIGHT)
+    /* column-major: screens[4] must use the same column stride (SCREENHEIGHT)
        as screens[0..3] so V_CopyRect/V_DrawPatch addressing is consistent.
        Allocate SCREENWIDTH*SCREENHEIGHT; only the top ST_HEIGHT rows of each
        column are used for status-bar content. */

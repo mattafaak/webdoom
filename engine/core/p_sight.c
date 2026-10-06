@@ -33,7 +33,7 @@ rcsid[] = "$Id: p_sight.c,v 1.3 1997/01/28 22:08:28 b1 Exp $";
 // State.
 #include "r_state.h"
 
-// webdoom task 8.1: frozen-surface invariant asserts.
+// webdoom: frozen-surface invariant asserts.
 #ifdef WEBDOOM_INVARIANTS
 #include "doomassert.h"
 #endif

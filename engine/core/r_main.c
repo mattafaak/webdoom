@@ -42,7 +42,7 @@ static const char rcsid[] = "$Id: r_main.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 #include "r_sky.h"
 #include "perf.h"	// webdoom: per-stage timing
 
-// webdoom task 8.1: frozen-surface invariant asserts.
+// webdoom: frozen-surface invariant asserts.
 // doomassert.h declares doom_in_render_path (defined in m_random.c) which
 // P_Random checks to catch sim/render contamination.
 // Include inside the #ifdef to stay zero-cost when the flag is off.
@@ -855,7 +855,7 @@ boolean		smoothrender = true;
 fixed_t		fractic = FRACUNIT;
 
 #ifdef WEBDOOM_INVARIANTS
-// webdoom round 8 (T2): test-only fractic pin.  -1 = off.
+// webdoom: test-only fractic pin.  -1 = off.
 //
 // Frame interpolation cannot be exercised through -timedemo at all: that path
 // sets singletics, whose branch in D_DoomFrame never calls run_tic(), and

@@ -40,7 +40,7 @@ rcsid[] = "$Id: p_maputl.c,v 1.5 1997/02/03 22:45:11 b1 Exp $";
 // State.
 #include "r_state.h"
 
-// webdoom task 8.1: frozen-surface invariant asserts.
+// webdoom: frozen-surface invariant asserts.
 // Include inside the #ifdef to stay zero-cost when the flag is off.
 #ifdef WEBDOOM_INVARIANTS
 #include "doomassert.h"

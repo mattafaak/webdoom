@@ -66,7 +66,7 @@
 // See playsim.md §4.4 for the full audit.
 #define MAXSPECIALCROSS		64
 
-// webdoom task 8.1: frozen-surface compile-time invariant asserts.
+// webdoom: frozen-surface compile-time invariant asserts.
 // These _Static_assert checks verify that the constants that are "frozen"
 // per playsim.md §16 have not been accidentally changed.  They fire at
 // compile time (no runtime overhead) when WEBDOOM_INVARIANTS is defined.

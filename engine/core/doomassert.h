@@ -1,4 +1,4 @@
-// webdoom frozen-surface invariant asserts — task 8.1
+// webdoom frozen-surface invariant asserts
 //
 // Usage:
 //   In each instrumented TU, inside an #ifdef WEBDOOM_INVARIANTS block:
@@ -19,7 +19,7 @@
 // flag is off, neither this file nor <assert.h> is opened by the preprocessor,
 // preserving byte-for-byte binary identity with the unflagged build.
 //
-// Architectural rule (task 2.2 precedent): this header is included INSIDE the
+// Architectural rule: this header is included INSIDE the
 // #ifdef WEBDOOM_INVARIANTS block in each TU — never at file scope — so the
 // normal build sees zero additional preprocessor work.
 //

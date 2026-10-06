@@ -154,7 +154,7 @@ void HUlib_eraseTextLine(hu_textline_t* l)
 	viewwindowx && l->needsupdate)
     {
 	lh = SHORT(l->f[0]->height) + 1;
-	/* 14.2a column-major: R_VideoErase now takes (x, y, width, height).
+	/* column-major: R_VideoErase now takes (x, y, width, height).
 	   Each call erases a 1-row-tall horizontal strip from screens[1]. */
 	for (y=l->y ; y<l->y+lh ; y++)
 	{

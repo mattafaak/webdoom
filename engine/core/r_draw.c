@@ -97,7 +97,7 @@ byte*			dc_source;
 // Height (texels) of the source column buffer — set by the caller before
 // invoking R_DrawColumn/R_DrawColumnLow.  The column draw dispatches on this:
 //   power-of-2 heights (walls: 8/16/32/64/128) → fast & mask path + 4-wide
-//     unroll (task 2.2), where mask = (dc_texheight - 1).
+//     unroll, where mask = (dc_texheight - 1).
 //   non-power-of-2 heights (sprites — patch post lengths are almost never
 //     pow2) → prboom-style true modulo via heightmask = dc_texheight<<FRACBITS,
 //     normalising frac before the loop then subtracting on overshoot.
@@ -152,10 +152,9 @@ void R_DrawColumn (void)
     source   = dc_source;
     colormap = dc_colormap;
 
-    // webdoom task 3.1: use dc_texheight as the column mask / wrap guard.
-    // task hotfix (sprite clone-stamp regression from 3.1/3.2):
+    // webdoom: use dc_texheight as the column mask / wrap guard.
     //   For power-of-2 heights (walls: 8/16/32/64/128) the fast & mask path
-    //   is correct and kept — including task 2.2's 4-wide unroll.
+    //   is correct and kept, with its 4-wide unroll.
     //   For non-power-of-2 heights (sprites — patch post lengths are almost
     //   never pow2) we must use a TRUE modulo: frac % (dc_texheight<<FRACBITS).
     //   `frac & (length-1)` is NOT a modulo for non-pow2, causing the vertical
@@ -177,7 +176,7 @@ void R_DrawColumn (void)
         while (count-- >= 0)
         {
             *dest = colormap[source[frac >> FRACBITS]];
-            dest++;  /* 14.2a: column-major — next row is +1 byte (was +SCREENWIDTH) */
+            dest++;  /* column-major — next row is +1 byte (was +SCREENWIDTH) */
             if ((frac += fracstep) >= heightmask)
                 frac -= heightmask;
         }
@@ -185,8 +184,8 @@ void R_DrawColumn (void)
     else
     {
         // Power-of-2 fast path (walls — the bulk of pixels).
-        // webdoom task 2.2: unrolled 4-wide inner loop.
-        // 14.2a column-major: sequential pixel writes (dest[0..3]) replace
+        // webdoom: unrolled 4-wide inner loop.
+        // column-major: sequential pixel writes (dest[0..3]) replace
         // the stride-SCREENWIDTH writes; dest += 4 advances four rows.
         const unsigned mask = (unsigned)(dc_texheight - 1);
 
@@ -280,7 +279,7 @@ void R_DrawColumnLow (void)
     byte*		dest2;
     fixed_t		frac;
     fixed_t		fracstep;
-    int			screen_x; /* 14.2a/14.2b: local doubled-x; do NOT modify dc_x (global) */
+    int			screen_x; /* local doubled-x; do NOT modify dc_x (global) */
 
     count = dc_yh - dc_yl;
 
@@ -298,7 +297,7 @@ void R_DrawColumnLow (void)
 #endif
 
     // Blocky mode: double to screen x (0..SCREENWIDTH-1) via LOCAL var.
-    // 14.2b: do NOT modify the global dc_x — callers iterate dc_x in
+    // do NOT modify the global dc_x — callers iterate dc_x in
     // viewwidth coords (0..viewwidth-1); modifying dc_x here causes
     // exponential growth of the outer loop counter across iterations.
     screen_x = dc_x << 1;
@@ -309,7 +308,7 @@ void R_DrawColumnLow (void)
     fracstep = dc_iscale; 
     frac = dc_texturemid + (dc_yl-centery)*fracstep;
     
-    // hotfix: same pow2/non-pow2 dispatch as R_DrawColumn.
+    // Same pow2/non-pow2 dispatch as R_DrawColumn.
     if (dc_texheight & (dc_texheight - 1))
     {
         const fixed_t heightmask = dc_texheight << FRACBITS;
@@ -321,7 +320,7 @@ void R_DrawColumnLow (void)
         do
         {
             *dest2 = *dest = dc_colormap[dc_source[frac >> FRACBITS]];
-            dest++;   /* 14.2a column-major */
+            dest++;   /* column-major */
             dest2++;
             if ((frac += fracstep) >= heightmask)
                 frac -= heightmask;
@@ -334,7 +333,7 @@ void R_DrawColumnLow (void)
         {
             // Hack. Does not work corretly.
             *dest2 = *dest = dc_colormap[dc_source[(frac>>FRACBITS)&mask]];
-            dest++;   /* 14.2a column-major */
+            dest++;   /* column-major */
             dest2++;
             frac  += fracstep;
         } while (count--);
@@ -346,7 +345,7 @@ void R_DrawColumnLow (void)
 // Spectre/Invisibility.
 //
 #define FUZZTABLE		50
-/* 14.2a column-major: adjacent fuzz pixel is 1 byte away (next row in column) */
+/* column-major: adjacent fuzz pixel is 1 byte away (next row in column) */
 #define FUZZOFF	1
 
 
@@ -451,7 +450,7 @@ void R_DrawFuzzColumn (void)
 	if (++fuzzpos == FUZZTABLE)
 	    fuzzpos = 0;
 
-	dest++;  /* 14.2a column-major */
+	dest++;  /* column-major */
 
 	frac += fracstep;
     } while (count--);
@@ -522,7 +521,7 @@ void R_DrawTranslatedColumn (void)
     frac = dc_texturemid + (dc_yl-centery)*fracstep; 
 
     // Here we do an additional index re-mapping.
-    // hotfix: apply same non-pow2/pow2 wrap as R_DrawColumn so translated
+    // Apply the same non-pow2/pow2 wrap as R_DrawColumn so translated
     // player sprites don't clone-stamp and don't OOB-read.
     if (dc_texheight & (dc_texheight - 1))
     {
@@ -535,7 +534,7 @@ void R_DrawTranslatedColumn (void)
         do
         {
             *dest = dc_colormap[dc_translation[dc_source[frac >> FRACBITS]]];
-            dest++;  /* 14.2a column-major */
+            dest++;  /* column-major */
             if ((frac += fracstep) >= heightmask)
                 frac -= heightmask;
         } while (count--);
@@ -551,7 +550,7 @@ void R_DrawTranslatedColumn (void)
             // Thus the "green" ramp of the player 0 sprite
             //  is mapped to gray, red, black/indigo.
             *dest = dc_colormap[dc_translation[dc_source[(frac>>FRACBITS)&mask]]];
-            dest++;  /* 14.2a column-major */
+            dest++;  /* column-major */
             frac += fracstep;
         } while (count--);
     }
@@ -660,11 +659,11 @@ void R_DrawSpan (void)
     // Convert to total pixel count (original do-while ran count+1 times).
     count++;
 
-    // NC5: 4-wide loop unroll (20.2b).
+    // NC5: 4-wide loop unroll.
     // Four independent spot computations per iteration expose OOO parallelism
     // on the four ds_source[] loads.  xfrac/yfrac remain separate 32-bit
     // accumulators (scalar) — no packing, bit-identical to original scalar loop.
-    // Column-major framebuffer (14.2a): successive pixels in a span are
+    // Column-major framebuffer: successive pixels in a span are
     // +SCREENHEIGHT bytes apart.
     while (count >= 4)
     {
@@ -805,7 +804,7 @@ void R_DrawSpanLow (void)
     yfrac = ds_yfrac;
 
     // Blocky mode, need to multiply by 2.
-    // 14.2a bug-fix: compute count BEFORE the shift.
+    // Compute count BEFORE the shift.
     // After ds_x1 <<= 1 and ds_x2 <<= 1, both are doubled, so (ds_x2 - ds_x1)
     // would be 2× the original span width. Each loop iteration advances by
     // 2*SCREENHEIGHT (two adjacent columns), so count must be the ORIGINAL
@@ -821,7 +820,7 @@ void R_DrawSpanLow (void)
     {
 	spot = ((yfrac>>(16-6))&(63*64)) + ((xfrac>>16)&63);
 	// Lowres/blocky mode writes two adjacent columns.
-	// 14.2a column-major: adjacent columns are SCREENHEIGHT bytes apart.
+	// column-major: adjacent columns are SCREENHEIGHT bytes apart.
 	{
 	    byte v = ds_colormap[ds_source[spot]];
 	    *dest = v;
@@ -854,7 +853,7 @@ R_InitBuffer
     //  with border and/or status bar.
     viewwindowx = (SCREENWIDTH-width) >> 1;
 
-    // 14.2a column-major layout: screens[n][x*SCREENHEIGHT + y].
+    // column-major layout: screens[n][x*SCREENHEIGHT + y].
     // columnofs[x] = byte offset of column (viewwindowx+x) from screens[0] base.
     // ylookup[y]   = screens[0] + (viewwindowy+y), the row offset within any column.
     // pixel(x,y)   = ylookup[y] + columnofs[x]  (same formula, different values).
@@ -906,7 +905,7 @@ void R_FillBackScreen (void)
 	name = name1;
     
     src = W_CacheLumpName (name, PU_CACHE);
-    /* 14.2a column-major: fill screens[1] column by column.
+    /* column-major: fill screens[1] column by column.
        screens[1] pixel at (x,y) lives at screens[1] + x*SCREENHEIGHT + y.
        Flat tile is 64x64; src[((y&63)<<6)+(x&63)] gives the tile pixel. */
     for (x=0 ; x<SCREENWIDTH ; x++)
@@ -958,7 +957,7 @@ void R_FillBackScreen (void)
  
 
 //
-// Copy a screen buffer — column-major version (14.2a).
+// Copy a screen buffer — column-major version.
 // Copies rectangle (x, y, width, height) from screens[1] to screens[0].
 // In column-major storage the copy is one memcpy per column.
 //
@@ -1000,7 +999,7 @@ void R_DrawViewBorder (void)
     top  = ((SCREENHEIGHT-SBARHEIGHT)-viewheight)/2;
     side = (SCREENWIDTH-scaledviewwidth)/2;
 
-    // 14.2a column-major: express border as four explicit axis-aligned rects.
+    // column-major: express border as four explicit axis-aligned rects.
     // Top border: full width, rows [0, top)
     R_VideoErase (0, 0, SCREENWIDTH, top);
     // Bottom border: full width, rows [viewheight+top, viewheight+2*top)

@@ -33,7 +33,7 @@
 
 // Visplane related.
 // webdoom: MAXOPENINGS exported here so r_segs.c can guard writes.
-#define MAXOPENINGS	(SCREENWIDTH*64)	// vanilla; was *64; webdoom raised to *256, reverted 14.2f (peak 2527)
+#define MAXOPENINGS	(SCREENWIDTH*64)	// vanilla's value; measured peak 2,527 (13 demos)
 extern  short		openings[MAXOPENINGS];
 extern  short*		lastopening;
 

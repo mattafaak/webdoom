@@ -17,7 +17,7 @@
 #include "web.h"
 #include "perf.h" // webdoom: per-stage timing
 
-/* Vanilla globals for web_set_detail (14.2b). */
+/* Vanilla globals for web_set_detail. */
 extern int detailLevel;
 extern int screenblocks;
 
@@ -212,7 +212,7 @@ EMSCRIPTEN_KEEPALIVE void web_set_fractic (int v)
 #endif
 
 //
-// web_set_detail (14.2b): opt-in detail level for bare-metal/testing use.
+// web_set_detail: opt-in detail level for bare-metal/testing use.
 // Routes through the vanilla R_SetViewSize mechanism so R_ExecuteSetViewSize
 // rebuilds view tables with the new detailshift on the next D_DoomFrame.
 // detail=0 → high-detail (R_DrawColumn/R_DrawSpan, default).

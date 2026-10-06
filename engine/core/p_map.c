@@ -42,14 +42,14 @@ rcsid[] = "$Id: p_map.c,v 1.5 1997/02/03 22:45:11 b1 Exp $";
 // Data.
 #include "sounds.h"
 
-// webdoom task 6.2: numspechit peak tracker.
+// webdoom: numspechit peak tracker.
 // Included only when compiled with -DWEB_PERF_SPECHIT_STATS.
 // Zero-cost in the default build: the #ifdef branches are dead code.
 #ifdef WEB_PERF_SPECHIT_STATS
 #include "perf.h"
 #endif
 
-// webdoom task 8.1: frozen-surface invariant asserts.
+// webdoom: frozen-surface invariant asserts.
 // Include inside the #ifdef to stay zero-cost when the flag is off.
 #ifdef WEBDOOM_INVARIANTS
 #include "doomassert.h"
@@ -77,8 +77,8 @@ line_t*		ceilingline;
 
 // keep track of special lines as they are hit,
 // but don't process them until the move is proven valid
-// MAXSPECIALCROSS is now in p_local.h (task 3.1: C99 §6.2.7 fix — both
-// p_map.c and p_enemy.c must agree on the array extent).
+// MAXSPECIALCROSS is in p_local.h, so p_map.c and p_enemy.c agree on the
+// array extent (C99 §6.2.7).
 
 line_t*		spechit[MAXSPECIALCROSS];
 int		numspechit;

@@ -23,10 +23,10 @@
 
 static const char rcsid[] = "$Id: m_random.c,v 1.1 1997/02/03 22:45:11 b1 Exp $";
 
-// webdoom task 8.1: frozen-surface invariant asserts.
+// webdoom: frozen-surface invariant asserts.
 // Include doomassert.h INSIDE the #ifdef so the normal build sees zero
-// additional preprocessor work (task 2.2 precedent: includes go inside the
-// flag block, not at file scope).
+// additional preprocessor work: includes go inside the flag block, not at
+// file scope.
 #ifdef WEBDOOM_INVARIANTS
 #include "doomassert.h"
 #endif
@@ -61,7 +61,7 @@ unsigned char rndtable[256] = {
 int	rndindex = 0;
 int	prndindex = 0;
 
-// webdoom task 8.1: shadow variables for invariant asserts.
+// webdoom: shadow variables for invariant asserts.
 // Defined only when WEBDOOM_INVARIANTS is on; zero overhead otherwise.
 #ifdef WEBDOOM_INVARIANTS
 // doom_in_render_path: set to 1 by R_RenderPlayerView entry, 0 on exit.

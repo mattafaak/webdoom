@@ -271,7 +271,7 @@ void F_TextWrite (void)
     int		cy;
     
     // erase the entire screen to a tiled background
-    // 14.2a column-major: fill screens[0] column by column.
+    // column-major: fill screens[0] column by column.
     src = W_CacheLumpName ( finaleflat , PU_CACHE);
     for (x=0 ; x<SCREENWIDTH ; x++)
     {
@@ -611,7 +611,7 @@ F_DrawPatchCol
     int		count;
 	
     column = (column_t *)((byte *)patch + LONG(patch->columnofs[col]));
-    /* 14.2a column-major: start of column x = screens[0] + x*SCREENHEIGHT. */
+    /* column-major: start of column x = screens[0] + x*SCREENHEIGHT. */
     desttop = screens[0] + x * SCREENHEIGHT;
 
     // step through the posts in a column

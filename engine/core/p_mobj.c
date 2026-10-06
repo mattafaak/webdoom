@@ -758,7 +758,7 @@ void P_SpawnMapThing (mapthing_t* mthing)
     }
 	
     // check for players specially
-    // webdoom task 3.1: guard mthing->type >= 1 so type-0 things (present in
+    // webdoom: guard mthing->type >= 1 so type-0 things (present in
     // some Plutonia maps) do not cause playeringame[-1] OOB read via P_SpawnPlayer.
     // In vanilla builds the read lands in zero-initialised BSS and returns early;
     // ASan catches it as a global-buffer-overflow.  type-0 things are invalid and

@@ -35,7 +35,7 @@
 
 // Retrieve column data for span blitting.
 //
-// NC3 (round 11): the single-patch case -- the common one -- is inlined here
+// NC3: the single-patch case -- the common one -- is inlined here
 // so the per-column call in R_RenderSegLoop becomes three array loads and a
 // W_CacheLumpNum.  The multi-patch case stays out of line because
 // R_GenerateComposite is private to r_data.c.

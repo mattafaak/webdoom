@@ -155,12 +155,12 @@ R_RenderMaskedSegRange
     }
     dc_texturemid += curline->sidedef->rowoffset;
 
-    // webdoom (task 3.2, refs task 3.1): pin the column-height mask for
+    // webdoom: pin the column-height mask for
     //   masked mid-textures.  R_RenderMaskedSegRange is called from
     //   R_DrawMaskedSegments (r_things.c) long after R_RenderSegLoop has
     //   finished — dc_texheight is whatever the last wall or plane call left.
-    //   That stale value caused OOB reads for mid-textures shorter than 128 px.
-    //   texnum is already resolved via texturetranslation[] above (line ~120).
+    //   A stale value reads out of bounds for mid-textures shorter than 128
+    //   px.  texnum is already resolved via texturetranslation[] above.
     dc_texheight = textureheight[texnum] >> FRACBITS;
 
     if (fixedcolormap)
@@ -271,7 +271,7 @@ void R_RenderSegLoop (void)
 	{
 	    // calculate texture offset
 	    angle = (rw_centerangle + xtoviewangle[rw_x])>>ANGLETOFINESHIFT;
-	    // webdoom task 3.1: mask to finetangent's valid range [0, FINEANGLES/2-1].
+	    // webdoom: mask to finetangent's valid range [0, FINEANGLES/2-1].
 	    // When rw_centerangle + xtoviewangle reaches exactly 90 deg the raw index
 	    // equals FINEANGLES/2 (4096), one past the table; mask keeps it in bounds.
 	    angle &= (FINEANGLES/2 - 1);
@@ -296,7 +296,7 @@ void R_RenderSegLoop (void)
 	    dc_yh = yh;
 	    dc_texturemid = rw_midtexturemid;
 	    dc_source = R_GetColumn(midtexture,texturecolumn);
-	    // task 3.1: pin the column-height mask to the actual texture height
+	    // pin the column-height mask to the actual texture height
 	    // so R_DrawColumn never reads past the allocated composite buffer.
 	    dc_texheight = textureheight[midtexture] >> FRACBITS;
 	    colfunc ();

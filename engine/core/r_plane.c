@@ -55,7 +55,7 @@ rcsid[] = "$Id: r_plane.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 #define PERF_PLANE_PEAK()  ((void)0)
 #endif
 
-// webdoom task 14.2f: openings peak counter.
+// webdoom: openings peak counter.
 // Compile with -DWEB_PERF_OPENINGS_STATS to enable; zero overhead otherwise.
 // Guard lastopening != NULL: first frame lastopening is 0 (uninitialised global) — skip.
 #ifdef WEB_PERF_OPENINGS_STATS
@@ -81,12 +81,12 @@ planefunction_t		ceilingfunc;
 //
 
 // Here comes the obnoxious "visplane".
-#define MAXVISPLANES	128	// vanilla; was 128; webdoom raised to 1024, reverted 14.2d.
-				// Measured peak = 118 visplanes (plutonia-demo1, task 18.1 full 13-demo
-				// suite; task 2.3 tnt-demo2 partial gave 68). 128 = 1.08× margin —
-				// too thin for community WADs. 1024 cost 581 KiB BSS (896 × 664 B);
-				// vanilla's I_Error at MAXVISPLANES (r_plane.c:274) is the correct
-				// failure surface — fail loudly, not silently on OOB overrun.
+#define MAXVISPLANES	128	// vanilla's value.  The peak over the 13 demos is
+				// 118 (plutonia-demo1), a 1.08× margin, so busy
+				// community maps can reach it.  Raising it to 1024
+				// would cost 581 KiB of BSS (896 × 664 B).  Vanilla's
+				// I_Error in R_FindPlane is the failure surface: loud,
+				// never a silent overrun.
 visplane_t		visplanes[MAXVISPLANES];
 visplane_t*		lastvisplane;
 visplane_t*		floorplane;
@@ -223,10 +223,10 @@ void R_ClearPlanes (void)
     int		i;
     angle_t	angle;
 
-    // webdoom task 2.3: record peak visplane count from the just-completed
+    // webdoom: record peak visplane count from the just-completed
     // frame before the array is reset.  No-op in unflagged builds.
     PERF_PLANE_PEAK();
-    // webdoom task 14.2f: record peak openings usage from the just-completed
+    // webdoom: record peak openings usage from the just-completed
     // frame before lastopening is reset.  No-op in unflagged builds.
     PERF_OPENING_PEAK();
 
@@ -446,7 +446,7 @@ void R_DrawPlanes (void)
 	    //  by INVUL inverse mapping.
 	    dc_colormap = colormaps;
 	    dc_texturemid = skytexturemid;
-	    // task 3.1: pin the column-height mask to the sky texture height.
+	    // pin the column-height mask to the sky texture height.
 	    dc_texheight = textureheight[skytexture] >> FRACBITS;
 	    for (x=pl->minx ; x <= pl->maxx ; x++)
 	    {

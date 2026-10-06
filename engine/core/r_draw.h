@@ -65,7 +65,7 @@ void 	R_DrawFuzzColumnLow (void);
 void	R_DrawTranslatedColumn (void);
 void	R_DrawTranslatedColumnLow (void);
 
-// 14.2a column-major: R_VideoErase now takes (x,y,width,height) rect coords.
+// column-major: R_VideoErase now takes (x,y,width,height) rect coords.
 // Copies a rectangle from screens[1] (background) into screens[0].
 void
 R_VideoErase

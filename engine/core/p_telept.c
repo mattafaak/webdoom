@@ -39,7 +39,7 @@ rcsid[] = "$Id: p_telept.c,v 1.3 1997/01/28 22:08:29 b1 Exp $";
 // State.
 #include "r_state.h"
 
-// webdoom task 6.2: teleport counter for runtime-stat verification.
+// webdoom: teleport counter for runtime-stat verification.
 // Incremented only when compiled with -DWEB_PERF_TELEPORT_STATS.
 // Zero-cost in the default build: the #ifdef branch is dead code.
 #ifdef WEB_PERF_TELEPORT_STATS

@@ -40,7 +40,7 @@ rcsid[] = "$Id: v_video.c,v 1.5 1997/02/03 22:45:13 b1 Exp $";
 #include "v_video.h"
 
 
-// 14.2a column-major layout: screens[n] pixel (x,y) = screens[n][x*SCREENHEIGHT+y].
+// column-major layout: screens[n] pixel (x,y) = screens[n][x*SCREENHEIGHT+y].
 // All screens[0..4] share this stride for coherent V_CopyRect / V_DrawBlock usage.
 byte*				screens[5];
  
@@ -185,7 +185,7 @@ V_CopyRect
 #endif 
     V_MarkRect (destx, desty, width, height);
 
-    /* 14.2a column-major: each column is contiguous; copy column by column. */
+    /* column-major: each column is contiguous; copy column by column. */
     {
 	int cx;
 	for (cx = 0; cx < width; cx++)
@@ -238,7 +238,7 @@ V_DrawPatch
 	V_MarkRect (x, y, SHORT(patch->width), SHORT(patch->height)); 
 
     col = 0;
-    /* 14.2a column-major: desttop points to start of column x.
+    /* column-major: desttop points to start of column x.
        Moving to the next column = +SCREENHEIGHT bytes.
        Moving down one pixel within a column = +1 byte.
        DOOM patches are already stored column-by-column, so this
@@ -307,7 +307,7 @@ V_DrawPatchFlipped
 	V_MarkRect (x, y, SHORT(patch->width), SHORT(patch->height)); 
 
     col = 0;
-    /* 14.2a column-major (same as V_DrawPatch but columns read in reverse). */
+    /* column-major (same as V_DrawPatch but columns read in reverse). */
     desttop = screens[scrn] + x * SCREENHEIGHT + y;
 
     w = SHORT(patch->width);
@@ -431,7 +431,7 @@ V_DrawBlock
 
     V_MarkRect (x, y, width, height);
 
-    /* 14.2a column-major: the src block stays ROW-major (width pixels/row,
+    /* column-major: the src block stays ROW-major (width pixels/row,
        the classic V_DrawBlock/V_GetBlock pair contract) while screens[scrn]
        is column-major, so this transposes on the fly.  Do NOT pass raw
        I_ReadScreen output here — that is a column-major capture and would
@@ -476,7 +476,7 @@ V_GetBlock
     }
 #endif
 
-    /* 14.2a column-major: screens[scrn] column-major → dest row-major. */
+    /* column-major: screens[scrn] column-major → dest row-major. */
     {
 	int cx, ry;
 	for (cx = 0; cx < width; cx++)

@@ -36,7 +36,7 @@ rcsid[] = "$Id: m_misc.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 #include <ctype.h>
 
 
-#include <stdint.h>   // task 3.1: intptr_t for 64-bit-safe default_t
+#include <stdint.h>   // intptr_t for 64-bit-safe default_t
 
 #include "doomdef.h"
 
@@ -212,7 +212,7 @@ typedef struct
 {
     char*	name;
     int*	location;
-    // task 3.1: intptr_t so string-pointer defaults (chatmacros, sndserver)
+    // intptr_t so string-pointer defaults (chatmacros, sndserver)
     // compile and round-trip correctly on 64-bit native builds.
     // On 32-bit WASM intptr_t == int, so the struct layout and all casts are
     // identical to the original — zero impact on the wasm build.
@@ -276,7 +276,7 @@ default_t	defaults[] =
 
     {"usegamma",&usegamma, 0},
 
-    // task 3.1: cast to intptr_t (not int) so these compile on 64-bit native
+    // cast to intptr_t (not int) so these compile on 64-bit native
     // without truncating the pointer.  On 32-bit WASM intptr_t==int, identical.
     {"chatmacro0", (int *) &chat_macros[0], (intptr_t) HUSTR_CHATMACRO0 },
     {"chatmacro1", (int *) &chat_macros[1], (intptr_t) HUSTR_CHATMACRO1 },
@@ -346,7 +346,7 @@ void M_LoadDefaults (void)
     numdefaults = sizeof(defaults)/sizeof(defaults[0]);
     for (i=0 ; i<numdefaults ; i++)
     {
-	// task 3.1: string defaults store a pointer in defaultvalue (intptr_t).
+	// string defaults store a pointer in defaultvalue (intptr_t).
 	// On 64-bit native the location field points to a char* (8 bytes), so
 	// we must write the full pointer width.  The range check mirrors the one
 	// in M_SaveDefaults: values outside [-0xfff, 0xfff] are string pointers.
@@ -396,7 +396,7 @@ void M_LoadDefaults (void)
 		    if (!isstring)
 			*defaults[i].location = parm;
 		    else
-			// task 3.1: char** cast writes full pointer on 64-bit
+			// char** cast writes full pointer on 64-bit
 			*(char **) defaults[i].location = newstring;
 		    break;
 		}
@@ -513,7 +513,7 @@ void M_ScreenShot (void)
     char	lbmname[12];
 
     // munge planar buffer to linear
-    /* 14.2a: screens[0] is column-major but WritePCXfile packs rows
+    /* screens[0] is column-major but WritePCXfile packs rows
        (bytes_per_line = SCREENWIDTH), so untranspose here — a raw
        I_ReadScreen copy would produce a spatially transposed PCX. */
     linear = screens[2];

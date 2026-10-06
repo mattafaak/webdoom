@@ -53,7 +53,7 @@ wipe_shittyColMajorXform
   int		width,
   int		height )
 {
-    /* 14.2a: screens[] are column-major (pixel(x,y) = base[x*height+y]),
+    /* screens[] are column-major (pixel(x,y) = base[x*height+y]),
        so the input is no longer row-major shorts.  Rebuild the short-
        column-major layout doMelt expects — dest[i*height+y] = the pixel
        pair (2i,y),(2i+1,y) — by packing the two byte columns explicitly.
@@ -207,7 +207,7 @@ wipe_doMelt
 		dy = (y[i] < 16) ? y[i]+1 : 8;
 		if (y[i]+dy >= height) dy = height - y[i];
 		s = &((short *)wipe_scr_end)[i*height+y[i]];
-		/* 14.2a column-major wipe_scr: short-column i row r is the
+		/* column-major wipe_scr: short-column i row r is the
 		   byte pair (2i,r),(2i+1,r) = wipe_scr[(2i)*height+r] and
 		   wipe_scr[(2i+1)*height+r].  Unpack lo/hi explicitly to
 		   match the explicit pack in wipe_shittyColMajorXform. */
@@ -269,7 +269,7 @@ wipe_EndScreen
 {
     wipe_scr_end = screens[3];
     I_ReadScreen(wipe_scr_end);
-    /* 14.2a: wipe_scr_start is a raw copy of column-major screens[0]
+    /* wipe_scr_start is a raw copy of column-major screens[0]
        (I_ReadScreen), so restoring it is a raw copy back — V_DrawBlock
        now expects a row-major source block and would transpose it. */
     memcpy(screens[0], wipe_scr_start, width*height); // restore start scr.

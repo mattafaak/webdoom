@@ -25,7 +25,7 @@
 #include "i_system.h"
 #include "doomdef.h"
 
-// task 13.2b: render-ON zone HWM + purge-pressure counters.
+// render-ON zone HWM + purge-pressure counters.
 // All variables and tracking code are compiled only when -DWEB_PERF_ZONE_STATS
 // is set; the default build is byte-identical to shipping.
 // Declared extern in engine/web/perf.h and tools/freestanding/perf.h so that
@@ -125,7 +125,7 @@ void Z_Free (void* ptr)
 	*block->user = 0;
     }
 
-    // task 13.2b: update live-byte counters before clearing the tag.
+    // update live-byte counters before clearing the tag.
 #ifdef WEB_PERF_ZONE_STATS
     if (block->user) {
         if (block->tag >= PU_PURGELEVEL)
@@ -231,7 +231,7 @@ Z_Malloc
 
 		// the rover can be the base block
 		base = base->prev;
-		// task 13.2b: count purge events (PU_CACHE evictions by Z_Malloc).
+		// count purge events (PU_CACHE evictions by Z_Malloc).
 		// Capture size before Z_Free; Z_Free will decrement live_p.
 #ifdef WEB_PERF_ZONE_STATS
 		web_perf_zone_purge_count++;
@@ -283,7 +283,7 @@ Z_Malloc
     }
     base->tag = tag;
 
-    // task 13.2b: update live-byte counters and HWMs after allocation.
+    // update live-byte counters and HWMs after allocation.
 #ifdef WEB_PERF_ZONE_STATS
     {
 	long total;
@@ -391,7 +391,7 @@ Z_ChangeTag2
     if (tag >= PU_PURGELEVEL && (unsigned)block->user < 0x100)
 	I_Error ("Z_ChangeTag: an owner is required for purgable blocks");
 
-    // task 13.2b: keep np/p live split accurate when a block changes category.
+    // keep np/p live split accurate when a block changes category.
 #ifdef WEB_PERF_ZONE_STATS
     if (block->user) {
 	int was_p  = (block->tag >= PU_PURGELEVEL);

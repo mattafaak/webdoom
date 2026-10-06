@@ -383,15 +383,12 @@ void R_DrawMaskedColumn (column_t* column)
 	    dc_texturemid = basetexturemid - (column->topdelta<<FRACBITS);
 	    // dc_source = (byte *)column + 3 - column->topdelta;
 
-	    // webdoom (task 3.2 refs 3.1, corrected by hotfix): pin dc_texheight
-	    //   to the actual post length so R_DrawColumn uses the right wrap.
-	    //   The |1 guard was needed to avoid mask=-1 in the old `& mask` path
-	    //   when length happened to be a power of 2 minus 1 (or 0 — impossible
-	    //   for valid posts, but defensive).  With the new pow2/non-pow2
-	    //   dispatch in R_DrawColumn* the `& mask` path is only taken for
-	    //   power-of-2 heights (walls); sprites go through the true-modulo path
-	    //   which uses heightmask = length<<FRACBITS, so length=0 is guarded by
-	    //   the dc_yl<=dc_yh early-exit above (no pixels to draw).  Drop |1.
+	    // webdoom: pin dc_texheight to the actual post length so
+	    //   R_DrawColumn uses the right wrap.  R_DrawColumn* takes the
+	    //   `& mask` path only for power-of-2 heights (walls); a sprite post
+	    //   goes through the true-modulo path, whose heightmask is
+	    //   length<<FRACBITS, and a length of 0 never gets there: the
+	    //   dc_yl <= dc_yh early exit has no pixels to draw.
 	    dc_texheight = column->length;
 
 	    // Drawn by either R_DrawColumn

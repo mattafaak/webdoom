@@ -264,8 +264,8 @@ boolean P_CheckMissileRange (mobj_t* actor)
 fixed_t	xspeed[8] = {FRACUNIT,47000,0,-47000,-FRACUNIT,-47000,0,47000};
 fixed_t yspeed[8] = {0,47000,FRACUNIT,47000,0,-47000,-FRACUNIT,-47000};
 
-// MAXSPECIALCROSS now in p_local.h (task 3.1: C99 §6.2.7 fix — array extent
-// must match the definition in p_map.c; p_local.h is the single source).
+// MAXSPECIALCROSS is in p_local.h, the single source, so this extent matches
+// the definition in p_map.c (C99 §6.2.7).
 
 extern	line_t*	spechit[MAXSPECIALCROSS];
 extern	int	numspechit;
