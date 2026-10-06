@@ -285,12 +285,13 @@ export function createInput(doom, canvas, settings) {
 
     // --- gamepad ------------------------------------------------------------
     let padPrev = 0;
-    // getGamepads() allocates a fresh array every call, and every browser
-    // announces a pad (on connect, or on its first button press) before it
-    // reports one -- so until then the poll is not made at all (round 10).
-    // Reset edge-detection state when the gamepad is disconnected so that
-    // held buttons re-trigger correctly on reconnect.
-    let padSeen = false;
+    // getGamepads() allocates a fresh array every call, so it is not polled
+    // until a pad has been announced.  A browser announces one once per PAGE
+    // (on connect, or its first button press), which may have been on the
+    // launcher or in an earlier game, before this listener existed -- so a
+    // pad already present counts as announced.  Edge state resets on a
+    // disconnect so held buttons re-trigger on reconnect.
+    let padSeen = (navigator.getGamepads?.() ?? []).some(Boolean);
     on(window, 'gamepadconnected', () => { padSeen = true; });
     on(window, 'gamepaddisconnected', () => { padPrev = 0; padSeen = false; });
     // Which buttons are edge-triggered, by mode.  LB/RB used to appear in both

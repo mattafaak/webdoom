@@ -38,8 +38,7 @@ const cleanup = code => { chrome.kill(); process.exit(code); };
 const tab = await chrome.tab('about:blank');
 const { cdp, ev } = tab;
 
-// The pad has to exist before input.js runs: it reads navigator.getGamepads
-// only after a gamepadconnected event, and installs that listener at boot.
+// The pad has to exist before the page's scripts run.
 await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
     window.__pad = { id: 'synthetic', index: 0, connected: true, mapping: 'standard',
                      axes: [0, 0, 0, 0],
@@ -59,6 +58,11 @@ for (let i = 0; i < 30; i++) {
     if (i === 29) { console.error('FAIL: service worker did not take control within 15s'); cleanup(1); }
     await sleep(500);
 }
+
+// The pad announces itself on the launcher, before any game exists -- the way
+// a player pressing a button to navigate the menu does.  Browsers announce a
+// pad once per page, so the game that boots afterwards must not wait for it.
+await ev(`window.dispatchEvent(new Event('gamepadconnected'))`);
 
 // Into a level: a bind is not consulted in UI mode, and neither is a stick.
 let booted = false, clicked = false;
@@ -99,9 +103,6 @@ const wrapped = await ev(`(() => {
 })()`);
 if (wrapped !== 'wrapped') { console.error(`FAIL: could not wrap the engine gamepad path (${wrapped})`); cleanup(1); }
 
-// The pad must announce itself: input.js does not poll until it has.
-await ev(`window.dispatchEvent(new Event('gamepadconnected'))`);
-
 // Drive one axis at a time and read the last call the engine received.
 const push = async (axes, ms = 700) => {
     await ev(`(() => { window.__pad.axes = ${JSON.stringify(axes)}; window.__pad_calls = []; })()`);
@@ -135,6 +136,11 @@ await ev(`(() => { window.__pad.axes = [0, -1, 0, 0]; window.dispatchEvent(new E
 await sleep(700);
 const after = await ev(`window.__pad_calls.length`);
 check('after gamepaddisconnected the pad is not read', after === 0, `${after} call(s) after the disconnect`);
+
+// and a pad that connects while the game runs is read from then on
+await ev(`window.dispatchEvent(new Event('gamepadconnected'))`);
+const back = await push([0, -1, 0, 0]);
+check('a pad connected during the game is read', !!back && back.fwd < -50, back ? JSON.stringify(back) : 'no call');
 
 console.log(`\n${fail ? `FAIL — browser-gamepad: ${fail} of ${pass + fail} assertions failed`
                       : `PASS — browser-gamepad: the analog path reaches the engine (${pass} assertions; `
