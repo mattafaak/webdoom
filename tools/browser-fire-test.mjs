@@ -14,26 +14,19 @@ import { join }          from 'node:path';
 import { launchChrome }  from './lib/cdp.mjs';
 import { sleep }         from './lib/util.mjs';
 import { startServer } from './lib/server.mjs';
+import { check, summary, fatal } from './lib/report.mjs';
 
 const url    = process.argv[2] ?? (await startServer()).url;
 const outdir = process.argv[3] ?? '/tmp';
 const chrome = await launchChrome();
-const cleanup = code => { chrome.kill(); process.exit(code); };
-const fail    = msg  => { console.error(`FAIL: ${msg}`); cleanup(1); };
 const tab = await chrome.tab(url);
 const { cdp, ev: evaluate } = tab;
 
 // ── (a) Wait for the landing screen to be ready, then check fire canvas ──────
-let ready = false;
-for (let i = 0; i < 30; i++) {
-    await sleep(300);
-    ready = await evaluate(`!!document.querySelector('#dmenu .row')`);
-    if (ready) break;
-}
-if (!ready) fail('landing menu did not appear within 9 s');
+if (!await tab.waitFor(() => evaluate(`!!document.querySelector('#dmenu .row')`), { timeout: 9000, every: 300 }))
+    fatal('landing menu did not appear within 9 s');
 
 const fireExists = await evaluate(`!!document.getElementById('fire-bg')`);
-if (!fireExists) fail('#fire-bg canvas not found in the DOM');
 
 const fireBehindMenu = await evaluate(`(() => {
     const fire = document.getElementById('fire-bg');
@@ -46,9 +39,9 @@ const fireBehindMenu = await evaluate(`(() => {
     const pos = getComputedStyle(fire).position;
     return fz < 0 && pe === 'none' && pos === 'absolute';
 })()`);
-if (!fireBehindMenu) fail('#fire-bg is not strictly behind the menu (z-index / pointer-events / position check)');
-
-console.log('(a) PASS — #fire-bg exists, z-index < 0, pointer-events: none, position: absolute');
+check('(a) #fire-bg exists, z-index < 0, pointer-events: none, position: absolute', fireExists && fireBehindMenu,
+      fireExists ? '#fire-bg is not strictly behind the menu (z-index / pointer-events / position check)'
+                 : '#fire-bg canvas not found in the DOM');
 
 // ── (b) Animating: sample pixel data twice ~300 ms apart ─────────────────────
 const sample = () => evaluate(`(() => {
@@ -67,7 +60,7 @@ const s1 = await sample();
 await sleep(350);
 const s2 = await sample();
 
-if (s1 === null || s2 === null) fail('could not read fire canvas pixel data');
+if (s1 === null || s2 === null) fatal('could not read fire canvas pixel data');
 // The fire propagation changes pixel values each tick; sum of pixel values
 // should differ between samples (the bottom row itself is constant but the
 // rows above change — sample from mid-canvas for safer check).
@@ -86,35 +79,30 @@ const m1 = await sampleMid();
 await sleep(400);
 const m2 = await sampleMid();
 
-if (m1 === m2) {
-    // Pixel sums identical across ~400 ms — fire is not ticking.
-    // Only flag as failure if the fire is not a reduced-motion static frame.
-    const rm = await evaluate(`window.matchMedia('(prefers-reduced-motion: reduce)').matches`);
-    if (!rm) fail(`fire is not animating (mid-canvas sum ${m1} unchanged after 400 ms)`);
-    else console.log('(b) SKIP — prefers-reduced-motion: static frame is correct behaviour');
-} else {
-    console.log(`(b) PASS — fire animating (mid sums ${m1} → ${m2})`);
-}
+// Pixel sums identical across ~400 ms mean the fire is not ticking, which is
+// a failure unless this browser asked for reduced motion.
+if (m1 === m2 && await evaluate(`window.matchMedia('(prefers-reduced-motion: reduce)').matches`))
+    console.log('(b) SKIP — prefers-reduced-motion: static frame is correct behaviour');
+else
+    check(`(b) fire animating (mid sums ${m1} → ${m2})`, m1 !== m2,
+          `fire is not animating (mid-canvas sum ${m1} unchanged after 400 ms)`);
 
 // ── (d) Menu text present and SP button clickable ─────────────────────────────
 const spExists = await evaluate(
     `!!document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]')`);
-if (!spExists) fail('"SINGLE PLAYER" menu item not found');
+if (!spExists) fatal('"SINGLE PLAYER" menu item not found');
 
 // Clicking SP should push the game picker screen.
 await evaluate(`document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]').click()`);
 await sleep(200);
 const gamePickerVisible = await evaluate(
     `!!document.querySelector('#dmenu .row')`);
-if (!gamePickerVisible) fail('menu did not respond to SP click');
 
 // Navigate back to root (Escape).
-await cdp('Input.dispatchKeyEvent', { type: 'keyDown', code: 'Escape', key: 'Escape', windowsVirtualKeyCode: 27 });
-await sleep(100);
-await cdp('Input.dispatchKeyEvent', { type: 'keyUp', code: 'Escape', key: 'Escape', windowsVirtualKeyCode: 27 });
+await tab.esc();
 await sleep(200);
 
-console.log('(d) PASS — SP button present and clickable; menu navigation works');
+check('(d) SP button present and clickable; menu navigation works', gamePickerVisible, 'menu did not respond to SP click');
 
 // ── (f) Flare-peak contrast: menu text readable at peak flare ─────────────────
 // Trigger a full flare (peak=36, the brightest state) directly via the API,
@@ -128,7 +116,6 @@ await sleep(80);   // capture near peak — before any cooldown kicks in (hold i
 
 const menuRowsAtPeak = await evaluate(
     `document.querySelectorAll('#dmenu .row').length`);
-if (!menuRowsAtPeak) fail('menu rows absent at flare peak — text not visible during flare');
 
 // Opacity sanity: the fire canvas must retain opacity ≤ 0.45 (contract from 4.1
 // spec — no CSS opacity changes during flare; brightness comes from sim only).
@@ -136,14 +123,13 @@ const fireOpacity = await evaluate(`(() => {
     const c = document.getElementById('fire-bg');
     return c ? parseFloat(getComputedStyle(c).opacity) : null;
 })()`);
-if (fireOpacity !== null && fireOpacity > 0.46) {
-    fail(`fire opacity at peak is ${fireOpacity} — exceeds 0.45 contrast-safe ceiling`);
-}
-
 const { result: peakResult } = await cdp('Page.captureScreenshot', { format: 'png' });
 const peakShotPath = join(outdir, 'fire-flare-peak.png');
 writeFileSync(peakShotPath, Buffer.from(peakResult.data, 'base64'));
-console.log(`(f) PASS — menu has ${menuRowsAtPeak} rows at flare peak; opacity=${fireOpacity ?? 'n/a'}; screenshot: ${peakShotPath}`);
+check(`(f) menu has ${menuRowsAtPeak} rows at flare peak; opacity=${fireOpacity ?? 'n/a'}; screenshot: ${peakShotPath}`,
+      menuRowsAtPeak && !(fireOpacity !== null && fireOpacity > 0.46),
+      !menuRowsAtPeak ? 'menu rows absent at flare peak — text not visible during flare'
+                      : `fire opacity at peak is ${fireOpacity} — exceeds 0.45 contrast-safe ceiling`);
 
 // Let fire cool back to steady before remaining checks.
 await sleep(600);
@@ -166,7 +152,7 @@ if (tickMs === null) {
     console.log(`(e) fire tick cost on alder CI (200-tick avg): ${tickMs.toFixed(4)} ms`);
     const wboxEst = tickMs * 8;
     console.log(`    wbox estimate (×8 conservative ratio): ${wboxEst.toFixed(3)} ms  budget: < 1 ms`);
-    if (tickMs > 0.5) fail(`fire tick cost ${tickMs.toFixed(4)} ms exceeds 0.5 ms alder gross-regression guard`);
+    if (tickMs > 0.5) fatal(`fire tick cost ${tickMs.toFixed(4)} ms exceeds 0.5 ms alder gross-regression guard`);
     else            console.log(`    alder gross-regression guard 0.5 ms: PASS`);
 }
 
@@ -177,8 +163,8 @@ await sleep(50);
 const p1 = await sampleMid();
 await sleep(400);
 const p2 = await sampleMid();
-if (p1 !== p2) fail(`fire did not pause — pixels changed (${p1} → ${p2}) after pause()`);
-console.log('(c) PASS — fire pauses correctly (pixels static after pause())');
+check('(c) fire pauses correctly (pixels static after pause())', p1 === p2,
+      `fire did not pause — pixels changed (${p1} → ${p2}) after pause()`);
 
 // Resume for completeness.
 await evaluate(`window._fireBg?.resume()`);
@@ -205,22 +191,17 @@ console.log(`screenshot (steady state): ${shotPath}`);
 // broken".
 {
     const rmChrome = await launchChrome({ flags: ['--force-prefers-reduced-motion'] });
-    const rmFail = msg => { try { rmChrome.kill(); } catch { /* gone */ } fail(msg); };
     const tab2 = await rmChrome.tab(url);
     const ev2 = tab2.ev;
 
     // Wait for the launcher, the same way the first arm does.
-    let up = false;
-    for (let i = 0; i < 40 && !up; i++) {
-        await sleep(500);
-        up = await ev2(`!!document.getElementById('fire-bg')`);
-    }
-    if (!up) rmFail('(f) reduced-motion arm: #fire-bg never appeared — nothing was measured');
+    if (!await tab2.waitFor(() => ev2(`!!document.getElementById('fire-bg')`), { timeout: 20000, every: 500 }))
+        fatal('(f) reduced-motion arm: #fire-bg never appeared — nothing was measured');
 
     // The flag has to actually be in force, or everything below is the first
     // arm again with extra steps.
     const rm = await ev2(`window.matchMedia('(prefers-reduced-motion: reduce)').matches`);
-    if (rm !== true) rmFail('(f) --force-prefers-reduced-motion did not take: the query still reads false');
+    if (rm !== true) fatal('(f) --force-prefers-reduced-motion did not take: the query still reads false');
 
     const sample2 = () => ev2(`(() => {
         const c = document.getElementById('fire-bg');
@@ -235,18 +216,16 @@ console.log(`screenshot (steady state): ${shotPath}`);
     const r1 = await sample2();
     await sleep(600);
     const r2 = await sample2();
-    if (r1 === -1) rmFail('(f) reduced-motion arm: no 2d context on #fire-bg');
-    if (r1 !== r2)
-        rmFail(`(f) prefers-reduced-motion is set and the fire is STILL animating (${r1} → ${r2})`);
+    if (r1 === -1) fatal('(f) reduced-motion arm: no 2d context on #fire-bg');
     // And it must be a FRAME, not a blank canvas: "static" is also what an
     // empty canvas looks like.
-    if (r1 === 0)
-        rmFail('(f) reduced-motion frame is entirely black — that is not a static frame, it is no frame');
-    console.log(`(f) PASS — prefers-reduced-motion: static frame held across 600 ms (sum ${r1}, non-blank)`);
+    check(`(f) prefers-reduced-motion: static frame held across 600 ms (sum ${r1}, non-blank)`, r1 === r2 && r1 !== 0,
+          r1 !== r2 ? `prefers-reduced-motion is set and the fire is STILL animating (${r1} → ${r2})`
+                    : 'reduced-motion frame is entirely black — that is not a static frame, it is no frame');
     await tab2.close();
     rmChrome.kill();
 }
 
-console.log('PASS — all fire background assertions passed, including the '
-          + 'prefers-reduced-motion arm under --force-prefers-reduced-motion (closes spc-003)');
-cleanup(0);
+summary('the fire background, including the prefers-reduced-motion arm under '
+      + '--force-prefers-reduced-motion (closes spc-003)');
+process.exit();
