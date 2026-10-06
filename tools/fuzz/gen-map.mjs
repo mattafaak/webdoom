@@ -470,7 +470,7 @@ function assemblePwad(mutatedLumps) {
 export const GEOMETRY_KINDS = [
     'segs-vertex', 'segs-linedef', 'segs-side', 'segs-missing-side', 'segs-glass',
     'ssectors-firstseg', 'ssectors-numsegs', 'ssectors-none',
-    'nodes-child', 'nodes-subsector',
+    'nodes-child', 'nodes-subsector', 'nodes-cycle',
     'blockmap-dims', 'blockmap-offset', 'blockmap-line', 'blockmap-unterminated',
     'linedefs-vertex', 'linedefs-no-front',
     'reject-short',
@@ -536,6 +536,13 @@ export function genGeometryMap(seed) {
     case 'nodes-child': {
         const k = pick(n.nodes), j = pick(2), v = n.nodes + pick(0x8000 - n.nodes);
         m.NODES.writeUInt16LE(v, 28 * k + 24 + 2 * j); what = `node ${k} child ${j} = node ${v}`; break;
+    }
+    case 'nodes-cycle': {
+        // the root is every node's ancestor, so pointing a child at it loops:
+        // R_PointInSubsector spins, and R_RenderBSPNode and P_CrossBSPNode
+        // recurse until the stack runs out
+        const k = pick(n.nodes), j = pick(2);
+        m.NODES.writeUInt16LE(n.nodes - 1, 28 * k + 24 + 2 * j); what = `node ${k} child ${j} = the root, node ${n.nodes - 1}`; break;
     }
     case 'nodes-subsector': {
         const k = pick(n.nodes), j = pick(2), v = n.ss + pick(0x8000 - n.ss);

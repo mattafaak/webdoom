@@ -20,7 +20,7 @@
 //
 // Three runs: benign (--seeds-benign, default 75), adversarial
 // (--seeds-adversarial, default 30) and geometry (--seeds-geometry, default
-// 34: each of gen-map.mjs's GEOMETRY_KINDS twice).  A geometry map holds one
+// 36: each of gen-map.mjs's GEOMETRY_KINDS twice).  A geometry map holds one
 // impossible index in SEGS/SSECTORS/NODES/BLOCKMAP/LINEDEFS, which no engine
 // can load without reading out of bounds, so the only pass is a refusal by
 // the loader's own check (an I_Error from P_Load*/P_Check*) in BOTH engines;
@@ -49,7 +49,7 @@ import { bootEngine } from '../lib/engine.mjs';
 // ── args ──────────────────────────────────────────────────────────────────────
 let seedsBenign = 75;
 let seedsAdversarial = 30;
-let seedsGeometry = 34;
+let seedsGeometry = 36;
 let buildDir = 'build';
 let parallelism = Math.min(4, Math.max(1, Math.ceil(cpus().length / 4)));
 // --adversarial-gate: run adversarial seeds only, exit 0 iff ALL results are
@@ -408,12 +408,16 @@ async function runGeometrySeed(seed) {
     let nat = null, natErr = '';
     try { nat = await runNative(pwad, `${seed}-geo`); } catch (e) { natErr = e.message; }
     let wasm = null, wasmErr = '';
-    try { wasm = await runWasm(pwad); } catch (e) { wasmErr = e.message; }
+    // a map that hung natively would hang the wasm engine in this process too
+    if (!/timed out/.test(natErr)) {
+        try { wasm = await runWasm(pwad); } catch (e) { wasmErr = e.message; }
+    }
     const natIErr = /I_Error: ([^|\n]+)/.exec(natErr)?.[1]?.trim() ?? '';
     const wasmIErr = /wasm load\/play failed: (.*)$/s.exec(wasmErr)?.[1]?.trim() ?? '';
     const sanitizer = natErr && /AddressSanitizer|runtime error|UBSan/.test(natErr);
     let why = null;
     if (sanitizer) why = `sanitizer report: ${natErr.slice(0, 200)}`;
+    else if (/timed out/.test(natErr)) why = 'nat-doom hung (a loop the loader let through)';
     else if (expect === 'refuse') {
         if (!LOADER_CHECK.test(natIErr)) why = `nat-doom did not refuse it at load: ${natErr ? natErr.slice(0, 160) : `loaded, ${nat.tics} tics`}`;
         else if (!LOADER_CHECK.test(wasmIErr)) why = `wasm did not refuse it at load: ${wasmErr ? wasmErr.slice(0, 160) : `loaded, ${wasm.tics} tics`}`;

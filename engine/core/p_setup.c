@@ -337,6 +337,13 @@ void P_LoadNodes (int lump)
 		: no->children[j] >= numnodes)
 		I_Error ("P_LoadNodes: node %d has out-of-range child %d",
 			 i, no->children[j]);
+	    // webdoom: node builders write a node after its children, so a
+	    // child node always has a lower index (true of every map in the
+	    // library); a child at or above its parent can close a loop, which
+	    // R_PointInSubsector would spin in and the BSP walks recurse into
+	    if (!(no->children[j] & NF_SUBSECTOR) && no->children[j] >= i)
+		I_Error ("P_LoadNodes: node %d has child node %d at or above it",
+			 i, no->children[j]);
 	    for (k=0 ; k<4 ; k++)
 		no->bbox[j][k] = SHORT(mn->bbox[j][k])<<FRACBITS;
 	}
