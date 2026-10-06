@@ -1918,6 +1918,11 @@ void A_BrainSpit (mobj_t*	mo)
     if (gameskill <= sk_easy && (!easy))
 	return;
 		
+    // webdoom: a map with a boss shooter and no boss target; as in Chocolate
+    // Doom, since the modulo below divides by zero
+    if (numbraintargets == 0)
+	I_Error ("A_BrainSpit: numbraintargets was 0 (vanilla crashes here)");
+
     // shoot a cube at current target
     targ = braintargets[braintargeton];
     braintargeton = (braintargeton+1)%numbraintargets;
