@@ -643,6 +643,10 @@ fi
 
 # These start their own servers, so they need no shared one.
 leg browser-insecure browser "real insecure origin: IDB WAD cache + music fallback" -- node tools/browser-insecure-test.mjs
+# Every browser leg launches Chrome through tools/chrome-harness.mjs; this one
+# asserts a launch leaves nothing in the temp directory and sweeps only the
+# profiles no live leg can be using.
+leg chrome-harness  browser "a Chrome launch leaves no temp files; the sweep takes only stale profiles" -- node tools/chrome-harness-test.mjs
 # "Second load is instant": a regression gate against a baseline committed per
 # host -- a host without one SKIPs by name, as browser-pipeline does.
 leg load-budget     browser,loadbudget,build,wad,alone "warm load within this host's budget" -- node tools/load-budget-test.mjs

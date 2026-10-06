@@ -2,7 +2,7 @@
 // launchChrome() spawns, allocates a port, waits for /json/version; tab()
 // opens a page with the JSON-RPC demux and the helpers the legs share.
 import { spawn } from 'node:child_process';
-import { chromeBin, chromeProfileArg, reapOnExit } from '../chrome-harness.mjs';
+import { chromeBin, chromeProfile, reapOnExit } from '../chrome-harness.mjs';
 import { sleep, freePort } from './util.mjs';
 
 // Two GPU families exist: swiftshader (most legs) and none (the own-server
@@ -15,12 +15,14 @@ const GPU = {
 export async function launchChrome({ gpu = 'swiftshader', flags = [], port = null, windowSize = '1280,960', readyMs = 20000,
                                      headless = true } = {}) {
     port ??= process.env.CDP_PORT ? +process.env.CDP_PORT : await freePort();
+    const profile = chromeProfile();
+    // TMPDIR inside the profile: Chrome's singleton directory goes with it
     const proc = spawn(chromeBin(), [
-        ...(headless ? ['--headless=new'] : []), `--remote-debugging-port=${port}`, chromeProfileArg(),
+        ...(headless ? ['--headless=new'] : []), `--remote-debugging-port=${port}`, profile.arg,
         '--no-first-run', '--no-sandbox', ...GPU[gpu], `--window-size=${windowSize}`,
         '--autoplay-policy=no-user-gesture-required', ...flags, 'about:blank',
-    ], { stdio: 'ignore', detached: true });
-    const kill = reapOnExit(proc);
+    ], { stdio: 'ignore', detached: true, env: { ...process.env, TMPDIR: profile.dir } });
+    const kill = reapOnExit(proc, profile.dir);
     const deadline = Date.now() + readyMs;
     for (;;) {
         try { if ((await fetch(`http://127.0.0.1:${port}/json/version`)).ok) break; } catch { /* not yet */ }
