@@ -412,6 +412,18 @@ if [ "$LIST" = "1" ]; then
     exit 0
 fi
 
+# An --only id the registry does not declare would be silently skipped, and
+# the run would pass on the legs that were left.
+if [ "${#ONLY[@]}" -gt 0 ]; then
+    KNOWN_IDS=" $(list_legs "$0" | awk '{print $1}' | tr '\n' ' ') "
+    for o in "${ONLY[@]}"; do
+        case "$KNOWN_IDS" in
+            *" $o "*) ;;
+            *) echo "unknown leg for --only: $o (see --list)" >&2; exit 2 ;;
+        esac
+    done
+fi
+
 echo "webdoom suite — tier: $TIER${ONLY+ }${ONLY[*]-}"
 echo "logs: $LOGDIR"
 
@@ -699,6 +711,19 @@ fi
 if [ "$TOTAL" -eq 0 ]; then
     echo "  SUITE VACUOUS: 0 legs ran — check --only ids against --list"
     exit 1
+fi
+
+# A leg named with --only that this tier never reached (a full-tier leg under
+# --quick) did not run, so the run cannot pass on it.
+if [ "${#ONLY[@]}" -gt 0 ]; then
+    for o in "${ONLY[@]}"; do
+        reached=0
+        for id in "${ORDER[@]}"; do [ "$id" = "$o" ] && reached=1; done
+        if [ "$reached" = 0 ]; then
+            echo "  SUITE COVERAGE: --only $o was never reached in the $TIER tier"
+            exit 1
+        fi
+    done
 fi
 
 # ── coverage: does the total account for the whole registry? ─────────────────
