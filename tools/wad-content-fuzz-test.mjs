@@ -114,6 +114,49 @@ function musLump(score) {
     return Buffer.concat([h, score]);
 }
 
+// ── hostile TEXTURE1 heights ─────────────────────────────────────────────────
+// Every wall texture given one height.  R_DrawColumn masks with height-1 or,
+// for a height that is not a power of two, wraps by height<<16: 0 made the
+// mask all ones (reads far past the column), and -32768 (a raw 0x8000) made
+// heightmask INT_MIN, so `while (frac >= heightmask)` never ended -- the
+// renderer hung on the first wall.  R_InitTextures clamps both to 1, so each
+// must render exactly as a height of 1 does.  64 is the control: a legal
+// height must still change the frame, or the cases above see nothing.
+const TEX_HEIGHTS = { 'texheight-zero': 0, 'texheight-negative': -32768 };
+function textureHeights(h) {
+    const wad = readFileSync(join(root, 'wads/lib/doom.wad'));
+    const n = wad.readInt32LE(4), dir = wad.readInt32LE(8);
+    for (let i = 0; i < n; i++) {
+        const e = dir + 16 * i;
+        if (wad.toString('latin1', e + 8, e + 16).replace(/\0.*$/, '') !== 'TEXTURE1') continue;
+        const t = Buffer.from(wad.subarray(wad.readInt32LE(e), wad.readInt32LE(e) + wad.readInt32LE(e + 4)));
+        // maptexture_t: name[8], masked, width, height
+        for (let k = 0, count = t.readInt32LE(0); k < count; k++) t.writeInt16LE(h, t.readInt32LE(4 + 4 * k) + 14);
+        return pwad([['TEXTURE1', t]]);
+    }
+    throw new Error('no TEXTURE1 in doom.wad');
+}
+
+const texIdx = process.argv.indexOf('--texheight');
+if (texIdx >= 0) {
+    const h = Number(process.argv[texIdx + 1]);
+    const createDoom = (await import(join(root, buildDir, 'doom.js'))).default;
+    const doom = await createDoom({ noInitialRun: true, print() {}, printErr() {} });
+    for (const [n, bytes] of [['doomu.wad', readFileSync(join(root, 'wads/lib/doom.wad'))], ['tex.wad', textureHeights(h)]]) {
+        const p = doom._malloc(bytes.length);
+        doom.HEAPU8.set(bytes, p);
+        doom.ccall('web_register_file', 'null', ['string', 'number', 'number'], [n, p, bytes.length]);
+    }
+    doom.callMain(['-iwad', 'doomu.wad', '-file', 'tex.wad', '-warp', '1', '1', '-skill', '1']);
+    doom._web_set_singletics(1);
+    for (let i = 0; i < 12; i++) { doom._web_wipe_skip(); doom._web_frame(); }
+    const fb = doom._web_framebuffer();
+    let f = 0x811c9dc5;
+    for (const b of doom.HEAPU8.subarray(fb, fb + 320 * 200)) f = Math.imul(f ^ b, 0x01000193) >>> 0;
+    console.log(`CHILD-OK frame=${f}`);
+    process.exit(0);
+}
+
 // ── child: run one case ──────────────────────────────────────────────────────
 const caseIdx = process.argv.indexOf('--case');
 if (caseIdx >= 0) {
@@ -299,7 +342,31 @@ const CONFIG_CASES = ['gamma-clamped', 'gamma-control'];
     c ? passes++ : failures++;
 }
 
-const EXPECTED = Object.keys(CASES).length + SERVER_CASES.length + THUMB_CASES.length + CONFIG_CASES.length;
+// ── hostile texture heights, each in a child with a timeout (one hung) ──────
+{
+    const frameFor = h => {
+        const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--build-dir', buildDir, '--texheight', String(h)],
+                            { timeout: CASE_MS, encoding: 'utf8' });
+        if (r.error && r.error.code === 'ETIMEDOUT') return { why: `HUNG (no exit within ${CASE_MS / 1000}s)` };
+        const m = /CHILD-OK frame=(\d+)/.exec(r.stdout || '');
+        return m ? { frame: m[1] } : { why: `exit ${r.status}: ${(r.stderr || '').trim().split('\n').pop()?.slice(0, 90) ?? ''}` };
+    };
+    const one = frameFor(1);
+    for (const [name, h] of Object.entries(TEX_HEIGHTS)) {
+        const r = frameFor(h);
+        const ok = one.frame && r.frame === one.frame;
+        console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${name} - ${ok ? `height ${h} renders as height 1` : (r.why ?? one.why ?? `height ${h} renders differently from height 1`)}`);
+        ok ? passes++ : failures++;
+    }
+    const c = frameFor(64);
+    const live = one.frame && c.frame && c.frame !== one.frame;
+    console.log(`  ${live ? 'ok  ' : 'FAIL'} texheight CONTROL: a legal height still changes the frame - `
+        + `${live ? 'height 64 differs from height 1' : (c.why ?? 'height 64 == height 1, so the cases above see nothing')}`);
+    live ? passes++ : failures++;
+}
+
+const EXPECTED = Object.keys(CASES).length + SERVER_CASES.length + THUMB_CASES.length + CONFIG_CASES.length
+    + Object.keys(TEX_HEIGHTS).length + 1;
 console.log(`\n  ${passes} passed, ${failures} failed`);
 if (failures) { console.log(`FAIL wad-content-fuzz-test: ${failures} case(s)`); process.exit(1); }
 if (passes !== EXPECTED) { console.log(`FAIL wad-content-fuzz-test: ran ${passes} of ${EXPECTED} cases`); process.exit(1); }

@@ -523,6 +523,11 @@ void R_InitTextures (void)
 			  PU_STATIC, 0);
 	    texture->width = read_le16(&mtexture->width);
 	    texture->height = read_le16(&mtexture->height);
+	    // webdoom: a height of 0, or one over 32767 read back negative,
+	    // makes R_DrawColumn's mask all ones or its wrap loop endless; a
+	    // legal texture is at least one pixel tall
+	    if (texture->height < 1)
+		texture->height = 1;
 	    texture->patchcount = pcount;
 	}
 
