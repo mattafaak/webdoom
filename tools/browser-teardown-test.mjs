@@ -41,8 +41,9 @@
 // Copyright (C) 2026, GPL-2.0-or-later.
 import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
+import { startServer } from './lib/server.mjs';
 const chrome = await launchChrome();
-const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
+const url = process.argv[2] ?? (await startServer()).url;
 const tab = await chrome.tab(url);
 const { cdp, ev } = tab;
 const done = c => { chrome.kill(); process.exit(c); };

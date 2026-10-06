@@ -21,8 +21,9 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
+import { startServer } from './lib/server.mjs';
 
-const srvUrl  = process.argv[2] ?? 'http://127.0.0.1:8666/';
+const srvUrl  = process.argv[2] ?? (await startServer()).url;
 const outdir  = process.argv[3] ?? '/tmp';
 const TARGET_TICKS = 50;   // 13 + 50*4 + 1 = 214 bytes — well below FRAGMENT_MAX=6000
 

@@ -20,8 +20,9 @@
 // Usage: node tools/browser-rafdeath-test.mjs [url]
 import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
+import { startServer } from './lib/server.mjs';
 
-const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
+const url = process.argv[2] ?? (await startServer()).url;
 // WHICH engine export to make throw.  This used to be hardcoded to
 // `_web_frame`, and `_web_frame` was the ONE statement inside the frame loop's
 // try -- so the gate proved the guarded line was guarded and said nothing

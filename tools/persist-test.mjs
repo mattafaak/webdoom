@@ -3,8 +3,9 @@
 // doom.onQuit() the sync interval must stop firing (no unhandled rejections).
 import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
+import { startServer } from './lib/server.mjs';
 const chrome = await launchChrome();
-const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
+const url = process.argv[2] ?? (await startServer()).url;
 const tab = await chrome.tab(url);
 const { cdp, ev, key } = tab;
 // every console line, exceptions marked, so the tail below can be filtered

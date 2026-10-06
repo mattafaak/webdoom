@@ -31,8 +31,9 @@
 // usage: node tools/browser-gamepad-test.mjs [url]
 import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
+import { startServer } from './lib/server.mjs';
 
-const url = process.argv[2] ?? 'http://127.0.0.1:8666/';
+const url = process.argv[2] ?? (await startServer()).url;
 const chrome = await launchChrome({ gpu: 'none' });
 const cleanup = code => { chrome.kill(); process.exit(code); };
 const tab = await chrome.tab('about:blank');

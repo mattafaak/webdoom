@@ -13,8 +13,9 @@ import { writeFileSync } from 'node:fs';
 import { join }          from 'node:path';
 import { launchChrome }  from './lib/cdp.mjs';
 import { sleep }         from './lib/util.mjs';
+import { startServer } from './lib/server.mjs';
 
-const url    = process.argv[2] ?? 'http://127.0.0.1:8666/';
+const url    = process.argv[2] ?? (await startServer()).url;
 const outdir = process.argv[3] ?? '/tmp';
 const chrome = await launchChrome();
 const cleanup = code => { chrome.kill(); process.exit(code); };
