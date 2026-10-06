@@ -130,6 +130,7 @@ export function createGame(log = console.log, servedWads = () => []) {
         const reply = m => ws.send(JSON.stringify(m));
         let slot = -1;          // lobby seat
         let reserved = -1;      // drop-in reservation
+        let reservedIn = null;  // ...and the session it was made in
 
         if (session) {
             reply(inProgress());
@@ -162,6 +163,7 @@ export function createGame(log = console.log, servedWads = () => []) {
                     ?? session.players.find(q => !q.ingame && !q.joining && !q.ws);
                 if (!p) { reply({ t: 'full', reason: 'game full' }); return; }
                 reserved = p.slot;
+                reservedIn = session;
                 p.joining = true;
                 p.reservedAt = Date.now();
                 const nm = cleanName(m.name);
@@ -221,7 +223,7 @@ export function createGame(log = console.log, servedWads = () => []) {
                 log(`lobby: ${COLORS[slot]} left`);
                 return;
             }
-            const p = reserved >= 0 && session?.players[reserved];
+            const p = reserved >= 0 && session === reservedIn && session.players[reserved];
             if (p && !p.ingame && !p.ws) { p.joining = false; p.reservedAt = 0; }
         });
     }
@@ -316,10 +318,11 @@ export function createGame(log = console.log, servedWads = () => []) {
             return;
         }
         if (!burstHistory(ws, 'spectate: observer')) return;
-        session.spectators.add(ws);
-        log(`spectate: observer connected (history ${session.historyLen} tics)`);
+        const me = session;
+        me.spectators.add(ws);
+        log(`spectate: observer connected (history ${me.historyLen} tics)`);
         ws.on('close', () => {
-            session?.spectators.delete(ws);
+            me.spectators.delete(ws);
             log('spectate: observer disconnected');
         });
     }
@@ -340,6 +343,13 @@ export function createGame(log = console.log, servedWads = () => []) {
         if (!Number.isInteger(slot) || slot < 0 || slot >= MAXPLAYERS) { refuse(ws, log); return; }
         const p = session?.players.find(p => p.slot === slot);
         if (!p || p.ws) { refuse(ws, log); return; }
+        // A socket speaks for its slot only while it holds it.  A timed-out
+        // joiner, or any socket of a session that has ended, can stay in
+        // CLOSING for up to ws's 30 s close timeout -- long enough for a new
+        // socket to bind the slot -- and its late frames and 'close' must not
+        // act on that binding or on a newer session.
+        const me = session;
+        const mine = () => session === me && p.ws === ws;
         p.ws = ws;
         p.joined = true;
         p.lastSeen = Date.now();
@@ -370,7 +380,7 @@ export function createGame(log = console.log, servedWads = () => []) {
 
         ws.on('message', buf => {
             if (!rateOk(ws)) return;
-            if (!session || buf.length !== 4 + CMD_SIZE) return;
+            if (!mine() || buf.length !== 4 + CMD_SIZE) return;
             const tic = buf.readUInt32LE(0);
             p.sentAny = true;
             // a joiner's first cmd means it caught up: promote it a short
@@ -395,7 +405,7 @@ export function createGame(log = console.log, servedWads = () => []) {
             seal();
         });
         ws.on('close', () => {
-            if (!session) return;
+            if (!mine()) return;
             p.ws = null;
             p.ingame = false;
             p.joining = false;
@@ -427,6 +437,7 @@ export function createGame(log = console.log, servedWads = () => []) {
             if (p.joining && !p.ingame && now - (p.reservedAt || now) > JOIN_TIMEOUT_MS) {
                 p.joining = false;
                 p.reservedAt = 0;
+                p.joinAt = 0;       // a drop-in this reservation scheduled goes with it
                 if (p.ws) { p.ws.close(); p.ws = null; }
                 log(`game: ${COLORS[p.slot]} join timed out — slot freed`);
             }
