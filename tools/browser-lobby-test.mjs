@@ -23,12 +23,6 @@ import { check, summary } from './lib/report.mjs';
 
 const url = process.argv[2] ?? (await startServer()).url;
 const chrome = await launchChrome();
-const openTab = () => chrome.tab(url);
-const cleanup = code => { chrome.kill(); process.exit(code); };
-
-// thin names over the tab helpers, so the cases read as they always did
-const clickItem = (tab, text, retries) => tab.click(text, retries);
-const pressEsc = tab => tab.esc();
 
 // Patch the page's WebSocket constructor to capture the lobby socket, so a
 // case can close it from outside or inject a server frame.
@@ -56,7 +50,7 @@ const forceCloseWS = tab => tab.ev(`if (window.__lobbyWS) window.__lobbyWS.close
 async function waitForCleanServer(secs = 20) {
     const deadline = Date.now() + secs * 1000;
     while (Date.now() < deadline) {
-        const tab = await openTab();
+        const tab = await chrome.tab(url);
         try {
             if (!await tab.waitForMenu(6)) { await tab.close(); await sleep(1000); continue; }
             await patchWS(tab);
@@ -92,12 +86,12 @@ async function runTest(name, fn) {
 // No server game session started.
 // ═══════════════════════════════════════════════════════════════════════════
 await runTest('lobby-menu-nav', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
         assert(await tab.waitForMenu(), 'root menu did not appear');
 
         // T01: LANDING → SP-PICK
-        assert(await clickItem(tab, 'SINGLE PLAYER'), 'SINGLE PLAYER not found');
+        assert(await tab.click('SINGLE PLAYER'), 'SINGLE PLAYER not found');
         await sleep(200);
         const inSpPick = await tab.ev(`!!document.querySelector('#dmenu .mtitle') || !!document.querySelector('#dmenu .row')`);
         assert(inSpPick, 'T01: SP-PICK screen did not appear');
@@ -105,7 +99,7 @@ await runTest('lobby-menu-nav', async () => {
         assert(noStart, 'T01: still showing root after SINGLE PLAYER click');
 
         // T02: SP-PICK → LANDING
-        await pressEsc(tab);
+        await tab.esc();
         await sleep(200);
         assert(
             await tab.ev(`!!document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]')`),
@@ -123,14 +117,14 @@ await runTest('lobby-menu-nav', async () => {
         await patchWS(tab);
         let inLobby = false;
         for (let attempt = 0; attempt < 3 && !inLobby; attempt++) {
-            assert(await clickItem(tab, 'MULTIPLAYER'), 'MULTIPLAYER not found');
+            assert(await tab.click('MULTIPLAYER'), 'MULTIPLAYER not found');
             for (let i = 0; i < 14; i++) {   // ~4.2s poll per attempt
                 if (await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`))
                     { inLobby = true; break; }
                 await sleep(300);
             }
             if (!inLobby) {   // re-attempt: return to root, drop the stale ws
-                await pressEsc(tab);
+                await tab.esc();
                 await sleep(400);
             }
         }
@@ -143,7 +137,7 @@ await runTest('lobby-menu-nav', async () => {
         for (const label of ['MODE:', 'SKILL:']) {
             const before = await rowLabel(label);
             assert(before, `${label} row not found`);
-            assert(await clickItem(tab, label), `${label} row not clickable`);
+            assert(await tab.click(label), `${label} row not clickable`);
             await sleep(200);
             const after = await rowLabel(label);
             assert(after && after !== before, `${label} did not step on click (${before} -> ${after})`);
@@ -153,19 +147,19 @@ await runTest('lobby-menu-nav', async () => {
 
         // T09/T10 × 3 pickers: open each picker, verify screen changed, ESC back
         for (const label of ['GAME:', 'MAP:', 'RULES']) {
-            assert(await clickItem(tab, label), `T09: ${label} row not found`);
+            assert(await tab.click(label), `T09: ${label} row not found`);
 
             await sleep(200);
             const notLobby = await tab.ev(`!document.querySelector('#dmenu .row[data-label*="START GAME"]')`);
             assert(notLobby, `T09: ${label} picker did not replace lobby screen`);
-            await pressEsc(tab);
+            await tab.esc();
             await sleep(200);
             const backLobby = await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`);
             assert(backLobby, `T10: ESC from ${label} picker did not return to MP-LOBBY`);
         }
 
         // T11: MP-LOBBY → LANDING (ESC triggers leaveLobby → root)
-        await pressEsc(tab);
+        await tab.esc();
         await sleep(400);
         const atRoot = await tab.ev(
             `!!document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]') &&
@@ -188,7 +182,7 @@ await runTest('lobby-menu-nav', async () => {
 // SP path only — no lobby server session.
 // ═══════════════════════════════════════════════════════════════════════════
 await runTest('sp-quit', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
         assert(await tab.waitForMenu(), 'root menu did not appear');
 
@@ -242,12 +236,12 @@ await runTest('sp-quit', async () => {
 // No START GAME → no server session started.
 // ═══════════════════════════════════════════════════════════════════════════
 await runTest('mp-lobby-ws-close', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
         assert(await tab.waitForMenu(), 'root menu did not appear');
         await patchWS(tab);
 
-        assert(await clickItem(tab, 'MULTIPLAYER'), 'MULTIPLAYER not found');
+        assert(await tab.click('MULTIPLAYER'), 'MULTIPLAYER not found');
         let inLobby = false;
         for (let i = 0; i < 20; i++) {
             if (await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`))
@@ -271,12 +265,12 @@ await runTest('mp-lobby-ws-close', async () => {
 
         // T24: reconnect, navigate into a picker, close ws there
         await patchWS(tab);
-        assert(await clickItem(tab, 'MULTIPLAYER'), 'T24: MULTIPLAYER not found on retry');
+        assert(await tab.click('MULTIPLAYER'), 'T24: MULTIPLAYER not found on retry');
         for (let i = 0; i < 20; i++) {
             if (await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`)) break;
             await sleep(300);
         }
-        assert(await clickItem(tab, 'GAME:'), 'T24: GAME row not found');
+        assert(await tab.click('GAME:'), 'T24: GAME row not found');
         await sleep(200);
         assert(
             await tab.ev(`!document.querySelector('#dmenu .row[data-label*="START GAME"]')`),
@@ -304,20 +298,20 @@ await runTest('mp-lobby-ws-close', async () => {
 // Closing tabA terminates its relay ws → server endSession immediately.
 // ═══════════════════════════════════════════════════════════════════════════
 await runTest('drop-in-offer-esc', async () => {
-    const tabA = await openTab();
-    const tabB = await openTab();
+    const tabA = await chrome.tab(url);
+    const tabB = await chrome.tab(url);
     try {
         assert(await tabA.waitForMenu(), 'A: menu did not appear');
         assert(await tabB.waitForMenu(), 'B: menu did not appear');
 
         // Tab A: connect to lobby and start a solo game
         await patchWS(tabA);
-        assert(await clickItem(tabA, 'MULTIPLAYER'), 'A: MULTIPLAYER not found');
+        assert(await tabA.click('MULTIPLAYER'), 'A: MULTIPLAYER not found');
         for (let i = 0; i < 20; i++) {
             if (await tabA.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`)) break;
             await sleep(300);
         }
-        assert(await clickItem(tabA, 'START GAME'), 'A: START GAME not found');
+        assert(await tabA.click('START GAME'), 'A: START GAME not found');
         let aInGame = false;
         for (let i = 0; i < 60; i++) {
             aInGame = await tabA.ev(
@@ -332,7 +326,7 @@ await runTest('drop-in-offer-esc', async () => {
 
         // T08: Tab B opens MULTIPLAYER → inprogress → DROP-IN-OFFER
         await patchWS(tabB);
-        assert(await clickItem(tabB, 'MULTIPLAYER'), 'B: MULTIPLAYER not found');
+        assert(await tabB.click('MULTIPLAYER'), 'B: MULTIPLAYER not found');
         let bHasOffer = false;
         for (let i = 0; i < 20; i++) {
             if (await tabB.ev(`!!document.querySelector('#dmenu .row[data-label*="DROP IN"]')`))
@@ -342,7 +336,7 @@ await runTest('drop-in-offer-esc', async () => {
         assert(bHasOffer, 'T08: B did not see DROP IN on GAME IN PROGRESS screen');
 
         // T12: ESC → LANDING
-        await pressEsc(tabB);
+        await tabB.esc();
         await sleep(400);
         assert(
             await tabB.ev(`!!document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]') &&
@@ -374,19 +368,19 @@ await runTest('drop-in-offer-ws-close', async () => {
     // Ensure previous session has fully ended
     await waitForCleanServer(12);
 
-    const tabA = await openTab();
-    const tabB = await openTab();
+    const tabA = await chrome.tab(url);
+    const tabB = await chrome.tab(url);
     try {
         assert(await tabA.waitForMenu(), 'A: menu did not appear');
         assert(await tabB.waitForMenu(), 'B: menu did not appear');
 
         await patchWS(tabA);
-        assert(await clickItem(tabA, 'MULTIPLAYER'), 'A: MULTIPLAYER not found');
+        assert(await tabA.click('MULTIPLAYER'), 'A: MULTIPLAYER not found');
         for (let i = 0; i < 20; i++) {
             if (await tabA.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`)) break;
             await sleep(300);
         }
-        assert(await clickItem(tabA, 'START GAME'), 'A: START GAME not found');
+        assert(await tabA.click('START GAME'), 'A: START GAME not found');
         let aInGame = false;
         for (let i = 0; i < 60; i++) {
             aInGame = await tabA.ev(
@@ -400,7 +394,7 @@ await runTest('drop-in-offer-ws-close', async () => {
         await sleep(1500);
 
         await patchWS(tabB);
-        assert(await clickItem(tabB, 'MULTIPLAYER'), 'B: MULTIPLAYER not found');
+        assert(await tabB.click('MULTIPLAYER'), 'B: MULTIPLAYER not found');
         let bHasOffer = false;
         for (let i = 0; i < 20; i++) {
             if (await tabB.ev(`!!document.querySelector('#dmenu .row[data-label*="DROP IN"]')`))
@@ -436,12 +430,12 @@ await runTest('drop-in-offer-ws-close', async () => {
 // ═══════════════════════════════════════════════════════════════════════════
 await waitForCleanServer(12);
 await runTest('mp-countdown-ws-close', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
         assert(await tab.waitForMenu(), 'root menu did not appear');
         await patchWS(tab);
 
-        assert(await clickItem(tab, 'MULTIPLAYER'), 'MULTIPLAYER not found');
+        assert(await tab.click('MULTIPLAYER'), 'MULTIPLAYER not found');
         let inLobby = false;
         for (let i = 0; i < 20; i++) {
             if (await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`))
@@ -451,7 +445,7 @@ await runTest('mp-countdown-ws-close', async () => {
         assert(inLobby, 'mp-countdown-ws-close: MP-LOBBY did not appear');
 
         // T13: click START GAME → server sends countdown messages → overlay visible
-        assert(await clickItem(tab, 'START GAME'), 'START GAME not found');
+        assert(await tab.click('START GAME'), 'START GAME not found');
         let cdVisible = false;
         for (let i = 0; i < 20; i++) {
             if (await tab.ev(`!document.getElementById('countdown')?.hidden`))
@@ -500,12 +494,12 @@ await runTest('mp-countdown-ws-close', async () => {
 // ═══════════════════════════════════════════════════════════════════════════
 await waitForCleanServer(16);
 await runTest('mp-countdown-esc', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
         assert(await tab.waitForMenu(), 'root menu did not appear');
         await patchWS(tab);
 
-        assert(await clickItem(tab, 'MULTIPLAYER'), 'MULTIPLAYER not found');
+        assert(await tab.click('MULTIPLAYER'), 'MULTIPLAYER not found');
         let inLobby = false;
         for (let i = 0; i < 20; i++) {
             if (await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`))
@@ -515,7 +509,7 @@ await runTest('mp-countdown-esc', async () => {
         assert(inLobby, 'mp-countdown-esc: MP-LOBBY did not appear');
 
         // T13 (prerequisite): START GAME → countdown overlay appears
-        assert(await clickItem(tab, 'START GAME'), 'START GAME not found');
+        assert(await tab.click('START GAME'), 'START GAME not found');
         let cdVisible = false;
         for (let i = 0; i < 20; i++) {
             if (await tab.ev(`!document.getElementById('countdown')?.hidden`))
@@ -525,7 +519,7 @@ await runTest('mp-countdown-esc', async () => {
         assert(cdVisible, 'T25 setup: countdown did not appear after START GAME');
 
         // T25 + Bug#1(ESC): press ESC → leaveLobby() → countdown.reset() must fire
-        await pressEsc(tab);
+        await tab.esc();
         await sleep(500);
 
         // countdown MUST be hidden
@@ -561,11 +555,11 @@ await runTest('mp-countdown-esc', async () => {
 // ═══════════════════════════════════════════════════════════════════════════
 await waitForCleanServer(16);
 await runTest('mp-lobby-full', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
         assert(await tab.waitForMenu(), 'root menu did not appear');
         await patchWS(tab);
-        assert(await clickItem(tab, 'MULTIPLAYER'), 'MULTIPLAYER not found');
+        assert(await tab.click('MULTIPLAYER'), 'MULTIPLAYER not found');
         let inLobby = false;
         for (let i = 0; i < 20; i++) {
             if (await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`))
@@ -588,7 +582,7 @@ await runTest('mp-lobby-full', async () => {
         assert(await tab.ev(`window.__lobbyWS.readyState >= 2`), 'T30: lobby socket left open after full');
 
         // and MULTIPLAYER works again, on a fresh socket
-        assert(await clickItem(tab, 'MULTIPLAYER'), 'T30: MULTIPLAYER not found after full');
+        assert(await tab.click('MULTIPLAYER'), 'T30: MULTIPLAYER not found after full');
         inLobby = false;
         for (let i = 0; i < 20; i++) {
             if (await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`))
@@ -597,7 +591,7 @@ await runTest('mp-lobby-full', async () => {
         }
         assert(inLobby, 'T30: MP-LOBBY did not reappear after full');
         assert(await tab.ev(`window.__lobbyWS.readyState === 1`), 'T30: no live lobby socket after re-entry');
-        await pressEsc(tab);
+        await tab.esc();
         await sleep(300);
         assert(tab.errors.length === 0, `exceptions: ${tab.errors.join('; ')}`);
     } finally {
@@ -616,13 +610,13 @@ await runTest('mp-lobby-full', async () => {
 // ═══════════════════════════════════════════════════════════════════════════
 await waitForCleanServer(16);
 await runTest('mp-launch-wad-fail', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
         assert(await tab.waitForMenu(), 'root menu did not appear');
         await tab.cdp('Network.enable', {});
         await patchWS(tab);
 
-        assert(await clickItem(tab, 'MULTIPLAYER'), 'MULTIPLAYER not found');
+        assert(await tab.click('MULTIPLAYER'), 'MULTIPLAYER not found');
         let inLobby = false;
         for (let i = 0; i < 20; i++) {
             if (await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`))
@@ -633,7 +627,7 @@ await runTest('mp-launch-wad-fail', async () => {
 
         // Block WAD fetches; click START → countdown → launch → bootDoom fails
         await tab.cdp('Network.setBlockedURLs', { urls: ['*/wads/*'] });
-        assert(await clickItem(tab, 'START GAME'), 'START GAME not found');
+        assert(await tab.click('START GAME'), 'START GAME not found');
 
         // Wait for error status after bootDoom rejects
         let statusText = '', landingVisible = false;
@@ -685,4 +679,4 @@ await runTest('mp-launch-wad-fail', async () => {
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('\n── lobby state-machine test results ────────────────────────');
 summary('lobby state-machine edges covered and clean');
-cleanup(process.exitCode ?? 0);
+process.exit();
