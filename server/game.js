@@ -286,6 +286,10 @@ export function createGame(log = console.log, servedWads = () => []) {
                 lastSeen: Date.now(),
                 ingame: lobby.has(slot),
                 joined: !lobby.has(slot),
+                joining: false,         // a drop-in holds this slot (reserved, or catching up)
+                reservedAt: 0,          // when that hold began; 0 = none
+                joinAt: 0,              // the tic the drop-in enters at; 0 = not scheduled
+                sentAny: false,         // this seat has sent at least one cmd
             })),
             tic: 0,                     // next tic to seal
             timer: null,
