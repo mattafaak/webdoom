@@ -1,6 +1,6 @@
 // webdoom demo store: in-memory content-addressed demo storage.
 //
-// Policy (stated explicitly per DoD):
+// Policy:
 //   PER_DEMO_CAP   1,048,576 bytes (1 MiB) — upload rejected with 413 above this
 //   TOTAL_QUOTA   134,217,728 bytes (128 MiB) — oldest demos evicted to make room
 //   TTL_MS        86,400,000 ms (24 hours) — demos expire and are GC'd at access
@@ -24,10 +24,10 @@ export const FRAGMENT_MAX  = 6_000;               // raw bytes; above this, use 
 
 // Every record costs more than its payload: a 64-character hex key, a Map
 // slot, a record object and a Buffer object, on the order of 200-250 bytes of
-// real RSS.  Charging only `bytes.length` meant a 1-byte demo was charged 1
-// byte, so the 128 MiB quota admitted ~134 million records -- tens of
-// gigabytes of heap -- and the process ran out of memory long before eviction
-// could ever trigger.  POST /api/demos has no auth and no rate limit, and each
+// real RSS.  Charging only `bytes.length` would charge a 1-byte demo 1 byte,
+// so the 128 MiB quota would admit ~134 million records -- tens of gigabytes
+// of heap -- and the process would run out of memory long before eviction
+// triggered.  POST /api/demos has no auth and no rate limit, and each
 // distinct body is a distinct sha256, so dedup does not help an attacker.
 //
 // 256 is deliberately above the measured overhead: the quota is a safety
@@ -113,11 +113,8 @@ export function getDemo(id) {
     return { bytes: rec.bytes, wad: rec.wad };
 }
 
-// Diagnostic: current store state.
-//
-// It reported nothing at all until task A3, which is how the attestation leak
-// described above stayed invisible.  A store with no readout is a store nobody
-// can prove is bounded.
+// Diagnostic: current store state.  A store with no readout is a store
+// nobody can prove is bounded.
 export function storeStats() {
     gcExpired();
     return {

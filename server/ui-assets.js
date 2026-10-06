@@ -3,7 +3,7 @@
 // Box art is NOT in it: /api/ui-assets names the games that have art and
 // /api/thumb/<file> serves each one lazily as an 80x60 index thumb with its
 // palette (5,568 bytes), so the payload carries no full TITLEPICs (seven of
-// them were 730 KB).
+// them would be 730 KB).
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -11,14 +11,12 @@ const FONT = [];
 for (let c = 33; c <= 95; c++) FONT.push(`STCFN${String(c).padStart(3, '0')}`);
 const WANTED = new Set(['PLAYPAL', 'M_SKULL1', 'M_SKULL2', 'M_DOOM', ...FONT]);
 
-// Cached forever, keyed on nothing.  An operator who drops a WAD into wads/lib
-// -- the documented way to add a game -- got the launcher's old box art until
-// the server was restarted, with no hint that a restart was what was missing.
-// serve.js:44-51 already keys wads/manifest.json on its mtime; this does the
-// same for every file this payload is actually built from.  Both the IWAD
-// candidates and the manifest's own entries are stamped, so a WAD REPLACED in
-// place (same name, new bytes) invalidates too -- a directory mtime alone would
-// not see that.
+// Cached, keyed on every file this payload is built from, as serve.js keys
+// wads/manifest.json on its mtime: a WAD dropped into wads/lib -- the
+// documented way to add a game -- shows up without a server restart.  Both the
+// IWAD candidates and the manifest's own entries are stamped, so a WAD
+// REPLACED in place (same name, new bytes) invalidates too -- a directory
+// mtime alone would not see that.
 let cached = null;          // { key, body }
 
 const SOURCES = ['doom.wad', 'doom2.wad', 'tnt.wad', 'plutonia.wad'];
@@ -77,8 +75,8 @@ export function uiAssets(wadDir, manifest) {
     const source = SOURCES.map(f => join(wadDir, f)).find(existsSync);
     if (!source) return null;
 
-    // The per-PWAD loop below has always been wrapped; the IWAD call was the
-    // one that was not, and it is the one whose failure kills the process.
+    // Wrapped like the per-PWAD loop below: this is the call whose uncaught
+    // failure would kill the process.
     const lumps = {};
     try {
         for (const [name, bytes] of Object.entries(lumpsOf(source, WANTED)))

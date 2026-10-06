@@ -31,7 +31,7 @@ const SEND_BACKLOG_CAP = envInt('WEBDOOM_SEND_BACKLOG', 4 * 1024 * 1024);
 // because drop-in and spectator catch-up replay it whole; a ring would hand
 // a joiner a prefix and desync it silently.  So it stops growing at the cap
 // and those two features refuse past it; live play continues.  It lives in
-// 1,024-tic slabs: one Buffer object per tic cost ~460 B of RSS
+// 1,024-tic slabs: one Buffer object per tic would cost ~460 B of RSS
 // each (28.8 MB for the 63,000-tic cap, measured after GC); the slabs hold
 // the same bundles in 8.1 MB, and a view is made only while one is sent.
 const MAX_HISTORY_TICS = envInt('WEBDOOM_MAX_HISTORY_TICS', 35 * 60 * 30);
@@ -405,13 +405,12 @@ export function createGame(log = console.log, servedWads = () => []) {
         // so it can re-simulate to the frontier; live bundles follow
         if (!p.ingame) {
             // Both refusals below happen AFTER `p.ws = ws` and BEFORE the
-            // 'close' handler that undoes it is registered, so each left the
-            // slot pointing at a terminated socket.  relayConnect's own
-            // `if (!p || p.ws) refuse` then rejected every legitimate
-            // reconnect.  The burst path recovers after JOIN_TIMEOUT_MS
-            // because it sets p.joining; the historyFull path does not set it,
-            // so that slot was locked for the rest of the session.  State
-            // written before its undo is armed -- release it by hand here.
+            // 'close' handler that undoes it is registered, so each releases
+            // the slot by hand.  Left pointing at a terminated socket, the
+            // slot would fail relayConnect's own `if (!p || p.ws) refuse` on
+            // every legitimate reconnect -- for the rest of the session on the
+            // historyFull path, which never sets p.joining and so never times
+            // out.
             const unbind = () => { p.ws = null; p.joined = false; };
             if (session.historyFull) {
                 unbind();
@@ -556,13 +555,12 @@ export function createGame(log = console.log, servedWads = () => []) {
             }
             // A FRESH buffer per tic, deliberately.  `ws` frames unmasked
             // server payloads without copying, and net.Socket.write queues a
-            // Buffer BY REFERENCE when the kernel buffer is full -- so one
-            // reused scratch meant a backlogged peer received whatever the
-            // NEXT tic wrote into it, not the tic that was queued: silent
-            // bundle corruption and a desync.  The slab path above is already
-            // per-tic for the same reason; this fallback reintroduced the
-            // aliasing the slab design exists to avoid.  38 bytes a tic on a
-            // session already past 30 minutes.
+            // Buffer BY REFERENCE when the kernel buffer is full -- so with one
+            // reused scratch a backlogged peer would receive whatever the NEXT
+            // tic wrote into it, not the tic that was queued: silent bundle
+            // corruption and a desync.  The slab path above is per-tic for the
+            // same reason.  38 bytes a tic on a session already past 30
+            // minutes.
             buf = Buffer.alloc(size);
         }
         buf.writeUInt32LE(tic, 0);
