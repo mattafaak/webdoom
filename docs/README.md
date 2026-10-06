@@ -31,7 +31,6 @@ section heading rather than at the top.
 | [engine-archaeology.md](engine-archaeology.md) | where every magic constant and table came from, each with a committed reproducer |
 | [magic-data.md](magic-data.md) | the published, readable version of the above — 16 figures, 14 gated through PUBLIC_HINTS |
 | [netcode.md](netcode.md) | the protocol SSOT: deterministic lockstep over a server tic relay |
-| [netcode-numbers.md](netcode-numbers.md) | the measured jitter/HOL figures behind the no-WebRTC verdict |
 | [state-machine.md](state-machine.md) | the JS lobby state machine, enumerated — the `state-machine` leg checks the code against this |
 
 ## Performance, and what was decided about it
