@@ -757,8 +757,11 @@ R_StoreWallRange
 	{
 	    // webdoom: sprtopclip is NULL; clear maskedtexture so the
 	    //   re-activation block below (lines ~770-778) does not re-set
-	    //   SIL_TOP and leave r_things.c with a NULL clip pointer.
+	    //   SIL_TOP and leave r_things.c with a NULL clip pointer, and
+	    //   drop the masked columns, which R_RenderMaskedSegRange clips
+	    //   against both arrays.
 	    maskedtexture = false;
+	    ds_p->maskedtexturecol = NULL;
 	    ds_p->silhouette &= ~SIL_TOP;
 	}
     }
@@ -776,8 +779,10 @@ R_StoreWallRange
 	else
 	{
 	    // webdoom: same as sprtopclip guard above — kill maskedtexture
-	    //   so the SIL_BOTTOM re-activation below cannot NULL-deref.
+	    //   so the SIL_BOTTOM re-activation below cannot NULL-deref, and
+	    //   drop the masked columns.
 	    maskedtexture = false;
+	    ds_p->maskedtexturecol = NULL;
 	    ds_p->silhouette &= ~SIL_BOTTOM;
 	}
     }

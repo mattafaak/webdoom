@@ -31,6 +31,16 @@
 //                    playerstarts[1] -- type 0, so playeringame[-1] and
 //                    players[-1].  It must end in P_SpawnPlayer's I_Error.
 //
+// And these render, natively under ASan/UBSan and in wasm, and pass only with
+// no sanitizer report and no trap:
+//
+//   masked-openings  thirty two-sided lines with a masked midtexture span the
+//                    view one behind another, so the openings run out part
+//                    way through one of them: its masked columns are
+//                    allocated, its sprite clips are not.  R_RenderMaskedSegRange
+//                    then clipped against a NULL array (UBSan: load of a null
+//                    pointer in R_DrawMaskedColumn).
+//
 // usage: node tools/fuzz/crafted-maps.mjs [--build-dir DIR]
 // Copyright (C) 2026, GPL-2.0-or-later.
 import { spawnSync } from 'node:child_process';
@@ -60,8 +70,8 @@ function map(sectors, draw, things) {
     // a wall from (x1,y1) to (x2,y2), its front on the right
     const wall = (x1, y1, x2, y2, sector, extra = {}) =>
         lines.push({ v1: v(x1, y1), v2: v(x2, y2), front: side(sector, STARTAN), flags: 1, ...extra });
-    const twoSided = (x1, y1, x2, y2, front, back, frontTex = {}, extra = {}) =>
-        lines.push({ v1: v(x1, y1), v2: v(x2, y2), front: side(front, frontTex), back: side(back), flags: 4, ...extra });
+    const twoSided = (x1, y1, x2, y2, front, back, frontTex = {}, backTex = {}, extra = {}) =>
+        lines.push({ v1: v(x1, y1), v2: v(x2, y2), front: side(front, frontTex), back: side(back, backTex), flags: 4, ...extra });
     draw({ wall, twoSided });
     return buildMap({ vertices, sectors, sides, lines, things });
 }
@@ -74,7 +84,7 @@ function map(sectors, draw, things) {
 function doorShot(candles) {
     const sectors = [ROOM, { ...ROOM, ceil: 0, tag: 1 }];
     const lumps = map(sectors, ({ wall, twoSided }) => {
-        twoSided(0, 300, 1024, 300, 0, 1, { top: 'STARTAN3' }, { special: 46, tag: 1 });
+        twoSided(0, 300, 1024, 300, 0, 1, { top: 'STARTAN3' }, {}, { special: 46, tag: 1 });
         twoSided(1024, 316, 0, 316, 0, 1, { top: 'STARTAN3' });
         wall(0, 0, 0, 300, 0); wall(1024, 300, 1024, 0, 0); wall(1024, 0, 0, 0, 0);
         wall(0, 300, 0, 316, 1); wall(1024, 316, 1024, 300, 1);
@@ -104,6 +114,17 @@ function dmNoStart() {
     return { lumps, tics: Array.from({ length: 35 }, () => [{}, {}]), demo: { deathmatch: 1, players: 2 } };
 }
 
+// ── more masked walls than openings ──────────────────────────────────────────
+function maskedOpenings() {
+    const lumps = map([ROOM], ({ wall, twoSided }) => {
+        // nearest first: one subsector draws in seg order
+        for (let k = 1; k <= 30; k++)
+            twoSided(-4096, 32 + 64 * k, 4096, 32 + 64 * k, 0, 0, { mid: 'MIDGRATE' }, { mid: 'MIDGRATE' });
+        wall(-4096, 0, -4096, 4096, 0); wall(-4096, 4096, 4096, 4096, 0); wall(4096, 4096, 4096, 0, 0); wall(4096, 0, -4096, 0, 0);
+    }, [{ x: 0, y: 16, angle: 90, type: 1 }]);
+    return { lumps, tics: idle(10) };
+}
+
 const lmp = c => pwad([['MAP01', Buffer.alloc(0)], ...c.lumps, ['DEMO', demoLump({ tics: c.tics, ...c.demo })]]);
 
 // Play a case natively under ASan/UBSan; returns { ierror } (the I_Error
@@ -128,17 +149,18 @@ function playNative(c, { draw = false } = {}) {
     }
 }
 
-// Play a case; returns { y } (player 0's y in map units) or { error }.
-async function play(c) {
+// Play a case; returns { y } (player 0's y in map units) and, drawn, the
+// last { frame }, or { error }.
+async function play(c, { draw = false } = {}) {
     const { tics } = c;
     const bytes = lmp(c);
     let err = null;
     const doom = await bootEngine(BUILD, [['doom2.wad', loadWad('doom2.wad')], ['crafted.wad', bytes]],
                                   { onDoomError: m => { err = m; } });
     try {
-        doom.callMain(['-file', 'crafted.wad', '-playdemo', 'DEMO', '-nodraw']);
+        doom.callMain(['-file', 'crafted.wad', '-playdemo', 'DEMO', ...(draw ? [] : ['-nodraw'])]);
         doom._web_set_singletics(1);
-        doom._web_set_nodraw(1);
+        if (!draw) doom._web_set_nodraw(1);
         for (let i = 0; i < tics.length - 2 && !err; i++) { doom._web_wipe_skip(); doom._web_frame(); }
     } catch (e) {
         if (!err) return { error: `trapped: ${String(e.message ?? e).split('\n')[0]}` };
@@ -146,7 +168,8 @@ async function play(c) {
     if (err) return { error: `I_Error: ${err}`, ierror: err };
     const p = doom._malloc(24);    // web_demo_state writes six ints
     doom._web_demo_state(p);
-    return { y: doom.HEAP32[p / 4 + 2] / 65536 };
+    const fb = doom._web_framebuffer();
+    return { y: doom.HEAP32[p / 4 + 2] / 65536, frame: draw ? Buffer.from(doom.HEAPU8.subarray(fb, fb + 320 * 200)) : null };
 }
 
 // VACUITY-EXEMPT R3: play() is the one bootEngine call site, and every case
@@ -169,10 +192,23 @@ async function refuses(name, c, expected) {
     check(`${name}: nat-doom stops with ${expected}, no sanitizer report (${Object.values(n)[0]})`,
           new RegExp(`^${expected}`).test(n.ierror ?? ''), n.sanitizer ?? n.crash ?? n.ierror ?? 'it ran on');
 }
+// Both engines must draw every frame: nat-doom with no sanitizer report,
+// wasm without trapping.
+async function renders(name, c) {
+    const w = await play(c, { draw: true });
+    check(`${name}: wasm draws ${c.tics.length - 2} frames`, !w.error, w.error);
+    const n = playNative(c, { draw: true });
+    check(`${name}: nat-doom draws the demo with no sanitizer report`, n.ran, n.sanitizer ?? n.crash ?? n.ierror);
+}
+const RENDERED = [
+    ['masked-openings', maskedOpenings],
+];
+for (const [name, build] of RENDERED) await renders(name, build());
+
 const REFUSED = [
     ['brain-no-targets', brainNoTargets, 'A_BrainSpit'],
     ['dm-no-start', dmNoStart, 'P_SpawnPlayer'],
 ];
 for (const [name, build, expected] of REFUSED) await refuses(name, build(), expected);
 
-summary(`crafted maps reach their limits through the real loader and a demo (${2 + REFUSED.length} cases)`);
+summary(`crafted maps reach their limits through the real loader and a demo (${2 + RENDERED.length + REFUSED.length} cases)`);
