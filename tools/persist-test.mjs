@@ -120,6 +120,20 @@ console.log('savegame bytes restored after quit-within-3s:', restoredAfterQuickQ
 if (!restoredAfterQuickQuit) fail('save lost after quit-within-3s — write-through or final flush broken');
 console.log('quit-within-3s test: PASS');
 
+// ── Phase 2c: a save the browser will not store is not silent ─────────────────
+// The engine prints "game saved" before IndexedDB has the bytes; when the
+// write fails (quota, private mode, a revoked origin) the player must be told.
+await ev(`IDBObjectStore.prototype.put = function () { throw new DOMException('the disk is full', 'QuotaExceededError'); }`);
+for (const [k, vk] of [['Escape', 27], ['Enter', 13], ['Enter', 13], ['Enter', 13]]) await key(k, vk);   // a new game
+await sleep(2500);
+await key('F2', 0x71); await key('ArrowDown', 40); await key('ArrowDown', 40); await key('Enter', 13);
+await key('c', 67); await key('Enter', 13);
+await sleep(1500);
+const failNotice = await ev(`window.__wdLastStatus ?? ''`);
+console.log('status after a refused save:', JSON.stringify(failNotice));
+if (!/would not store your save/.test(failNotice)) fail('a save IndexedDB refused was silent: the player believes it was kept');
+console.log('refused-save test: PASS');
+
 // ── Phase 3: teardown test (ws-008) ──────────────────────────────────────────
 // Set up an unhandled-rejection listener, trigger doom.onQuit() to stop the
 // sync interval, wait > 3 s, then assert no wasm/sync rejections fired.
@@ -133,5 +147,5 @@ const badRej = urjList.filter(r => /wasm|RuntimeError|abort|sync|save/i.test(r))
 if (badRej.length) fail(`unhandled rejections after quit: ${badRej.join(', ')}`);
 console.log(`teardown test: ${urjList.length} total unhandled rejections, ${badRej.length} wasm/sync related — OK`);
 
-console.log('PASS — savegame survives a page reload; load slots visible; quit-within-3s durable; interval stops cleanly on quit');
+console.log('PASS — savegame survives a page reload; load slots visible; quit-within-3s durable; a refused save is reported; interval stops cleanly on quit');
 chrome.kill(); process.exit(0);

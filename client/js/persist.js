@@ -5,6 +5,7 @@
 // saveNamespace: the IWAD's name, or base+pwad), config shared.
 
 import { openDB, tx as idbTx } from './idb.js';
+import { setStatus } from './ui.js';
 
 const DB = 'webdoom';
 const STORE = 'files';
@@ -66,6 +67,17 @@ async function flushDirect(doom, iwad) {
 // savegames every three seconds (round 10).
 export function startSync(doom, iwad, intervalMs = 3000) {
     const dirty = new Set();
+    // The engine has already said "game saved" when a write here fails, so
+    // the player is told, once per session, that the save lives only in
+    // memory.  A write retried later that succeeds clears nothing: the
+    // message names the first failure, not the current state.
+    let warned = false;
+    const failed = (what, err) => {
+        console.warn(`${what}:`, err);
+        if (warned) return;
+        warned = true;
+        setStatus(`this browser would not store your save (${err?.name ?? err}) — it lasts only until you close the page`);
+    };
     let lastConfig = null;
 
     const same = (a, b) => {
@@ -97,7 +109,7 @@ export function startSync(doom, iwad, intervalMs = 3000) {
                 await putFile(d, name, bytes);
             }
         } catch (err) {
-            console.warn('save sync failed:', err);
+            failed('save sync failed', err);
         }
         d?.close();
     }
@@ -115,8 +127,8 @@ export function startSync(doom, iwad, intervalMs = 3000) {
         db().then(d =>
             putFile(d, name, bytes)
             .then(() => d.close())
-            .catch(err => { console.warn('onFileWrite IDB write failed:', err); try { d.close(); } catch {} })
-        ).catch(err => console.warn('onFileWrite db open failed:', err));
+            .catch(err => { failed('saving to IndexedDB failed', err); try { d.close(); } catch {} })
+        ).catch(err => failed('opening IndexedDB failed', err));
     };
 
     const timer = setInterval(sync, intervalMs);
