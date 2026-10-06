@@ -1,86 +1,95 @@
 # webdoom divergence atlas
 
-Port lineage behavioral forks, webdoom's position, and evidence for each.
+This document catalogs the behavioral forks between vanilla DOOM, the Boom
+lineage of source ports, and webdoom: where each port takes a different
+position on the same piece of vanilla code, what webdoom does, and the evidence.
 
-Created: 2026-07-17. Verified against `engine/core/` source code before
-writing — do not infer from docs alone. Where a port's behavior could not
-be verified from this repository's source, the cell is marked **unverified**
-with the exact reason.
+- [playsim.md](playsim.md) documents the vanilla mechanism. Its §15 (quirk
+  catalog, Q1-Q10) and §16 (the frozen surface) are the spine this atlas hangs
+  on; every family below cites the matching playsim section.
+- [engine-archaeology.md](engine-archaeology.md) covers fixed-point math, the
+  trig tables and the random table. webdoom keeps all of those identical to
+  vanilla, so they are not forks and do not appear here.
 
-Cross-reference: `docs/playsim.md §15 Quirk catalog` and `§16 The frozen
-surface` are the primary spine. Every fork below references the corresponding
-playsim.md section. This document catalogs the *inter-port* delta; playsim.md
-catalogs the vanilla-internal mechanism.
-
-Companion: `docs/engine-archaeology.md` covers fixed-point math, the trig
-tables, and the random-number LUT — all of which are identity-preserved in
-webdoom and are not forked behaviors.
+Every webdoom position below is read from `engine/core`. Port behaviors for
+Boom, MBF, MBF21, PrBoom+ and dsda-doom are general source-port community
+knowledge and are marked with a dagger (†): this repo carries none of those
+ports' source, so they are not verified here.
 
 ---
 
 ## Compatibility position
 
-webdoom's simulation is vanilla-exact: all 13 IWAD demos replay tic-identical
-against golden traces and cross-validate against instrumented Chocolate Doom
-(44,580 tics). That is the proof scope — demo-proven over that corpus, not a
-claim that all inputs behave identically to vanilla. The engine carries no
-`comp_*` toggle flags (`F7`); every behavioral position is hardwired. The sole
-sanctioned departure from vanilla semantics is netcode modernization
-(`g_game.c:684-693`): the relay-command consistency-check bypass that makes
-peer-to-peer sessions possible without altering the simulation (`spec.md`
-tenet #1).
+webdoom's simulation is vanilla-exact over its proof corpus: all 13 IWAD demos
+replay tic-identical against golden traces (the `sim-goldens` leg), and the
+same per-tic fingerprint matches an instrumented Chocolate Doom over 44,580
+tics (`tools/build-choco-reference.sh`, then
+`node tools/demo-test.mjs --cross <binary>`). That is demo-proven over the
+corpus, not a claim that every input behaves as vanilla does.
+
+The engine has no `comp_*` toggle flags (F7); every position is hardwired.
+Apart from fail-soft guards that no golden demo reaches, the one sanctioned
+departure from vanilla semantics is in the netcode. `G_Ticker` (g_game.c) skips
+the consistency check for commands the relay fabricated for a stalled client
+(`D_NetCmdFabricated`) and for a dropped-in player's first `BACKUPTICS` tics.
+The check only raises `I_Error`, so skipping it changes no simulation state
+(spec.md, tenet 1).
 
 ### Preserved vanilla quirks
 
-Every quirk below is demo-visible; changing it would desync the golden suite.
+Each of these is demo-visible: changing it would desync the golden suite.
 
 | Quirk | Atlas | Source anchor |
 |-------|-------|---------------|
-| spechit[] processed in reverse order (`while numspechit--`) | F3 | `p_map.c:556-567` |
-| Wallrunning — P_SlideMove 3-retry limit + stairstep fallback | F4 | `p_map.c:749-842` |
-| Blockmap OOB block: silent `true` return (map-edge truncation) | F5a | `p_maputl.c:487-493` |
-| 0-length linedef: `den==0` guard returns 0 fraction in intercept math | F5b | `p_maputl.c` |
-| No runtime bounds check on 16-bit blockmap offsets | F5c | `playsim.md §12.2` |
-| P_CheckSight asymmetry: t1 eye height only, not t2's | F6 | `p_sight.c:334` |
+| spechit[] processed in reverse order (`while (numspechit--)`) | F3 | `P_TryMove`, p_map.c |
+| Wallrunning: P_SlideMove's 3-retry limit and stairstep fallback | F4 | `P_SlideMove`, p_map.c |
+| Blockmap out-of-bounds cell returns `true` (map-edge truncation) | F5a | `P_BlockLinesIterator`, p_maputl.c |
+| 0-length linedef: `den == 0` returns a 0 fraction in intercept math | F5b | `P_InterceptVector`, p_maputl.c |
+| No runtime bounds check on 16-bit blockmap offsets | F5c | `P_BlockLinesIterator`; playsim.md §12.2 |
+| P_CheckSight asymmetry: the eye is t1's only | F6 | `P_CheckSight`, p_sight.c |
 
-### Modern fixes NOT taken
+### Modern fixes not taken
 
 | Fix (not applied) | Atlas | Why |
 |-------------------|-------|-----|
-| comp_* runtime toggle layer (Boom/PrBoom+ selection mechanism) | F7 | webdoom targets vanilla, not Boom or MBF21; toggle layer adds complexity (`spec.md` tenet #3) with no benefit for the 13-demo corpus |
+| comp_* runtime toggle layer (the Boom/PrBoom+ selection mechanism) | F7 | webdoom targets vanilla, not Boom or MBF21; the toggle layer is complexity (spec.md, tenet 3) with no benefit to the 13-demo corpus |
 
 ### Deliberate divergences (taken, demo-transparent)
 
-The two taken divergences are safety clamps that never engage during golden
-demo playback — so vanilla-identical behavior is preserved over the proof corpus.
+These are safety clamps on vanilla memory-corruption paths. None engages during
+golden demo playback, so vanilla behavior is preserved over the proof corpus.
 
-| Divergence | Atlas | Measured cover (13 golden demos) |
-|------------|-------|----------------------------------|
-| MAXSPECIALCROSS raised to 64 with silent clamp; vanilla 8-entry OOB not reproduced | F1 | Peak numspechit = **8** — clamp at 64 never reached |
-| MAXINTERCEPTS = 128 with clamp at 127; heap OOB write not reproduced | F2 | Peak intercept count = **45** — clamp at 127 never reached |
+| Divergence | Atlas | Cover over the 13 golden demos |
+|------------|-------|--------------------------------|
+| MAXSPECIALCROSS raised to 64 with a silent clamp; vanilla's 8-entry overrun not reproduced | F1 | Peak numspechit **8**; the clamp at 64 is never reached |
+| MAXINTERCEPTS kept at 128 with a clamp at 127; vanilla's overrun not reproduced | F2 | Peak intercept count **45**; the clamp at 127 is never reached |
+
+Other fail-soft guards follow the same rule (fail soft on input vanilla would
+crash on, never on a path a golden demo reaches) and are too small to be fork
+families:
+
+| Guard | Where | Vanilla behavior |
+|-------|-------|------------------|
+| Donut special skips a sector with no two-sided first line, or a NULL backsector | `EV_DoDonut`, p_spec.c | NULL dereference |
+| Icon of Sin target list capped at `MAXBRAINTARGETS` (32) | `A_BrainAwake`, p_enemy.c | writes past `braintargets[]` |
+| Sidedef sector index and linedef sidenum checked at load, `I_Error` on out-of-range | `P_LoadSideDefs`, `P_LoadLineDefs`, p_setup.c | out-of-bounds read |
+| Missing player start in a non-deathmatch game | `P_SetupLevel`, p_setup.c | NULL dereference in `P_PlayerThink` |
 
 ---
 
-## How to read this document
+## How to read a family
 
-Each section covers one **behavioral fork family** — a class of behavior where
-vanilla DOOM, the Boom lineage, and webdoom diverge in mechanically significant
-ways. Every row carries:
+Each family is one class of behavior where vanilla, the Boom lineage and webdoom
+differ in a mechanically significant way. Each one gives:
 
-1. **What it is** — the actual behavior, mechanically, at source level.
-2. **Port matrix** — what vanilla / Boom / MBF / MBF21 / PrBoom+ / dsda-doom
-   each do. Port behaviors that cannot be verified from this repo are marked
-   *unverified* with a reason.
-3. **webdoom's position** — what THIS engine does, cited to a verified file:line.
-4. **Why** — tied to `spec.md` tenet #1 (vanilla demo compat) or the explicit
-   netcode-modernization exception.
-5. **Evidence** — demo, golden, or source citation. No unsourced assertions.
-6. **Cross-reference** — playsim.md section number.
-
-Port behavior descriptions for Boom, MBF, MBF21, PrBoom+, and dsda-doom are
-based on general Doom source-port community knowledge; their source code is not
-available in this repo. Claims marked with a dagger (†) are general-knowledge
-hedges that have not been verified from those ports' source in this session.
+1. **What it is**: the behavior at source level.
+2. **Mechanism**: the vanilla code, with its playsim.md section.
+3. **Port matrix**: what vanilla, Boom, MBF, MBF21, PrBoom+ and dsda-doom do.
+   Every non-vanilla, non-webdoom cell is †.
+4. **webdoom's position**: what this engine does, cited to a function.
+5. **Why**: the spec.md tenet it serves. Tenet 1 is vanilla demo accuracy;
+   tenet 4 is robustness (no WAD input may corrupt memory).
+6. **Evidence**: source, demo or suite leg.
 
 ---
 
@@ -89,46 +98,38 @@ hedges that have not been verified from those ports' source in this session.
 ### What it is
 
 When a thing's bounding box crosses more than `MAXSPECIALCROSS` special-tagged
-linedefs in a single `P_TryMove` call, the engine must decide what to do with
-the surplus entries. In vanilla the array is small and unguarded; the overflow
-scribbles into adjacent globals. This is the most widely-discussed limit in the
-Boom compatibility layer.
+linedefs in one `P_TryMove`, the engine must decide what to do with the
+surplus. In vanilla the array is small and unguarded, and the surplus is
+written past its end. This is the most widely discussed limit in the Boom
+compatibility layer.
 
 ### Mechanism (playsim.md §4.4)
 
 `PIT_CheckLine` (p_map.c) appends each crossed special line to `spechit[]`. In
-vanilla the array holds 8 entries and no bounds check exists. After `P_TryMove`
-succeeds, `P_TryMove` walks `spechit[]` in reverse to trigger crossings.
+vanilla the array holds 8 entries and nothing checks the bound. Once the move
+succeeds, `P_TryMove` walks `spechit[]` in reverse to trigger the crossings
+(F3).
 
-The vanilla OOB write typically hits `numspechit` itself (the integer that
-immediately follows `spechit[]` in the BSS) or `spechit[8..N]` entries that
-alias other globals. The resulting `numspechit` value can be wildly wrong,
-causing either spurious special crossings (if it grows) or missed ones (if it
-shrinks to zero before the loop finishes).
+The overrun lands in whatever globals the linker placed after `spechit[]`. It
+can corrupt `numspechit` itself, so the walk either fires spurious crossings
+(the count grows) or misses real ones (it shrinks).
 
 ### Port matrix
 
 | Port | MAXSPECIALCROSS | Guard | Overflow behavior |
 |------|----------------|-------|-------------------|
-| vanilla (linuxdoom-1.10) | 8 | none | OOB write; corrupts adjacent globals (numspechit, adjacent `spechit` slots aliasing other BSS) |
-| Boom | raised† | yes† | Raises limit; clamps or guards the write† |
+| vanilla (linuxdoom-1.10) | 8 | none | Writes past the array into adjacent globals, including possibly `numspechit` |
+| Boom | raised† | yes† | Raises the limit and guards the write† |
 | MBF | inherits Boom† | yes† | Same as Boom† |
-| MBF21 | inherits MBF† | yes† | Same as MBF†; spec does not add a new value |
-| PrBoom+ | configurable | yes† | `comp_maxscross=1` reproduces vanilla OOB corruption; `comp_maxscross=0` uses raised limit† |
-| dsda-doom | configurable | yes† | Same comp_maxscross behavior as PrBoom+† |
-| **webdoom** | **64** | **yes** | Clamps silently; extras are dropped, not scribbled |
-
-† General Doom source-port community knowledge; not verified from those ports'
-source in this session.
+| MBF21 | inherits MBF† | yes† | Same as MBF†; adds no new value |
+| PrBoom+ | configurable† | yes† | `comp_maxscross=1` reproduces the vanilla corruption; `0` uses the raised limit† |
+| dsda-doom | configurable† | yes† | Same as PrBoom+† |
+| **webdoom** | **64** | **yes** | Clamps silently; surplus entries are dropped, not written |
 
 ### webdoom's position
 
-`p_local.h:67`:
-```c
-#define MAXSPECIALCROSS  64
-```
+`p_local.h` defines `MAXSPECIALCROSS 64`. The guard is in `PIT_CheckLine`:
 
-Guard at `p_map.c:257-265`:
 ```c
 if (numspechit < MAXSPECIALCROSS)
 {
@@ -137,37 +138,27 @@ if (numspechit < MAXSPECIALCROSS)
 }
 ```
 
-The `MAXSPECIALCROSS` constant was moved from a local `#define` in `p_map.c`
-to `p_local.h` in task 3.1 to resolve a C99 §6.2.7 compatible-type violation
-(the old `p_enemy.c` local `#define MAXSPECIALCROSS 8` declared `spechit[8]`
-while `p_map.c` defined `spechit[64]` — same object, different array sizes).
-Both translation units now see 64.
+The constant lives in `p_local.h` so that p_map.c and p_enemy.c declare
+`spechit[]` with the same extent. Vanilla's p_enemy.c had its own local
+`MAXSPECIALCROSS 8`, which gives one object two array types (a C99 §6.2.7
+compatible-type violation) once p_map.c's array is raised.
 
 ### Why
 
-`spec.md` tenet #1: 100% vanilla demo compat is non-negotiable. The critical
-observation is that the peak `numspechit` across all 13 golden IWAD demos is
-**8** — exactly the vanilla limit (tnt-demo2, MAP12). No demo exceeds 8, so
-the webdoom clamp at 64 is never reached and the behavior for those demos is
-identical to vanilla. The clamp prevents crashes on large custom maps that
-*would* overflow, fulfilling `spec.md` tenet #4 (robustness: no WAD input
-may corrupt memory).
+Tenet 1 is met because the peak `numspechit` over all 13 golden demos is **8**
+(tnt-demo2, MAP12), exactly the vanilla limit. No demo exceeds 8, so the clamp
+at 64 is never reached and those demos behave as vanilla. The clamp serves
+tenet 4: a large custom map that would overflow cannot corrupt memory.
 
 ### Evidence
 
-- Source verification: `p_local.h:67` (`MAXSPECIALCROSS = 64`), `p_map.c:257-265`
-  (guard).
-- Compile-time enforcement: `p_local.h:84` has `_Static_assert(MAXSPECIALCROSS == 64, ...)` active under `WEBDOOM_INVARIANTS`.
-- Measured peak numspechit across 13 golden demos: **8** (tnt-demo2, MAP12).
-  Measurement method: `EMSCRIPTEN_KEEPALIVE` counter, C changes reverted,
-  13/13 goldens confirmed. See playsim.md §17.
-- Reproduce: `node tools/archaeology/runtime-stat-verify.mjs` with
-  `WEB_PERF_SPECHIT_STATS` build.
-
-### Cross-reference
-
-`playsim.md §4.4` (mechanism), `playsim.md Q1` (quirk catalog entry),
-`playsim.md §16` (frozen-surface table entry: `MAXSPECIALCROSS = 64`).
+- Source: `MAXSPECIALCROSS` in p_local.h, the guard in `PIT_CheckLine`.
+- `_Static_assert(MAXSPECIALCROSS == 64)` in p_local.h under
+  `WEBDOOM_INVARIANTS`, compiled by the `build-invariants` leg.
+- The peak of 8 was measured with the `-DWEB_PERF_SPECHIT_STATS` counter
+  (`web_perf_spechit_peak_get` in engine/web/perf.c) over the 13 demos. No leg
+  re-measures it.
+- See also playsim.md Q1 and the §16 frozen-surface entry.
 
 ---
 
@@ -175,79 +166,64 @@ may corrupt memory).
 
 ### What it is
 
-`P_PathTraverse` collects all lines and things a trace crosses into
+`P_PathTraverse` collects every line and thing a trace crosses into
 `intercepts[]` before `P_TraverseIntercepts` sorts and processes them. In
-vanilla this array has 128 entries and no bounds check; crossing more than 128
-objects in a single hitscan or slide trace writes past the array into the heap.
+vanilla the array has 128 entries and no bound check, so a hitscan or slide
+trace that crosses more than 128 objects writes past it.
 
 ### Mechanism (playsim.md §5.1)
 
-`PIT_AddLineIntercepts` and `PIT_AddThingIntercepts` each advance `intercept_p`
-to store a new entry. In vanilla neither function checks whether `intercept_p`
-has reached `intercepts + MAXINTERCEPTS`. The typical corruption result is the
-"all-ghosts" family: the enemy's intercept slot gets overwritten with a zero
-fraction, causing the traverser to process it "before" the wall at `frac = 0`,
-which may mean the shot registers as hitting nothing because the early-out fires
-first.
+`PIT_AddLineIntercepts` and `PIT_AddThingIntercepts` each store an entry at
+`intercept_p` and advance it. In vanilla neither checks whether `intercept_p`
+has reached `intercepts + MAXINTERCEPTS`. The community-documented symptom† is
+the "all-ghosts" family: corruption leaves a zero-fraction entry that the
+traverser processes before the wall, so a shot can register as hitting
+nothing.
 
 ### Port matrix
 
 | Port | MAXINTERCEPTS | Guard | Overflow behavior |
 |------|--------------|-------|-------------------|
-| vanilla (linuxdoom-1.10) | 128 | none | OOB heap write; zero-fraction corruption → "ghosts" |
-| Boom | 128† | likely guarded† | Boom raised many limits; intercepts guard is probable† |
+| vanilla (linuxdoom-1.10) | 128 | none | Writes past the array; "all-ghosts"† |
+| Boom | 128† | probable† | Boom raised many limits; an intercepts guard is likely† |
 | MBF | 128† | yes† | Inherits Boom† |
 | MBF21 | 128† | yes† | Inherits MBF† |
-| PrBoom+ | 128† | yes† | No comp flag specifically for intercepts overflow behavior is documented; unverified |
+| PrBoom+ | 128† | yes† | No comp flag for intercepts overflow is documented† |
 | dsda-doom | 128† | yes† | Same as PrBoom+† |
-| **webdoom** | **128** | **yes** | Clamps at MAXINTERCEPTS-1; objects beyond the limit are silently skipped |
+| **webdoom** | **128** | **yes** | Clamps at MAXINTERCEPTS-1; intercepts past the 127th are lost |
 
 ### webdoom's position
 
-`p_local.h:195`:
-```c
-#define MAXINTERCEPTS  128
-```
+`p_local.h` keeps vanilla's `MAXINTERCEPTS 128`. Both adders clamp the advance:
 
-Guard at `p_maputl.c:612-613` (PIT_AddLineIntercepts):
 ```c
 if (intercept_p - intercepts < MAXINTERCEPTS-1)
     intercept_p++;   // webdoom: clamp, vanilla overran on long traces
 ```
 
-Same guard at `p_maputl.c:689-690` (PIT_AddThingIntercepts).
-
-webdoom preserves the same constant (128) as vanilla but adds the clamp. A
-trace that hits more than 127 objects (one slot reserved for the guard margin)
-drops the distal objects rather than corrupting memory. This produces the "ghosts"
-effect in a milder, bounded form for extreme-density situations.
-
-**Note on line numbers vs. playsim.md §5.1**: playsim.md cites these guards as
-`p_maputl.c:606-607`. The current source has them at lines 612-613 because
-task 8.1 inserted `WEBDOOM_INVARIANTS` assertion blocks above the clamp line,
-shifting the line numbers by approximately 6. The behavior is unchanged; only
-the source line numbers drifted. See `new_findings` below.
+Once `intercept_p` reaches slot 127 it stops advancing. Each further intercept
+overwrites slot 127, and `P_TraverseIntercepts` counts only
+`intercept_p - intercepts` entries, so slot 127 is never processed. A trace
+keeps its first 127 intercepts in block-walk order. The block walk runs from
+the trace's origin outward, so what is lost is roughly the far end of the
+trace: the "ghosts" effect in a bounded form, only at extreme density.
 
 ### Why
 
-Same reasoning as F1. Measured peak intercept count across 13 golden demos: **45**
-(plutonia-demo3, MAP12), well below the 127 clamp. The clamp is never reached
-by those demos, so vanilla-ident behavior is preserved. The guard prevents heap
-corruption from large custom maps, satisfying `spec.md` tenet #4.
+As F1. The peak intercept count over the 13 golden demos is **45**
+(plutonia-demo3, MAP12), well below 127, so the clamp never engages and vanilla
+behavior holds (tenet 1). The clamp stops a dense custom map from writing past
+the array (tenet 4).
 
 ### Evidence
 
-- Source verification: `p_local.h:195`, `p_maputl.c:612-613` and `689-690`.
-- Compile-time enforcement: `p_local.h:199` has `_Static_assert(MAXINTERCEPTS == 128, ...)` under `WEBDOOM_INVARIANTS`.
-- Measured peak intercept count: 45 (plutonia-demo3, MAP12). See playsim.md §17.
-- Note: the §17 entry is marked *(not machine-verified: instrumented build
-  required; stat removed — no current CI script)*. The measurement was conducted
-  but no CI script enforces it.
-
-### Cross-reference
-
-`playsim.md §5.1` (mechanism), `playsim.md Q2` (quirk catalog entry),
-`playsim.md §16` (frozen-surface table entry: `MAXINTERCEPTS = 128 / clamp behavior`).
+- Source: `MAXINTERCEPTS` in p_local.h; the clamps in `PIT_AddLineIntercepts`
+  and `PIT_AddThingIntercepts`, each followed by a `DOOM_ASSERT` on the bound
+  under `WEBDOOM_INVARIANTS` (armed by the `sim-invariants` leg).
+- `_Static_assert(MAXINTERCEPTS == 128)` in p_local.h (`build-invariants`).
+- The peak of 45 was measured with an instrumented build over the 13 demos. No
+  counter for it remains in the tree, and no leg re-measures it.
+- See also playsim.md Q2 and §16.
 
 ---
 
@@ -255,14 +231,15 @@ corruption from large custom maps, satisfying `spec.md` tenet #4.
 
 ### What it is
 
-After a `P_TryMove` succeeds, the engine iterates `spechit[]` to fire the
-`P_CrossSpecialLine` callback for each crossed special linedef. Vanilla iterates
-in **reverse order** — from `spechit[numspechit-1]` down to `spechit[0]`. This
-means the *last* special line written to the array is processed *first*.
+After `P_TryMove` succeeds, the engine walks `spechit[]` and calls
+`P_CrossSpecialLine` for each special line the thing crossed. Vanilla walks in
+**reverse**, from `spechit[numspechit-1]` down to `spechit[0]`, so the last
+line recorded fires first.
 
 ### Mechanism (playsim.md §4.3, §16)
 
-The loop at `p_map.c:556-567`:
+The loop at the end of `P_TryMove`:
+
 ```c
 while (numspechit--)
 {
@@ -277,49 +254,42 @@ while (numspechit--)
 }
 ```
 
-The `while (numspechit--)` idiom: the condition evaluates `numspechit` then
-decrements it, so the first iteration reads `spechit[numspechit-1]` (the last
-entry), proceeding toward `spechit[0]`.
+`while (numspechit--)` tests the count and then decrements it, so the first
+iteration reads the last entry.
 
 ### Port matrix
 
 | Port | spechit processing order |
 |------|--------------------------|
-| vanilla (linuxdoom-1.10) | reverse (last-in first-processed) |
-| Boom | reverse† (vanilla-compat; no change to this loop†) |
+| vanilla (linuxdoom-1.10) | reverse (last in, first processed) |
+| Boom | reverse† (loop unchanged for vanilla compat†) |
 | MBF | reverse† |
 | MBF21 | reverse† |
-| PrBoom+ | reverse (vanilla-compat; no comp flag for this ordering) |
+| PrBoom+ | reverse†; no comp flag for this ordering† |
 | dsda-doom | reverse† |
 | **webdoom** | **reverse** |
 
 ### webdoom's position
 
-`p_map.c:556-567` — verified directly. The `while (numspechit--)` idiom is
-preserved from linuxdoom-1.10 without modification.
-
-Under `WEBDOOM_INVARIANTS`, `p_map.c:538-554` adds assertions that `numspechit`
-is in bounds and non-negative before the loop, providing structural enforcement
-that the reverse walk accesses only valid `spechit[]` slots.
+The loop is linuxdoom-1.10's, unmodified. Under `WEBDOOM_INVARIANTS`,
+`P_TryMove` asserts before the loop that `numspechit` is in
+`[0, MAXSPECIALCROSS]` and non-negative, so the reverse walk can only touch
+valid slots.
 
 ### Why
 
-`spec.md` tenet #1. The processing order is demo-visible: if line A fires before
-line B, and A's effect changes the sector state that B's effect queries, reversing
-the order changes gameplay. The frozen-surface table in `playsim.md §16` explicitly
-lists "spechit[] processing order (reverse, from numspechit-1 downward)" as
-immutable.
+Tenet 1. The order is demo-visible: if line A fires before line B, and A's
+effect changes sector state that B's effect reads, reversing the order changes
+gameplay. playsim.md §16 lists "spechit[] processing order (reverse, from
+numspechit-1 downward)" as frozen.
 
 ### Evidence
 
-- Source verification: `p_map.c:556-567`.
-- `playsim.md §16` frozen-surface table entry.
-- `WEBDOOM_INVARIANTS` assertion block at `p_map.c:533-554` (structural evidence
-  that the invariant is enforced at the call site, not merely described).
-
-### Cross-reference
-
-`playsim.md §4.3` (P_TryMove step 7), `playsim.md §16`.
+- Source: the `while (numspechit--)` loop in `P_TryMove`.
+- The `DOOM_ASSERT` block before it, armed by the `sim-invariants` leg over the
+  13 demos.
+- `sim-goldens`: the 13 demos replay tic-identical through the unmodified
+  loop.
 
 ---
 
@@ -327,187 +297,171 @@ immutable.
 
 ### What it is
 
-A player moving into a wall at a shallow angle can "run along" it because
-`P_SlideMove` fires only three rays (two leading corners, one cross-corner) and
-limits retries to 3. When the rays fail to find a valid slide wall, the engine
-jumps to a `stairstep` fallback that tries purely-vertical then purely-horizontal
-moves. This fallback can allow movement through narrow corners that a true
-convex-hull check would block.
+`P_SlideMove` finds the wall to slide along by firing three traces, from the
+three leading corners of the mover's bounding box. It makes two passes; the
+third entry to its `retry:` label goes straight to a `stairstep` fallback, as
+does a pass whose traces find no wall. The fallback tries the move on one axis
+at a time with the mover's current momentum. Whether that move is allowed is decided by `P_TryMove`'s
+bounding-box check, not by the slide traces, which lets a player keep speed or
+get through corners that a true slide would stop. Speedrunners exploit this†;
+"wallrunning" is the community name.
 
 ### Mechanism (playsim.md §4.5)
 
-`P_SlideMove` at `p_map.c:749-842`:
+In `P_SlideMove` (p_map.c), whose own comment reads `// This is a kludgy mess.`:
 
-1. Fires three `P_PathTraverse` rays to locate the closest wall (`bestslideline`).
-2. If `++hitcount == 3`, unconditionally jumps to `stairstep` (`p_map.c:763-764`).
-3. `stairstep` label at `p_map.c:803`: tries `P_TryMove(mo, mo->x, mo->y + mo->momy)`
-   then `P_TryMove(mo, mo->x + mo->momx, mo->y)`. One or both may succeed because
-   the bounding-box collision is less conservative than the slide-ray approach.
+1. Three `P_PathTraverse` calls with `PTR_SlideTraverse` locate the closest wall
+   (`bestslideline`).
+2. At the `retry:` label, `if (++hitcount == 3) goto stairstep;`, so the third
+   pass never traces.
+3. `stairstep:` tries `P_TryMove(mo, mo->x, mo->y + mo->momy)`, then
+   `P_TryMove(mo, mo->x + mo->momx, mo->y)` if the first fails.
 
-The source comment at `p_map.c:747`: `// This is a kludgy mess.`
-
-The 3-retry limit is the primary source of wallrunning behavior. Community UV-Speed
-demos routinely exploit the stairstep fallback to pass through geometry that
-should geometrically block a 16-unit-radius player.
+The fallback is also taken when no wall was found
+(`bestslidefrac == FRACUNIT+1`) and when the move up to the wall fails.
 
 ### Port matrix
 
-| Port | Wallrunning enabled | Notes |
-|------|-------------------|-------|
-| vanilla (linuxdoom-1.10) | yes | 3-retry limit, stairstep fallback |
+| Port | Wallrunning | Notes |
+|------|-------------|-------|
+| vanilla (linuxdoom-1.10) | yes | `hitcount == 3` limit, stairstep fallback |
 | Boom | yes† | preserved for demo compat† |
 | MBF | yes† | preserved† |
 | MBF21 | yes† | preserved† |
-| PrBoom+ | yes | preserved; no comp flag to disable wallrunning — it would break all speedrun demos |
-| dsda-doom | yes | preserved; dsda-doom is the premier speedrun port |
+| PrBoom+ | yes† | no comp flag to disable it; doing so would break speedrun demos† |
+| dsda-doom | yes† | preserved; dsda-doom is the main speedrun port† |
 | **webdoom** | **yes** | preserved exactly |
 
 ### webdoom's position
 
-`p_map.c:749-842` — verified. The `hitcount` check (`p_map.c:763-764`) and the
-`stairstep` label (`p_map.c:803-806`) are identical to linuxdoom-1.10. No
-modification to the retry count, ray count, or fallback logic.
+`P_SlideMove` is linuxdoom-1.10's: the `hitcount` check, the trace count and
+the `stairstep` fallback are unmodified.
 
 ### Why
 
-`spec.md` tenet #1. Wallrunning is a demo-visible player-movement behavior:
-any change to the retry count or fallback logic would alter the trajectory
-every time a player hits a wall, desyncing speedrun demos. The community
-demo archive has thousands of entries that exploit wallrunning; it is
-effectively a required feature of vanilla-compat engines.
+Tenet 1. Wallrunning is demo-visible player movement. Any change to the pass
+limit or the fallback alters the trajectory every time a player touches a wall,
+which desyncs any demo that does so, speedrun demos most of all.
 
 ### Evidence
 
-- Source verification: `p_map.c:749-842` (full `P_SlideMove`), `p_map.c:763-764`
-  (hitcount == 3 guard), `p_map.c:803-806` (stairstep label).
-- `playsim.md §4.5` (mechanism documentation).
-- `playsim.md Q4` (quirk catalog entry): "If P_SlideMove's 3-ray approach or
-  the stairstep fallback were changed, all such demos would desync."
-- `playsim.md §16` frozen surface: `P_BlockLinesIterator` and slide-move
-  constants are implicitly frozen under tenet #1.
-
-### Cross-reference
-
-`playsim.md §4.5`, `playsim.md Q4`.
+- Source: `P_SlideMove` in p_map.c.
+- `sim-goldens`: the 13 demos replay tic-identical through the unmodified
+  slide code.
+- See also playsim.md Q4: "If P_SlideMove's 3-ray approach or the stairstep
+  fallback were changed, all such demos would desync."
 
 ---
 
-## F5 — Blockmap family (edge truncation / 0-length linedefs / 16-bit overflow)
+## F5 — Blockmap family (edge truncation, 0-length linedefs, 16-bit offsets)
 
-This family covers three distinct but related blockmap behaviors. They share the
-root cause of the blockmap being a lossy, 16-bit-indexed structure trusted
-blindly by the engine.
+Three related behaviors with one root cause: the blockmap is a lossy,
+16-bit-indexed structure that the engine trusts without checking.
 
-### F5a — Out-of-bounds block truncation (off-by-one at map edge)
+### F5a — Out-of-bounds block truncation at the map edge
 
-**What it is**: `P_BlockLinesIterator` silently succeeds (returns `true`) for
-any block coordinate outside `[0, bmapwidth) × [0, bmapheight)`. Objects or
-traces near the map boundary may not collide with geometry in the outermost
-block column/row.
+**What it is.** `P_BlockLinesIterator` returns `true` (success, no collision)
+for any block outside `[0, bmapwidth) × [0, bmapheight)`. Objects or traces
+near the map boundary can miss geometry in the outermost block column or row.
 
-**Mechanism** (`playsim.md §3.2`): `p_maputl.c:487-493`:
+**Mechanism** (playsim.md §3.2). The top of `P_BlockLinesIterator`, p_maputl.c:
+
 ```c
 if (x<0 || y<0 || x>=bmapwidth || y>=bmapheight)
     return true;
 ```
 
-An OOB cell returns `true` (success, no collision found), so any caller
-iterating OOB cells gets a "no lines here" result and continues. Vanilla maps
-leave a margin inside the blockmap boundary, so this rarely matters in practice;
-custom maps that pack geometry right to the edge expose it.
+A caller iterating an out-of-bounds cell gets "no lines here" and continues.
+Vanilla maps leave a margin inside the blockmap boundary, so this rarely
+matters; custom maps that put geometry right at the edge expose it.
 
-The thing-iteration pass expands by `MAXRADIUS` before iterating blocks
-(`p_map.c:438-445`) but the line-iteration pass does not (`p_map.c:452-460`).
-This asymmetry is vanilla behavior: things can straddle block boundaries, so
-expansion is needed; lines already know their blocks from the WAD builder.
+`P_CheckPosition` (p_map.c) widens the block range by `MAXRADIUS` for its thing
+pass but not for its line pass. That is vanilla too: a thing is filed in the
+block of its origin and can overlap neighbours by up to `MAXRADIUS`, while a
+line is filed in every block it touches.
 
-**webdoom's position**: Vanilla behavior preserved exactly.
-- Source: `p_maputl.c:487-493` (OOB guard), `p_map.c:424-443` (asymmetric expansion).
+**Port matrix.**
 
-**Port matrix** (all ports):
+| Port | Out-of-bounds block |
+|------|---------------------|
+| vanilla | returns true |
+| Boom | returns true† (vanilla compat) |
+| MBF, MBF21 | returns true† |
+| PrBoom+, dsda-doom | returns true† |
+| **webdoom** | **returns true (vanilla, unmodified)** |
 
-| Port | OOB block behavior |
-|------|-------------------|
-| vanilla | silent true return |
-| Boom | silent true return† (vanilla compat) |
-| MBF, MBF21 | silent true return† |
-| PrBoom+, dsda-doom | silent true return† |
-| **webdoom** | **silent true return (identical to vanilla)** |
+**webdoom's position and evidence.** Vanilla behavior, unmodified. The source
+shows it directly: the bounds test followed by `return true`. See playsim.md
+Q3.
 
-**Evidence**: `p_maputl.c:487-493` is self-proving: the source code directly
-shows the OOB check followed by `return true`. `playsim.md Q3`.
+### F5b — 0-length linedef in a trace
 
-**Cross-reference**: `playsim.md §3.2`, `playsim.md Q3`.
+**What it is.** A linedef whose two vertices coincide has `dx = dy = 0`. When
+`P_MakeDivline` turns it into a divline and `P_InterceptVector` intersects it
+with the trace, the denominator of the intersection formula is zero.
 
----
+**Mechanism.** `P_InterceptVector` (p_maputl.c):
 
-### F5b — 0-length linedef in trace (division-by-zero family)
-
-**What it is**: A linedef whose start vertex equals its end vertex has
-`dx = 0, dy = 0`. When `P_InterceptVector` or `P_MakeDivline` processes it,
-the denominator in the line-intersection formula can reach zero, producing
-undefined arithmetic behavior (typically a zero result or an infinite fraction
-in integer fixed-point arithmetic).
-
-**Mechanism**: `P_InterceptVector` (p_maputl.c) computes:
+```c
+den = FixedMul (v1->dy>>8,v2->dx) - FixedMul(v1->dx>>8,v2->dy);
+if (den == 0)
+    return 0;
 ```
-den = FixedMul(v1->dy >> 8, v2->dx) - FixedMul(v1->dx >> 8, v2->dy)
-if (den == 0) return 0;
-```
-The `den == 0` guard handles the degenerate parallel case including zero-length
-lines, returning 0. A zero fraction causes the intercept to be placed at the
-trace origin, which may fire the traverser callback with wrong position data.
 
-**webdoom's position**: No special handling beyond what linuxdoom-1.10 had. The
-`den == 0` guard is preserved. 0-length linedefs in WAD data can still produce
-unexpected intercept behavior, but they don't crash.
+The guard covers the parallel case, which includes zero-length lines, by
+returning 0. A zero fraction places the intercept at the trace origin, so the
+traverser callback can run with wrong position data. `P_InterceptVector2`
+(p_sight.c) has the same guard.
 
-**Port matrix**: All ports inherit the same `den == 0` guard from vanilla. Boom
-and later ports improve the blockmap *builder* (not shipped in this engine, which
-uses the WAD's prebuilt blockmap), but the engine-side intercept math is
-universally the same. **Unverified**: whether any port adds additional 0-length
-linedef validation in the block iterator or intercept routines.
+**Port matrix.** All ports inherit the vanilla `den == 0` guard†. Boom and
+later ports improve the blockmap *builder*†; webdoom has no builder and uses
+the WAD's prebuilt blockmap. Whether any port adds its own 0-length linedef
+validation in the block iterator or intercept routines is not known here.
 
-**Evidence**: General architectural knowledge; the `den == 0` guard is visible
-in the intercept vector math (`p_maputl.c`). No golden demo is known to exercise
-a 0-length linedef.
+**webdoom's position.** Vanilla, unmodified. A 0-length linedef in WAD data can
+still produce odd intercepts, but it does not crash.
 
-**Cross-reference**: `playsim.md §12.2` (lump validation gaps; LINEDEFS lump
-has no range check on vertex indices, related category).
-
----
+**Evidence.** The guard in `P_InterceptVector`. No golden demo is known to
+cross a 0-length linedef.
 
 ### F5c — Blockmap 16-bit offset overflow (very large maps)
 
-**What it is**: The BLOCKMAP lump stores line-list offsets as 16-bit signed
-integers (relative to the lump start). For very large maps where the offset
-list + line lists exceed 65,535 16-bit units (~128 KB), offsets wrap and line
-lists are read from wrong positions. This is a WAD-builder issue, not an
-engine-runtime issue, but the engine trusts the lump data blindly.
+**What it is.** The BLOCKMAP lump stores each block's line-list offset as a
+16-bit word, counted from the start of the lump. p_setup.c loads the lump as
+`short*`, and `P_BlockLinesIterator` reads the offset into an `int`, so it is
+sign-extended: once the offset table plus the line lists pass 32,767 words
+(about 64 KB), offsets go negative and point before the lump. Lump builders
+cause this on very large maps; the engine trusts the data as given.
 
-**webdoom's position**: `P_BlockLinesIterator` reads:
+**Mechanism.** `P_BlockLinesIterator`:
+
 ```c
 offset = *(blockmap+offset);
 for (list = blockmaplump+offset; *list != -1; list++)
 ```
-The `blockmaplump` pointer arithmetic trusts the header counts without bounds
-checking (`playsim.md §12.2`). An overflowed offset could read outside the lump.
 
-**Port matrix**: Vanilla and early ports are affected for extremely large custom
-maps. Boom and later ports include improved blockmap builders that avoid the
-overflow, but the *engine-side reader* in all ports trusts the lump. PrBoom+
-and dsda-doom document a blockmap overflow workaround in their extended node
-builders. **Unverified**: whether PrBoom+/dsda-doom add runtime bounds checking
-on blockmap offset reads.
+Nothing bounds `offset` against the lump size (playsim.md §12.2).
 
-**webdoom's position**: No runtime bounds check on blockmap offsets. Vanilla
-behavior preserved. If a crafted WAD provides an overflowed blockmap, behavior
-is undefined.
+**Port matrix.** Vanilla and early ports are affected on very large custom
+maps. Boom and later ports ship improved blockmap builders that avoid the
+overflow†, and PrBoom+ and dsda-doom document
+workarounds in their extended node builders†. Whether either adds a runtime
+bounds check on the offset read is not known here.
 
-**Evidence**: `playsim.md §12.2` (BLOCKMAP validation gap noted as a 3.2
-overflow audit candidate: "negative/large offsets could read outside the lump").
+**webdoom's position.** No runtime bounds check on blockmap offsets, as in
+vanilla. A crafted WAD with a bad offset makes the read undefined.
 
-**Cross-reference**: `playsim.md §3.1` (blockmap structure), `playsim.md §12.2`.
+F5c is one instance of the wider unguarded-index surface in playsim.md §12.2:
+vertex, seg, node and REJECT indices in map lumps are also used unchecked.
+p_setup.c checks only the sidedef sector index and the linedef sidenums (the
+fail-soft table above). On such malformed input the release wasm build reads
+whatever is there and carries on, while the native ASan build traps on the
+same read. `tools/fuzz/run-map-fuzz.mjs` classifies that as the expected
+sanitizer-vs-release difference on invalid input, not a simulation divergence.
+
+**Evidence.** The source of `P_BlockLinesIterator` and `P_LoadBlockMap`. The
+`adversarial-map` leg (30 mutated maps, zero ASan/UBSan reports) does not cover
+F5c: the map fuzzer never mutates BLOCKMAP or the other geometry lumps.
 
 ---
 
@@ -515,224 +469,171 @@ overflow audit candidate: "negative/large offsets could read outside the lump").
 
 ### What it is
 
-`P_CheckSight(A, B)` is not generally equal to `P_CheckSight(B, A)`. The
-function computes its sight ray from A's eye (at 3/4 of A's height above A's
-floor z) looking toward any part of B (top or bottom of B's height). Swapping
-arguments produces a different eye height and a different slope window.
+`P_CheckSight(A, B)` is not in general equal to `P_CheckSight(B, A)`. The sight
+ray starts at A's eye, three quarters of A's height above A's base, and looks
+for any part of B, top to bottom. Swapping the arguments changes the eye height
+and the slope window.
 
 ### Mechanism (playsim.md §6.3)
 
-`p_sight.c:334`:
+In `P_CheckSight` (p_sight.c):
+
 ```c
 sightzstart = t1->z + t1->height - (t1->height>>2);
 topslope    = (t2->z + t2->height) - sightzstart;
 bottomslope = (t2->z)              - sightzstart;
 ```
 
-The eye is always computed from `t1` (the first argument). The slope window
-tests whether any part of `t2` is visible from that eye. A tall monster looking
-at a short player uses the monster's high eye; the reverse check (player looking
-at monster) uses the player's lower eye. These are genuinely different LOS tests.
+The eye always comes from `t1`. A tall monster looking at a short player uses
+the monster's high eye; the reverse uses the player's low eye. These are
+different line-of-sight tests.
 
 ### Consequences
 
-Monster AI calls `P_CheckSight(actor, player->mo)` — the monster's eye. This
-means a player hiding behind a ledge that geometrically blocks the player's eye
-looking up at the monster may still be seen by the monster, because the monster's
-higher eye looks *over* the ledge. This is the intended vanilla behavior for
-the monster-player relationship.
+Monster AI asks from the monster's side: `P_LookForPlayers` calls
+`P_CheckSight(actor, player->mo)`, and the chase and attack code calls
+`P_CheckSight(actor, actor->target)`. A player behind a ledge that blocks the
+player's own view up to the monster can still be seen, because the monster's
+higher eye looks over the ledge. Radius damage asks from the victim's side:
+`PIT_RadiusAttack` calls `P_CheckSight(thing, bombspot)`.
 
-Any change to the eye-height formula, or adding a symmetric double-check, would
-alter enemy sighting behavior in every demo that involves enemy sight acquisition.
+Changing the eye-height formula, or adding a symmetric second check, would
+alter enemy sight acquisition in every demo with enemies.
 
 ### Port matrix
 
-| Port | P_CheckSight asymmetry |
-|------|------------------------|
-| vanilla | asymmetric (t1 eye only) |
+| Port | P_CheckSight |
+|------|--------------|
+| vanilla | asymmetric (t1's eye only) |
 | Boom | asymmetric† (vanilla compat†) |
 | MBF | asymmetric† |
 | MBF21 | asymmetric† |
-| PrBoom+ | asymmetric (vanilla compat; no comp flag for sight symmetry) |
+| PrBoom+ | asymmetric†; no comp flag for sight symmetry† |
 | dsda-doom | asymmetric† |
-| **webdoom** | **asymmetric (identical to vanilla)** |
+| **webdoom** | **asymmetric (vanilla, unmodified)** |
 
-No port in this lineage is known to add optional symmetric sight. The asymmetry
-is too deeply embedded in demo playback to toggle.
+No port in this lineage is known† to offer optional symmetric sight; the
+asymmetry is too deeply embedded in demo playback to toggle.
 
 ### webdoom's position
 
-`p_sight.c:334` — verified. The `sightzstart` formula is identical to
-linuxdoom-1.10:
-```c
-sightzstart = t1->z + t1->height - (t1->height>>2);
-```
-
-No modification.
+The `sightzstart` formula is linuxdoom-1.10's, unmodified. Under
+`WEBDOOM_INVARIANTS` a `DOOM_ASSERT` recomputes it independently, so an edit to
+the formula fires in the `sim-invariants` leg.
 
 ### Why
 
-`spec.md` tenet #1. The eye-height formula is in the frozen-surface table at
-`playsim.md §16`: "P_CheckSight eye height formula: `t1->z + t1->height - (t1->height >> 2)`".
-Any change changes which tics a monster acquires a target, shifting `P_Random`
-call sequences, desyncing all demos with enemies.
+Tenet 1. playsim.md §16 freezes "P_CheckSight eye height formula:
+`t1->z + t1->height - (t1->height >> 2)`". A change moves the tic on which a
+monster acquires a target, which shifts the `P_Random` call sequence and
+desyncs every demo with enemies.
 
 ### Evidence
 
-- Source verification: `p_sight.c:334`.
-- `playsim.md §16` frozen-surface table.
-- `playsim.md §6.3` (mechanism documentation).
-- `playsim.md Q6` (quirk catalog entry).
-
-### Cross-reference
-
-`playsim.md §6.3`, `playsim.md Q6`, `playsim.md §16`.
+- Source: `P_CheckSight` in p_sight.c, and its `DOOM_ASSERT`.
+- `sim-goldens` and `sim-invariants` over the 13 demos.
+- See also playsim.md Q6.
 
 ---
 
-## F7 — comp_* flag system (PrBoom+/dsda-doom compatibility toggle layer)
+## F7 — comp_* flag system (PrBoom+/dsda-doom compatibility toggles)
 
 ### What it is
 
-PrBoom+ introduced a `comp_*` boolean flag array that allows players and demo
-playback tools to selectively enable or disable individual vanilla quirks at
-runtime. The flags default to vanilla-compatible (1 = emulate vanilla bug) for
-demo playback and can be overridden for gameplay. dsda-doom inherits and extends
-this system.
+PrBoom+ added an array of `comp_*` booleans that let players and demo playback
+tools switch individual vanilla quirks on or off at runtime†. The flags default
+to vanilla-compatible (1 = emulate the vanilla behavior) for demo playback and
+can be overridden for play†. dsda-doom inherits and extends the system†.
 
-The comp_* system is a meta-fork: it adds a *selection mechanism* for individual
-behaviors rather than hardwiring a particular position.
+It is a meta-fork: a mechanism for *selecting* behaviors rather than a position
+on any one of them.
 
-### Key flags (general knowledge; not verified from PrBoom+/dsda-doom source)
+### Commonly cited flags (unverified)
 
-The following comp_* flags are generally attributed to PrBoom+ or its sources.
-They are listed here because they directly correspond to the behavioral families
-catalogued in F1–F6 or are commonly cited in the Doom compatibility literature:
+These flags are commonly attributed to PrBoom+ or its ancestors and correspond
+to the families above or to other well-known quirks. Every name, meaning and
+default in this table is general knowledge, not checked against PrBoom+ or
+dsda-doom source. Verify from those ports' source if the exact list matters.
 
 | Flag | Controls | Vanilla value |
 |------|----------|---------------|
-| `comp_maxscross`† | Whether spechit[] overflow is reproduced (8 entry OOB) | 1 (emulate) |
-| `comp_soul`† | Lost-soul collision with other things | 1 (emulate) |
-| `comp_vile`† | Arch-vile resurrects former humans into crusher state | 1 (emulate) |
-| `comp_pain`† | Pain elemental spawning with -nomonsters | 1 (emulate) |
-| `comp_zombie`† | Player zombie can activate exit specials | 1 (emulate) |
-| `comp_pursuit`† | Monster target switch on infighting | 1 (emulate) |
-| `comp_dropoff`† | Monsters avoid drop-offs | 1 (emulate) |
-| `comp_falling`† | Falling damage | 0 (no vanilla falling damage) |
-| `comp_staylift`† | Monsters follow player off lifts | 1 (emulate) |
-| `comp_stairs`† | Stair-building sector scan behavior | 1 (emulate) |
-| `comp_infcheat`† | Infinite ammo cheat interaction | 1 (emulate) |
-| `comp_zerotags`† | Zero-tag linedef special activation | 1 (emulate) |
-| `comp_model`† | Linedef activation model (closest vs. any) | 1 (emulate) |
-| `comp_god`† | God mode invulnerability interaction | 1 (emulate) |
-| `comp_blazing`† | Fast door double-sound bug | 1 (emulate) |
-| `comp_doorlight`† | Door lighting effects | 1 (emulate) |
-| `comp_maskedanim`† | Animated textures on two-sided linedefs | 1 (emulate) |
-
-† All entries in this table are general-knowledge summaries. Flag names, exact
-semantics, and default values have not been verified from PrBoom+ or dsda-doom
-source in this session. Use with appropriate skepticism; verify from those ports'
-source if the exact flag list matters.
+| `comp_maxscross` | Whether the spechit[] overflow (8-entry overrun) is reproduced | 1 (emulate) |
+| `comp_soul` | Lost-soul collision with other things | 1 (emulate) |
+| `comp_vile` | Arch-vile resurrects former humans into crusher state | 1 (emulate) |
+| `comp_pain` | Pain elemental spawning with -nomonsters | 1 (emulate) |
+| `comp_zombie` | Player zombie can activate exit specials | 1 (emulate) |
+| `comp_pursuit` | Monster target switch on infighting | 1 (emulate) |
+| `comp_dropoff` | Monsters avoid drop-offs | 1 (emulate) |
+| `comp_falling` | Falling damage | 0 (no vanilla falling damage) |
+| `comp_staylift` | Monsters follow the player off lifts | 1 (emulate) |
+| `comp_stairs` | Stair-building sector scan | 1 (emulate) |
+| `comp_infcheat` | Infinite-ammo cheat interaction | 1 (emulate) |
+| `comp_zerotags` | Zero-tag linedef special activation | 1 (emulate) |
+| `comp_model` | Linedef activation model (closest vs. any) | 1 (emulate) |
+| `comp_god` | God-mode invulnerability interaction | 1 (emulate) |
+| `comp_blazing` | Fast-door double-sound bug | 1 (emulate) |
+| `comp_doorlight` | Door lighting effects | 1 (emulate) |
+| `comp_maskedanim` | Animated textures on two-sided linedefs | 1 (emulate) |
 
 ### webdoom's position
 
-**webdoom has no comp_* system.** There is no flag array, no runtime toggle,
-and no configuration mechanism for selecting vanilla vs. fixed behavior on a
-per-quirk basis.
+**webdoom has no comp_* system**: no flag array, no runtime toggle, no
+configuration for choosing vanilla or fixed behavior per quirk.
+`grep -rn comp_ engine/` finds nothing. Every position is hardwired:
 
-webdoom's positions are hardwired:
+| Behavior | webdoom's position |
+|----------|--------------------|
+| spechit[] overflow | clamped at 64 (vanilla overrun not reproduced) |
+| intercepts[] overflow | clamped at 127 (vanilla overrun not reproduced) |
+| sight asymmetry | vanilla (t1's eye) |
+| wallrunning | vanilla (`hitcount` limit, stairstep) |
+| blockmap edge | vanilla (out-of-bounds cell returns true) |
+| lost-soul collision | vanilla code, no toggle |
+| arch-vile resurrection | vanilla code, no toggle |
+| zero-tag specials | vanilla code, no toggle; which Boom behavior a `comp_zerotags=0` would select is not examined here |
 
-| Behavior | webdoom's hardwired position |
-|----------|------------------------------|
-| spechit[] overflow | clamped at 64 (not vanilla-reproduced) |
-| intercepts[] overflow | clamped at 127 (not vanilla-reproduced) |
-| sight asymmetry | vanilla (t1 eye, no change) |
-| wallrunning | vanilla (3-retry, stairstep) |
-| blockmap edge | vanilla (silent true return) |
-| monster lost-soul collision | vanilla (no comp_soul toggle) |
-| arch-vile resurrection quirk | vanilla (no comp_vile toggle) |
-| zero-tag specials | vanilla behavior (unverified which Boom behavior applies; see followups) |
+Not implementing comp_* is deliberate:
 
-The choice not to implement comp_* is deliberate:
-
-1. **Accuracy is non-negotiable** (`spec.md` tenet #1). The 13 golden IWAD demos
-   never trigger the vanilla OOB writes for spechit or intercepts (measured peaks
-   are 8 and 45 respectively, below the vanilla limits of 8 and 128 for OOB
-   writes). So the clamps do not affect demo compat.
-2. **Code simplicity** (`spec.md` tenet #3). A comp_* toggle layer adds
-   significant complexity; webdoom does not target demo compatibility with Boom,
-   MBF21, or PrBoom+ custom maps that depend on comp_* behavior.
-3. **netcode modernization** is the **only** sanctioned divergence from vanilla
-   behavior per spec.md. No comp_* flag exists for the relay-command
-   consistency-check bypass (`g_game.c:684-693`), which is the sole implemented
-   departure from vanilla's exact simulation semantics.
-
-### Evidence
-
-- Absence of comp_* verified by `grep -r "comp_" engine/core/` — no results
-  (not run in this session, but all source files read show no `comp_*` reference).
-- Source files read in this session: `p_map.c`, `p_maputl.c`, `p_sight.c`,
-  `p_local.h`, `playsim.md` — none reference a comp_* system.
-- `spec.md` tenet #1 is the affirmative justification.
-
-### Cross-reference
-
-F1 (spechit overlap), F2 (intercepts overlap), F4 (wallrunning), F6 (sight
-asymmetry); `playsim.md §16`; `spec.md §Core tenets`.
+1. **Accuracy** (tenet 1). The 13 golden demos never reach the vanilla overruns
+   (peaks 8 and 45, against vanilla limits of 8 and 128), so the clamps cost no
+   demo compatibility and there is nothing to toggle back.
+2. **Simplicity** (tenet 3). A toggle layer is significant code, and webdoom
+   does not target Boom, MBF21 or PrBoom+ maps that depend on comp_* behavior.
+3. **The netcode exception is not a toggle.** The consistency-check skip in
+   `G_Ticker` is the one sanctioned semantic departure, and it is unconditional.
 
 ---
 
 ## Deliberately out of scope
 
-The following are real behavioral forks in the Doom source-port landscape but
-are excluded from this atlas per the scope guardrail (Plans.md line 98:
-"bounded to the known **major** forks"):
+These are real forks in the source-port landscape, outside this atlas, which
+covers only the major forks of vanilla code:
 
 | What | Why excluded |
 |------|--------------|
-| Boom extended linedef / sector specials | Not implemented in webdoom; a separate feature dimension, not a behavioral fork of existing vanilla code |
-| MBF21 codepointer extensions | Same reason; webdoom does not implement MBF21 |
-| Deep Water / BOOM transfer effects | Render-side; not sim-behavioral forks |
-| MUSINFO / MAPINFO lump handling | Not present in linuxdoom-1.10 or webdoom; format extension, not fork |
-| PrBoom+ advanced node builders (ZDBSP, ZNoNodes) | BSP builder, not engine runtime behavior |
+| Boom extended linedef and sector specials | Not implemented in webdoom; a new feature, not a fork of existing vanilla code |
+| MBF21 codepointer extensions | Same; webdoom does not implement MBF21 |
+| Deep water and other Boom transfer effects | Render-side, not simulation forks |
+| MUSINFO / MAPINFO lumps | Not in linuxdoom-1.10 or webdoom; format extensions, not forks |
+| Advanced node builders (ZDBSP, ZNoNodes) | Map builders, not engine runtime behavior |
 | Heretic / Hexen / Strife compatibility | Out of scope for a Doom 1/2 engine |
-| WebAssembly/JS platform-layer divergences | webdoom-specific; not a vanilla-vs-port fork |
-| Save-game format differences | Addressed in playsim.md §13; not a gameplay behavioral fork |
-| Music / OPL synthesis differences | Renderer/audio side; not sim-visible |
-| Individual comp_* flags beyond the family overview in F7 | F7 covers the system; per-flag deep dives would require PrBoom+ source access this session does not have |
-
----
-
-## New findings
-
-The following discrepancies between existing documentation and verified source
-code were discovered during atlas preparation. They are reported here per the
-honesty rules; the corresponding docs are read-only to this task.
-
-### NF1 — WITHDRAWN (a shared-worktree artifact, not a real finding)
-
-The draft of this atlas reported that `playsim.md §5.1`'s intercept-clamp
-citations had drifted and recommended re-pinning them. That was a **false
-positive**: this atlas was drafted in a worktree that carried task 8.1's
-*uncommitted* assert insertions (Plans.md FINDING-7), so the source it read
-was shifted relative to master while playsim.md was still correct for
-master. The recommendation was withdrawn rather than applied. Citation
-drift is now caught mechanically — `tools/archaeology/check-citations.mjs`
-(task 8.1c) bounds-checks and identifier-verifies every `file:line`
-citation in these docs on every `run-tests.sh` run, including this file's.
+| WebAssembly/JS platform-layer differences | webdoom-specific; not a vanilla-vs-port fork |
+| Savegame format differences | Covered in playsim.md §13; not a gameplay fork |
+| Music / OPL synthesis differences | Audio side; not sim-visible |
+| Individual comp_* flags beyond the F7 overview | Per-flag analysis needs those ports' source, which this repo does not carry |
 
 ---
 
 ## Summary
 
-| ID | Fork | webdoom position | Verified |
-|----|------|-----------------|---------|
-| F1 | spechit[] overflow | MAXSPECIALCROSS=64 with clamp; vanilla 8-entry OOB not reproduced | yes |
-| F2 | intercepts[] overflow | MAXINTERCEPTS=128 with MAXINTERCEPTS-1 clamp; heap OOB not reproduced | yes |
-| F3 | spechit[] reverse processing | vanilla reverse order preserved (while numspechit--) | yes |
-| F4 | Wallrunning | vanilla preserved (3-retry hitcount, stairstep goto) | yes |
-| F5a | Blockmap OOB edge truncation | vanilla preserved (silent true return for OOB cells) | yes |
-| F5b | 0-length linedef in trace | vanilla preserved (den==0 guard in P_InterceptVector) | yes |
-| F5c | Blockmap 16-bit offset overflow | vanilla preserved (no runtime bounds check) | yes (no added guard) |
-| F6 | Sight asymmetry | vanilla preserved (t1 eye height at p_sight.c:334) | yes |
-| F7 | comp_* flag system | not implemented; webdoom positions are hardwired | yes (by absence) |
+| ID | Fork | webdoom position | Verified from source |
+|----|------|------------------|----------------------|
+| F1 | spechit[] overflow | MAXSPECIALCROSS = 64 with a clamp; vanilla 8-entry overrun not reproduced | yes |
+| F2 | intercepts[] overflow | MAXINTERCEPTS = 128 with a MAXINTERCEPTS-1 clamp; overrun not reproduced | yes |
+| F3 | spechit[] reverse processing | vanilla reverse order (`while (numspechit--)`) | yes |
+| F4 | Wallrunning | vanilla (`hitcount == 3` limit, `stairstep` goto) | yes |
+| F5a | Blockmap edge truncation | vanilla (out-of-bounds cell returns true) | yes |
+| F5b | 0-length linedef in a trace | vanilla (`den == 0` guard in `P_InterceptVector`) | yes |
+| F5c | Blockmap 16-bit offset overflow | vanilla (no runtime bounds check) | yes (no guard added) |
+| F6 | Sight asymmetry | vanilla (t1's eye height in `P_CheckSight`) | yes |
+| F7 | comp_* flag system | not implemented; positions are hardwired | yes (by absence) |
