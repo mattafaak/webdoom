@@ -254,8 +254,13 @@ function attachCommon(doom, url, { numplayers, slots, names }, WS, consoleSlotOf
     const ingameSlots = slots ?? [...Array(numplayers).keys()];
     const mask = ingameSlots.reduce((m, s) => m | (1 << s), 0);
     doom._web_net_setup(consoleSlotOf(ingameSlots), numplayers, mask);
-    names?.forEach((n, i) => {
-        if (n) doom.ccall('web_set_player_name', null, ['number', 'string'], [i, n]);
+    // A name is copied onto the engine's 1 MB stack before the engine can
+    // bound it, so it is cleaned here exactly as the server cleans one it
+    // accepts (server/game.js cleanName): a 1.2M-character name from a
+    // hostile server overran the stack into the engine's static data.
+    (Array.isArray(names) ? names.slice(0, numplayers) : []).forEach((n, i) => {
+        const clean = typeof n === 'string' ? n.replace(/[^A-Za-z0-9 _-]/g, '').trim().slice(0, 10) : '';
+        if (clean) doom.ccall('web_set_player_name', null, ['number', 'string'], [i, clean]);
     });
 
     let quitting = false, lostReason = null, onLost = null;

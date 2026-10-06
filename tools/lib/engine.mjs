@@ -28,3 +28,21 @@ export async function bootEngine(buildDir, wads, { print = () => {}, printErr = 
     }
     return doom;
 }
+
+// The static data region of a build, [0, staticEnd): DATA and BSS, which sit
+// below the 1 MB shadow stack (engine/Makefile -sSTACK_SIZE).  Read from
+// __heap_base, emscripten's first global, in the wasm file.
+export function staticEnd(buildDir) {
+    const wasm = readFileSync(join(root, buildDir, 'doom.wasm'));
+    const leb = off => { let v = 0, s = 0, b; do { b = wasm[off++]; v |= (b & 0x7f) << s; s += 7; } while (b & 0x80); return { v: v >>> 0, off }; };
+    for (let off = 8; off < wasm.length;) {
+        const id = wasm[off++], size = leb(off);
+        if (id === 6) {
+            const count = leb(size.off);
+            if (count.v > 0 && wasm[count.off + 2] === 0x41) return leb(count.off + 3).v - (1 << 20);
+            break;
+        }
+        off = size.off + size.v;
+    }
+    throw new Error(`no __heap_base in ${buildDir}/doom.wasm`);
+}

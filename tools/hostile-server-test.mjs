@@ -25,6 +25,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { attachRelay, attachSpectate } from '../client/js/net.js';
 import { root } from './lib/util.mjs';
+import { staticEnd } from './lib/engine.mjs';
 
 const bdIdx = process.argv.indexOf('--build-dir');
 const buildDir = bdIdx >= 0 ? process.argv[bdIdx + 1] : 'build';
@@ -159,6 +160,33 @@ for (const [label, np, slots] of [
 ]) mustRefuse(label, () => attachSpectate(
     doom, 'ws://127.0.0.1:1', { numplayers: np, slots }, StubWS));
 
+// Player names from a launch frame go to web_set_player_name as a ccall
+// 'string', which copies them onto the 1 MB shadow stack first: a name longer
+// than the stack overruns it, downward, into DATA and BSS.  A legitimate name
+// writes its own 16-byte buffer and nothing else there.
+{
+    const END = staticEnd(buildDir);
+    const statics = () => Uint8Array.prototype.slice.call(doom.HEAPU8, 0, END);
+    const namesWrite = names => {
+        const before = statics();
+        let threw = null;
+        try { attachRelay(doom, 'ws://127.0.0.1:1', { slot: 0, numplayers: 4, slots: [0, 1, 2, 3], names }, StubWS); }
+        catch (e) { threw = e; }
+        return { n: wrote(before, statics()).length, threw };
+    };
+    const legit = namesWrite(['Ann', 'Bob', null, 'Cy']);
+    for (const [label, names] of [
+        ['a 1.2M-character player name', ['Z'.repeat(1_200_000)]],
+        ['a 3M-character player name', [null, 'Z'.repeat(3_000_000)]],
+        ['player names that are not strings', [{ toString: () => 'x'.repeat(2_000_000) }, 7, ['a'], true]],
+        ['twenty player names', Array(20).fill('Eve')],
+    ]) {
+        const r = namesWrite(names);
+        ok(`launch names: ${label}`, !r.threw && r.n <= legit.n,
+           r.threw ? `threw: ${String(r.threw.message ?? r.threw).slice(0, 60)}` : `${r.n} static bytes written (legitimate names: ${legit.n})`);
+    }
+}
+
 // Anti-vacuity: a guard that refuses everything would pass every case above.
 {
     let threw = null;
@@ -179,7 +207,7 @@ const goodWrites = wrote(beforeGood, full());
 ok('a valid bundle still lands in the tic ring', goodWrites.length > 0 && Math.min(...goodWrites) >= FLOOR,
    goodWrites.length ? `wrote ${goodWrites.length} bytes at or above slot 0` : 'wrote nothing');
 
-const EXPECTED = 28;   // 5 tic + 5 roster + 2 console + 14 hostile-launch + 1 anti-vacuity + 1 liveness
+const EXPECTED = 32;   // 5 tic + 5 roster + 2 console + 14 hostile-launch + 4 names + 1 anti-vacuity + 1 liveness
 console.log(`\n  ${passes} passed, ${failures} failed`);
 if (failures) { console.log(`FAIL hostile-server-test: ${failures} case(s) let a hostile value through`); process.exit(1); }
 if (passes < EXPECTED) {
