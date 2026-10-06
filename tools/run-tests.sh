@@ -672,14 +672,9 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
     leg browser-mp-gating     browser,build,wad,shared "local-WAD MP gating (16.6b)"           -- node tools/browser-mp-gating-test.mjs "$U"
     leg browser-offline       browser,build,wad,shared "offline single player"                 -- node tools/browser-offline-test.mjs
     leg browser-demo          browser,build,wad,shared "demo permalink replay (19.2)"          -- node tools/browser-demo-test.mjs "$U"
-        # The old runner gave this its own server on 8669 "per the 12.2b
-        # stale-server lesson".  That lesson was about a STALE server being
-        # picked up; this runner starts its own, polls it ready and tears it
-        # down from one trap, so the shared secure-context server is fine and
-        # the test itself only patches audioWorklet client-side.
-    leg browser-music-fallback browser,build,wad,shared "BufferSink fallback, audioWorklet=undefined" -- node tools/browser-music-fallback-test.mjs "$U"
-        # The other side of that: on a secure origin the worklet instantiates
-        # build/synth.wasm and the main thread renders no music at all.  It
+        # On a secure origin the worklet instantiates build/synth.wasm and the
+        # main thread renders no music at all (the BufferSink fallback, where
+        # there is no AudioWorklet, is browser-insecure's).  It
         # cannot assert audio was PRODUCED -- no audio device pulls the graph
         # headless or under xvfb -- so the samples are gated by opl-mode's
         # gate 7, which drives the shipped worklet file in node.

@@ -35,7 +35,7 @@ shipped, gated feature that the contract never claimed at all.
 | Offline single player once a WAD is cached | `browser-offline`, `sw-precache` |
 | Rebindable keys, gamepad, and an OPTIONS screen on the launcher menu | `browser-options` |
 | Freelook and frame interpolation — render-side, opt-in | `sim-freelook`, `sim-invariants` |
-| Music: the in-engine OPL2/OPL3 sequencer from the IWAD's own GENMIDI, on the audio thread | `opl-mode`, `browser-music-worklet`, `browser-music-fallback` |
+| Music: the in-engine OPL2/OPL3 sequencer from the IWAD's own GENMIDI, on the audio thread | `opl-mode`, `browser-music-worklet`, `browser-insecure` |
 | **Low-detail render mode** (runtime `web_set_detail`), pixel-exact against its own goldens | `render-low` |
 | **A freestanding core** with no OS, and an N64 correctness leg | `freestanding-sim`, `ro-wad`, `arm-cross`, `n64-demos` |
 | **The engine's derived figures reproduce**, the artifact fits its ceilings, and the platform contract matches the exports | `archaeology`, `size-budget`, `web-contract` |
