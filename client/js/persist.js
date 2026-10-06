@@ -4,7 +4,7 @@
 // before boot and mirrors changes back — savegames keyed per game (lobby.js
 // saveNamespace: the IWAD's name, or base+pwad), config shared.
 
-import { openDB, tx as idbTx } from './idb.js';
+import { openDB, tx as idbTx, withDB } from './idb.js';
 import { setStatus } from './ui.js';
 
 const DB = 'webdoom';
@@ -20,7 +20,8 @@ const ALL_FILES = [...SAVES, CONFIG];
 // save the engine writes is bigger than that.
 const MAX_BYTES = name => name === CONFIG ? 64 * 1024 : 4 * 1024 * 1024;
 
-const db = () => openDB(DB, 1, [STORE]);
+const SPEC = [DB, 1, [STORE]];
+const db = () => openDB(...SPEC);
 const tx = (d, mode, fn) => idbTx(d, STORE, mode, fn);
 
 const keyFor = (iwad, name) => name === CONFIG ? `config:${name}` : `${iwad}:${name}`;
@@ -32,18 +33,19 @@ const legacyKeyFor = (iwad, name) =>
 export async function loadPersisted(iwad) {
     const files = new Map();
     try {
-        const d = await db();
-        for (const name of ALL_FILES) {
-            const bytes = await tx(d, 'readonly', s => s.get(keyFor(iwad, name)))
-                ?? await tx(d, 'readonly', s => s.get(legacyKeyFor(iwad, name)));
-            if (!(bytes instanceof Uint8Array)) continue;
-            if (bytes.length > MAX_BYTES(name)) {
-                console.warn(`persistence: ignoring a ${bytes.length}-byte ${name}; the engine never writes one that size`);
-                continue;
+        // withDB closes the connection on every exit, a failed read included
+        await withDB(SPEC, async d => {
+            for (const name of ALL_FILES) {
+                const bytes = await tx(d, 'readonly', s => s.get(keyFor(iwad, name)))
+                    ?? await tx(d, 'readonly', s => s.get(legacyKeyFor(iwad, name)));
+                if (!(bytes instanceof Uint8Array)) continue;
+                if (bytes.length > MAX_BYTES(name)) {
+                    console.warn(`persistence: ignoring a ${bytes.length}-byte ${name}; the engine never writes one that size`);
+                    continue;
+                }
+                files.set(name, bytes);
             }
-            files.set(name, bytes);
-        }
-        d.close();
+        });
     } catch (err) {
         console.warn('persistence unavailable:', err);
     }

@@ -6,8 +6,6 @@ behind the current state live in `spec.md` and `docs/`.
 
 ## Client
 
-- `idb.js` leaks a connection when `onblocked` fires and the open succeeds
-  later.
 - Hostile colour strings from a server grow the glyph cache.
 - A lost Enter keyup can arm a key rebind.
 - Each `ping()` replaces the lobby's single `pong` handler, so two pings in

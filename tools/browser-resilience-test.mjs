@@ -647,7 +647,108 @@ await runTest('12-boot-onto-a-lost-webgl-context', async () => {
     } finally { tab.close(); }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 13-14. AN INDEXEDDB CONNECTION NOBODY CLOSES.
+//     An open connection blocks every later version change of its database,
+//     in this tab and any other.  Two ways one used to stay open: an open
+//     reported blocked that succeeded afterwards, and a persisted read that
+//     threw before the connection was closed; and a connection that is open
+//     on purpose did not give way when another open asked for a version
+//     change.  Each probe enters through the shipped modules
+//     (import('/js/idb.js'), the boot's loadPersisted), counts the connections
+//     still open by wrapping open/close, and asks for a version change.  The
+//     one on the real 'webdoom' database is aborted at upgradeneeded, so the
+//     store stays at version 1.
+// ═══════════════════════════════════════════════════════════════════════════
+// installed in the page by each probe: connections opened from here on, and
+// not yet closed
+const TALLY = `(() => {
+    if (window.__idbLive) return window.__idbLive;
+    const live = window.__idbLive = new Set();
+    const open = IDBFactory.prototype.open, close = IDBDatabase.prototype.close;
+    IDBFactory.prototype.open = function (...a) {
+        const q = open.apply(this, a);
+        q.addEventListener('success', () => live.add(q.result));
+        return q;
+    };
+    IDBDatabase.prototype.close = function () { live.delete(this); return close.call(this); };
+    return live;
+})()`;
+// how a raw open of a newer version is decided; an upgrade is aborted.
+// nameExpr is a page-side expression.
+const VERSION_CHANGE = (nameExpr, v) => `new Promise(res => {
+    const q = indexedDB.open(${nameExpr}, ${v});
+    const timer = setTimeout(() => res('timeout'), 3000);
+    q.onblocked = () => { clearTimeout(timer); res('blocked'); };
+    q.onupgradeneeded = () => { clearTimeout(timer); q.transaction.abort(); res('not blocked'); };
+    q.onsuccess = () => q.result.close();
+    q.onerror = e => e.preventDefault();
+})`;
+
+await runTest('13-idb-connections-give-way', async () => {
+    const tab = await chrome.tab(url);
+    try {
+        if (!await tab.waitForMenu()) throw new Error('menu did not appear');
+        const r = await tab.ev(`(async () => {
+            const live = ${TALLY};
+            const { openDB } = await import('/js/idb.js');
+            const name = 'webdoom-probe-' + Math.random().toString(36).slice(2);
+            const verdict = p => Promise.race([
+                p.then(db => db, e => /blocked/.test(e?.message) ? 'blocked' : 'error: ' + e?.message),
+                new Promise(r => setTimeout(() => r('timeout'), 3000))]);
+            // a v1 connection with no versionchange handler: it holds on
+            const holder = await new Promise((res, rej) => {
+                const q = indexedDB.open(name, 1);
+                q.onupgradeneeded = () => q.result.createObjectStore('s');
+                q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+            const v2 = await verdict(openDB(name, 2, ['s']));
+            holder.close();
+            await new Promise(r => setTimeout(r, 500));     // the blocked open completes now
+            const leaked = live.size;
+            // a connection its caller is still using must give way
+            const held = await verdict(openDB(name, 3, ['s']));
+            const v4 = typeof held === 'string' ? 'not tried' : await ${VERSION_CHANGE('name', 4)};
+            for (const d of live) d.close();
+            indexedDB.deleteDatabase(name);
+            return { v2: typeof v2 === 'string' ? v2 : 'opened', leaked,
+                     held: typeof held === 'string' ? held : 'opened', v4 };
+        })()`);
+        console.log(`  v2 open beside a v1 holder: ${r?.v2}; connections left open once it closed: ${r?.leaked}; `
+                  + `v3 open: ${r?.held}; v4 open beside that v3 connection: ${r?.v4}`);
+        assert(r?.v2 === 'blocked', `CONTROL: the v2 open beside a v1 holder was not blocked (${r?.v2})`);
+        assert(r?.leaked === 0, `${r?.leaked} connection(s) still open: the blocked v2 open succeeded later and `
+                              + 'nothing closed what it returned');
+        assert(r?.held === 'opened', `the v3 open was refused (${r?.held})`);
+        assert(r?.v4 === 'not blocked', `a version change beside an open connection was ${r?.v4}: `
+                                      + 'the connection did not close when asked');
+    } finally { tab.close(); }
+});
+
+await runTest('14-idb-failed-persisted-read-closes', async () => {
+    const tab = await chrome.tab(url);
+    try {
+        if (!await tab.waitForMenu()) throw new Error('menu did not appear');
+        const r = await tab.ev(`(async () => {
+            const live = ${TALLY};
+            const { loadPersisted } = await import('/js/persist.js');
+            const get = IDBObjectStore.prototype.get;
+            let fired = 0;
+            IDBObjectStore.prototype.get = function () {
+                IDBObjectStore.prototype.get = get; fired++; throw new Error('synthetic read failure'); };
+            try { await loadPersisted('doom.wad'); } finally { IDBObjectStore.prototype.get = get; }
+            const leaked = live.size;
+            const v2 = await ${VERSION_CHANGE(`'webdoom'`, 2)};
+            return { fired, leaked, v2 };
+        })()`);
+        console.log(`  a persisted read threw ${r?.fired} time(s); connections left open: ${r?.leaked}; `
+                  + `a version-2 open of 'webdoom' afterwards: ${r?.v2}`);
+        assert(r?.fired === 1, `CONTROL: the injected read failure fired ${r?.fired} times, not once`);
+        assert(r?.leaked === 0, `the boot's failed read left ${r?.leaked} connection(s) open`);
+        assert(r?.v2 === 'not blocked', `the version-2 open was ${r?.v2}: the boot's connection blocks it`);
+    } finally { tab.close(); }
+});
+
 // ── Results ───────────────────────────────────────────────────────────────────
 console.log('\n── resilience results ──────────────────────────────────────');
-summary('every resilience path graceful', { min: 12 });
+summary('every resilience path graceful', { min: 14 });
 process.exit();

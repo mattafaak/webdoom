@@ -17,10 +17,23 @@ export function openDB(name, version, stores) {
             for (const s of stores)
                 if (!db.objectStoreNames.contains(s)) db.createObjectStore(s);
         };
-        req.onsuccess = () => resolve(req.result);
+        // An open reported blocked has been given up on, but the request
+        // stays pending and can still succeed once the blocker closes; nobody
+        // holds what it returns then, so it is closed here.  Every connection
+        // handed out closes when another open asks for a version change, so
+        // none of them can be the blocker in turn.
+        let blocked = false;
+        req.onsuccess = () => {
+            const db = req.result;
+            if (blocked) { db.close(); return; }
+            db.onversionchange = () => db.close();
+            resolve(db);
+        };
         req.onerror   = () => reject(req.error);
-        req.onblocked = () => reject(new Error(
-            `indexedDB.open("${name}") is blocked by another tab holding an older version`));
+        req.onblocked = () => {
+            blocked = true;
+            reject(new Error(`indexedDB.open("${name}") is blocked by another tab holding an older version`));
+        };
     });
 }
 
