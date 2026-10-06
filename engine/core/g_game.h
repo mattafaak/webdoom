@@ -35,6 +35,7 @@
 // GAME
 //
 void G_DeathMatchSpawnPlayer (int playernum);
+boolean G_SpawnAtAnyStart (int playernum);
 
 void G_InitNew (skill_t skill, int episode, int map);
 

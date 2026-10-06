@@ -14,6 +14,16 @@
 //                   must equal the one a drop-in into never-used slot 2
 //                   leaves: the same random index and the same sectors and
 //                   thinker count (web_demo_state's world hash).
+//   no start        MAP02 has player 1's start only, and the drop-in takes
+//                   slot 1.  It spawns at another player's start (a
+//                   sanctioned divergence: vanilla crashed, Chocolate
+//                   refuses) instead of ending the session in P_SpawnPlayer.
+//
+// And a level loaded with a player who has no start of their own: a
+// two-player demo on Chex Quest's E1M3, which has player 1's start only.  It
+// must load (it stopped with "no player 2 start"), and player 2, spawned at
+// player 1's start, must be able to walk: the world after 35 tics of player 2
+// walking must differ from the world after 35 tics of player 2 standing.
 //
 // usage: node tools/net-reborn-test.mjs [--build-dir DIR]
 // Copyright (C) 2026, GPL-2.0-or-later.
@@ -43,14 +53,15 @@ const start = (x, type) => ({ x, y: 200, angle: 90, type });
 // MAP01: starts for players 1 and 2, and a walk-over exit (W1, special 52) at y=320
 const MAP01 = room(512, [{ x: 128, y: 128, angle: 90, type: 1 }, { x: 384, y: 128, angle: 90, type: 2 }],
     ({ v, side, lines }) => lines.push({ v1: v(0, 320), v2: v(512, 320), front: side(0), back: side(0), flags: 4, special: 52 }));
-const MAP02 = room(1024, [start(200, 1), start(400, 2), start(600, 3), start(800, 4)]);
-const WAD = pwad([['MAP01', Buffer.alloc(0)], ...MAP01, ['MAP02', Buffer.alloc(0)], ...MAP02]);
+const map02 = starts => pwad([['MAP01', Buffer.alloc(0)], ...MAP01, ['MAP02', Buffer.alloc(0)], ...room(1024, starts)]);
+const WAD = map02([start(200, 1), start(400, 2), start(600, 3), start(800, 4)]);
+const WAD_ONE_START = map02([start(200, 1)]);
 
 // Play to MAP02 and drop a player into `slot` there.  Returns web_demo_state
 // 20 tics after the drop-in, or { error }.
-async function dropInAfterExit(slot) {
+async function dropInAfterExit(slot, wad = WAD) {
     let error = null;
-    const doom = await bootEngine(BUILD, [['doom2.wad', loadWad('doom2.wad')], ['c.wad', WAD]],
+    const doom = await bootEngine(BUILD, [['doom2.wad', loadWad('doom2.wad')], ['c.wad', wad]],
                                   { onDoomError: m => { error = m; } });
     doom._web_net_setup(0, NP, 0b0011);
     doom.callMain(['-file', 'c.wad', '-warp', '1', '-skill', '2', '-nodraw']);
@@ -85,4 +96,30 @@ check('freed slot: the world equals the never-used slot\'s (random index, sector
       !freed.error && !fresh.error && freed.state[0] === fresh.state[0] && freed.state[5] === fresh.state[5],
       `prndindex ${freed.state?.[0]} vs ${fresh.state?.[0]}, world ${freed.state?.[5]} vs ${fresh.state?.[5]}`);
 
-summary('a drop-in after a level change spawns as a first spawn, whatever slot it takes', { min: 3 });
+const noStart = await dropInAfterExit(1, WAD_ONE_START);
+check(`no start: a drop-in into slot 1 on a map with player 1's start only spawns (${noStart.error ?? 'ran'})`,
+      !noStart.error, noStart.error);
+
+// ── a level loaded with a player who has no start ────────────────────────────
+async function chexTwoPlayers(player2) {
+    const { demoLump } = await import('./lib/mapkit.mjs');
+    const tics = Array.from({ length: 37 }, () => [{}, player2]);
+    let error = null;
+    const doom = await bootEngine(BUILD, [['doomu.wad', loadWad('chex.wad')],
+                                          ['demo.wad', pwad([['DEMO', demoLump({ episode: 1, map: 3, players: 2, tics })]])]],
+                                  { onDoomError: m => { error = m; } });
+    try {
+        doom.callMain(['-file', 'demo.wad', '-playdemo', 'DEMO', '-nodraw']);
+        doom._web_set_singletics(1);
+        doom._web_set_nodraw(1);
+        for (let i = 0; i < 35 && !error; i++) { doom._web_wipe_skip(); doom._web_frame(); }
+    } catch (e) { error ??= `trapped: ${String(e.message ?? e).split('\n')[0]}`; }
+    return error ? { error } : { hash: doom._web_state_hash() >>> 0, tic: doom._web_gametic() };
+}
+const stand = await chexTwoPlayers({});
+const walk = await chexTwoPlayers({ forward: 25 });
+check(`chex E1M3, two players: the level loads and runs (${stand.error ?? `tic ${stand.tic}`})`, !stand.error, stand.error);
+check('chex E1M3: player 2, spawned at player 1\'s start, walks free (the world differs from standing still)',
+      !stand.error && !walk.error && stand.hash !== walk.hash, walk.error ?? `hash ${stand.hash} both ways`);
+
+summary('drop-ins and level loads spawn every player, whatever slot or start they have', { min: 6 });

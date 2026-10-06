@@ -933,6 +933,75 @@ void G_DeathMatchSpawnPlayer (int playernum)
 } 
 
 //
+// G_StepAside
+// webdoom: two solid players on one spot block each other's every move, so a
+// player spawned onto an occupied start is moved to the first free spot
+// beside it: 48 then 96 units away in eight directions, reached in a straight
+// line that crosses no linedef (no wall walked through, no special
+// triggered), where P_TryMove accepts it.  With no such spot it stays.
+//
+static boolean	stepaside_blocked;
+
+static boolean PTR_StepAsideLine (intercept_t* in)
+{
+    stepaside_blocked = true;
+    return false;
+}
+
+static void G_StepAside (mobj_t* mo)
+{
+    static const signed char dir[8][2] =
+	{ {1,0}, {-1,0}, {0,1}, {0,-1}, {1,1}, {-1,1}, {1,-1}, {-1,-1} };
+    fixed_t	x = mo->x;
+    fixed_t	y = mo->y;
+    fixed_t	nx;
+    fixed_t	ny;
+    int		r;
+    int		d;
+
+    for (r=48 ; r<=96 ; r+=48)
+	for (d=0 ; d<8 ; d++)
+	{
+	    nx = x + dir[d][0]*r*FRACUNIT;
+	    ny = y + dir[d][1]*r*FRACUNIT;
+	    stepaside_blocked = false;
+	    P_PathTraverse (x, y, nx, ny, PT_ADDLINES, PTR_StepAsideLine);
+	    if (!stepaside_blocked && P_TryMove (mo, nx, ny))
+		return;
+	}
+}
+
+//
+// G_SpawnAtAnyStart
+// webdoom: spawn a player at another player's start, faked as their own, for
+// a map with no start for this one (Chex Quest E1M3-E1M5 have player 1's
+// only).  A start whose spot is free comes first, as in G_DoReborn's own
+// fallback; with none free the player is spawned on the first start present
+// and steps aside from whoever stands there.  Vanilla crashed here and
+// Chocolate Doom refuses the level (divergence-atlas F8).  Returns false
+// when the map has no player start at all.
+//
+boolean G_SpawnAtAnyStart (int playernum)
+{
+    int		i;
+    int		pass;
+
+    for (pass=0 ; pass<2 ; pass++)
+	for (i=0 ; i<MAXPLAYERS ; i++)
+	    if (playerstarts[i].type
+		&& (pass || G_CheckSpot (playernum, &playerstarts[i])))
+	    {
+		playerstarts[i].type = playernum+1;	// fake as other player
+		P_SpawnPlayer (&playerstarts[i]);
+		playerstarts[i].type = i+1;		// restore
+		if (pass && players[playernum].mo)
+		    G_StepAside (players[playernum].mo);
+		return true;
+	    }
+    return false;
+}
+
+//
 // G_DoReborn 
 // 
 void G_DoReborn (int playernum) 
@@ -960,7 +1029,10 @@ void G_DoReborn (int playernum)
 	    return; 
 	} 
 		 
-	if (G_CheckSpot (playernum, &playerstarts[playernum]) ) 
+	// webdoom: a map can lack this player's start (type 0, zeroed at level
+	// setup); its spot is not a place, so it is skipped
+	if (playerstarts[playernum].type
+	    && G_CheckSpot (playernum, &playerstarts[playernum]) ) 
 	{ 
 	    P_SpawnPlayer (&playerstarts[playernum]); 
 	    return; 
@@ -969,7 +1041,8 @@ void G_DoReborn (int playernum)
 	// try to spawn at one of the other players spots 
 	for (i=0 ; i<MAXPLAYERS ; i++)
 	{
-	    if (G_CheckSpot (playernum, &playerstarts[i]) ) 
+	    if (playerstarts[i].type
+		&& G_CheckSpot (playernum, &playerstarts[i]) ) 
 	    { 
 		playerstarts[i].type = playernum+1;	// fake as other player 
 		P_SpawnPlayer (&playerstarts[i]); 
@@ -978,7 +1051,10 @@ void G_DoReborn (int playernum)
 	    }	    
 	    // he's going to be inside something.  Too bad.
 	}
-	P_SpawnPlayer (&playerstarts[playernum]); 
+	if (playerstarts[playernum].type)
+	    P_SpawnPlayer (&playerstarts[playernum]); 
+	else if (!G_SpawnAtAnyStart (playernum))
+	    P_SpawnPlayer (&playerstarts[playernum]);	// no start at all: its I_Error
     } 
 } 
  

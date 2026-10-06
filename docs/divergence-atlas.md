@@ -47,6 +47,7 @@ Each of these is demo-visible: changing it would desync the golden suite.
 | 0-length linedef: `den == 0` returns a 0 fraction in intercept math | F5b | `P_InterceptVector`, p_maputl.c |
 | No runtime bounds check on 16-bit blockmap offsets | F5c | `P_BlockLinesIterator`; playsim.md §12.2 |
 | P_CheckSight asymmetry: the eye is t1's only | F6 | `P_CheckSight`, p_sight.c |
+| A glass-hack line (two-sided, no back side) with a raise-to-texture or lower-and-change special reads `sides[-1]` in `getSide`/`getSector`; in wasm that is the zone block header in front of `sides[]`, so the result is deterministic and never traps or writes. Chocolate Doom has the same code | — | `getSide`, `getSector`, p_spec.c; specials 30/96, 37/84 |
 
 ### Modern fixes not taken
 
@@ -62,7 +63,8 @@ golden demo playback, so vanilla behavior is preserved over the proof corpus.
 | Divergence | Atlas | Cover over the 13 golden demos |
 |------------|-------|--------------------------------|
 | MAXSPECIALCROSS raised to 64 with a silent clamp; vanilla's 8-entry overrun not reproduced | F1 | Peak numspechit **8**; the clamp at 64 is never reached |
-| MAXINTERCEPTS kept at 128, intercepts past the 128th dropped; vanilla's overrun not reproduced | F2 | Peak intercept count **45**; the clamp at 127 is never reached |
+| MAXINTERCEPTS kept at 128, intercepts past the 128th dropped; vanilla's overrun not reproduced | F2 | Peak intercept count **45**; the guard at 128 is never reached |
+| A co-op player with no start of their own spawns at another player's start and steps aside | F8 | No golden demo is a co-op game on a map missing a start (vanilla crashes on one) |
 
 Other fail-soft guards follow the same rule (fail soft on input vanilla would
 crash on, never on a path a golden demo reaches) and are too small to be fork
@@ -73,7 +75,7 @@ families:
 | Donut special skips a sector with no two-sided first line, or a NULL backsector | `EV_DoDonut`, p_spec.c | NULL dereference |
 | Icon of Sin target list capped at `MAXBRAINTARGETS` (32) | `A_BrainAwake`, p_enemy.c | writes past `braintargets[]` |
 | Sidedef sector index and linedef sidenum checked at load, `I_Error` on out-of-range | `P_LoadSideDefs`, `P_LoadLineDefs`, p_setup.c | out-of-bounds read |
-| Missing player start in a non-deathmatch game | `P_SetupLevel`, p_setup.c | NULL dereference in `P_PlayerThink` |
+| A co-op level with no player start at all | `P_SetupLevel`, p_setup.c | NULL dereference in `P_PlayerThink` |
 
 ---
 
@@ -584,7 +586,7 @@ configuration for choosing vanilla or fixed behavior per quirk.
 | Behavior | webdoom's position |
 |----------|--------------------|
 | spechit[] overflow | clamped at 64 (vanilla overrun not reproduced) |
-| intercepts[] overflow | clamped at 127 (vanilla overrun not reproduced) |
+| intercepts[] overflow | intercepts past the 128th dropped (vanilla overrun not reproduced) |
 | sight asymmetry | vanilla (t1's eye) |
 | wallrunning | vanilla (`hitcount` limit, stairstep) |
 | blockmap edge | vanilla (out-of-bounds cell returns true) |
@@ -601,6 +603,46 @@ Not implementing comp_* is deliberate:
    does not target Boom, MBF21 or PrBoom+ maps that depend on comp_* behavior.
 3. **The netcode exception is not a toggle.** The consistency-check skip in
    `G_Ticker` is the one sanctioned semantic departure, and it is unconditional.
+
+---
+
+## F8 — A co-op player with no start of their own
+
+### What it is
+
+A co-op level gives each player a start (thing types 1–4). Some maps carry
+fewer: Chex Quest's E1M3, E1M4 and E1M5 have player 1's only. Vanilla spawns
+nobody for a player whose start is missing, and the first `P_PlayerThink`
+dereferences a NULL `mo`. Chocolate Doom refuses the level instead
+(`P_LoadThings: Player %d start missing`).
+
+### webdoom's position
+
+A player in the game with no start of their own is spawned at another
+player's start, faked as their own (`G_SpawnAtAnyStart`, g_game.c). The
+same happens at level load (`P_SetupLevel`) and on a drop-in or respawn
+(`G_DoReborn`). A start whose spot is free comes first, as in `G_DoReborn`'s
+vanilla fallback for a blocked spot. With none free, the player is spawned on
+the first start present and moved to the nearest free spot beside it
+(`G_StepAside`): 48 then 96 units away in eight directions, reached in a
+straight line that crosses no linedef, and accepted by `P_TryMove`. Two solid
+players on one spot block each other's every move, so a plain stack would
+leave both stuck. Only a co-op level with no player start at all is refused.
+
+### Why
+
+The lobby offers Chex Quest for co-op and lets the host pick any map, so
+"vanilla crashes here" was a session ending on E1M3. No demo is affected,
+because vanilla cannot run one on such a map. A deathmatch keeps vanilla's
+rule: four deathmatch starts or an `I_Error`.
+
+### Evidence
+
+`net-reborn`: a two-player demo on chex E1M3 loads and runs, and player 2
+walks free (the world after 35 tics of walking differs from 35 tics of
+standing). A drop-in on a map with player 1's start only spawns.
+`demo-verify` Gate E: a co-op demo header for such a map is accepted, and a
+level with no player start at all is refused.
 
 ---
 
@@ -637,3 +679,4 @@ covers only the major forks of vanilla code:
 | F5c | Blockmap 16-bit offset overflow | vanilla (no runtime bounds check) | yes (no guard added) |
 | F6 | Sight asymmetry | vanilla (t1's eye height in `P_CheckSight`) | yes |
 | F7 | comp_* flag system | not implemented; positions are hardwired | yes (by absence) |
+| F8 | A co-op player with no start | spawned at another player's start, stepping aside if it is taken | yes |

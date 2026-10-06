@@ -851,12 +851,13 @@ P_SetupLevel
     }
     else
     {
-	/* tenet-4 fail-soft: detect missing player starts at map-setup time so
-	   P_PlayerThink never null-derefs players[i].mo mid-sim. playerstarts[i]
-	   type is 0 (zeroed above) if the map contained no start for player i+1.
-	   Check every in-game player before the sim begins. */
+	/* webdoom: an in-game player the map has no start for (playerstarts[i]
+	   is zeroed above) is spawned at another player's start, so
+	   P_PlayerThink never meets a NULL mo; a map with no player start at
+	   all is refused before the sim begins. */
 	for (i=0 ; i<MAXPLAYERS ; i++)
-	    if (playeringame[i] && playerstarts[i].type == 0)
+	    if (playeringame[i] && playerstarts[i].type == 0
+		&& !G_SpawnAtAnyStart (i))
 		I_Error ("no player %d start in %s", i+1, lumpname);
     }
 

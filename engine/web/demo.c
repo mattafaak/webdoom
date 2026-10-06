@@ -231,9 +231,11 @@ EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr, int len)
         !hdr_ingame[hdr_console])
         return -1;
 
-    // A level the WAD lacks, or one without a start for every player the
-    // header names, makes G_InitNew I_Error (W_GetNumForName,
-    // G_DeathMatchSpawnPlayer, P_SetupLevel).  Name the level as G_InitNew
+    // A level the WAD lacks, a deathmatch on one with fewer than four
+    // deathmatch starts, or a co-op game on one with no player start at all
+    // makes G_InitNew I_Error (W_GetNumForName, G_DeathMatchSpawnPlayer,
+    // P_SetupLevel; a co-op player without a start of their own is spawned
+    // at another's, G_SpawnAtAnyStart).  Name the level as G_InitNew
     // and P_SetupLevel will, with the same clamps, and count its starts as
     // P_LoadThings will: it stops at the first Doom II monster outside
     // commercial games.
@@ -281,9 +283,8 @@ EMSCRIPTEN_KEEPALIVE int web_play_demo_buf (int heapPtr, int len)
         }
         if (hdr_deathmatch && dm < 4)
             return -1;
-        for (k = 0; k < MAXPLAYERS; k++)
-            if (!hdr_deathmatch && hdr_ingame[k] && !(have & 1 << k))
-                return -1;
+        if (!hdr_deathmatch && !have)
+            return -1;
     }
 
     /* ---- the header is good; only now touch the engine ---- */
