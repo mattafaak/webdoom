@@ -508,7 +508,12 @@ export function createGame(log = console.log, servedWads = () => []) {
         // no fabrication until the game is rolling — wasm boot times differ
         if (!live.every(p => p.sentAny) && now - session.launched < NEVER_JOINED_MS) return;
         const laggards = live.filter(p => !p.cmds.has(session.tic));
-        if (!laggards.length) return;
+        // No laggard can mean the one there was has just left: its socket
+        // closed, or it never connected and was dropped above.  The players
+        // left may already have sent their whole lead and gone silent waiting
+        // (an engine runs at most BACKUPTICS/2-1 tics past its last bundle),
+        // so no frame is coming to seal what they filled.  Seal it here.
+        if (!laggards.length) { seal(); return; }
         for (const p of laggards) {
             if (now - p.lastSeen > DROP_MS) {
                 p.ingame = false;

@@ -1292,10 +1292,13 @@ async function fuzzSendBacklog(path) {
         paused = await pausedPeer(s.port, path === '/ws/game' ? gamePath(wb.slot, lb.token) : path);
         // the honest player blasts cmds as far ahead as the window allows; a
         // paused player still WRITES its cmds (it only stops reading), so the
-        // seal runs as fast as the host does
+        // seal runs as fast as the host does.  The relay ignores a cmd more
+        // than 512 tics ahead of the seal, so a batch of 256 starts only when
+        // the lead is under 256: past 512 the host would leave a gap it never
+        // fills, and be fabricated for and dropped like a stalled player.
         (async () => {
             while (!stopped) {
-                if (sent - frontier < 400)
+                if (sent - frontier < 256)
                     for (let j = 0; j < 256; j++, sent++) {
                         const c = Buffer.alloc(12); c.writeUInt32LE(sent, 0);
                         host.send(c);
@@ -1622,6 +1625,76 @@ async function fuzzReservationOwnership() {
 // `results`.  Serially this file was 46 of CI's 59 s.  Output is buffered per
 // suite through AsyncLocalStorage and printed when the suite completes, so a
 // FAIL line still sits under its own heading.
+// ── SURFACE 27: the last player holding up a tic leaves ─────────────────────
+//
+// An honest client runs at most BACKUPTICS/2-1 tics past the last bundle it
+// has seen (engine/web/d_net.c NetUpdate), then goes silent waiting for the
+// seal.  When the only player missing the current tic leaves -- its socket
+// closes inside the grace window, or it never connected at all -- the tics
+// the others have already filled must seal without waiting for a frame that
+// is not coming.
+const LEAD = 16;    // an honest client's cmds stay below frontier + LEAD
+async function fuzzLaggardLeaves(variant) {
+    const s = await spawnServer();
+    const seats = variant === 'never' ? 3 : 2;
+    const lobs = [], wel = [];
+    for (let i = 0; i < seats; i++) {
+        const l = lobbyWs(s.base); await open(l);
+        wel.push(await onceMsg(l, m => m.t === 'welcome'));
+        lobs.push(l);
+    }
+    lobs[0].send(JSON.stringify({ t: 'start' }));
+    const launches = await Promise.all(lobs.map(l => onceMsg(l, m => m.t === 'launch', 6000)));
+    const t0 = Date.now();
+    // seats 0 and 1 connect; in 'never' the third seat does not
+    const [a, b] = [0, 1].map(i => {
+        const w = gameWs(s.base, wel[i].slot, launches[i].token);
+        w.binaryType = 'nodebuffer';
+        return w;
+    });
+    await open(a); await open(b);
+    let frontier = 0;           // one past the newest sealed tic a has seen
+    a.on('message', d => { if (Buffer.isBuffer(d)) frontier = Math.max(frontier, d.readUInt32LE(0) + 1); });
+    const sent = new Map([[a, 0], [b, 0]]);
+    const send = (w, upto) => {
+        for (let t = sent.get(w); t < upto; t++) { const c = Buffer.alloc(12); c.writeUInt32LE(t, 0); w.send(c); }
+        sent.set(w, Math.max(sent.get(w), upto));
+    };
+    // 35 Hz, never past frontier + LEAD: the engine's own pacing
+    const pace = w => setInterval(() => { if (w.readyState === 1) send(w, Math.min(sent.get(w) + 1, frontier + LEAD)); }, 28);
+    const timers = [];
+
+    let filled;
+    if (variant === 'close') {
+        // b fills 8 tics and leaves at once; a has already sent its full lead
+        // over the frontier b leaves behind, so a is silent when b goes
+        send(a, LEAD / 2 + LEAD);
+        await sleep(200);
+        send(b, LEAD / 2);
+        b.close();
+        timers.push(pace(a));           // and a plays on as an engine would
+        filled = LEAD / 2 + LEAD;
+        await sleep(1500);              // GRACE_MS is 250; the sweep runs every 50 ms
+    } else {
+        timers.push(pace(a), pace(b));  // both run into their lead and wait
+        filled = LEAD;
+        await sleep(Math.max(0, 10000 + 1500 - (Date.now() - t0)));   // NEVER_JOINED_MS is 10 s
+    }
+    check(`laggard leaves (${variant}): every tic the rest filled is sealed`, frontier >= filled,
+          `frontier ${frontier}, ${filled} tics filled by everyone still playing`);
+
+    const f0 = frontier;
+    await sleep(1000);
+    check(`laggard leaves (${variant}): the game goes on for the players left`,
+          frontier - f0 >= 20 && a.readyState === 1, `frontier ${f0} -> ${frontier} in 1 s, a readyState ${a.readyState}`);
+
+    timers.forEach(clearInterval);
+    for (const w of [a, b, ...lobs]) try { w.close(); } catch {}
+    const alive = await serverAlive(s.base);
+    check(`laggard leaves (${variant}): server survives`, alive && !s.didCrash(), `alive=${alive} crashed=${s.didCrash()}`);
+    s.kill();
+}
+
 const SUITES = [
     ['[1] Malformed lobby JSON',                fuzzLobbyJSON],
     ['[2] Binary tic frame abuse',              fuzzBinaryFrames],
@@ -1649,6 +1722,8 @@ const SUITES = [
     ['[24] Stranger aborting a countdown',       fuzzCountdownAbort],
     ['[25] Drop-in without a reservation',       fuzzDropInUnreserved],
     ['[26] A stale reservation\'s owner leaving', fuzzReservationOwnership],
+    ['[27] Laggard leaves: closes in the grace window', () => fuzzLaggardLeaves('close')],
+    ['[27] Laggard leaves: never connected',     () => fuzzLaggardLeaves('never')],
 ];
 const POOL = Math.max(1, +(process.env.NET_FUZZ_JOBS ?? 8));
 const als = new AsyncLocalStorage();
