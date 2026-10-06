@@ -1,13 +1,21 @@
 # DOOM bare-metal port contract
 
-**Purpose**: answer precisely and quantitatively what this repo's DOOM core
-demands from a platform. A competent embedded developer with this document
-plus `docs/engine-archaeology.md`, `docs/renderer.md`, `docs/playsim.md`,
-`docs/formats.md`, and `docs/perf.md` must be able to produce a credible
-ESP32 port plan without reading the source first.
+What this repo's DOOM core demands from a platform, stated precisely enough
+that an embedded developer can plan a port (ESP32-class or smaller) from this
+document plus [engine-archaeology.md](engine-archaeology.md),
+[renderer.md](renderer.md), [playsim.md](playsim.md),
+[formats.md](formats.md) and [perf.md](perf.md) before reading the source.
 
-All numbers are from the merged reference docs or verified with the commands
-shown. Code claims are cited as `file:line`.
+Three platform layers in the repo implement the contract. Each is a reference
+implementation a port can copy from:
+
+| Layer | Where | What it shows |
+|---|---|---|
+| Browser | `engine/web/` | the shipped port (wasm32) |
+| Hosted freestanding (`fs-doom`) | `tools/freestanding/` | the core on a static arena, a byte-out and a preloaded WAD blob, with no OS file I/O below the shim. 13/13 golden demos bit-identical on x86 `-m32` (leg `freestanding-sim`), 32-bit ARM under qemu (`arm-cross`) and big-endian PowerPC under qemu (`be-cross`) |
+| Nintendo 64 | `tools/n64/` | OS-less on libdragon: 93.75 MHz big-endian MIPS, 4 MiB RDRAM, the IWAD read in place from cartridge space. 13/13 (`n64-demos`; see [n64/DEMO-GATE-STATUS.md](n64/DEMO-GATE-STATUS.md)) |
+
+Code is cited by function name where a line number would go stale.
 
 ---
 
@@ -20,45 +28,56 @@ shown. Code claims are cited as `file:line`.
 5. [Endianness, alignment, and integer-width portability](#5-endianness-alignment-and-integer-width-portability)
 6. [What this repo already proves](#6-what-this-repo-already-proves)
 7. [ESP32 sketch](#7-esp32-sketch)
-8. [Contract on trial: what the bring-up found](#8-contract-on-trial-what-the-bring-up-found)
-
----
-
-> **Validation status — rung 1 (hosted-freestanding, 2026-07-17)**: commit
-> c7b5f11 produced `tools/freestanding/fs-doom`, a Linux -m32 build of
-> `engine/core` against a static 8 MiB arena + `fs_putc` byte-out + preloaded
-> WAD blob. Gate commit b3c8a40 (`tools/freestanding/run-check.sh`) verified
-> 13/13 golden demos bit-identical to vanilla. Every claim in §1–§7 was measured
-> against this bring-up; gaps and validated predictions are recorded in §8.
-> **Scope caveat**: this is hosted-freestanding — Linux, glibc, the -m32 ABI.
-> It is not the OS-less rung, which is a separate step and has since been
-> taken.
->
-> **The OS-less rung is done (superseded 24.4).** This banner used to say that
-> rung was deferred for want of a cross-compiler, and it outlived that blocker
-> by two phases. §7 records the PPC, MIPS and ARM QEMU trials; 13.4b landed a
-> full OS-less `D_DoomMain` on ARM; and since 2026-09-11 alder cross-builds the
-> freestanding core for 32-bit ARM with zig and replays all 13 golden demos
-> bit-identically under qemu-arm-static (`tools/freestanding/arm-check.sh`,
-> suite leg `arm-cross`).
+8. [The libc surface](#8-the-libc-surface)
 
 ---
 
 ## 1. The platform contract
 
-The platform contract spans **five** header files: `engine/core/i_system.h`
-(timing, memory, error, startup), `engine/core/i_video.h` (display),
-`engine/core/i_sound.h` (audio), `engine/web/web.h` (file registry, music
-sequencer bridge, and `D_DoomFrame` declaration — mirrored for non-web builds
-at `tools/freestanding/web.h`), and `engine/web/perf.h` (per-stage timing
-counters — mirrored at `tools/freestanding/perf.h`). `engine/core/d_main.c`,
-`m_misc.c`, and `w_wad.c` unconditionally `#include "web.h"`; `d_main.c` and
-`r_main.c` unconditionally `#include "perf.h"`. A bare-metal porter must
-supply stubs for both (FINDING-6; see §8.1). The web implementation in
-`engine/web/` is the reference. §1.1–§1.10 enumerate the `i_system.h` /
-`i_video.h` / `i_sound.h` function symbols. The full libc symbol surface a
-porter must also satisfy is in `tools/freestanding/IMPORTS.md` (authoritative
-list, §8.2).
+The contract spans five headers:
+
+| Header | What the core needs from it |
+|---|---|
+| `engine/core/i_system.h` | timing, zone memory, screen-buffer allocation, error, quit, startup hook, base ticcmd |
+| `engine/core/i_video.h` | display |
+| `engine/core/i_sound.h` | audio (may be all stubs) |
+| `engine/web/web.h` | the file registry (`W_WebFile`, `W_WebFileExists`, `Web_FileLen`, `Web_FileCopy`, `Web_FileCopyN`, `Web_FileWrite`), `ZONESIZE`, and the `D_DoomFrame` declaration |
+| `engine/web/perf.h` | per-stage timing counters (`web_perf_*`) and `web_perf_now()` |
+
+`d_main.c`, `m_misc.c`, `m_menu.c` and `w_wad.c` include `web.h`
+unconditionally. `d_main.c`, `r_main.c`, `r_bsp.c`, `r_plane.c`, `r_draw.c`,
+`p_map.c` and `p_telept.c` include `perf.h` unconditionally. A port supplies
+its own copy of both headers. `tools/freestanding/web.h` and
+`tools/freestanding/perf.h` are minimal mirrors, and
+`tools/freestanding/perf.c` and `tools/n64/perf_n64.c` define the counters.
+`web_perf_now()` may return a cycle count, a microsecond clock or a constant;
+nothing in the simulation reads it.
+
+Beyond the headers, a port replaces `engine/core/d_net.c` (§1.9) and provides
+the libc symbols listed in §8. §1.1 to §1.10 cover the `i_system.h`,
+`i_video.h` and `i_sound.h` functions.
+
+### Entry points the platform calls
+
+The core has no main loop of its own. `D_DoomLoop` (d_main.c) only finishes
+initialisation (it calls `I_InitGraphics`) and returns, so the platform drives
+the game:
+
+1. Make the WAD reachable through the file registry. The web layer registers
+   files from JS; `tools/freestanding/files.c` serves one preloaded blob.
+2. Call `D_DoomMain()` once. `IdentifyVersion` probes the registry by name, in
+   the order `doom2f.wad`, `doom2.wad`, `plutonia.wad`, `tnt.wad`, `doomu.wad`,
+   `doom.wad`, `doom1.wad`, and the name decides the game mode: the Ultimate
+   Doom IWAD is `retail` only when presented as `doomu.wad`. `D_DoomMain` then
+   loads the WAD, initialises every subsystem and returns.
+3. Call `D_DoomFrame()` once per display frame. Each call runs every tic that
+   is due (`TryRunTics`, §3.2), updates positional sound, renders one frame
+   into `screens[0]` and calls `I_FinishUpdate`.
+4. Deliver input between frames with `D_PostEvent` (§1.7).
+
+`tools/freestanding/i_main.c` is the smallest complete driver: it loads the
+WAD, calls `D_DoomMain`, then loops on `D_DoomFrame` and hashes the game state
+after every tic.
 
 ### 1.1 Timing — MUST implement
 
@@ -67,53 +86,60 @@ list, §8.2).
 int I_GetTime(void);
 ```
 
-**Calling frequency**: every iteration of `TryRunTics` (d_net.c:636) and
-the wipe loop (d_main.c:355). In practice, every trip through
-`D_DoomLoop → TryRunTics`.
+**Callers**: `TryRunTics` and `NetUpdate` in the platform's `d_net.c`
+(several times per frame), the wipe (`D_WipeFrame`, d_main.c), and the
+timedemo bookkeeping in g_game.c.
 
-**Contract**: return the number of whole game tics elapsed since engine start.
-The unit is 1/35 second (`TICRATE = 35`, doomdef.h:123). A tic is 28.57 ms.
+**Contract**: return the number of whole game tics elapsed since a fixed
+origin. The unit is 1/35 second (`TICRATE = 35`, doomdef.h), so a tic is
+28.57 ms.
 
-**Web implementation** (`engine/web/i_system.c:40`):
-```c
-int I_GetTime(void) {
-    return (int)(emscripten_get_now() * TICRATE / 1000.0);
-}
-```
+**Web implementation** (`engine/web/i_system.c`):
+`(int)(emscripten_get_now() * TICRATE / 1000.0)`, with module load as the
+origin.
 
-**Bare-metal**: any monotonic counter with ≥ 35 Hz resolution suffices.
-Using a hardware timer with a 35 Hz (or faster) interrupt and an incrementing
-integer is the canonical implementation. The integer must not wrap within a
-session (int32 at 35 Hz wraps after ~709 days; uint32 after 1,418 days).
+**Bare-metal**: any monotonic counter with at least 35 Hz resolution works. A
+hardware timer interrupt at 35 Hz (or faster, divided down) incrementing an
+integer is the canonical form. The count must not wrap within a session: a
+signed 32-bit count at 35 Hz wraps after about 710 days.
 
-**Precision requirement**: the core is adaptive (§3). Returning the correct
-*integer* tic count on each call is sufficient. Sub-tic precision is only
-needed for interpolation (I_GetTimeFrac below).
+**Precision**: the core is adaptive (§3), so the correct integer tic count on
+each call is enough. Sub-tic precision matters only for render interpolation:
 
 ```c
 // i_system.h (webdoom addition)
 int I_GetTimeFrac(void);
 ```
 
-**Contract**: returns the fractional portion of the current tic as a
-`fixed_t` in [0, FRACUNIT]. Used exclusively by the renderer's interpolation
-path (`r_main.c:845–851`). A port that does not implement render interpolation
-can return `FRACUNIT` (= 65536) always — this locks the renderer to
-end-of-tic positions (vanilla behaviour). **MAY stub**.
+**Contract**: the fraction of a tic elapsed since the simulation last
+advanced, as a `fixed_t` in [0, FRACUNIT]. `R_SetupFrame` (r_main.c) reads it
+only when `smoothrender` is set, and uses it to interpolate positions between
+the last two tics. The web version lives in `engine/web/d_net.c` and clamps
+to one tic, so a stalled simulation holds still. A port without interpolation
+can return `FRACUNIT` always, or clear `smoothrender`; either way the renderer
+shows end-of-tic positions, as vanilla does. **MAY stub**.
 
 ### 1.2 Error — MUST implement
 
 ```c
-void I_Error(char *error, ...) __attribute__((noreturn));
+void I_Error(char *error, ...);
 ```
 
-**Contract**: format and display the error message, then halt. The
-`__attribute__((noreturn))` annotation lets the compiler see past error
-branches; a bare-metal port must implement this as a true non-return (spin
-loop, trap instruction, or reboot). `abort()` is acceptable.
+**Contract**: format and report the message, then never return. Spin, trap,
+reboot or `abort()`.
 
-**Web implementation** (`engine/web/i_system.c:84`): surfaces the message
-via `Module.onDoomError`, then calls `abort()`.
+Two callers need more than a halt:
+
+- **Timedemo end.** `G_CheckDemoStatus` (g_game.c) ends a `-timedemo` run by
+  calling `I_Error("timed %i gametics in %i realtics", ...)`. A port that
+  replays demos must recognise this message as success.
+  `tools/freestanding/i_system.c` matches it with `sscanf` and `longjmp`s back
+  to `main`, which then reports the trace.
+- **Zone exhaustion.** `Z_Malloc` reports a failed non-purgeable allocation
+  through `I_Error` (§2.2).
+
+**Web implementation** (`engine/web/i_system.c`): formats into a 512-byte
+buffer, hands the text to `Module.onDoomError`, then calls `abort()`.
 
 ### 1.3 Zone memory — MUST implement
 
@@ -121,84 +147,82 @@ via `Module.onDoomError`, then calls `abort()`.
 byte* I_ZoneBase(int *size);
 ```
 
-**Contract**: called once at startup (`z_zone.c`). Return a pointer to a
-contiguous block of memory and set `*size` to its byte length. The engine
-manages everything inside this block via Z_Zone; the platform never touches
-it after this call.
+**Contract**: called once at startup by `Z_Init`. Return a pointer to one
+contiguous block and set `*size` to its length. The zone allocator owns every
+byte of it from then on. The block must be at least 4-byte aligned: `Z_Malloc`
+rounds sizes to 4 bytes, so every lump copy inherits the base alignment
+(§5.2).
 
-**Web implementation** (`engine/web/i_system.c:32`): `malloc(32MB)`.
+**Implementations**:
 
-**Bare-metal**: see §2 for the credible minimum. Pass a statically or
-dynamically allocated region; `malloc` is not required.
+| Layer | Zone | Source |
+|---|---|---|
+| web | `malloc(ZONESIZE)`, 4 MiB; `I_Error` if the allocation fails | `engine/web/i_system.c`, `ZONESIZE` in `engine/web/web.h` |
+| fs-doom | static 8 MiB arena (`FS_ZONE_SIZE`, overridable with `-DFS_ZONE_SIZE_OVERRIDE=N`) | `tools/freestanding/i_system.c`, `fs_platform.h` |
+| N64 | static 2.5 MiB arena (`N64_ZONE_KB ?= 2560`) | `tools/n64/i_system_n64.c`, `tools/n64/Makefile` |
 
-### 1.4 Video — MUST implement (two functions; two more are no-ops)
+`malloc` is not required. §2.2 sizes the zone.
+
+### 1.4 Video — MUST implement (two functions; the rest may be empty)
 
 ```c
-void I_InitGraphics(void);      // called once at boot
+void I_InitGraphics(void);        // called once, at the end of D_DoomMain
 void I_SetPalette(byte* palette); // called on every palette change
-void I_FinishUpdate(void);      // called after every rendered frame
-void I_UpdateNoBlit(void);      // MUST exist; MAY be empty
-void I_ShutdownGraphics(void);  // called on quit; MAY be empty
+void I_FinishUpdate(void);        // called after every rendered frame
+void I_UpdateNoBlit(void);        // MUST exist; MAY be empty
+void I_ShutdownGraphics(void);    // called on quit; MAY be empty
 ```
 
-**`I_InitGraphics`**: initialise display hardware. Called once by
-`D_DoomMain`. The web implementation is empty (`engine/web/i_video.c:16`);
-the platform is assumed to be initialised before `D_DoomMain` is called.
+**`I_InitGraphics`**: initialise the display. `D_DoomLoop` calls it after
+`V_Init` has allocated the screen buffers, so this is also the place to
+repoint `screens[0]` at a buffer of the port's choosing (§1.5). The web
+version is empty.
 
 **`I_SetPalette(byte* palette)`**:
 
-- `palette` points to a 768-byte array (256 × 3 bytes: R, G, B, one byte
-  each, indices into PLAYPAL).
-- Called by `V_SetPalette` (`v_video.c`) whenever the active palette
-  changes: at level start, and every tic that `players[0].palette` changes
-  (damage flash, bonus pickup, radiation suit, etc.).
-- Calling frequency: at most once per tic, typically once per level start and
-  a handful of times during combat.
-- **Contract**: store or apply the 768-byte palette. The web implementation
-  gamma-corrects through `gammatable[usegamma]` and stores it in a 768-byte
-  `webpalette` static (`engine/web/i_video.c:20`). A bare-metal port should
-  either do the same (apply gamma then push to hardware palette registers) or
-  maintain a software palette table for the blitter.
-- The palette is the *active* selection from `PLAYPAL` (14 palettes ×
-  768 bytes = 10,752 bytes; formats.md §3.3). The game selects which of the
-  14 palettes to use; `I_SetPalette` receives the already-selected 768 bytes.
+- `palette` points to 768 bytes: 256 entries of R, G, B, one byte each. It is
+  one of the 14 palettes in the `PLAYPAL` lump (14 × 768 = 10,752 bytes;
+  formats.md §3.3), already selected by the caller.
+- Callers: `ST_doPaletteStuff` (st_stuff.c) on every damage flash, bonus
+  pickup or radiation-suit change, `ST_Stop`, `D_Display` and the gamma key
+  (F11) in `M_Responder`. In practice a few times per level and a handful per second in
+  combat.
+- **Contract**: store or apply the palette. The web version gamma-corrects
+  through `gammatable[usegamma]` into a 768-byte `webpalette` static and bumps
+  a version counter the page polls. It clamps `usegamma` to 0..4 first,
+  because the config file sets it with no range check. A port should do the
+  same clamp, then either load hardware palette registers or keep a software
+  table for the blit.
 
 **`I_FinishUpdate`**:
 
-- Called by `D_Display` (d_main.c) after every call to `R_RenderPlayerView`.
-  At 35 Hz, that is every 28.57 ms.
-- **Contract**: transfer `screens[0]` to the display hardware. `screens[0]`
-  is a `byte[SCREENWIDTH * SCREENHEIGHT]` = `byte[64000]` buffer of palette
-  indices whose backing store is allocated by `I_AllocLow` (see §1.5). The
-  platform converts indices to RGB via the palette set by the most recent
-  `I_SetPalette`.
-- The web implementation is empty (`engine/web/i_video.c`): JS reads
-  `web_framebuffer()` — `screens[0]` itself, column-major — and
-  `web_palette()` directly from wasm memory after `D_DoomFrame` returns and
-  the GPU swaps the axes (round 10 removed the untranspose copy).
-- Bare-metal: do the palette-indexed → display-format blit here. For SPI
-  displays, this is where you push 64,000 pixel lookups (or DMA the
-  result). Double-buffering is optional; the core does not swap `screens[0]`
-  mid-frame.
+- Called by `D_Display` (d_main.c) after every rendered frame.
+- **Contract**: present `screens[0]`, which holds 64,000 palette indices,
+  converting each through the palette set by the last `I_SetPalette`. The core
+  never swaps `screens[0]` mid-frame, so double-buffering is optional.
+- The web version is empty. JS reads `screens[0]` in place through
+  `web_framebuffer()` and the palette through `web_palette()` after
+  `D_DoomFrame` returns, uploads the buffer as a texture, and the fragment
+  shader swaps the axes (`client/js/video.js`).
 
 **Framebuffer layout**:
 
 ```
-screens[0]:  byte[320 * 200] = 64,000 bytes   palette indices, row-major
-screens[1]:  byte[320 * 200] = 64,000 bytes   status-bar border background
-             (screens[1] is written by R_FillBackScreen, renderer.md §7.1)
+screens[0]:  byte[320 * 200] = 64,000 bytes   palette indices, COLUMN-major:
+             pixel (x, y) is screens[0][x * SCREENHEIGHT + y]
 ```
 
-`screens` is declared in `v_video.c:44` as `byte* screens[5]` — an array of
-five pointers, initially all NULL. The backing store for each entry is
-**not** a static byte array; it is allocated at runtime by `I_AllocLow`
-(see §1.5) in `V_Init` (v_video.c:489, called from d_main.c:936). The
-pointers are NULL until `V_Init` completes.
+The layout is column-major, which differs from vanilla's row-major buffer.
+`R_InitBuffer` (r_draw.c) builds `columnofs[x] = x * SCREENHEIGHT` and
+`ylookup[y] = screens[0] + y`, so a wall or sprite column is a run of
+consecutive bytes and a floor span steps 200 bytes per pixel. The status bar
+(`screens[4]`) and the view-border background (`screens[1]`) use the same
+stride. The browser uploads the buffer without a copy because of this. A port
+inherits it: the blit transposes, or the display controller scans in column
+order (many SPI LCD controllers can swap row and column addressing).
 
-`screens[0]` uses palette indices, not RGB. The platform converts to its
-display format in `I_FinishUpdate` via the 768-byte palette set by the last
-`I_SetPalette`. Double-buffering is not required; the core completes each
-frame before calling `I_FinishUpdate`.
+`screens` is `byte* screens[5]` in v_video.c, all NULL until `V_Init`
+assigns the first four (§1.5). `ST_Init` allocates `screens[4]` from the zone.
 
 ### 1.5 Screen buffer allocation — MUST implement
 
@@ -206,43 +230,38 @@ frame before calling `I_FinishUpdate`.
 byte* I_AllocLow(int length);
 ```
 
-**Declared**: `i_system.h:89`. **Calling context**: called once by `V_Init`
-(v_video.c:489, called from d_main.c:936) with
-`length = SCREENWIDTH * SCREENHEIGHT * 4` = 320 × 200 × 4 = 256,000 bytes.
-`V_Init` then divides the returned block into four equal 64,000-byte regions
-and assigns them to `screens[0]` through `screens[3]` (`v_video.c:492`).
+**Caller**: `V_Init` (v_video.c), once, from `D_DoomMain`, with
+`length = SCREENWIDTH * SCREENHEIGHT * 4` = 256,000 bytes. `V_Init` divides
+the block into four 64,000-byte regions and assigns them to `screens[0]`
+through `screens[3]`.
 
-**Contract**: return a pointer to a zero-initialised, writable block of
-exactly `length` bytes. The block must remain valid for the lifetime of the
-process. Zero-initialisation is required: some code paths read `screens[]`
-entries before the first render write.
+**Contract**: return a zero-initialised, writable block of exactly `length`
+bytes that stays valid for the whole session. The four regions are used as
+follows, and the last use is why the block must stay contiguous:
 
-**Web implementation** (`engine/web/i_system.c:74`):
-```c
-byte* I_AllocLow(int length) {
-    return (byte*)calloc(1, length);
-}
-```
+| Region | Used for |
+|---|---|
+| `screens[0]` | the render target (§1.4) |
+| `screens[1]` | view-border background (`R_FillBackScreen`), intermission background |
+| `screens[2]`, `screens[3]` | wipe start and end frames (f_wipe.c); `screens[2]` is also the screenshot scratch |
+| `screens[1] + 0x4000` onward | the savegame workspace: `G_DoSaveGame` builds the save there, spilling into `screens[2]` and `screens[3]` (175,616 bytes of room) |
 
-**Bare-metal guidance**: the single allocation is 256,000 bytes (250 KiB).
-Three placement strategies:
+**Web implementation** (`engine/web/i_system.c`): `calloc(1, length)`, with
+`I_Error` on a negative length or a failed allocation.
 
-- **PSRAM heap** (simplest): `psram_calloc(1, length)`. The full 256 KiB
-  lands in PSRAM. Simplest to implement but `screens[0]` column writes will
-  hit PSRAM latency (see §7.3 bottleneck analysis).
-- **Statically reserved region**: declare a `static byte fb_block[256000]`
-  in a linker section mapped to the target memory and return its address.
-  Pre-zero with `memset`. The `__attribute__((section(".psram_bss")))`
-  attribute is the ESP-IDF idiom for PSRAM-resident BSS.
-- **Hybrid — recommended for ESP32-S3**: place `screens[0]` specifically in
-  the 512 KiB internal SRAM to avoid PSRAM round-trip latency on the column
-  draw inner loop, and keep screens[1..3] in PSRAM. The simplest
-  implementation: `I_AllocLow` returns a pointer into a 256 KiB PSRAM block,
-  then after `V_Init` returns (or inline in `I_AllocLow` if a call counter
-  is maintained), override `screens[0]` to point at a 64 KiB region carved
-  from internal SRAM. The linker idiom: `static byte __attribute__((section(".iram0.data"))) sram_fb0[64000];`
+**Placement on a constrained target**: the block is 250 KiB.
 
-This is the direct mitigation for the §7.3 PSRAM bandwidth bottleneck.
+- **One region** (simplest): allocate the whole block in PSRAM or SRAM.
+- **Static reservation**: return a `static byte fb_block[256000]` placed by
+  the linker in the chosen memory. ESP-IDF places PSRAM-resident BSS with
+  `__attribute__((section(".psram_bss")))`.
+- **Hybrid** (recommended for ESP32-S3): keep the 256,000-byte block in PSRAM
+  and repoint only `screens[0]` at a 64,000-byte buffer in internal SRAM,
+  from `I_InitGraphics`. `tools/freestanding/i_video.c` does exactly this with
+  a static buffer. Keep the replacement 4-byte aligned: the wipe casts screen
+  buffers to `short*`.
+
+The hybrid is the main mitigation for the PSRAM bottleneck in §7.3.
 
 ### 1.6 Startup hook — MUST implement (may be empty)
 
@@ -250,26 +269,20 @@ This is the direct mitigation for the §7.3 PSRAM bandwidth bottleneck.
 void I_Init(void);
 ```
 
-**Declared**: `i_system.h:35`. **Called**: `D_DoomMain` (d_main.c:1023).
+**Caller**: `D_DoomMain` (d_main.c), after `R_Init` and before
+`D_CheckNetGame` and `S_Init`.
 
-`I_Init` is the **only** hook that starts the sound subsystem. Without it,
-`I_InitSound` is never called and the §1.8 sound stub symbols are never
-executed (they must still link, but will not be reached without `I_Init`
-invoking them).
+`I_Init` is the only place the sound subsystem is started. Without a call to
+`I_InitSound` here, the §1.8 sound functions still have to link but are never
+initialised.
 
-**Web implementation** (`engine/web/i_system.c:45–48`):
-```c
-void I_Init(void) {
-    I_InitSound();
-}
-```
+**Web implementation**: `I_Init` calls `I_InitSound()` and nothing else.
 
-**Contract**: perform any platform-level initialisation required between
-`D_DoomMain` start and game-loop entry. For a port with no audio the body
-may be `{}`. For a port with audio, call `I_InitSound()` here. The link
-symbol must exist; omitting it produces a link error.
+**Contract**: platform initialisation needed between `D_DoomMain`'s start and
+the first frame. A port with no audio may leave the body empty; the symbol
+must exist.
 
-### 1.7 Input — MUST implement (one function; rest are no-ops)
+### 1.7 Input — MUST implement (one function; the rest may be empty)
 
 ```c
 ticcmd_t* I_BaseTiccmd(void);
@@ -277,40 +290,40 @@ void I_StartFrame(void);   // MAY be empty
 void I_StartTic(void);     // MAY be empty (poll input here)
 ```
 
-**`I_BaseTiccmd`**: returns a pointer to an empty `ticcmd_t` for single-
-player. For single-player, this is a zero-filled struct; inputs are added
-on top by `G_BuildTiccmd` (g_game.c). The web implementation returns
-`&emptycmd` where `emptycmd` is a zero-initialised static
-(`engine/web/i_system.c:28`).
+**`I_BaseTiccmd`**: `G_BuildTiccmd` (g_game.c) starts every ticcmd from a
+copy of this. For a local game it is a zeroed static; the web version returns
+`&emptycmd`.
 
-**`I_StartTic`**: called once per tic before input processing. The canonical
-place to poll a keypad or GPIO and call `D_PostEvent` for each event.
-The web implementation is empty; events arrive via JS callbacks.
+**`I_StartTic`**: called once for each tic `NetUpdate` builds, before
+`D_ProcessEvents`. It is the place to poll a keypad or GPIO and post events.
+The web version is empty because events arrive from JS callbacks.
 
-**Event posting**: call `D_PostEvent(event_t *ev)` with `ev_keydown` /
-`ev_keyup` / `ev_mouse` / `ev_joystick` events. Keybindings default to
-WASD/arrow keys via `m_misc.c:216`. For a minimal bare-metal controller:
-8 GPIO lines can map to forward, back, left, right (turning), strafe,
-fire, use, speed.
+**Event posting**: call `D_PostEvent(event_t *ev)` with `ev_keydown`,
+`ev_keyup`, `ev_mouse` or `ev_joystick` events. The default bindings are in
+`m_misc.c`'s `defaults[]` table (`key_right`, `key_fire` and so on). A minimal
+controller needs eight lines: forward, back, turn left, turn right, strafe,
+fire, use, run.
 
 ### 1.8 Sound — MAY fully stub; MAY partially implement
 
-The entire sound subsystem is optional. The headless demo-test tool
-(`tools/demo-test.mjs`) runs correctly with the web sound stubs disabled
-(the JS bridge functions are no-ops until `client/js/audio.js` installs
-them). The simulation is untouched by sound. `I_Init` (§1.6) must call
-`I_InitSound()` only if sound is actually implemented; otherwise `I_Init`
-may be empty.
+Audio is optional and the simulation never reads it. Every simulation gate in
+this repo runs with sound stubbed. `I_Init` (§1.6) needs to call
+`I_InitSound()` only if sound is implemented.
 
-**Fully stub approach** (zero audio, correct sim):
+**Full stub** (no audio, correct simulation), as in
+`tools/freestanding/i_sound.c`:
 
 ```c
-void I_InitSound(void) {}
+void I_InitSound(void) { I_InitMusic(); }
 void I_UpdateSound(void) {}
 void I_SubmitSound(void) {}
 void I_ShutdownSound(void) {}
 void I_SetChannels(void) {}
-int  I_GetSfxLumpNum(sfxinfo_t *sfx) { return -1; }
+int  I_GetSfxLumpNum(sfxinfo_t *sfx) {
+    char name[9];
+    sprintf(name, "ds%s", sfx->name);
+    return W_CheckNumForName(name);
+}
 int  I_StartSound(int id, int vol, int sep, int pitch, int pri) { return 0; }
 void I_StopSound(int handle) {}
 int  I_SoundIsPlaying(int handle) { return 0; }
@@ -321,285 +334,273 @@ void I_SetMusicVolume(int vol) {}
 void I_PauseSong(int handle) {}
 void I_ResumeSong(int handle) {}
 int  I_RegisterSong(void *data, int len) { return 0; }
-int  I_PlaySong(int handle, int looping) { return 0; }
+void I_PlaySong(int handle, int looping) {}
 void I_StopSong(int handle) {}
 void I_UnRegisterSong(int handle) {}
 ```
 
-**Partial implementation** (SFX only, no music):
-Implement `I_StartSound` to feed raw PCM to a DAC. SFX lumps are DMX format
-(formats.md §6): 8-byte header, then raw unsigned 8-bit PCM at 11,025 Hz
-with 16-byte lead-in and lead-out pads. The real PCM is bytes `[24 .. 24 +
-num_samples - 33]`. Convert 8-bit unsigned to signed (`sample - 128`) and
-push to the DAC. Volume, stereo, and pitch parameters are passed on every
-call to `I_StartSound` and updated via `I_UpdateSoundParams`. Up to
-`snd_channels` (default 3) sounds run simultaneously.
+**Sound effects only**: implement `I_StartSound` to feed PCM to a DAC. Effect
+lumps are DMX format (formats.md §6): an 8-byte header, then unsigned 8-bit
+PCM at 11,025 Hz with 16 pad bytes at each end, so the real samples are bytes
+`[24 .. 24 + num_samples - 33]`. Convert to signed with `sample - 128`.
+Volume, separation and pitch arrive on every `I_StartSound` call and change
+through `I_UpdateSoundParams`. Up to `snd_channels` sounds play at once
+(default 3, `m_misc.c`).
 
-**Calling frequency**: `S_UpdateSounds` is called once per tic from
-`G_Ticker` (outside the sim proper — uses `M_Random`, not `P_Random`).
-It calls `I_StartSound` for each new sound event and `I_UpdateSoundParams`
-for spatially-changing sounds.
+**Calling frequency**: `D_DoomFrame` calls `S_UpdateSounds` once per frame,
+after the tics run. It calls `I_UpdateSoundParams` for moving sources;
+`I_StartSound` is called as game events start sounds. Sound code draws on
+`M_Random`, never `P_Random`.
 
-**Sound parameter semantics** (archaeology §10):
-- `vol`: 0..127 (`S_MAX_VOLUME = 127`, s_sound.c:51). Linear from inaudible
-  at distance 1200 map units to full at distance ≤ 160 map units.
-- `sep`: 0..255 (0=full left, 128=center, 255=full right). Computed as
-  `128 − 96 × sin(relative_angle)` (s_sound.c:787).
-- `pitch`: 0..255; NORM_PITCH = 128 = unmodified. Vary ±8 for chainsaw,
-  ±16 for most other sounds (s_sound.c:327–346, using M_Random — not
-  sim-critical).
+**Parameter meaning** (engine-archaeology.md §10):
 
-### 1.9 Net — single-player needs nothing
+- `vol`: 0..127 (`S_MAX_VOLUME`, s_sound.c). Linear from silent at 1,200 map
+  units (`S_CLIPPING_DIST`) to full at 160 or closer (`S_CLOSE_DIST`).
+- `sep`: 0..255, 128 centred. `S_AdjustSoundParams` computes
+  `128 - (FixedMul(S_STEREO_SWING, finesine[angle]) >> FRACBITS)` with a
+  swing of 96.
+- `pitch`: 0..255, 128 (`NORM_PITCH`) unmodified. `S_StartSoundAtVolume` adds
+  a random ±8 for the chainsaw and ±16 for most other sounds.
 
-In single-player, `netgame = false`. `NetUpdate` (d_net.c:159) returns
-immediately when `!netgame`. `TryRunTics` still calls it but the call is a
-no-op loop. `I_InitNetwork` is never called by the core; in webdoom it is
-replaced by `web_net_setup` called from JS before `D_DoomMain`.
+Music is separate: the web layer runs the MUS-to-OPL sequencer in
+`engine/web/mus_opl.c` (§3.3). The core never calls it directly; only the
+platform's `I_RegisterSong` / `I_PlaySong` do.
 
-**Important**: webdoom replaces `engine/core/d_net.c` entirely via
-`CORE_EXCLUDE` in the Makefile (Makefile:8–9). The core's `d_net.c` pulls in
-BSD socket headers (`sys/socket.h`, etc.) that will not compile on bare-metal
-targets. A bare-metal single-player port must likewise replace `core/d_net.c`
-with a minimal stub — modelled on `engine/web/d_net.c` — that provides the
-required symbols (`NetUpdate`, `NetSend`, `D_InitNetGame`) as no-ops. Do not
-compile `core/d_net.c` directly.
+### 1.9 Net — single-player needs a stub, not a network
 
-For multi-player, the relay architecture is described in `docs/netcode.md`;
-the lockstep protocol is transport-agnostic and could be implemented over
-UART, SPI, or any byte stream.
+`engine/core/d_net.c` cannot be compiled for a bare-metal target: it pulls in
+the BSD socket path through `I_InitNetwork`, and its `TryRunTics` blocks while
+it waits for tics. Every build here excludes it (`CORE_EXCLUDE` in
+`engine/Makefile`, with `i_main.c`, `i_net.c`, `i_sound.c`, `i_system.c` and
+`i_video.c`) and links a replacement that provides `TryRunTics`, `NetUpdate`,
+`D_CheckNetGame`, `D_QuitNetGame`, `I_GetTimeFrac` and the globals the core
+expects (`localcmds`, `netcmds`, `nettics`, `maketic`, `ticdup`, and the
+drop-in globals `web_joinTic` and `web_replaying` that g_game.c reads).
+
+`tools/freestanding/d_net.c` is the single-player model to copy. It has no
+network I/O: `D_CheckNetGame` makes player 0 the only player, `NetUpdate`
+builds ticcmds from local input, and `TryRunTics` runs the due tics (§3.2).
+`engine/web/d_net.c` is the multiplayer version.
+
+For multiplayer, the relay architecture is described in
+[netcode.md](netcode.md). The lockstep protocol is transport-agnostic and
+could run over UART, SPI or any byte stream.
 
 ### 1.10 Remaining platform symbols — MAY stub
 
-The following symbols are declared in `i_system.h` or `i_video.h` and must
-link in any build. All are present in the web layer as minimal bodies. None
-has required side effects for a headless single-player bare-metal port; all
-may be implemented as the stubs shown.
+These are declared in `i_system.h` or `i_video.h` and must link in every
+build. None has a required side effect for a headless single-player port.
 
-| Symbol | Header | Calling site(s) | Web impl | Bare-metal stub |
-|--------|--------|-----------------|----------|-----------------|
-| `void I_Quit(void)` | i_system.h:84 | g_game.c:1684, m_menu.c:1094 | Saves config, calls `I_ShutdownGraphics`, signals JS `onQuit`, then `emscripten_force_exit(0)` | Call `exit(0)` or trigger hardware reboot; must not return |
-| `void I_Tactile(int on, int off, int total)` | i_system.h:91 | p_inter.c:883 | `{}` (rumble hook, never wired in web) | Always stub: `{}` |
-| `void I_WaitVBL(int count)` | i_video.h:49 | d_net.c:620, m_menu.c:1092 | `{}` (no-op — "Never block the browser main thread") | Optionally `sleep_ms(count * 1000/35)` or `{}` |
-| `void I_ReadScreen(byte* scr)` | i_video.h:51 | m_misc.c:493 (screenshot), f_wipe.c:244,256 (screen wipe) | `memcpy(scr, screens[0], SCREENWIDTH*SCREENHEIGHT)` | Same: `memcpy(scr, screens[0], 64000)` — required for wipe effects |
-| `void I_BeginRead(void)` | i_video.h:53 | w_wad.c:259 | `{}` (disk-activity LED hook) | Always stub: `{}` |
-| `void I_EndRead(void)` | i_video.h:54 | w_wad.c:262 | `{}` (disk-activity LED hook) | Always stub: `{}` |
+| Symbol | Called from | Web body | Bare-metal stub |
+|--------|-------------|----------|-----------------|
+| `void I_Quit(void)` | `G_CheckDemoStatus` (single-demo playback end), `M_QuitResponse` | quits the net game, shuts sound down, saves config, signals JS `onQuit`, `emscripten_force_exit(0)` | reset or spin; must not return |
+| `void I_Tactile(int on, int off, int total)` | `P_DamageMobj` | empty (rumble hook) | `{}` |
+| `void I_WaitVBL(int count)` | `M_QuitResponse` (the pause before quitting) | empty: never block the browser | `{}`, or a delay of `count` 70 Hz ticks |
+| `void I_ReadScreen(byte* scr)` | the wipe (`wipe_StartScreen`, `wipe_EndScreen` in f_wipe.c) | `memcpy(scr, screens[0], 64000)` | the same copy |
+| `void I_BeginRead(void)`, `void I_EndRead(void)` | nothing in the core (disk-LED hooks) | empty | `{}` |
 
-**Note on `I_ReadScreen`**: unlike the others, `I_ReadScreen` is called by
-`f_wipe.c` for screen-wipe transitions. A port that wants wipe effects must
-implement it as the memcpy shown. A port that stubs it as `{}` will skip wipe
-animations (the wipe effect reads `screens[0]` before the transition frame,
-then compares per-column). The simulation is unaffected by either choice.
+`I_ReadScreen` is the one that matters: the melt wipe captures the start and
+end frames with it. A port that stubs it to `{}` gets garbage wipes; the
+simulation is unaffected either way. The copy is raw column-major bytes, which
+is what the wipe expects. Screenshots (`M_ScreenShot`) untranspose
+`screens[0]` themselves.
+
+A few core files also call libc directly, outside the platform layer:
+`W_AddFile` (w_wad.c) grows `lumpinfo` with `realloc` once per WAD added,
+`M_ScreenShot` (m_misc.c) probes file names with `access`, and `D_DoomMain`
+calls `mkdir` under `-cdrom`. `realloc` must really work (a NULL return is an
+`I_Error`); the other two can be stubs. §8 lists the whole libc surface.
 
 ---
 
 ## 2. Memory map for constrained targets
 
-All numbers are from `docs/perf.md` (measured at commit 6de6256 with
-32 MiB zone, doom.wad and plutonia.wad attract demos). All sizes use binary
-MiB / KiB throughout this section to match perf.md's measurement convention.
+Sizes are binary (KiB, MiB). Where a figure comes from the wasm build it says
+so: wasm and a native 32-bit target share pointer and integer widths, so data
+and BSS sizes carry over closely, but code size does not.
 
 ### 2.1 Static segment
 
-From `docs/perf.md §3` (wasm linear memory layout):
+The wasm linear-memory layout (perf.md §3):
 
 | Region | Size |
 |--------|------|
-| C shadow stack | 1 MiB (`STACK_SIZE=1MB`, engine/Makefile; 4 MiB until round 10) |
-| Initialized data (DATA) | ~74 KiB (perf.md §1 wasm DATA section) |
-| Zero-initialized BSS | ~379 KiB (static + BSS total = 453 KiB, perf.md §3, 2026-09-16) |
-| **`__heap_base`** | **1.44 MiB** (1,512,384 B, 2026-09-17) |
+| C shadow stack | 1 MiB (`-sSTACK_SIZE=1MB`, engine/Makefile) |
+| Initialised data (DATA) | ~74 KiB (perf.md §1) |
+| Zero-initialised BSS | ~379 KiB (DATA + BSS = 453 KiB) |
+| **`__heap_base`** | **1.44 MiB** (1,512,384 bytes) |
 
-The large BSS is dominated by renderer scratch arrays: `visplanes[128]`
-(~83 KiB at sizeof = 664 B; task 14.2d restored vanilla 128 from 1024,
-saving 581 KiB), `openings[20480]` (40 KiB; task 14.2f reverted from 81920×2 = 160 KiB to vanilla 20480×2 = 40 KiB, saving 120 KiB BSS; peak measured 2527/20480),
-`drawsegs[256]` (~12 KiB; task 14.2e reverted from 2048×48 = 96 KiB to vanilla 256×48 = 12 KiB, saving 84 KiB BSS), `vissprites[1024]` (~50 KiB). The screen
-buffers (`screens[0..3]`, 250 KiB total) are **not** in static BSS; they
-are allocated at runtime by `I_AllocLow` and point into whichever memory
-region the port selects (see §1.5).
+BSS is dominated by renderer scratch arrays: `visplanes[128]` (~83 KiB),
+`vissprites[1024]` (~50 KiB), `openings[20480]` (40 KiB) and
+`drawsegs[256]` (~12 KiB). Only `MAXVISSPRITES` (1024, vanilla 128) and
+`MAXSEGS` (64, vanilla 32) are raised above vanilla; the visplane, opening
+and drawseg limits are vanilla's. The trig tables are BSS too (§4.1). The
+screen buffers (250 KiB) are not in BSS; `I_AllocLow` places them (§1.5).
 
-**Bare-metal implication**: **1.44 MiB** of writable memory (SRAM or
-write-capable PSRAM) is the minimum for the static segment alone. That is
-`__heap_base` above: the whole region below the heap, being the 1 MiB shadow
-stack plus 453 KiB of DATA and BSS. It is the floor below which the engine
-cannot boot, independent of WAD and zone size. Add the 250 KiB screen buffers (from
-`I_AllocLow`) to arrive at the true minimum writable footprint: **~1.68 MiB**.
+**What a native target needs**: 453 KiB of writable data and BSS, plus a
+stack, plus the 250 KiB screen block. One MiB of stack is proven enough:
+`make check-stack-1m` in `tools/freestanding/` replays all 13 demos, rendering,
+under `ulimit -s 1024`. The true requirement is lower but not measured. With
+a 1 MiB stack the floor is **1.44 MiB** (`__heap_base`), and **~1.68 MiB**
+with the screen buffers. That is before the zone and the WAD. The budget
+tables below use these figures.
 
-This figure read 1.21 MiB here and in six budget tables below until round 13.
-The `__heap_base` row three lines up already said 1.44. 1.21 MiB was DATA+BSS
-*alone*, from before tasks 14.2d/14.2e/14.2f restored the vanilla renderer
-limits and took 785 KiB out of BSS. It was never the writable floor, because it
-does not include the stack. Every total derived from it was ~0.23 MiB light.
+The N64 build, measured with its toolchain, puts `.data + .bss` at 990,732
+bytes with a 512 KiB zone arena and the 250 KiB screen block inside it
+([n64/BRING-UP.md](n64/BRING-UP.md)).
 
 ### 2.2 Zone (heap)
 
-From `docs/perf.md §2` (measured with 32 MiB zone):
+Peak non-purgeable zone use, from the wasm build's attract demos
+(perf.md §2):
 
-| IWAD | Peak zone used (non-purgeable) | % of 32 MiB zone |
-|------|-------------------------------|-----------------|
-| doom.wad | 0.91 MiB | 2.8% |
-| doom2.wad | 1.00 MiB | 3.1% |
-| tnt.wad | 1.29 MiB | 4.0% |
-| plutonia.wad | **1.36 MiB** | **4.3%** (worst) |
+| IWAD | Peak zone used (non-purgeable) |
+|------|-------------------------------|
+| doom.wad | 0.91 MiB |
+| doom2.wad | 1.00 MiB |
+| tnt.wad | 1.29 MiB |
+| plutonia.wad | **1.36 MiB** (worst: demo3) |
 
-The 1.36 MiB figure is the peak of **non-purgeable live usage only**
-(perf.md §2). Purgeable cache blocks (composite textures, flat data) add
-to the instantaneous committed size but are not counted in this peak —
-Z_Malloc reclaims them on pressure by calling `Z_FreeTags`.
+That is live `PU_STATIC` and `PU_LEVEL` data. Purgeable cache blocks
+(composite textures, flats, sprite patches) come on top and are reclaimed
+under pressure.
 
-**What degrades under zone pressure**: when `Z_Malloc` cannot satisfy a
-`PU_CACHE` request, it purges existing `PU_CACHE` blocks (composite textures,
-flat data, sprite patches) and regenerates them on next access from WAD lumps.
-This produces a cache-miss penalty — textures must be re-composited from WAD
-patches (`r_data.c:228–289`, renderer.md §8.1) — but the game continues.
+`fs-doom` built with `-DWEB_PERF_ZONE_STATS` and run with `-zonestats <file>`
+measures the same thing with rendering on. Its non-purgeable peak is
+0.981 MiB (tnt demo2), its total high-water mark in a 32 MiB zone is
+10.485 MiB (tnt demo3), and at 4 MiB the demos evict 248 to 1,397 `PU_CACHE`
+blocks each with all 13 simulation hashes unchanged. The two instruments
+disagree on the non-purgeable peak; size from the larger.
 
-**What breaks**: `PU_STATIC` and `PU_LEVEL` blocks are never purgeable. If
-the zone cannot satisfy a non-purgeable allocation (map data, player structs,
-thinkers), `Z_Malloc` calls `I_Error`. The 1.36 MiB peak represents the
-non-purgeable floor; a zone smaller than ~2 MiB risks hitting this on extreme
-maps or if purgeable overhead is larger than the attract-demo measurement.
+**What degrades under pressure**: when `Z_Malloc` cannot satisfy a request it
+purges `PU_CACHE` blocks and the data is regenerated on next use: textures
+are recomposited from their patches (`R_GenerateComposite`, renderer.md §8.1)
+and lumps are re-read. The game continues; it only runs slower.
 
-**Credible minimum zone for production gameplay**: `4 MiB`. The perf.md §3
-recommendation states "4–8 MiB as a first pass"; 4 MiB is 3× the measured
-non-purgeable peak, leaving 2.64 MiB for purgeable texture cache. This is
-sufficient for normal maps; pathological maps (many large textures, many
-monsters) may need 8 MiB.
+**What breaks**: `PU_STATIC` and `PU_LEVEL` blocks are never purged. When a
+non-purgeable allocation cannot be satisfied, `Z_Malloc` calls
+`I_Error("Z_Malloc: failed on allocation of %i bytes")`.
 
-**Recommended for first bring-up**: 4 MiB zone, then profile with the 13
-golden demos (§6.3). If any demo triggers `I_Error` from `Z_Malloc`,
-increase zone size.
+**Sizing**:
 
-*Cross-reference*: task 13.2a re-trial (2026-07-18) confirmed 4 MiB passes
-all three gates (sim 13/13, render 13/13, 4-client net) on post-3.2 master —
-see `docs/perf.md` Q2 task 13.2a re-trial subsection for full results.
+- **4 MiB is what ships.** The browser build's zone is 4 MiB (`ZONESIZE` in
+  `engine/web/web.h`); every sim, render and net leg runs on it. The worst
+  attract-demo peak is 34% of it.
+- **2.5 MiB passes the simulation gate** on N64 (`N64_ZONE_KB = 2560`, sim
+  only: the N64 gate runs `-nodraw`). 512 KiB fills during the first attract
+  demo and `Z_Malloc` fails at gametic 171.
+- Pathological PWAD maps (many large textures, many monsters) may need 8 MiB,
+  which is what `fs-doom` uses.
 
-*Render-ON evidence (task 13.2b, 2026-07-18)*: flag-guarded `z_zone.c`
-instrumentation (`-DWEB_PERF_ZONE_STATS`) measured render-ON HWM via
-`tools/freestanding/fs-doom` over all 13 demos.  Non-purgeable peak:
-**0.981 MiB** (tnt-demo2); total HWM at 32 MiB zone: **10.485 MiB** (tnt-demo3).
-At 4 MiB zone: 248–1,397 PU_CACHE evictions/demo, 13/13 sim hashes identical,
-counts deterministic across two passes.  The 4 MiB "credible minimum" is now
-a measured floor, not an estimate.  Full data: `tools/golden/zone-stats.json`.
+For a first bring-up use 4 MiB, or 8 MiB if memory allows, and replay the 13
+golden demos (§6.3). An `I_Error` from `Z_Malloc` means the zone is too small
+for that map set.
 
 ### 2.3 WAD residency strategies
 
-w_wad.c's lump access pattern: `W_CacheLumpNum(lump, tag)` is called
-per-frame for every texture column (`r_data.c:382–401`, renderer.md §8.2)
-and per-tic for map data access. Cache hits (already in zone) are pointer
-returns; cache misses either re-composite from WAD (textures) or load raw
-lump data. The WAD must therefore support **random byte-range access by lump
-file-position and size**.
+`W_CacheLumpNum` (w_wad.c) is the only lump read path. A cache hit returns the
+zone copy; a miss allocates a zone block and calls `W_ReadLump`, which copies
+the bytes out of the WAD. Wall texture columns go through it on every frame
+(`R_GetColumn`, an inline in r_data.h, renderer.md §8.2), and map data goes
+through it at level load. The WAD must therefore support **random byte-range
+access by lump file position and size**.
 
-Three strategies for a constrained target:
+In this port a lump's `handle` is a pointer straight into the registered WAD
+buffer (`W_AddFile`: `handle = (int)(data + filepos)`), and `W_ReadLump` is a
+`memcpy` from it.
 
 #### (a) Full IWAD in PSRAM (~16 MiB class)
 
-Load the entire WAD into a heap-allocated buffer before calling `D_DoomMain`.
-In webdoom, `handle = (int)(wadBuffer + filepos)` makes every lump a direct
-pointer into the WAD buffer (`w_wad.c:153`). On a target with 16 MiB+ PSRAM,
-this is the simplest approach: zero latency for lump access.
+Load the whole WAD into memory before `D_DoomMain`. Lump access is then a
+`memcpy` with no latency beyond the memory's own.
 
-WAD sizes (binary MiB, verified against perf.md §3):
+IWAD sizes:
 
-| IWAD | Size |
-|------|------|
-| doom.wad (Ultimate Doom variant, 12,408,292 bytes) | ≈ 11.8 MiB |
-| doom2.wad | ≈ 13.9 MiB |
-| plutonia.wad (worst case) | **16.61 MiB** |
+| IWAD | Bytes | MiB |
+|------|-------|-----|
+| doom.wad (Ultimate Doom) | 12,408,292 | 11.83 |
+| doom2.wad | 14,604,584 | 13.93 |
+| plutonia.wad | 17,420,824 | 16.61 |
+| tnt.wad | 18,195,736 | **17.35** (largest) |
 
-Only doom.wad fits comfortably in a 16 MiB PSRAM budget alongside static +
-zone. doom2.wad exceeds 16 MiB when combined with the 1.44 MiB static
-segment and 4 MiB zone; plutonia.wad clearly does not fit.
-
-**Memory budget (doom.wad, full IWAD in PSRAM)**:
+**Budget, doom.wad in PSRAM**:
 
 | Region | Size |
 |--------|------|
 | Static (stack + DATA + BSS, = `__heap_base`) | 1.44 MiB |
-| Screen buffers (I_AllocLow) | 0.24 MiB |
+| Screen buffers (`I_AllocLow`) | 0.24 MiB |
 | Zone | 4 MiB |
-| WAD in PSRAM | 11.8 MiB |
+| WAD | 11.83 MiB |
 | **Total** | **~17.5 MiB** |
 
-Requires ~17.5 MiB PSRAM. ESP32-S3 with 16 MiB PSRAM does **not** fit doom.wad
-— it is 1.5 MiB over, not the "tight" this row used to call it — and does not
-fit doom2.wad or plutonia.wad without streaming.
+A 16 MiB PSRAM part does not fit doom.wad this way (it is 1.5 MiB over), and
+none of the commercial IWADs fit. Use (c) or (d), or the shareware WAD.
 
 #### (b) Shareware doom1.wad (~4 MiB class)
 
-doom1.wad (shareware IWAD, episodes 1 only) is ~4.2 MiB. With this WAD:
+The shareware IWAD (episode 1 only) is about 4 MiB.
 
 | Region | Size |
 |--------|------|
 | Static (= `__heap_base`) | 1.44 MiB |
-| Screen buffers (I_AllocLow) | 0.24 MiB |
+| Screen buffers (`I_AllocLow`) | 0.24 MiB |
 | Zone | 4 MiB |
-| WAD in PSRAM | ~4.2 MiB |
-| **Total** | **~9.9 MiB** |
+| WAD | ~4 MiB |
+| **Total** | **~9.7 MiB** |
 
-Fits in 16 MiB PSRAM with margin. The shareware WAD is free to redistribute.
-The 13 golden demos include doom.wad demos (not shareware), but for a port
-validation pass, any set of demos on the shareware WAD can be recorded and
-used as a local golden.
+It fits in 16 MiB of PSRAM with margin, and the shareware WAD may be
+redistributed. The 13 golden demos need the commercial IWADs, so a port
+validating on doom1.wad records its own demos as a local golden once the
+commercial set has passed elsewhere.
 
 #### (c) Streaming from SPI flash
 
-If PSRAM is unavailable or insufficient, the WAD can live in SPI flash and
-be streamed in on demand. This requires modifying `w_wad.c`'s lump access:
-instead of `handle` being a direct pointer, `W_ReadLump` must do a SPI
-flash read via `spi_flash_read(filepos, buf, size)`.
+With no room for the WAD in RAM, it can live in SPI flash and be read on
+demand. `W_ReadLump` becomes a flash read (for example
+`spi_flash_read(filepos, dest, size)`) instead of a `memcpy`; `handle` then
+holds a flash offset rather than a pointer. `W_CacheLumpNum` already caches on
+top of `W_ReadLump`, so only the raw read changes.
 
-The access pattern is random-access but heavily cached by the zone. With a
-4 MiB zone and 1.36 MiB non-purgeable peak, up to ~2.6 MiB of zone space is
-available for purgeable lump cache. This means most frequently used textures
-and flats will be in-cache across frames; SPI reads occur only on cache miss.
+The zone absorbs most of the access pattern. A 4 MiB zone over a 1.36 MiB
+non-purgeable peak leaves about 2.6 MiB of purgeable cache, which holds a
+typical map's textures and flats across frames; flash reads happen on misses.
 
-SPI flash latency impact: a typical SPI flash read at 80 MHz is ~1 µs/byte;
-a 4 KiB texture column composite read is ~4 ms. At worst, each distinct
-texture on screen causes one read per render pass. On a level with dozens of
-distinct textures, first-frame latency will be noticeable but subsequent
-frames serve from zone cache.
+Latency, estimated: at 80 MHz a 4 KiB read is a few milliseconds. The first
+frame of a map, with a cold cache, stalls; later frames run from the zone.
+Touching the level's textures at load time (as `R_PrecacheLevel` does when
+precaching is on) moves the stall to the load.
 
-**What must change in w_wad.c**: `W_ReadLump` must fetch bytes from flash
-rather than returning a pointer. The zone-cache layer (`W_CacheLumpNum`)
-already handles caching on top of `W_ReadLump`; only the raw read path needs
-to change.
+#### (d) XIP from flash: viable, the engine never writes the WAD
 
-#### (d) XIP from flash — feasibility verdict (13.2c)
+The engine never writes into the WAD buffer. Every access goes through
+`W_CacheLumpNum`, which copies into the zone, so the blob can sit in
+execute-in-place flash or mask ROM with no RAM cost. The BLOCKMAP byte swap in
+`P_LoadBlockMap` (p_setup.c) works on the zone copy too, so this holds on
+big-endian targets.
 
-**WAD blob proven read-only over the 13-demo corpus [PROT_READ, 2026-07-18,
-commit TBD]; XIP-viable.** The engine never writes into the WAD blob. All lump
-accesses go through `W_CacheLumpNum` (`w_wad.c:398–422`) which allocates a
-zone copy via `Z_Malloc` and then calls `W_ReadLump` (`w_wad.c:376–389`)
-which does `memcpy(dest, (byte*)l->handle, l->size)` — reading FROM the blob
-into the zone copy. The suspect BLOCKMAP byte-swap in `P_LoadBlockMap`
-(`p_setup.c:494–509`) operates on `blockmaplump = W_CacheLumpNum(lump,
-PU_LEVEL)`, a zone copy, not the blob. On a big-endian target the swap is
-in-place within zone memory, so the WAD blob is untouched even there.
-
-Proof method: `tools/freestanding/ro-wad-check.sh` builds `fs-doom` with
-`WD_RO_WAD=1` which places the preloaded WAD blob in an anonymous `mmap`
-region and calls `mprotect(PROT_READ)` after load. A SIGSEGV handler
-intercepts any write, prints `WAD-BLOB WRITE: fault at <addr>`, and exits
-nonzero. Result: 13/13 demos complete bit-identical with zero WAD-blob writes.
-
-Reproduce: `make ro-wad-check` in `tools/freestanding/` (requires wads/lib/).
+Proof: `tools/freestanding/ro-wad-check.sh` (leg `ro-wad`; also
+`make ro-wad-check` in `tools/freestanding/`) builds `fs-doom` with
+`WD_RO_WAD=1`, which maps the preloaded WAD with `mmap`, makes it
+`PROT_READ`, and installs a SIGSEGV handler that reports any write as
+`WAD-BLOB WRITE`. All 13 demos run bit-identical with no write. The N64 port
+relies on the same property: it reads the 12.4 MB IWAD in place out of
+cartridge space.
 
 ### 2.4 Palette and framebuffer summary
 
 | Buffer | Size | Location |
 |--------|------|----------|
-| `screens[0]` — render target | 64,000 B | `I_AllocLow` heap (PSRAM or SRAM; see §1.5) |
-| `screens[1]` — status-bar background | 64,000 B | `I_AllocLow` heap (PSRAM or SRAM) |
-| `screens[2..3]` — wipe buffers | 64,000 B each | `I_AllocLow` heap (PSRAM) |
-| `webpalette` — gamma-corrected RGB palette | 768 B | Static BSS |
-| PLAYPAL WAD lump (14 palettes) | 10,752 B | Zone (PU_CACHE) |
-| COLORMAP WAD lump | 8,704 B | Zone (PU_STATIC) |
+| `screens[0]`, render target | 64,000 B | `I_AllocLow` block, or a port's own buffer (§1.5) |
+| `screens[1]`, border and intermission background | 64,000 B | `I_AllocLow` block |
+| `screens[2..3]`, wipe frames and save workspace | 64,000 B each | `I_AllocLow` block |
+| `screens[4]`, status bar background | 64,000 B | zone (`PU_STATIC`) |
+| `webpalette`, gamma-corrected RGB | 768 B | static BSS |
+| PLAYPAL lump (14 palettes) | 10,752 B | zone (`PU_CACHE`) |
+| COLORMAP lump | 8,704 B | zone (`PU_STATIC`) |
 
-`screens[0]` contains palette indices, not RGB values. The platform converts
-indices to its display format in `I_FinishUpdate` via the 768-byte palette
-set by the last `I_SetPalette`. `screens[0]` is the only buffer written on
-every frame; placing it in internal SRAM (see §1.5 hybrid strategy) is the
-primary mitigation for the §7.3 PSRAM latency bottleneck.
+`screens[0]` holds palette indices. It is the only buffer written on every
+frame, which is why placing it in internal SRAM (§1.5) is the main fix for
+the §7.3 bottleneck.
 
 ---
 
@@ -607,160 +608,162 @@ primary mitigation for the §7.3 PSRAM latency bottleneck.
 
 ### 3.1 The 35 Hz tic
 
-`TICRATE = 35` (`doomdef.h:123`). One game tic = 1/35 s ≈ 28.57 ms. The
-simulation (`G_Ticker → P_Ticker`) runs exactly once per tic. Every
-physics constant (movement speed, strobe periods, gravity) is calibrated to
-35 Hz — `SLOWDARK = 35` tics (1 s slow strobe dark phase), `FASTDARK = 15`
-tics (~0.43 s fast strobe), `GRAVITY = FRACUNIT` per tic² (archaeology §11).
+`TICRATE = 35` (doomdef.h): one tic is 28.57 ms. The simulation
+(`G_Ticker` → `P_Ticker`) runs exactly once per tic, and every physics
+constant is calibrated to that rate: `GRAVITY = FRACUNIT` per tic²,
+`SLOWDARK = 35` tics for the slow strobe's dark phase, `FASTDARK = 15`
+(engine-archaeology.md §11).
 
-**The tic is discrete, not continuous**: two calls to `I_GetTime` differing
-by N return N tics, and the engine runs exactly N simulation steps. There is
-no fractional tic in the simulation.
+The tic is discrete. When `I_GetTime` advances by N, the engine runs N
+simulation steps; there is no fractional tic in the simulation.
 
 ### 3.2 Adaptive underrun behaviour
 
-`TryRunTics` (d_net.c:636) is called once per trip through `D_DoomLoop`.
-It asks `I_GetTime` for the current tic, computes `realtics` (wall-clock
-tics elapsed since last call), then decides `counts = max(1, realtics)`.
-The engine then runs `counts` simulation tics in sequence.
+`TryRunTics` lives in the platform's `d_net.c` (§1.9). The single-player
+version in `tools/freestanding/d_net.c` works like this on each call:
 
-**On underrun (render slower than 35 Hz)**: the engine runs multiple tics
-per trip through the loop, catching up. The sim advances at real time
-regardless of frame rate. At 10 Hz display rate, each display trip runs ~3
-tics; demo replay is unaffected because only the sim state matters, not the
-display rate.
+1. `realtics` = tics elapsed since the previous call (`I_GetTime`).
+2. `NetUpdate` builds one ticcmd per elapsed tic from local input, running
+   `I_StartTic` and `D_ProcessEvents` for each. It stays at most
+   `BACKUPTICS/2 - 1` tics ahead of the simulation, and after a gap longer
+   than a second it builds only one.
+3. It runs `counts = (built tics) - gametic`, capped at `realtics + 1`. The
+   web version caps at `realtics + web_inputdelay`, which defaults to 1.
+4. `counts` may be 0. Nothing blocks: the frame renders the unchanged world
+   and returns.
 
-**On overrun (render faster than 35 Hz)**: `counts = 1` is the minimum.
-The engine always runs at least one tic per loop iteration. If the platform's
-`D_DoomLoop` calls the render every 1 ms, the sim still runs at 35 Hz
-(runs 1 tic per call, but only 28.57 ms of tics are available per second).
-This is the model for bare-metal: a tight loop calling `D_DoomFrame` (or the
-equivalent) as fast as possible is correct; the sim self-throttles via
-`I_GetTime`.
+**On underrun** (rendering slower than 35 Hz), each frame runs several tics
+and the simulation keeps real time. At a 10 Hz display each frame runs about
+three tics. Demo playback is unaffected, because only the simulation state
+matters.
 
-**`singletics` debug path** (d_main.c:104,397): when `singletics = true`,
-`TryRunTics` forces exactly one tic per frame regardless of elapsed time.
-This is used by the demo-test tool (`g_game.c:1653`) for deterministic
-playback. A bare-metal port bringing up its timing can use this mode to
-verify the sim without worrying about wall-clock accuracy.
+**On overrun** (rendering faster than 35 Hz), most frames run 0 tics. A tight
+loop calling `D_DoomFrame` as fast as possible is correct; the simulation
+self-throttles through `I_GetTime`. With interpolation on (§1.1), the extra
+frames are not wasted: they show positions between tics.
+
+The core's own `TryRunTics` (engine/core/d_net.c) differs: it always runs at
+least one tic and busy-waits in `NetUpdate` until that tic exists. No build
+here uses it.
+
+**`singletics`** (d_main.c): when set, `D_DoomFrame` skips `TryRunTics` and
+runs exactly one tic per frame regardless of time. `G_TimeDemo` sets it for
+`-timedemo`, which is how every demo gate replays deterministically. A port
+bringing up its timing can use it to verify the simulation before trusting
+its clock.
 
 ### 3.3 Audio timing
 
-The web audio model: the OPL sequencer (`mus_opl.c`) runs at 140 Hz (MUS
-ticks, formats.md §7.3). JS pulls samples via an AudioWorklet at the output
-sample rate (44,100 Hz or device rate). Sound effect PCM is 11,025 Hz (DMX
-format, formats.md §6).
+On the web, the OPL music sequencer (`engine/web/mus_opl.c`) steps MUS events
+at 140 Hz (`MUS_RATE`, formats.md §7.3) between rendered samples; the audio
+worklet pulls interleaved stereo float samples through
+`web_music_render()` at the output rate (44,100 Hz or the device rate). Sound
+effects are 11,025 Hz PCM (formats.md §6).
 
-For bare-metal: a hardware DAC or I²S peripheral with a dedicated fill
-interrupt is the natural fit. The OPL sequencer exposes `mus_play` and a
-render function (`web_music_render` in the web layer); bare-metal reuses
-the same sequencer, replacing the AudioWorklet pull with a DMA callback.
-Sound effects are separate: `I_StartSound` hands a DMX PCM buffer to the
-platform, which mixes channels and pushes to the DAC independently of the
-simulation loop.
+On bare metal, an I²S or DAC peripheral with a refill interrupt is the
+natural fit. The sequencer can be reused as is, with the worklet's pull
+replaced by a DMA callback. Sound effects are separate: `I_StartSound` hands
+over a DMX PCM buffer and the platform mixes channels itself.
 
-The key contract: audio timing is **decoupled from the sim**. No `P_Random`
-calls occur inside sound mixing. Sound parameter updates (`S_UpdateSounds`)
-run once per tic using `M_Random` only. A bare-metal port may implement audio
-on a separate core (ESP32-S3 has two LX7 cores) without any synchronisation
-concern beyond the `I_StartSound` call.
+Audio timing is **decoupled from the simulation**. No `P_Random` call happens
+in sound code, and `S_UpdateSounds` runs once per frame using `M_Random` only.
+Audio can run on a second core (the ESP32-S3 has two) with no synchronisation
+beyond the `I_StartSound` and `I_UpdateSoundParams` calls.
 
 ---
 
 ## 4. Table strategy for ROM targets
 
-Payoff from `docs/engine-archaeology.md §14` (40-row ledger). The ledger
-classifies every hardcoded blob as: **recipe** (cracked, can regenerate),
-**equivalence** (provably derivable), **irreducible** (cannot be derived),
-or **declarative** (art/design data). The port's flash and RAM budget depends
-on which blobs live where.
+The master verdict ledger in engine-archaeology.md §14 classifies every
+hard-coded table as **recipe** (cracked, can be regenerated), **equivalence**
+(provably derivable), **irreducible** (cannot be derived) or **declarative**
+(art and design data). Where each one lives decides the port's flash and RAM
+budget.
 
 ### 4.1 Trig tables — boot-generate (saves ~64 KiB flash)
 
 | Table | Entries | Size | Verdict |
 |-------|---------|------|---------|
-| `finesine[10240]` + `finetangent[4096]` | 14,336 | 56 KiB | **recipe** — archaeology §1 |
-| `tantoangle[2049]` | 2,049 | 8 KiB | **recipe** — archaeology §1 |
-| **Total** | | **64 KiB** | |
+| `finesine[10240]` + `finetangent[4096]` | 14,336 | 56 KiB | **recipe** (engine-archaeology.md §1) |
+| `tantoangle[2049]` | 2,049 | 8 KiB | **recipe** (engine-archaeology.md §1) |
+| **Total** | 16,385 | **64 KiB** | |
 
-**Recipe** (archaeology §1): `sin(i + 0.5) * FRACUNIT` (truncated toward
-zero), `tan` similarly, `atan(i/2048)` for the arctangent. 33 finesine
-entries need correction (razor-edge values where the 1992 libm differed
-from modern). The correction stream is ~11 KiB entropy-coded; it ships in
-the binary (`engine/core/tables.c`, `tables.h:86`).
+**How the core does it**: `T_GenerateTables` (engine/core/tables.c), called
+early in `D_DoomMain`, computes the three tables with `sin`, `tan` and `atan`
+(truncated toward zero, `(i + 0.5)` phase for sine and tangent), then applies
+a correction stream from `tables_fix.h` that turns the host libm's output into
+the exact 1993 values. A FNV-1a checksum over all 16,385 entries
+(`TABLES_CRC`) must match, or boot stops with
+`I_Error("T_GenerateTables: tables differ from 1993 canon ...")`. The tables
+are BSS, not DATA.
 
-**Current webdoom approach**: boot-generate all three tables at startup
-(`R_InitTables()` called from `D_DoomMain`). The trig tables do NOT appear
-in the wasm DATA section (73.5 KiB, perf.md §1); they are allocated in BSS
-and filled at boot. A FNV checksum over all 16,385 entries guards against
-libm drift.
+The correction stream is about 11 KiB compiled: 4,097 bytes of packed 2-bit
+deltas plus 1,702 32-bit escape values (1,603 of them for `tantoangle`).
+`tools/gen-tables.mjs` generates it from the wasm build against the canonical
+values in `tools/golden/tables-canon.json`. The same `tables_fix.h` passes the
+checksum on glibc (x86 `-m32`), musl (ARM, PowerPC) and libdragon's newlib
+(N64), as the 13/13 legs on each show. A target whose libm rounds differently
+fails loudly at boot rather than desyncing.
 
-**ROM target recommendation**: keep boot-generation. Net flash savings:
-64 KiB tables − ~11 KiB corrections − generation code ≈ 50 KiB net.
-Boot generation cost: ~16,385 libm `sin`/`tan` calls + 33-entry correction
-patch. On a 240 MHz Cortex-M7, `sin` is ~50 cycles via FPU; 14,336 calls ≈
-14,336 × 50 / 240,000,000 = ~3 ms. Acceptable for a one-time startup cost.
+**ROM target recommendation**: keep boot generation. Net flash saving is about
+64 KiB of tables minus ~11 KiB of corrections minus the generator, so ~50 KiB.
+Boot cost is 16,385 libm calls plus the correction pass. Estimated: at ~50
+cycles per `sin` on a 240 MHz FPU core, ~3 ms, once.
 
-**Alternative for flash-rich, boot-speed-critical targets**: ship the 64 KiB
-of pre-computed table data as `const` in flash. If flash is XIP-capable, the
-tables are accessed directly from flash (zero RAM cost). Omit the 11 KiB
-correction stream; just ship the final verified values.
+**Alternative for flash-rich targets where boot time matters**: ship the
+64 KiB of final values as `const` (from `tables-canon.json`) and skip
+generation. On XIP flash the tables then cost no RAM.
 
 ### 4.2 Irreducible tables — ship as ROM data
 
-These cannot be regenerated; they MUST ship as constants:
+These cannot be regenerated and ship as constants:
 
 | Table | Size | Verdict | Sim-critical? |
 |-------|------|---------|---------------|
-| `rndtable[256]` (m_random.c) | 256 B | irreducible — no standard PRNG generates it (brute-forced 2³² seeds, archaeology §3) | YES |
-| `gammatable[5][256]` (v_video.c) | 1,280 B | irreducible — no exact closed form (archaeology §4) | No |
-| `fuzzoffset[50]` (r_draw.c:260) | 200 B | irreducible — fixed spectre pattern | No |
-| `translationtables[768]` (r_draw.c:459) | 768 B | recipe — identity + palette remap for multiplayer colours | No |
+| `rndtable[256]` (m_random.c) | 256 B | irreducible: no standard PRNG produces it (all 2³² seeds searched, engine-archaeology.md §3) | YES |
+| `gammatable[5][256]` (v_video.c) | 1,280 B | irreducible: no exact closed form (engine-archaeology.md §4) | no |
+| `fuzzoffset[50]` (r_draw.c) | 200 B | irreducible: the fixed spectre pattern | no |
 
-If flash is XIP-capable, all of these cost zero RAM (read directly from flash
-by the CPU cache or fetch unit). If flash is SPI-only (no XIP), cache them in
-SRAM on first access.
+On XIP flash these cost no RAM. Without XIP, copy them to SRAM at boot.
+
+`translationtables` (the player colour remaps) is not shipped:
+`R_InitTranslationTables` (r_draw.c) computes it into a 256-byte-aligned zone
+block at startup.
 
 ### 4.3 WAD-owned tables — always RAM after WAD load
 
-These blobs are WAD lumps: they are loaded from the WAD into the zone and
-are subject to PWAD override (e.g., coloured lighting PWADs replace
-COLORMAP). They cannot be reproduced from ROM alone.
+These are WAD lumps: they load into the zone and a PWAD can replace them
+(coloured-lighting PWADs replace COLORMAP). They cannot come from ROM alone.
 
 | Lump | Size | Notes |
 |------|------|-------|
-| `COLORMAP` | 8,704 B | recipe known (archaeology §6) but PWAD-overridable; always load from WAD, never regenerate |
+| `COLORMAP` | 8,704 B | recipe known (engine-archaeology.md §6) but PWAD-replaceable; always load from the WAD |
 | `PLAYPAL` | 10,752 B | 14 palettes × 768 B |
 | `PNAMES`, `TEXTURE1/2` | variable | wall texture definitions |
-| All sprite/flat/sound lumps | variable | loaded on demand |
-
-COLORMAP and PLAYPAL are loaded `PU_STATIC` and never purged. Their combined
-8 + 10.7 ≈ 19 KiB is included in the 1.36 MiB non-purgeable peak (perf.md §2).
+| sprites, flats, sounds | variable | loaded on demand |
 
 ### 4.4 Boot-computed pointer tables — RAM only
 
-`zlight[16][128]` and `scalelight[16][48]` are 2D pointer arrays into
-`colormaps` (= COLORMAP lump data). They contain no data values of their
-own — only pointers — and are rebuilt at `R_InitLightTables` /
-`R_ExecuteSetViewSize` (r_main.c:626, r_main.c:683). They occupy:
+`zlight[16][128]` and `scalelight[16][48]` are arrays of pointers into
+`colormaps` (the COLORMAP lump). They hold no values of their own and are
+rebuilt by `R_InitLightTables` and `R_ExecuteSetViewSize` (r_main.c):
 
-- `zlight`: 16 × 128 × sizeof(pointer) = 2,048 × 4 = 8 KiB (pointer table)
-- `scalelight`: 16 × 48 × sizeof(pointer) = 768 × 4 = 3 KiB
+- `zlight`: 2,048 pointers × 4 = 8 KiB
+- `scalelight`: 768 pointers × 4 = 3 KiB
 
-These are ROM-incompatible (they hold live pointers); they go in SRAM.
+They hold live pointers, so they go in RAM.
 
 ### 4.5 Concrete recommendation per target class
 
 | Target class | Trig tables | rndtable / gamma | COLORMAP | Zone |
 |---|---|---|---|---|
-| Flash-rich, XIP (≥ 2 MiB flash) | Ship as `const` in flash, zero RAM | `const` in flash, zero RAM | Load from WAD (PSRAM/SRAM zone) | 4 MiB PSRAM |
-| Flash-constrained (< 1 MiB flash) | Boot-generate from recipe + 11 KiB correction stream | Ship 256+1280 B as `const` | Load from WAD | 4 MiB PSRAM |
-| PSRAM-only (no WAD flash) | Boot-generate | `const` in flash | Include COLORMAP as fallback `const` in flash (8.7 KiB) | 4 MiB |
+| Flash-rich, XIP (≥ 2 MiB flash) | `const` in flash, no RAM | `const` in flash | load from WAD | 4 MiB |
+| Flash-constrained (< 1 MiB flash) | boot-generate (~11 KiB of corrections) | `const`, 1.5 KiB | load from WAD | 4 MiB |
+| No WAD in flash (PSRAM only) | boot-generate | `const` in flash | load from WAD | 4 MiB |
 
-**The never-do rule** (archaeology §7): do not replace trig table lookups
-with runtime `sin`/`tan` calls in the render loop. An L1-cached table lookup
-is ~4 cycles; runtime transcendental is 20–100 cycles. Boot-generate once,
-look up always.
+**Never replace a table lookup with a runtime transcendental in the render
+loop** (engine-archaeology.md §7). A cached lookup is a few cycles; `sin` is
+tens. Generate once, look up always.
 
 ---
 
@@ -768,8 +771,7 @@ look up always.
 
 ### 5.1 Endianness
 
-All WAD on-disk data is **little-endian** (`docs/formats.md §11.1`).
-The macro gate in `m_swap.h:37–42`:
+All WAD data is little-endian (formats.md §11.1). The gate is in `m_swap.h`:
 
 ```c
 #ifdef __BIG_ENDIAN__
@@ -778,429 +780,343 @@ long  SwapLONG(long);
 #define SHORT(x) ((short)SwapSHORT((unsigned short)(x)))
 #define LONG(x)  ((long)SwapLONG((unsigned long)(x)))
 #else
-#define SHORT(x) (x)   // identity on LE / wasm
+#define SHORT(x) (x)   // identity on little-endian hosts and wasm
 #define LONG(x)  (x)
 #endif
 ```
 
-Every map lump read and WAD directory parse goes through `SHORT()` / `LONG()`
-(`p_setup.c:146–292`, `w_wad.c:177–187`). A big-endian bare-metal port must:
+Every map-lump read and directory parse goes through `SHORT()` and `LONG()`
+(`P_Load*` in p_setup.c, `W_AddFile` in w_wad.c). A big-endian port needs:
 
-1. Implement `SwapSHORT` / `SwapLONG` in `m_swap.c`.
-2. Define `__BIG_ENDIAN__` before including `m_swap.h`.
-3. Handle the BLOCKMAP in-place byte-swap loop (`p_setup.c:480–481`) which
-   swaps the entire lump as a `short[]` array.
-4. Tag savegames with a platform identifier: savegame `player_t` / `mobj_t`
-   are `memcpy`'d verbatim and contain native-endian pointer indices
-   (formats.md §11.4).
-5. The MUS lump header is parsed with explicit `m[4] | (m[5] << 8)` bit
-   arithmetic (`mus_opl.c:427–428`) — already endian-safe.
-6. **Force signed `char`** (`-fsigned-char`). Discovered by the trial below:
-   the engine inherits x86's signed-`char` default; PowerPC and ARM ABIs
-   default `char` to **unsigned**, which silently changes demo-byte and
-   table arithmetic. A per-site audit (explicit `signed char` at each use)
-   is future work; until then the flag is a port REQUIREMENT.
+1. **`__BIG_ENDIAN__` defined.** clang (and `zig cc`) predefines it on
+   big-endian targets; GCC does not, so a GCC build passes
+   `-D__BIG_ENDIAN__` (tools/n64/Makefile does).
+2. **Nothing more for the swaps.** `m_swap.c` already implements `SwapSHORT`
+   and `SwapLONG` in its big-endian branch.
+3. **The BLOCKMAP swap** in `P_LoadBlockMap` swaps the whole lump in place as
+   a `short[]`. It runs on the zone copy, so it is correct and leaves the WAD
+   untouched (§2.3d).
+4. **Savegames are not portable.** `player_t` and `mobj_t` are archived with
+   `memcpy` and hold native-endian values and pointers; a save from one byte
+   order does not load on the other (formats.md §11.4).
+5. **MUS is already safe**: `mus_opl.c` parses its header with explicit
+   `m[4] | (m[5] << 8)` arithmetic.
+6. **Signed `char` is required: compile with `-fsigned-char`.** The engine
+   relies on x86's signed `char`; PowerPC, ARM and MIPS ABIs default to
+   unsigned, which changes demo-byte and table arithmetic and diverges the
+   simulation within the first 25 tics with no crash. Every cross build here
+   passes the flag (`be-build.sh`, `tools/n64/Makefile`).
 
-> **TESTED — first big-endian execution (task 13.3a, 2026-07-18).** fs-doom
-> cross-built for **powerpc-linux-musleabi** (`zig cc`, static) and run under
-> `qemu-ppc-static`: **13/13 golden demos bit-identical** per-tic. Items 1–2
-> above were exactly sufficient for byte order (implementing the two swaps in
-> `m_swap.c`'s existing `#else` branch); item 3 is moot for read-only WAD
-> residency (13.2c: the BLOCKMAP swap operates on the zone copy, never the
-> blob). Item 6 (char signedness) was the missing doctrine — without
-> `-fsigned-char` the sim diverges at tics 0–25 with NO crash. Notably the
-> §4.1 trig boot-generation survived BE untouched: the armed `TABLES_CRC`
-> FNV-1a gate (defined unconditionally in `tables_fix.h`) verifies the tables
-> are canon on PPC musl — the checksum design did its job across a third
-> libm. Reproduce: `bash tools/freestanding/be-build.sh && bash
-> tools/freestanding/be-check.sh`. **Carry-forward for rung 2 (13.4b): the
-> QEMU ARM baremetal build must also add `-fsigned-char` (ARM defaults
-> unsigned) before demo hashes can match.**
+With these, the freestanding core replays 13/13 golden demos bit-identically
+on big-endian PowerPC and MIPS under qemu-user (`be-check.sh`; PowerPC is the
+default target, MIPS with `BE_TARGET=mips-linux-musleabi`) and on the N64.
+The trig tables pass their boot checksum on every one of them.
 
 ### 5.2 Alignment — known unaligned access sites
 
-On a target with strict alignment requirements (ARM Cortex-M0, Cortex-M3,
-Cortex-M4 without `__attribute__((packed))` workaround), the following code
-sites read multi-byte values from WAD data that may not be naturally aligned.
-All were found by `grep` against the source tree.
+On strict-alignment targets (Cortex-M0/M3, MIPS) a multi-byte load from an
+address that is not a multiple of its size traps. qemu-user delivers SIGBUS
+for MIPS, so the 13-demo corpus on MIPS exercises every site below.
 
-| Site | Access | Alignment risk |
-|------|--------|---------------|
-| `w_wad.c:177` — `(wadinfo_t*)data` | int32 at offsets 4 and 8 (numlumps, infotableofs) via `LONG()` | WAD data is malloc-aligned, but WAD directory offset is arbitrary |
-| `w_wad.c:187` — `(filelump_t*)(data + LONG(...))` | int32 at offsets 0 and 4 (filepos, size) per directory entry | filepos of the directory itself may not be 4-byte aligned |
-| `p_setup.c:279` — `(mapnode_t*)data` | int16 bbox[2][4] at struct offset 8, then int16 children at offset 24 | the NODES lump start is at an arbitrary file offset |
-| `r_data.c:277,345` — `LONG(realpatch->columnofs[x])` | int32 array at byte offset 8 from patch start | patch lump start at arbitrary file offset; offset 8 may not be 4-byte aligned |
-| `r_things.c:454-455` — `LONG(patch->columnofs[texturecolumn])` | same as above | same |
-| `v_video.c:252,317` — `LONG(patch->columnofs[col])` | same as above | same — two live call sites (the third, in V_DrawPatchDirect, is inside the commented-out block at v_video.c:351-401) |
-| `r_data.c:522` — `(maptexture_t*)(maptex + offset)` | int32 `masked` at offset 8, int32 `columndirectory` at offset 16 within maptexture_t | offset into TEXTURE1/2 lump may be misaligned |
+One rule decides most cases. Lumps read through `W_CacheLumpNum` land in zone
+blocks, which are 4-byte aligned (§1.3), so a field at a 4-aligned offset
+from a lump's start is safe. Risk comes from arbitrary offsets inside a lump,
+from the raw WAD buffer, and from buffers the core casts.
 
-**Total: 7 primary sites** (some with multiple call lines). The `patch_t`
-`columnofs[]` access is the most pervasive: it is hit every frame for every
-visible wall column and sprite column.
+| Site | Access | Status |
+|------|--------|--------|
+| `R_InitTextures` (r_data.c): `maptexture_t` at an offset read from the TEXTURE1/2 directory | `int16`/`int32` fields at an arbitrary offset | **faulted on ARM and MIPS; fixed**: read with `read_le16`/`read_le32` (m_swap.h) and a byte-wise name copy |
+| `R_InitSpriteDefs` (r_things.c): sprite names compared as `*(int*)` | 4-byte load from string literals (alignment 1 in `.rodata`) | **faulted; fixed** with `read_le32` on both sides |
+| platform screen buffers cast to `short*` by the wipe | 2-byte loads | **faulted in fs-doom; fixed** with `__attribute__((aligned(4)))`; a port's own buffers need the same |
+| `patch_t.columnofs[]` at offset 8 (`R_GenerateLookup`, `R_GenerateComposite`, `R_DrawVisSprite`, `V_DrawPatch`, `V_DrawPatchFlipped`) | `int32` array | safe: the patch is a zone copy, so offset 8 is aligned. Hit for every visible column, so it is the site to watch if lump copies ever stop being aligned |
+| `P_LoadNodes` (p_setup.c): `mapnode_t` cast | `int16` fields | safe: zone copy |
+| `W_AddFile` (w_wad.c): `wadinfo_t` header and `filelump_t` directory | `int32` fields in the raw WAD buffer; the directory sits at an arbitrary `infotableofs` | depends on the WAD: aligned in the IWADs, unguaranteed for PWADs |
 
-> **TESTED — strict-alignment trial (tasks 13.4a QEMU-ARM + 13.3b qemu-user
-> MIPS BE, 2026-07-18).** qemu-user mips DOES deliver SIGBUS on unaligned
-> access, so this list went on a real trial across the full 13-demo corpus.
-> Verdicts: **site r_data.c:522 (maptexture_t cast) FAULTED on both strict
-> ISAs** — fixed with byte-safe `read_le16`/`read_le32` helpers (m_swap.h)
-> plus a byte-wise name copy; the pervasive `columnofs` rows (r_data.c:277/
-> 345, r_things.c:454-455, v_video.c ×2) **never faulted over the corpus** —
-> id's IWAD lumps are 4-byte-aligned in practice, so `columnofs[]` at offset
-> 8 lands aligned (PWADs offer no such guarantee — the mitigation below still
-> applies to hardened ports). **Two site families the list MISSED, found by
-> the trial**: the sprite-name `*(int*)` string puns in `r_things.c`
-> (`.rodata` literals have alignment 1) — fixed with `read_le32` on both
-> sides of the compare — and the freestanding shim's static screen buffers
-> (cast to `short*` by the wipe transform) — fixed with
-> `__attribute__((aligned(4)))`. Helper-fix neutrality proven per the 13.4b
-> core-touch policy: sim 13/13 + render pixel-identical + cycle-floor mean
-> within 2.12% (documented variance 9.9%); the LE wasm is NOT byte-identical
-> (the compiler folds the helpers differently at 2 sites, +71 B) — the
-> (b)-class proofs above are the sanctioned evidence. MIPS BE result:
-> **13/13 bit-identical** (`BE_TARGET=mips-linux-musleabi bash
-> tools/freestanding/be-check.sh`); PowerPC BE re-verified 13/13 after the
-> fixes.
+`read_le16` and `read_le32` assemble the value from bytes. On little-endian
+hosts the compiler folds them back to a single load, so the simulation and
+render goldens are unchanged on wasm.
 
-**Mitigation on strict-alignment targets**:
+**Mitigation for the remaining sites on a strict-alignment target**:
 
-Option A (minimal change): replace the bare `LONG()` macro with a byte-by-byte
-read helper:
-```c
-static inline int32_t read_le32(const void *p) {
-    const uint8_t *b = (const uint8_t *)p;
-    return (int32_t)(b[0] | ((uint32_t)b[1]<<8) | ((uint32_t)b[2]<<16) | ((uint32_t)b[3]<<24));
-}
-```
-Override the `LONG()` macro with this on strict-alignment targets.
+- **Option A**: on such targets, define `LONG()` and `SHORT()` in terms of
+  `read_le32`/`read_le16` taking the field's address, so every WAD-sourced
+  read is byte-safe.
+- **Option B**: keep lump data aligned. `W_CacheLumpNum` already copies into
+  4-byte-aligned zone blocks; copy the WAD directory into an aligned buffer
+  before parsing it.
 
-Option B: copy WAD lump data into 4-byte-aligned heap buffers at load time
-before casting. `W_CacheLumpNum` already copies into zone memory; ensure the
-zone allocator aligns to 4 bytes (Z_Zone's default block header alignment
-satisfies this on most platforms).
-
-On ESP32-S3 (LX7): LX7 supports unaligned loads natively (no trap). The
-above is not needed unless targeting Cortex-M0/M3.
+The ESP32-S3's LX7 handles unaligned loads in hardware, so neither is needed
+there; they matter for Cortex-M0/M3 and MIPS.
 
 ### 5.3 Integer width assumptions
 
-`fixed_t` is `int32_t` (`doomtype.h`). `angle_t` is `uint32_t`. The fixed-
-point unit is `FRACUNIT = 0x10000 = 65536`.
+`fixed_t` is `int` (32-bit, m_fixed.h), `angle_t` is `unsigned`, and
+`FRACUNIT = 0x10000`.
 
-**The FixedDiv decision** (archaeology §2 and §7):
+**32-bit pointers are required.** `lumpinfo_t.handle` is an `int` that holds
+a pointer into the WAD buffer (`W_AddFile`: `handle = (int)(data + filepos)`),
+and savegames archive structs that contain pointers. Every build here is
+ILP32 or has 32-bit pointers: wasm32, x86 `-m32`, ARM32, PowerPC32 and the
+N64's libdragon ABI. An LP64 build truncates every lump handle. A port to a
+64-bit-pointer target must widen `handle` first.
 
-`FixedDiv` computes `(a / b) * 65536` over the guarded domain
-`|a| >> 14 < |b|` (equivalently, `|result| < 2^14`). Three forms are
-bit-identical over this domain (proven by 2×10⁹ random + 1.8×10⁶ boundary
-pairs, archaeology §2):
+**FixedDiv** (engine-archaeology.md §2 and §7). The shipped form, in
+m_fixed.h, is:
 
 ```c
-// Form 1: int64
-((int64_t)a << 16) / b
-
-// Form 2: double
-(double)a / (double)b * 65536.0
-
-// Form 3: 64/32 idiv (x86 DOS original)
+static inline fixed_t FixedDiv (fixed_t a, fixed_t b)
+{
+    if ((abs(a) >> 14) >= abs(b))
+        return (a ^ b) < 0 ? MININT : MAXINT;
+    return (fixed_t) (((long long) a << FRACBITS) / b);
+}
 ```
 
-**The Cortex-M problem**: Cortex-M0/M3/M4 have no 64-bit divide instruction.
-`((int64_t)a << 16) / b` compiles to a software `__aeabi_ldivmod` call.
-Cortex-M7 and Cortex-A have hardware 32-bit divide (SDIV/UDIV) but no 64-bit
-divide.
+The guard keeps `|a/b|` below 2¹⁴, so the 16.16 result fits in 31 bits. Over
+that domain the integer form is bit-identical to linuxdoom's `double` path
+and to the DOS original's 64/32 `idiv` (proven in engine-archaeology.md §2,
+reproduced by `tools/archaeology/fixeddiv-proof.c`). A port may use whichever
+is faster on its hardware.
 
-**Software divide cost**: on ARM with `-mcpu=cortex-m4`, `__aeabi_ldivmod`
-is ~40–80 cycles. `FixedDiv` is called in the renderer inner loop (scale
-calculation in `R_ScaleFromGlobalAngle`, r_main.c:465–506) and in `P_PathTraverse`. The archaeology §7
-wasm measurements show `int64` divide is faster than `double` on Pi5 (+20%)
-but 65% slower on Kaby Lake; on Bobcat (old x86), `double` is +6% faster.
-On Cortex-M without FPU: both forms require software emulation; `double`
-emulation is typically slower. On Cortex-M4F/M7 with FPU: hardware `divsd`
-may be faster than software 64-bit divide.
+**The 64-bit divide problem**: Cortex-M0/M3/M4, LX7 and the N64's R4300 have
+no 64-by-32 divide. `((long long)a << 16) / b` becomes a library call
+(`__aeabi_ldivmod` on ARM), roughly 40 to 80 cycles. `FixedDiv` runs in
+`R_ScaleFromGlobalAngle` for every wall segment, in sprite projection and in
+`P_PathTraverse`.
 
-**Recommendation for Cortex-M**: benchmark both paths at port bringup.
-Neither has a universal advantage. The guard-domain constraint limits the
-result to 30 significant bits (`|result| < 2^30 after left shift by 16`);
-however, no current 32-bit shortcut exists because the inputs (`a`, `b`)
-are not themselves bounded — `a` can be any int32. The double path remains
-an option for FPU-equipped Cortex-M targets. Use whichever the target's
-`FixedDiv` profiling shows faster; demo traces validate correctness.
+Measured on wasm with a 2×10⁸-iteration microbench
+(`tools/golden/bench-baseline.json`, `primitiveMicrobench`): the `int64` path
+is 16% faster than `double` on a Pi 5, 2.8× slower on a Kaby Lake laptop
+(i5-8350U), and 6% slower on an AMD Bobcat. Neither form wins everywhere. On
+Cortex-M without an FPU both are software; on M4F/M7 the hardware divider may
+win. Profile both at bring-up; the demo traces prove correctness either way.
 
-**Other width assumptions**:
-- `int` is used as 32-bit throughout (doomtype.h assumes LP32/LP64 model).
-  On an ILP16 target (8-bit AVR), this codebase does not port without
-  significant changes. Cortex-M is ILP32: safe.
-- `boolean` is typedef'd to `int` (`doomtype.h`). No bit-field dependencies.
-- `short` is used for WAD lump index values (`int16_t` semantics). Verify
-  `sizeof(short) == 2` on target.
-- `long` is assumed 32-bit in `LONG()` / `SwapLONG` (`m_swap.h`). On LP64
-  targets (64-bit Linux), `long` is 64 bits; the macro works but wastes bits.
-  Use `int32_t` in `SwapLONG` for correctness on all targets.
+**Other widths**:
+
+- `int` is 32-bit throughout. A 16-bit-`int` target (AVR) does not port
+  without major changes; Cortex-M is ILP32 and safe.
+- `boolean` is `int` (doomtype.h). Nothing depends on bit-fields.
+- `short` reads 16-bit WAD fields. Check `sizeof(short) == 2`.
+- `long` is assumed 32-bit in `LONG()` and `SwapLONG`. On a 64-bit `long` the
+  macros still work on little-endian hosts but waste bits.
 
 ---
 
 ## 6. What this repo already proves
 
-### 6.1 The web port is a platform-layer-only port
+### 6.1 The port lives in the platform layer
 
-The webdoom port touches `engine/core/` in **91 places** (measured:
-`grep -rn "// webdoom" engine/core/ | wc -l`), categorised as:
+`engine/core/` is linuxdoom-1.10 with a bounded set of edits. Edits carry a
+`webdoom` comment; `grep -rn "// webdoom" engine/core/` finds 132 such lines
+(a lower bound, since not every edit uses that exact form). They fall into
+these groups:
 
-| Category | Approximate count | Examples |
-|----------|-------------------|---------|
-| Render interpolation snapshots | ~12 | `p_mobj.c:535`, `p_tick.c:148`, `r_main.c:835` |
-| Raised limits (overflow guards) | ~6 | `r_plane.c:74` (MAXVISPLANES restored to vanilla 128 by task 14.2d), `r_bsp.c:88` (MAXSEGS 32→64) |
-| Safety clamps for overflows | ~3 | `p_maputl.c:607,673` (intercepts), `p_map.c` (spechit) |
-| Net/timing additions | ~6 | `d_net.h:49,137,140,145`, `g_game.c:683` |
-| JS bridge declarations and platform hooks | ~5 | `m_fixed.h:26`, `i_system.h:47,94` |
-| Bug fixes / robustness (HACX, SIGIL, etc.) | ~10 | `r_things.c:254`, `m_menu.c:1889` |
-| Save-game size increase | 1 | `g_game.c:74` (0x2c000→0x80000) |
-| WAD file handling (JS registry) | ~3 | `w_wad.c:153,218,387` |
-| Other | remainder | |
+| Group | Examples |
+|-------|---------|
+| Render interpolation snapshots | `p_mobj.c`, `p_tick.c`, `R_SetupFrame` (r_main.c) |
+| Raised limits | `MAXSEGS` 32→64 (r_bsp.c), `MAXVISSPRITES` 128→1024 (r_things.h), `MAXSPECIALCROSS` 8→64 (p_local.h), `SAVEGAMESIZE` 0x2c000→0x80000 (g_game.c) |
+| Overflow clamps | intercepts (`p_maputl.c`), spechit (`p_map.c`) |
+| Netplay and timing | `BACKUPTICS` and drop-in support (d_net.h, g_game.c) |
+| Platform hooks | the file registry in `W_AddFile`/`W_ReadLump`, `T_GenerateTables`, `D_DoomFrame` |
+| Robustness for real-world PWADs | HACX missing sprite frames (r_things.c), SIGIL's fifth episode (m_menu.c) |
+| Framebuffer layout | column-major `screens[]` (r_draw.c, v_video.c, st_stuff.c, f_wipe.c) |
 
-A bare-metal port replaces `engine/web/` wholesale and may need fewer of the
-91 core-side changes (e.g., no BACKUPTICS increase for a local-only port,
-no HACX/SIGIL support). The core is clean: 91 annotated divergences out of
-~15,000 lines of core C.
+A bare-metal port replaces `engine/web/` and reuses the core unchanged. The
+N64 and freestanding layers do exactly that.
 
-### 6.2 The headless path proves video/audio/input are optional
+### 6.2 The headless path proves video, audio and input are optional
 
-`tools/demo-test.mjs` runs the engine with `I_InitGraphics` and
-`I_FinishUpdate` as no-ops (`engine/web/i_video.c`) and all JS sound
-hooks uninstalled. The game runs 44,580 simulation tics across 13 demos
-without display or audio. This directly proves: **the simulation is
-independent of the display and audio layer**. A bare-metal port can bring
-up simulation first and add display/audio incrementally.
+`tools/demo-test.mjs` replays demos with `-nodraw`, empty `I_FinishUpdate`
+and no audio installed. The freestanding layer has no display or audio
+device at all, and the N64 gate runs headless too. All of them replay the
+13 demos (44,580 tics) bit-identically, so **the simulation is independent of
+the display and audio layers**. A port can bring up the simulation first and
+add display and audio later.
 
-The wbox headless sim rate: 19,781 simulated tics per second
-(`perf.md §perStage, simFpsNodraw`). At 35 Hz, headless sim uses only
-35/19,781 ≈ 0.18% of wbox CPU — the sim is negligible; the render is the
-workload.
+On wbox (AMD G-T56N Bobcat, ~1 GHz), the headless wasm simulation runs at an
+average of 19,994 tics per second over the three doom.wad attract demos
+(`tools/golden/bench-baseline.json`, `simFpsNodraw`). Real time needs 35, so
+the simulation uses about 0.2% of that CPU. The renderer is the workload.
 
 ### 6.3 The 13-demo golden gate is the port-validation tool
 
-`tools/golden/` contains per-tic FNV-1a hashes of the simulation state for
-all 13 built-in IWAD attract demos (doom.wad 4 demos, doom2.wad 3, tnt.wad
-3, plutonia.wad 3). The hash function (`engine/web/i_main.c:175`):
+`tools/golden/` holds per-tic hashes of the simulation for all 13 IWAD attract
+demos: doom.wad 4 demos, doom2.wad 3, tnt.wad 3, plutonia.wad 3. Each file
+(`<iwad>-<demo>.json`) has `tics` and `trace`, eight hex digits per tic. The
+hash is `web_state_hash()` (engine/web/i_main.c):
 
 ```c
-int web_state_hash(void) {
-    unsigned h = 0x9e3779b9u ^ (unsigned)gametic;
-    h = (h ^ (unsigned)prndindex) * 0x01000193u;
-    for each active player:
-        h ^= player.mo->x, y, angle, health;
-    return (int)h;
-}
+unsigned h = 0x9e3779b9u ^ (unsigned)gametic;
+h = (h ^ (unsigned)prndindex) * 0x01000193u;
+for each player in game with a mobj:
+    h = (h ^ mo->x) * 0x01000193u;   then y, angle, health the same way
+for each sector:
+    h = (h ^ floorheight) * 0x01000193u;   then ceilingheight
+h = (h ^ number_of_thinkers) * 0x01000193u;
+return (int)h;
 ```
 
-The hash mixes `prndindex` (the P_Random sequence position) and player world
-state. Any divergence in the P_Random call sequence — from a wrong platform
-constant, misimplemented fixed-point op, byte-swap error — snowballs through
-RNG and causes the hash to diverge within a few tics of the mistake.
+`prndindex` is the `P_Random` cursor, so any divergence in gameplay decisions
+(a wrong constant, a mis-ported fixed-point operation, a byte-swap error)
+shifts the RNG and shows within a few tics. Sector heights and the thinker
+count catch moving floors, doors and spawns that never touch a player.
 
-**How a bare-metal port uses this**:
+**How a port uses it**:
 
-1. Export an equivalent `platform_state_hash()` function from the port.
-2. After each game tic, record `(gametic, platform_state_hash())`.
-3. Compare the recorded trace against `tools/golden/<iwad>-<demo>.json`.
-4. A port that produces 13/13 identical traces is sim-correct by construction.
+1. Copy the hash exactly; `fs_state_hash` in `tools/freestanding/i_main.c` is
+   a field-for-field duplicate.
+2. Start the engine with `-timedemo demoN` (add `-nodraw` to skip rendering).
+   This sets `singletics`, so each `D_DoomFrame` runs exactly one tic.
+3. After each tic, record the hash. Send the trace over UART or any byte
+   stream.
+4. Compare against `tools/golden/<iwad>-<demo>.json` on a host. The run ends
+   through `I_Error("timed ...")` (§1.2).
+5. 13/13 identical traces means the port's simulation matches vanilla.
 
-The trace comparison requires only: serial output (to log hashes), a host
-machine to compare JSON, and the demo playback path (singletics mode is
-cleanest). No display hardware is needed. The traces cover 44,580 tics
-across four IWADs and nine maps — a thorough correctness oracle.
+Present the Ultimate Doom IWAD as `doomu.wad` (§1, entry points): demo4
+exists only in the retail game, and under the name `doom.wad` it desyncs at
+tic 0. `tools/freestanding/run-check.sh` is the harness to copy; it maps each
+demo to the file name to present.
 
-**Wiring the trace comparison**: set `singletics = true` (d_main.c:104)
-before `D_DoomMain` returns; call `G_RecordDemo`/`G_PlayDemo` for each IWAD
-demo lump. Log `(gametic, web_state_hash())` over UART after each `G_Ticker`
-call. Feed the log to a host-side diff against the golden JSON.
+The comparison needs only a byte-out, a host to diff on, and the demo
+playback path. No display is involved.
 
 ---
 
 ## 7. ESP32 sketch
 
+Feasibility for this and other targets, with CPU estimates, is in
+[feasibility-atlas.md](feasibility-atlas.md) §3.6.
+
 ### 7.1 Hardware
 
-ESP32-S3 class (as of 2026):
+ESP32-S3 class:
 
 | Spec | Value |
 |------|-------|
-| CPU | Dual-core Xtensa LX7 at 240 MHz |
+| CPU | dual-core Xtensa LX7 at 240 MHz |
 | Internal SRAM | 512 KiB |
-| PSRAM (external) | 2–16 MiB (QSPI or OPI) |
+| PSRAM (external) | 2–16 MiB (quad or octal SPI) |
 | Flash | 4–16 MiB SPI NOR |
-| FPU | Yes (single-precision only; double is software) |
-| 64-bit divide | Software only |
-| I²S / I²C / SPI | Native peripherals for audio and display |
+| FPU | single precision only; `double` is software |
+| 64-bit divide | software only |
+| Unaligned loads | handled in hardware |
+| I²S / I²C / SPI | native peripherals for audio and display |
 
 ### 7.2 Memory fit
 
-DOOM's static segment requires 1.44 MiB of writable memory (§2.1), plus
-250 KiB for screen buffers allocated by `I_AllocLow` (§1.5). The ESP32-S3's
-512 KiB internal SRAM is insufficient for the static segment alone; PSRAM is
-mandatory. The §1.5 hybrid strategy (screens[0] in internal SRAM) is the
-recommended mitigation for the column-draw latency bottleneck (§7.3).
+The static segment needs 1.44 MiB with a 1 MiB stack (§2.1), plus the 250 KiB
+screen block (§1.5). 512 KiB of internal SRAM cannot hold the static segment,
+so PSRAM is mandatory. Internal SRAM is best spent on `screens[0]` (§1.5
+hybrid), which addresses the §7.3 bottleneck.
 
 **Credible configuration (shareware doom1.wad)**:
 
 | Region | Size | Location |
 |--------|------|----------|
 | Static (stack + DATA + BSS, = `__heap_base`) | 1.44 MiB | PSRAM |
-| screens[0] (render target) | 64 KiB | Internal SRAM (hybrid strategy, §1.5) |
-| screens[1..3] (wipe/status buffers) | 192 KiB | PSRAM |
+| `screens[0]` (render target) | 64,000 B | internal SRAM (§1.5 hybrid) |
+| `I_AllocLow` block (`screens[1..3]`, save workspace) | 250 KiB | PSRAM |
 | Zone | 4 MiB | PSRAM |
-| WAD (doom1.wad full load) | ~4.2 MiB | PSRAM |
-| **Total PSRAM** | **~9.9 MiB** | Must fit in PSRAM capacity |
-| Code (TEXT + tables) | ~275 KiB (perf.md §1 CODE section) | Flash (XIP) |
-| Trig table corrections | ~11 KiB | Flash (XIP) |
-| rndtable + gammatable | ~1.5 KiB | Flash (XIP) |
+| WAD (doom1.wad, fully loaded) | ~4 MiB | PSRAM |
+| **Total PSRAM** | **~9.7 MiB** | |
+| Code | ~275 KiB (wasm CODE section, perf.md §1; native code size differs) | flash (XIP) |
+| Trig corrections | ~11 KiB | flash (XIP) |
+| `rndtable` + `gammatable` | ~1.5 KiB | flash (XIP) |
 
-A 16 MiB PSRAM part leaves ~6.1 MiB margin above the 9.9 MiB requirement —
-comfortable for purgeable texture cache growth beyond the attract-demo peak.
+A 16 MiB PSRAM part leaves about 6 MiB of margin, enough for the zone to grow
+to 8 MiB.
 
-**Rung-1 arena vs. this recommendation**: the freestanding bring-up (rung 1,
-commit c7b5f11) used an 8 MiB zone (`ZONESIZE = 8 * 1024 * 1024` in
-`tools/freestanding/web.h`), consistent with perf.md §3's "4–8 MiB first
-pass" guidance. All 13 golden demos passed at 8 MiB; the 4 MiB lower bound
-from §2.2 is analytically sound (3× the 1.36 MiB non-purgeable peak) but was
-not stress-tested by rung 1. For an ESP32 bring-up, start with 8 MiB if PSRAM
-allows; reduce to 4 MiB only after profiling confirms no `PU_STATIC` overflows
-on the target map set. See §8.1 (zone-size row) for the trial record.
-
-**Full doom.wad (≈ 11.8 MiB, Ultimate Doom variant) in PSRAM**:
-1.21 + 0.19 + 4 + 11.8 = ~17.2 MiB → exceeds 16 MiB PSRAM. Either stream
-the WAD from XIP-flash (§2.3c) or use a 32 MiB PSRAM part (available in the
-ESP32-S3R8 and some custom designs).
+**Full doom.wad in PSRAM** needs ~17.5 MiB (§2.3a), over 16 MiB. Map the WAD
+from flash instead (§2.3c, §2.3d), or use a 32 MiB PSRAM part.
 
 ### 7.3 Expected bottleneck
 
-The wbox (AMD G-T56N Bobcat, ~1.0 GHz) achieves an average render of
-0.483 ms/frame across doom.wad demos (`perf.md §perStage`), with sim at
-0.071 ms/tic. At 35 Hz this is:
+On wbox (AMD G-T56N Bobcat, ~1 GHz) the wasm renderer averages 0.52 ms per
+frame over the three doom.wad attract demos (0.49 to 0.57 ms), and the
+simulation 0.086 ms per tic (`tools/golden/bench-baseline.json`, `perStage`).
+Against the 28.57 ms tic that is 1.8% of the CPU for rendering and 0.3% for
+the simulation.
 
-- Render load: 0.483 ms / 28.57 ms/tic = 1.7% CPU on wbox
-- Sim load: 0.071 ms / 28.57 ms/tic = 0.25% CPU on wbox
+**Scaling is speculative.** wasm on an x86 core does not translate directly
+to LX7: instruction sets, caches, the FPU and memory latency all differ.
+Scaling by clock alone (240 MHz is about 0.24 of 1 GHz) puts rendering near
+2.2 ms per frame, leaving most of the 28.57 ms budget. That suggests 35 Hz is
+reachable **if memory latency on `screens[0]` is tolerable**.
 
-**Honest scaling caveat**: wbox wasm numbers do not directly translate to
-Xtensa LX7. Differences in instruction sets, cache sizes, FPU availability,
-and SPI flash latency for WAD access make any numeric projection speculative.
-However, at 240 MHz LX7, the instruction throughput is roughly
-240/1000 ≈ 0.24× of a 1 GHz in-order machine (ignoring ISA and cache
-differences). A rough worst-case estimate: render ~0.483 / 0.24 ≈ 2 ms per
-frame. At 35 Hz the render budget is 28.57 ms — this would leave ~93% of the
-budget unused for the render, suggesting 35 Hz is achievable **if the memory
-access pattern (PSRAM latency for screens[0] column writes) is tolerable**.
-
-**The real bottleneck is PSRAM latency, not compute**. DOOM's column draw
-writes to `screens[0]` in vertical strides (SCREENWIDTH = 320 bytes per step,
-renderer.md §7.2). On PSRAM with 50–100 ns latency per access, a 320-column
-frame (64,000 writes, each 320 bytes apart) will generate cache misses for
-every write. PSRAM bandwidth is the likely limiting factor, not the Xtensa
-LX7 ALU. Primary mitigation: place `screens[0]` in internal SRAM via the
-§1.5 hybrid `I_AllocLow` strategy (512 KiB internal SRAM is not enough for
-the full static segment, but carving 64 KiB for screens[0] via a dedicated
-linker section is achievable).
+**Memory latency, not compute, is the likely limit.** Because `screens[0]` is
+column-major (§1.4), wall and sprite columns write consecutive bytes, which a
+PSRAM cache handles well. Floor and ceiling spans (`R_DrawSpan`) write one
+byte every 200 bytes, so each pixel lands on a different cache line; on PSRAM
+with tens of nanoseconds per miss, the plane pass is the exposed stage. On
+wbox the stages split roughly 51% walls (`bsp`), 33% planes and 14% sprites
+and masked textures (`masked`). The fix is the same either way: put
+`screens[0]` in internal SRAM with the §1.5 hybrid.
 
 ### 7.4 Known prior art
 
-DOOM has been ported to ESP32 (non-S3, 240 MHz, 4 MiB PSRAM): the 2021
-project by `davidbuzz` on GitHub demonstrated playable performance using the
-ESP-IDF framework, doom1.wad from SPIFFS flash, and an ILI9341 SPI display
-at ~320×240. This confirms the memory-mapped WAD streaming approach (§2.3c)
-works at this hardware tier.
+DOOM already runs on the original ESP32 (240 MHz, 4 MiB PSRAM). Espressif's
+`esp32-doom` is PrBoom-based and reads the shareware WAD from a flash
+partition, driving an ILI9341 SPI display; community forks such as
+`davidbuzz`'s build on it. They confirm that the flash-resident WAD of §2.3c
+and §2.3d works at this hardware tier.
 
 ### 7.5 Three hardest problems in order
 
-**1. PSRAM bandwidth for the column draw** (hardest)
+**1. Memory bandwidth for the framebuffer** (hardest)
 
-`R_DrawColumn` writes `screens[0]` with a stride of 320 bytes per pixel
-(renderer.md §7.2). PSRAM burst reads are efficient (row-cache hit); burst
-writes to non-consecutive addresses are slow. Every wall column write is a
-separate PSRAM transaction. At 60+ columns per frame (typical), PSRAM round-
-trip latency dominates frame time. Solutions: (a) place `screens[0]` in
-internal SRAM via the §1.5 hybrid strategy (requires reducing BSS size —
-move large arrays to PSRAM); (b) use DMA with a pixel-conversion step; (c)
-lower resolution via the engine's existing low-detail mode (`detaillevel = 1`
-halves horizontal resolution, renderer.md §7.2).
+The plane pass misses the PSRAM cache on every span pixel (§7.3). Remedies,
+best first: (a) `screens[0]` in internal SRAM via the §1.5 hybrid;
+(b) low-detail mode, which halves horizontal resolution (`R_SetViewSize`
+with detail 1, as `WD_DETAIL=1` does in `fs-doom`; renderer.md §7.2);
+(c) a DMA path that converts and pushes the frame while the next one renders.
 
-**2. FixedDiv software 64-bit divide** (significant)
+**2. FixedDiv's software 64-bit divide** (significant)
 
-No hardware 64-bit divide on LX7. `__aeabi_ldivmod` (or equivalent) is
-called in every wall-scale computation (`R_ScaleFromGlobalAngle`, r_main.c:465–506), sprite
-projection, and `P_PathTraverse` trace. At ~40–80 cycles per software divide
-and ~200 divide calls per frame (estimated), this is ~8,000–16,000 cycles per
-frame = ~60–120 µs at 240 MHz. Manageable but measurable. See §5.3 for the
-double-path alternative on FPU-equipped targets; the ESP32-S3 has
-single-precision hardware but `double` is software. Profile both paths at
-bringup.
+LX7 has no hardware 64-bit divide. At an estimated ~200 divides per frame and
+40 to 80 cycles each, that is 8,000 to 16,000 cycles, about 35 to 70 µs at
+240 MHz: measurable, manageable. §5.3 covers the `double` alternative; on the
+ESP32-S3 `double` is also software. Profile both.
 
-**3. WAD streaming latency for cache-cold textures** (manageable)
+**3. WAD streaming latency for cold textures** (manageable)
 
-If the WAD streams from SPI NOR flash via `W_ReadLump`, the first frame of
-each new map (cold cache) will be slow as textures populate the zone cache.
-Subsequent frames hit the zone cache and are fast. The 4 MiB zone (§2.3c)
-provides 2.6 MiB of purgeable cache above the 1.36 MiB non-purgeable floor;
-this holds most of a typical map's textures. Pre-warming the cache at level-
-load time (iterating visible textures before the first rendered frame)
-eliminates in-game stutter.
+Streaming the WAD from SPI NOR (§2.3c) makes the first frame of each map slow
+while textures fill the zone cache; later frames run from the cache.
+Touching the level's textures at load time moves the stall to the load.
 
 ---
 
-## 8. Contract on trial: what the bring-up found
+## 8. The libc surface
 
-Rung 1 (`tools/freestanding/`, commit c7b5f11, gate b3c8a40) compiled
-`engine/core` against a minimal hosted-freestanding platform layer and ran
-13/13 golden demos bit-identical to vanilla. This section records one row per
-checkable claim: what the doc predicted, what rung 1 found, and how it was
-resolved. `tools/freestanding/IMPORTS.md` is the authoritative symbol surface
-list; every row that cites a symbol cites its category letter there.
+The functions in §1 are what a porter writes. The libc symbols the core and
+its platform layer reference are what the porter's runtime must provide.
+`make imports` in `tools/freestanding/` lists them from the built `fs-doom`
+binary (`nm -u`) into
+[tools/freestanding/IMPORTS.md](../tools/freestanding/IMPORTS.md): 51 strong
+undefined symbols and 4 weak ones, each with a disposition.
 
-Verdicts: **held** = the doc's prediction was correct. **gap** = reality
-diffed from the doc.
+| Category | Symbols | What a bare-metal port does |
+|----------|---------|-----------------------------|
+| WAD loading in the hosted shim | `open`, `read`, `close`, `lseek`, `malloc`, `free` | nothing: they disappear when the WAD is a linker symbol, a ROM blob or a flash mapping |
+| `-sim` trace output and config file I/O | `fopen`, `fclose`, `fwrite`, `fputc`, `fread`, `fseek`, `ftell`, `fstat` | nothing: send the trace over the byte-out; config and saves can be no-ops |
+| Platform primitives | `write` (the byte-out), `clock_gettime`, `_setjmp`, `longjmp`, `abort`, `exit`, `__stack_chk_fail` | replace: UART or SWO write, hardware timer, a flag-and-poll demo exit, spin or reset; build with `-fno-stack-protector` or provide the guard |
+| stdio called from the core | `fprintf`, `printf`, `putchar`, `puts`, `setbuf`, `sprintf`, `vsnprintf`, `sscanf` | provide from newlib or picolibc, routing output to the byte-out |
+| Heap and filesystem called from the core | `realloc` (`W_AddFile`), `access` (`M_ScreenShot`), `mkdir` (`D_DoomMain`, `-cdrom` only) | `realloc` must work (§1.10); `access` can return −1; `mkdir` can be a no-op |
+| String and memory | `memcpy`, `memset`, `strcpy`, `strncpy`, `strcmp`, `strncmp`, `strcasecmp`, `strncasecmp`, `strlen`, `strchr`, `strrchr`, `strtol` | provide from newlib, musl, picolibc or compiler built-ins |
+| Math, once at boot | `sin`, `tan`, `atan` | provide libm for `T_GenerateTables`, or ship the tables as `const` and drop the call (§4.1) |
+| C runtime | `__libc_start_main`, `__ctype_toupper_loc`, `stdout`, `stderr`; weak `__cxa_finalize`, `__gmon_start__`, `_ITM_*` | crt0 and the target libc |
 
-### 8.1 Trial table
-
-| Predicted | Reality (rung 1) | Resolution | Verdict |
-|-----------|-----------------|------------|---------|
-| **Platform surface is three files** (§1 before this revision): `i_system.h`, `i_video.h`, `i_sound.h`. Completeness "auditable by diffing against **the two header files**" (§1 self-contradicted its own count). | **Five headers.** `engine/core` unconditionally `#include`s `web.h` (`d_main.c`, `m_misc.c`, `w_wad.c`) and `perf.h` (`d_main.c`, `r_main.c`). Freestanding stubs provided at `tools/freestanding/web.h` and `tools/freestanding/perf.h`. (FINDING-6) | §1 corrected to name all five headers; the "three"/"two" contradiction removed. | gap |
-| **Libc surface not enumerated** — §1 framed the contract as only I_ header functions | **48 strong undefined symbols** across 8 categories (see §8.2 and `tools/freestanding/IMPORTS.md`). The surface spans memcpy/memset/str* (12), platform primitives (6), core stdio stragglers (8), core heap stragglers (3), math one-shot boot (3), shim symbols eliminated in rung 2 (14), and infra/weak symbols (7). | `tools/freestanding/IMPORTS.md` is now the porter's authoritative symbol checklist. See §8.2. | gap |
-| **Core needs no heap beyond the zone** (§1.3 framing: "The engine manages everything inside this block via Z_Zone") | `m_misc.c` calls `realloc` (config-file token parser), `access` (file-existence check), and `mkdir` (savegame directory creation) directly and unconditionally — outside the platform layer's control (IMPORTS.md category d). | Stubbed for rung 1: `realloc` → NULL, `access` → −1, `mkdir` → no-op. All 13 goldens pass with these stubs. Rung-2 disposition: stub or zone-backed (`m_misc.c`). | gap |
-| **§4.1 predicted**: trig tables (`finesine`, `finetangent`, `tantoangle`; 14,336 entries) boot-generated at startup via `sin`, `tan`, `atan` — called once, not in the render loop | **Confirmed.** `sin`, `tan`, `atan` appear as strong undefined symbols (IMPORTS.md category g), called from `tables.c:T_GenerateTables` (invoked by `d_main.c:723`). Zero runtime cost after the one-time fill. | §4.1 prediction correct — no change needed. | held |
-| **Zone: 4 MiB recommended** as credible first-pass minimum (§2.2; perf.md §3: "4–8 MiB first pass") | Rung 1 used **8 MiB** static arena (`ZONESIZE = 8 * 1024 * 1024` in `tools/freestanding/web.h`). All 13 goldens passed. The 4 MiB lower bound was not stress-tested by rung 1. | §7 ESP32 sketch updated to note the 8 MiB rung-1 arena. §2.2 reasoning (3× non-purgeable peak) is unchanged, but 4 MiB remains an untested extrapolation from rung 1's evidence. | gap (not validated) |
-| **§6.2 predicted**: simulation is independent of display and audio; headless bring-up first, display/audio added incrementally | **Confirmed.** 13/13 demos run to completion with `I_FinishUpdate` as a no-op and all sound functions as empty stubs. The freestanding platform layer never touches a display or audio device. | §6.2 prediction validated by rung 1. | held |
-| **§5.1 predicted**: implementing `SwapSHORT`/`SwapLONG` + defining `__BIG_ENDIAN__` suffices for a big-endian port (items 1–2) | **Tested on real BE hardware model (task 13.3a)**: PowerPC/qemu 13/13 bit-identical — but ONLY after adding `-fsigned-char`. The doctrine's swap items were correct and sufficient for byte order; the doctrine was INCOMPLETE — it did not predict the char-signedness dependency (§5.1 item 6, added). | §5.1 gains item 6 + the TESTED banner; §8 records the partial-hold honestly. | held-with-gap (missing char-signedness item) |
-| **§5.2 predicted**: 7 unaligned-access site families; `columnofs[]` "most pervasive" | **Tested (13.4a ARM + 13.3b MIPS BE)**: site r_data.c:522 faulted on BOTH strict ISAs (fixed, byte-safe helpers); the "most pervasive" `columnofs` rows never faulted over the corpus (IWAD lump alignment holds in practice); 2 site families the list missed were found and fixed (sprite-name string puns, shim screen buffers). MIPS BE 13/13. | §5.2 gains the TESTED banner with per-row verdicts. | held-with-gaps (1 confirmed of 7 predicted; 2 unpredicted found) |
-
-### 8.2 The full libc surface: IMPORTS.md as porter's checklist
-
-`tools/freestanding/IMPORTS.md` was generated from the `fs-doom` binary via
-`nm -u fs-doom | sort` (rung 1, commit c7b5f11). It lists every strong
-undefined symbol `engine/core` demanded and classifies each with its rung-2
-disposition (eliminate, replace, stub, or provide from newlib/musl). The 48
-strong symbols divide as follows:
-
-| Category | Symbols | Rung-2 action |
-|----------|---------|---------------|
-| Shim — WAD load | `open`, `read`, `close`, `lseek`, `malloc`, `free` | Eliminated: WAD becomes a linker symbol or ROM blob |
-| Shim — `-sim` file output | `fopen`, `fclose`, `fwrite`, `fputc`, `fread`, `fseek`, `ftell`, `fstat` | Eliminated: drop the `-sim` shim path |
-| Platform primitives | `write`, `clock_gettime`, `_setjmp`, `longjmp`, `abort`, `exit` | Replaced: UART/SWO, hardware timer, spin-loop, reset |
-| Core stdio stragglers | `fprintf`, `printf`, `putchar`, `puts`, `setbuf`, `sprintf`, `vsnprintf`, `sscanf` | Route through `fs_putc` / newlib |
-| Core heap stragglers | `realloc`, `access`, `mkdir` | Stub: NULL / −1 / no-op (§8.1 row 3) |
-| String/memory | `memcpy`, `memset`, `strcpy`, `strncpy`, `strcmp`, `strncmp`, `strcasecmp`, `strncasecmp`, `strlen`, `strchr`, `strrchr`, `strtol` | Newlib or compiler built-ins |
-| Math — one-shot boot | `sin`, `tan`, `atan` | Libm at boot, or pre-generated tables (§4.1) |
-| Infra/weak | `__libc_start_main`, `__ctype_toupper_loc`, `__cxa_finalize`, `__gmon_start__`, `_ITM_*` | crt0 / newlib |
-
-The distinction between §1 functions (what the porter *writes*) and
-IMPORTS.md (what the porter's runtime must *provide*) matters most on
-targets with a constrained libc (newlib-nano, picolibc): even if `i_system.c`
-stubs `exit` and `abort`, string and memory symbols must still resolve at
-link time.
+This matters most on a constrained libc (newlib-nano, picolibc): even with
+`exit` and `abort` replaced, the string, stdio and math symbols must still
+resolve at link time.
 
 ---
 
-*References*: `docs/engine-archaeology.md` (table ledger, §14; FixedDiv,
-§2; trig recipe, §1; sound constants, §10), `docs/perf.md` (memory numbers,
-§2–3; bench baseline, §perStage), `docs/renderer.md` (framebuffer layout,
-§7.1; column draw, §7.2), `docs/playsim.md` (tic orchestration, §1; zone
-use-after-free caution, §1.2), `docs/formats.md` (WAD format, §1;
-endianness doctrine, §11; DMX sound, §6),
-`tools/freestanding/IMPORTS.md` (authoritative rung-1 symbol surface, §8.2).
+*References*: [engine-archaeology.md](engine-archaeology.md) (trig recipe §1,
+FixedDiv §2, compute versus lookup §7, sound constants §10, table ledger §14),
+[perf.md](perf.md) (wasm sections §1, zone §2, linear memory §3),
+[renderer.md](renderer.md) (framebuffer §7.1, column draw §7.2, textures §8),
+[playsim.md](playsim.md) (tic orchestration §1, thinkers and the zone §1.2),
+[formats.md](formats.md) (WAD §1, DMX sound §6, MUS §7, endianness §11),
+[netcode.md](netcode.md), [n64/BRING-UP.md](n64/BRING-UP.md),
+[tools/freestanding/IMPORTS.md](../tools/freestanding/IMPORTS.md).
