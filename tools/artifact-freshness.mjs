@@ -34,8 +34,9 @@
 // newest source.  Missing artifacts are reported separately from stale ones.
 //
 // Copyright (C) 2026, GPL-2.0-or-later.
-import { existsSync, statSync, readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { existsSync, statSync, readdirSync, readFileSync } from 'node:fs';
+import { join, relative, basename } from 'node:path';
+import { createHash } from 'node:crypto';
 import { root } from './lib/util.mjs';
 
 
@@ -52,6 +53,7 @@ export const ARTIFACTS = {
         also:    ['build/doom.js'],
         dirs:    [['engine/core', true], ['engine/web', false]],
         files:   ['engine/Makefile'],
+        binds:   true,
         rebuild: 'source tools/emsdk-env.sh && make -C engine',
     },
     // The worklet synth links only three objects, so its sources are those
@@ -103,6 +105,7 @@ export const ARTIFACTS = {
         also:     [`${dir}/doom.js`],
         dirs:     [['engine/core', true], ['engine/web', false]],
         files:    ['engine/Makefile'],
+        binds:    true,
         optional: true,
         rebuild:  `bash tools/build-toggle.sh ${define} ${dir}`,
     }])),
@@ -158,6 +161,23 @@ export function provenance(name) {
     return `${name}: ${r.path} built ${r.builtAtISO} — ${state} vs ${r.sourceCount} sources`;
 }
 
+// `binds`: the loader (also[0]) must name its module (path) by content, as
+// engine/Makefile stamps it -- every reference is <module>?v=<sha256[:12]>.
+// A loader and module from two different links pass the mtime test and fail
+// this one.  Returns null when bound, or what is wrong.
+export function binding(name) {
+    const spec = ARTIFACTS[name];
+    if (!spec.binds) return null;
+    const wasm = join(root, spec.path), js = join(root, spec.also[0]);
+    const tag = createHash('sha256').update(readFileSync(wasm)).digest('hex').slice(0, 12);
+    const mod = basename(wasm);
+    const refs = [...readFileSync(js, 'latin1').matchAll(new RegExp(`"${mod.replace('.', '\\.')}(\\?v=([0-9a-f]*))?"`, 'g'))];
+    if (!refs.length) return `${spec.also[0]} never names "${mod}"`;
+    const off = refs.filter(m => m[2] !== tag);
+    return off.length ? `${spec.also[0]} names ${off[0][0]} but ${spec.path} is ?v=${tag} (${off.length} of ${refs.length} references)`
+                      : null;
+}
+
 // Throwing form for gates.  Returns the inspect() record when fresh.
 export function assertFresh(name) {
     const r = inspect(name);
@@ -171,6 +191,8 @@ export function assertFresh(name) {
             (r.newer.length > 5 ? `\n      … and ${r.newer.length - 5} more` : '') +
             `\n    Rebuild: ${r.spec.rebuild}`);
     }
+    const unbound = binding(name);
+    if (unbound) throw new Error(`${name} is UNBOUND: ${unbound}.\n    Rebuild: ${r.spec.rebuild}`);
     return r;
 }
 
@@ -207,7 +229,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         checked++;
         try {
             const r = assertFresh(n);
-            console.log(`PASS ${n}: ${r.path} built ${r.builtAtISO}, newer than all ${r.sourceCount} sources`);
+            console.log(`PASS ${n}: ${r.path} built ${r.builtAtISO}, newer than all ${r.sourceCount} sources`
+                        + (r.spec.binds ? ', its loader bound to it by content' : ''));
         } catch (e) {
             console.log(`FAIL ${e.message}`);
             bad++;

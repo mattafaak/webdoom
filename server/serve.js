@@ -114,6 +114,19 @@ function pickEncoding(req) {
     if (/(^|,)\s*gzip\s*(;\s*q=(?!0(\.0*)?\s*(,|$)))?\s*(,|$)/.test(ae)) return 'gzip';
     return null;
 }
+// doom.js asks for doom.wasm?v=<sha256[:12]> of the module it was linked with
+// (engine/Makefile stamps it).  The tag of each engine file, against its stat.
+const tags = new Map();               // file -> { key, tag }
+function contentTag(file, st) {
+    const key = `${st.mtimeMs}:${st.size}`;
+    let t = tags.get(file);
+    if (t?.key !== key) {
+        t = { key, tag: createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 12) };
+        tags.set(file, t);
+    }
+    return t.tag;
+}
+
 const etagMatches = (inm, etag) =>
     !!inm && inm.split(',').some(t => t.trim().replace(/^W\//, '') === etag);
 
@@ -277,6 +290,19 @@ const server = createServer((req, res) => {
         try { st = statSync(file); } catch { continue; }
         if (!st.isFile()) continue;
         const type = MIME[extname(file)] ?? 'application/octet-stream';
+
+        // A loader names the module it was linked with.  A tab that imported
+        // doom.js before a deploy keeps that module for its life, and the new
+        // doom.wasm under the old loader is a LinkError or, worse, exports
+        // bound to the wrong functions: refuse, and the page says reload.
+        const v = prefix === '/engine/' ? url.searchParams.get('v') : null;
+        if (v !== null) {
+            let tag;
+            try { tag = contentTag(file, st); }
+            catch { return send(req, res, 404, 'not found'); }
+            if (v !== tag)
+                return send(req, res, 409, 'the engine was updated: reload the page', { 'cache-control': 'no-store' });
+        }
 
         // the shell and the engine: negotiated, ETagged, revalidated
         if (prefix !== '/wads/' && COMPRESSIBLE.test(type)) {

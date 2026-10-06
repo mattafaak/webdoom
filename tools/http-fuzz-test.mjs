@@ -519,6 +519,68 @@ async function checkWire() {
 console.log('\nthe wire — negotiated encoding and revalidation:');
 await checkWire();
 
+// ── a loader is answered only with the module it was linked with ─────────────
+//
+// doom.js and doom.wasm come from one link, and nothing tied them together on
+// the wire: a tab that imported doom.js before a deploy (a module import is
+// cached for the page's life, so every later boot reuses it) instantiated the
+// new doom.wasm against the old loader's import table -- a LinkError, or, when
+// the shapes happen to agree, exports bound to the wrong functions.  The link
+// now stamps the module's content into the loader (doom.wasm?v=<sha256[:12]>),
+// and the server refuses a v that is not the file it holds.  Run on a
+// temporary tree whose doom.wasm is replaced in place, as a deploy does.
+async function checkEngineBinding() {
+    const { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, copyFileSync, rmSync, readdirSync } =
+        await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { createHash } = await import('node:crypto');
+    const v = b => createHash('sha256').update(b).digest('hex').slice(0, 12);
+    const tree = mkdtempSync(join(tmpdir(), 'webdoom-bind-'));
+    let srv = null;
+    try {
+        for (const d of ['server', 'wads/lib', 'client', 'build']) mkdirSync(join(tree, d), { recursive: true });
+        for (const f of readdirSync(join(root, 'server')).filter(f => /\.(js|json)$/.test(f)))
+            copyFileSync(join(root, 'server', f), join(tree, 'server', f));
+        symlinkSync(join(root, 'server/node_modules'), join(tree, 'server/node_modules'));
+        writeFileSync(join(tree, 'client/index.html'), '<!doctype html><title>x</title>');
+        writeFileSync(join(tree, 'wads/manifest.json'), JSON.stringify({ wads: [] }));
+        const A = Buffer.concat([Buffer.from('\0asm\x01\0\0\0', 'binary'), Buffer.alloc(4096, 0xa1)]);
+        const B = Buffer.concat([Buffer.from('\0asm\x01\0\0\0', 'binary'), Buffer.alloc(4100, 0xb2)]);
+        writeFileSync(join(tree, 'build/doom.wasm'), A);
+        srv = await startServer({ servePath: join(tree, 'server/serve.js') });
+        const get = async q => {
+            const r = await fetch(`http://127.0.0.1:${srv.port}/engine/doom.wasm${q}`, { signal: AbortSignal.timeout(5000) });
+            return { status: r.status, body: Buffer.from(await r.arrayBuffer()), cc: r.headers.get('cache-control') };
+        };
+
+        const bare = await get('');
+        check('engine binding: an unversioned doom.wasm is served (the service worker precaches it so)',
+              bare.status === 200 && bare.body.equals(A), `status=${bare.status}`);
+        const own = await get(`?v=${v(A)}`);
+        check('engine binding: the v the loader names is served, byte for byte',
+              own.status === 200 && own.body.equals(A), `status=${own.status} ${own.body.length} B`);
+        const wrong = await get('?v=000000000000');
+        check('engine binding: a v that is not this module is 409, never cached',
+              wrong.status === 409 && /no-store/.test(wrong.cc ?? ''), `status=${wrong.status} cache-control=${wrong.cc}`);
+
+        // the deploy: doom.wasm replaced in place, a tab still holding A's loader
+        writeFileSync(join(tree, 'build/doom.wasm'), B);
+        const stale = await get(`?v=${v(A)}`);
+        check('engine binding: after the module is replaced, the old loader\'s v is 409',
+              stale.status === 409, `status=${stale.status} ${stale.body.length} B`);
+        const fresh = await get(`?v=${v(B)}`);
+        check('engine binding: and the new loader\'s v is served the new module',
+              fresh.status === 200 && fresh.body.equals(B), `status=${fresh.status} ${fresh.body.length} B`);
+        check('engine binding: server still up', !srv.proc.exitCode && await healthCheck('127.0.0.1', srv.port), 'GET / after');
+    } finally {
+        srv?.stop();
+        rmSync(tree, { recursive: true, force: true });
+    }
+}
+
+console.log('\nengine binding — the loader and its module:');
+await checkEngineBinding();
+
 // ── request shapes the router must still answer ──────────────────────────────
 //
 // An absolute-form request target that llhttp accepts and the WHATWG URL

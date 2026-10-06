@@ -85,9 +85,20 @@ $(SYNTH): $(SYNTH_OBJ) Makefile
 	emcc -O3 $(CFLAGS) $(EXTRA_CFLAGS) $(SYNTH_LDFLAGS) $(SYNTH_OBJ) -o $(SYNTH)
 	@ls -la $(SYNTH)
 
+# The loader is bound to its module: doom.js asks for doom.wasm?v=<sha256[:12]>
+# of the doom.wasm it was linked with, and server/serve.js answers any other v
+# with 409.  A stamp that matched nothing fails the link and deletes the
+# unstamped loader, so the next make links again rather than trusting it.
+WASM := $(OUT:.js=.wasm)
+WASM_NAME := $(notdir $(WASM))
+
 $(OUT): $(OBJ) Makefile
 	emcc -O3 $(CFLAGS) $(EXTRA_CFLAGS) $(LDFLAGS) $(OBJ) -o $(OUT)
-	@ls -la $(BUILD)/doom.js $(BUILD)/doom.wasm
+	@v=$$(sha256sum $(WASM)) && v=$$(echo "$$v" | cut -c1-12) && \
+	  sed "s|\"$(subst .,\.,$(WASM_NAME))\"|\"$(WASM_NAME)?v=$$v\"|g" $(OUT) > $(OUT).tmp && \
+	  grep -q "\"$(WASM_NAME)?v=$$v\"" $(OUT).tmp && mv $(OUT).tmp $(OUT) || \
+	  { rm -f $(OUT) $(OUT).tmp; echo "engine/Makefile: no \"$(WASM_NAME)\" in $(OUT) to stamp" >&2; exit 1; }
+	@ls -la $(OUT) $(WASM)
 
 clean:
 	rm -rf $(BUILD)
