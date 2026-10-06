@@ -136,17 +136,9 @@ for (const slot of BAD_SLOTS) {
 const good = await withClient(async (api, server) => {
     server.send(JSON.stringify({ t: 'welcome', slot: 2, color: 'Brown' }));
     await sleep(60);
-    return { slot: api.slot, color: api.color };
+    return { slot: api.slot };
 });
-ok('a valid welcome is still accepted (slot 2, Brown)', good.slot === 2 && good.color === 'Brown',
-    `slot=${good.slot} color=${good.color}`);
-
-const badColor = await withClient(async (api, server) => {
-    server.send(JSON.stringify({ t: 'welcome', slot: 1, color: { evil: true } }));
-    await sleep(60);
-    return api.color;
-});
-ok('welcome with a non-string color rejected', badColor === null, `color=${JSON.stringify(badColor)}`);
+ok('a valid welcome is still accepted (slot 2)', good.slot === 2, `slot=${good.slot}`);
 
 console.log('\n── the ping that could hang forever ─────────────────────────────');
 
@@ -271,11 +263,11 @@ for (const [label, frame] of SHAPES) {
 
 try { wss.close(); } catch { /* sockets already torn down */ }
 
-// The two loops, plus the eight named assertions after them: a valid welcome, a
-// non-string colour, three about the unanswered ping, an answered ping, and two
-// about send-after-close. A floor, so a section that stops running is a red
-// rather than a shorter list.
-const NAMED_AFTER_LOOPS = 8 + 1;   // +1: the well-formed-roster anti-vacuity case
+// The two loops, plus the seven named assertions after them: a valid welcome,
+// three about the unanswered ping, an answered ping, and two about
+// send-after-close. A floor, so a section that stops running is a red rather
+// than a shorter list.
+const NAMED_AFTER_LOOPS = 7 + 1;   // +1: the well-formed-roster anti-vacuity case
 const EXPECTED = GARBAGE.length + BAD_SLOTS.length + SHAPES.length + NAMED_AFTER_LOOPS;
 summaryPrinted = true;
 console.log(`\n  ${passes} passed, ${failures} failed`);

@@ -316,7 +316,6 @@ export function createMenu(font, host, opts = {}) {
         reset(s) { stack.length = 0; stack.push(s); sel = 0; entry = null; onTransition?.('reset'); render(); },
         // descend into a screen
         push(s) { if (screen()) screen().sel = sel; stack.push(s); sel = 0; entry = null; onTransition?.('push'); render(); },
-        pop: back,
         // re-render current screen after data changes (roster updates — NOT a
         // screen transition; no flare, no onTransition)
         // A roster update must not move the cursor onto a different ACTION.

@@ -271,7 +271,7 @@ export async function bootDoom({ wads, saves = null, args = [], net = null, onQu
     // animation callback, never mid-frame.
     let seekPending = null;
     let scrubberHandle = null;
-    disposers.push(() => { scrubberHandle?.destroy?.(); scrubberHandle = null; });
+    disposers.push(() => { scrubberHandle?.destroy(); scrubberHandle = null; });
     window.webdoom.attachScrubber = (demoBytes, container) => {
         scrubberHandle?.destroy();
         scrubberHandle = createScrubberUI(doom, demoBytes, { container, seekHook: n => { seekPending = n; } });
@@ -281,7 +281,7 @@ export async function bootDoom({ wads, saves = null, args = [], net = null, onQu
     disposers.push(() => syncHandle?.stop?.());
 
     const renderer = createRenderer(canvas);
-    disposers.push(() => { renderer?.destroy?.(); renderer?.dispose?.(); });
+    disposers.push(() => renderer.dispose());
     window.webdoom._renderer = renderer;   // browser-pipeline reads .kind
     // memory never grows (ALLOW_MEMORY_GROWTH=0), so the views are stable
     const fb = doom._web_framebuffer();
@@ -294,7 +294,7 @@ export async function bootDoom({ wads, saves = null, args = [], net = null, onQu
     status('');
     canvas.focus();
     const input = createInput(doom, canvas, loadSettings());
-    disposers.push(() => { input?.destroy?.(); input?.dispose?.(); });
+    disposers.push(() => input.destroy());
     doom._web_set_smooth(input.settings.smooth ? 1 : 0);
 
     // through doomAudio, not the export: on the worklet tier the flavour has

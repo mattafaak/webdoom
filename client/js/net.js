@@ -47,9 +47,8 @@ const PING_TIMEOUT_MS = 3000;
 export function connectLobby(baseUrl, WS = WebSocket) {
     const ws = new WS(`${baseUrl}/ws/lobby`);
     const handlers = new Map();
-    let closed = false;
     const api = {
-        slot: -1, color: null,
+        slot: -1,
         on(t, fn) { handlers.set(t, fn); return api; },
         // ws.send throws before OPEN and after CLOSE
         send(msg) {
@@ -72,7 +71,7 @@ export function connectLobby(baseUrl, WS = WebSocket) {
                 if (!api.send({ t: 'ping', t0 })) finish(null);
             });
         },
-        close() { closed = true; ws.close(); },
+        close() { ws.close(); },
     };
     ws.onmessage = ev => {
         // The server treats the client as hostile (try/catch around every
@@ -106,11 +105,10 @@ export function connectLobby(baseUrl, WS = WebSocket) {
         if (m.t === 'welcome') {
             // slot indexes COLORS[] and the player arrays in lobby.js.
             if (Number.isInteger(m.slot) && m.slot >= 0 && m.slot < MAXPLAYERS) api.slot = m.slot;
-            if (typeof m.color === 'string') api.color = m.color;
         }
         handlers.get(m.t)?.(m);
     };
-    ws.onclose = () => { closed = true; handlers.get('closed')?.(); };
+    ws.onclose = () => handlers.get('closed')?.();
     ws.onerror = e => handlers.get('error')?.(e);
     return api;
 }
