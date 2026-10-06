@@ -866,8 +866,11 @@ G_CheckSpot
     if (!players[playernum].mo)
     {
 	// first spawn of level, before corpses
+	// webdoom: a lower slot can be empty here (a drop-in), so skip one with
+	// no body
 	for (i=0 ; i<playernum ; i++)
-	    if (players[i].mo->x == mthing->x << FRACBITS
+	    if (players[i].mo
+		&& players[i].mo->x == mthing->x << FRACBITS
 		&& players[i].mo->y == mthing->y << FRACBITS)
 		return false;	
 	return true;
@@ -946,7 +949,9 @@ void G_DoReborn (int playernum)
 	// respawn at the start
 
 	// first dissasociate the corpse 
-	players[playernum].mo->player = NULL;   
+	// webdoom: a drop-in has no corpse yet (Strife's check, Chocolate)
+	if (players[playernum].mo)
+	    players[playernum].mo->player = NULL;   
 		 
 	// spawn at random spot if in death match 
 	if (deathmatch) 

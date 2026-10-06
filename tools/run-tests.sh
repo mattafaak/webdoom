@@ -552,6 +552,7 @@ leg spectate-fuzz   build,wad  "hostile clients against /ws/spectate" -- node to
 leg edge            build,wad  "drop-in edge cases"                    -- node tools/edge-test.mjs
 leg churn           build,wad  "connect/disconnect churn"              -- node tools/churn-test.mjs
 leg net-hidden      build,wad  "a hidden tab survives 3 s in lockstep; told when dropped" -- node tools/net-hidden-test.mjs
+leg net-reborn      build,wad  "a drop-in after a level change spawns as a first spawn" -- node tools/net-reborn-test.mjs
 leg launch-args     build,wad  "RULES reach the engine; hostile launch params are refused" -- node tools/launch-args-test.mjs
 
 # ── demo tooling ─────────────────────────────────────────────────────────────

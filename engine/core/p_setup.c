@@ -830,6 +830,12 @@ P_SetupLevel
     /* tenet-4 fail-soft: zero playerstarts so a level transition cannot carry
        over starts from the previous map and mask a missing-start in this one. */
     memset (playerstarts, 0, sizeof(playerstarts));
+    // webdoom: the previous level's mobjs went with Z_FreeTags.  A player in
+    // the game gets a new one below; a slot that is not in the game (one a
+    // player left, which a drop-in may take later) must not keep a pointer
+    // into freed zone memory for G_DoReborn and G_CheckSpot to follow.
+    for (i=0 ; i<MAXPLAYERS ; i++)
+	players[i].mo = NULL;
     P_LoadThings (lumpnum+ML_THINGS);
 
     // if deathmatch, randomly spawn the active players
