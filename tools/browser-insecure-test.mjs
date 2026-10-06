@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Insecure-origin WAD cache gate (ws-014).
+// Insecure-origin WAD cache gate.
 //
 // Proves that the IDB fallback tier in wad-cache.js caches WADs on insecure
 // origins where the service worker cannot engage.
@@ -18,7 +18,7 @@
 // RED-PROOF: stash the wad-cache.js + main.js changes and run — session 2
 // will re-download the WAD (wadHits.s2 > 0) and the assertion fails.
 //
-// Wired into run-tests.sh as the insecure-origin CI leg (task 16.5).
+// Wired into run-tests.sh as the insecure-origin leg.
 //
 // Usage: node tools/browser-insecure-test.mjs
 import { join } from 'node:path';

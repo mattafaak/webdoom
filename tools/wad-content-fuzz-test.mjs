@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// tools/wad-content-fuzz-test.mjs — hostile LUMP CONTENT (task 23.2).
+// tools/wad-content-fuzz-test.mjs — hostile LUMP CONTENT.
 //
 // wad-import.js validates a WAD's DIRECTORY well (lump count cap, negative and
 // EOF checks on every field).  Nothing validated what is INSIDE a lump, and a
@@ -301,8 +301,8 @@ for (const kind of THUMB_CASES) {
 // bridge), which browser-options already treats as hostile input.
 //
 // `usegamma` indexes gammatable[5][256] in engine/web/i_video.c on every
-// palette update.  `usegamma 99` read about 24 KB past it until round 13
-// clamped it at the index site.  spec.md tenet 4: no input from the network,
+// palette update; unclamped, `usegamma 99` reads about 24 KB past it, so it is
+// clamped at the index site.  spec.md tenet 4: no input from the network,
 // the WAD, or the user may corrupt memory.
 //
 // The CONTROL is the load-bearing part.  A clamp that made every gamma

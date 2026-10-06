@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Pass B: demo seek equivalence gate (task 19.3).
+// Pass B: demo seek equivalence gate.
 //
 // Proves that web_seek_demo(N) produces the same per-tic sim state as
 // linear playback up to tic N — the core DoD equivalence assertion.

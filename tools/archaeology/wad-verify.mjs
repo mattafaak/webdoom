@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// wad-verify.mjs — verifies invariant WAD-data claims from docs/claims-index.md.
+// wad-verify.mjs — verifies the doom.wad figures docs/formats.md quotes.
 // Reads wads/lib/doom.wad directly; no build required.
 //
 // Usage: node tools/archaeology/wad-verify.mjs [/path/to/doom.wad]

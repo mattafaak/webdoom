@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// OPL2/OPL3 mode toggle test (task 17.1).
+// OPL2/OPL3 mode toggle test.
 //
 // Three gates:
 //  1. web_set_opl_mode export exists     (Red until implementation)
@@ -286,13 +286,12 @@ for (const [mode, name] of [[0, 'OPL2'], [1, 'OPL3']]) {
                 `${quanta} quanta of ${QUANTUM} frames`);
 }
 
-// Gate 8: synth_play's OWNERSHIP CONTRACT (task 26.2).
+// Gate 8: synth_play's OWNERSHIP CONTRACT.
 //
-// synth_main.c decides whether to free the caller's block or the previous one,
-// and until round 13 it read that decision out of web_music_debug(0) -- the
-// `playing` flag, through a debug accessor.  mus_play returns the decision now
-// (1 = took the buffer, 0 = declined and touched nothing), so this asserts the
-// contract the free depends on, against the real module:
+// synth_main.c decides whether to free the caller's block or the previous one
+// from mus_play's return (1 = took the buffer, 0 = declined and touched
+// nothing), so this asserts the contract the free depends on, against the
+// real module:
 //
 //   a good song is TAKEN         -> web_music_debug(0) is 1, and it renders
 //   a bad header is DECLINED     -> the module survives, the previous song is

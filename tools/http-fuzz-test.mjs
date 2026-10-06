@@ -1,13 +1,12 @@
 #!/usr/bin/env node
-// Static HTTP path fuzz test (ws-005 companion — exercise the real server).
+// Static HTTP path fuzz test, against the real server.
 // Sends malformed / adversarial HTTP paths and verifies:
 //   1. No 5xx response (server must not crash on bad input).
 //   2. No file outside client/ served (traversal guard holds).
 //   3. Server stays up — a subsequent good GET /  returns 200.
 //
-// All cases derived from ws-005 on-paper analysis in docs/web-scrutiny.md.
 // usage: node tools/http-fuzz-test.mjs
-// Also the wire: negotiated br/gzip, ETag/304, on the real server (round 10).
+// Also the wire: negotiated br/gzip, ETag/304, on the real server.
 import { createConnection } from 'node:net';
 import { startServer } from './lib/server.mjs';
 import { join } from 'node:path';
@@ -162,7 +161,7 @@ await fuzzStaticHTTP();
 // and so does the next one, because there is no longer a server. One malformed
 // file in the data directory took the game down for everyone on the LAN.
 //
-// That is the failure server/ui-assets.js was hardened against in task 23.3 --
+// That is the failure server/ui-assets.js is hardened against --
 // "One corrupt WAD takes the game down for everyone on the LAN" -- and the
 // hardening went into lumpsOf() and stopped one call short of its own caller.
 //

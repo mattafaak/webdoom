@@ -294,7 +294,7 @@ if declared != len(trace):
 open(trace_out, 'w').write('\n'.join(f'{h:08x}' for h in trace) + '\n')
 
 golden   = json.load(open(golden_path))
-unpack = lambda t: [int(t[i:i+8], 16) for i in range(0, len(t), 8)] if isinstance(t, str) else t   # hex-string goldens (round 10)
+unpack = lambda t: [int(t[i:i+8], 16) for i in range(0, len(t), 8)] if isinstance(t, str) else t   # hex-string goldens
 expected = [int(x) for x in unpack(golden['trace'])]
 
 if len(trace) != len(expected):

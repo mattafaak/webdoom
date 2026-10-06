@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Build-time precache integrity check (ws-003 drift prevention).
+// Build-time precache integrity check: the precache list cannot drift from the files.
 // Parses sw.js's SHELL precache list and the actual app-shell import graph
 // (index.html script tags + static import statements in client/js/*.js) and
 // fails if any app-shell file is missing from the precache, or if any

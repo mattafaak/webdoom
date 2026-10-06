@@ -76,9 +76,9 @@ int main (int argc, char** argv)
     }
     printf ("standard ITU luma (77/150/29): %d/256 mismatches\n", bad_itu);
 
-    // CLAIMS_JSON footer (task 6.3) — engine-archaeology.md §6 invuln map:
+    // CLAIMS_JSON footer — engine-archaeology.md §6 invuln map:
     //   ea-023 matching entries = 256 - mismatches  (the doc claimed 242 until
-    //          task 6.1's inventory caught it: 242 + 15 = 257 > 256. Now 241.)
+    //          an inventory caught it: 242 + 15 = 257 > 256. Now 241.)
     //   ea-024 tie-break count   = the mismatches themselves (15)
     //   ea-025 luma weight sum   = wr + wg + wb (262, not the textbook ITU set)
     //   ea-026 entries the standard ITU weights miss (91 — see FINDING-4)

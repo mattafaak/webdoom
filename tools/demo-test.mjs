@@ -20,8 +20,8 @@ import { root } from './lib/util.mjs';
 const record = process.argv.includes('--record');
 const renderMode = process.argv.includes('--render');
 const lowDetail = process.argv.includes('--low-detail'); // 14.2b: low-detail render goldens
-const simDrawn       = process.argv.includes('--sim-drawn');        // round 8 T2: sim hashes with the render path RUNNING
-const smoothMod      = process.argv.includes('--smooth');            // round 8 T2: pass T enables frame interpolation
+const simDrawn       = process.argv.includes('--sim-drawn');        // sim hashes with the render path RUNNING
+const smoothMod      = process.argv.includes('--smooth');            // pass T enables frame interpolation
 const pitchIdx       = process.argv.indexOf('--pitch');
 const pitchPixels    = pitchIdx >= 0 ? Number(process.argv[pitchIdx + 1]) : 0;
 const fracticIdx     = process.argv.indexOf('--fractic');
@@ -31,7 +31,7 @@ const chocoBin = crossIdx >= 0 ? process.argv[crossIdx + 1] : null;
 const buildDirIdx = process.argv.indexOf('--build-dir');
 const buildDir = buildDirIdx >= 0 ? process.argv[buildDirIdx + 1] : 'build';
 
-// ── argv validation (task 21.6) ──────────────────────────────────────────────
+// ── argv validation ─────────────────────────────────────────────────────────
 // Every flag above is read with process.argv.includes(), which cannot tell a
 // typo from an absent flag: `--render-low` (for `--render --low-detail`) ran
 // the SIM suite and printed "PASS — all demos bit-identical to golden (13
@@ -58,7 +58,7 @@ for (let i = 2; i < process.argv.length; i++) {
     console.error(`FAIL: unrecognised argument '${a}'\n${USAGE}`);
     process.exit(2);
 }
-// Provenance for anything this run records (task 21.3).  Recording from a dirty
+// Provenance for anything this run records.  Recording from a dirty
 // tree without a stated reason is refused: a regold asserts the NEW output is
 // correct, and the reason belongs in the artifact.
 const { provenance, recordReason } = await import('./lib/golden.mjs');
@@ -128,7 +128,7 @@ const MATRIX = [
 
 // Every gate family replays the whole MATRIX.  Derive the expected demo count
 // from it rather than hardcoding 13, so adding an IWAD row moves the assertion
-// with no other edit (task 21.2).
+// with no other edit.
 const EXPECTED_DEMOS = MATRIX.reduce((n, [, , demos]) => n + demos.length, 0);
 
 // A run that verified fewer demos than the matrix declares DID NOT RUN IN FULL,
@@ -269,7 +269,7 @@ if (renderMode) {
                 verified++;
                 continue;
             }
-            // No auto-record: missing golden is a hard error (task 21.2).
+            // No auto-record: missing golden is a hard error.
             // This branch used to share the `record` arm above AND increment
             // `verified`, so deleting a golden re-created it from the build
             // under test and still printed the full-count PASS line — a silent,
@@ -309,7 +309,7 @@ if (renderMode) {
     process.exit(0);
 }
 
-// ── sim-drawn mode (round 8 T2: --sim-drawn) ────────────────────────────────
+// ── sim-drawn mode (--sim-drawn) ───────────────────────────────────────────
 //
 // The sim-invariance gate for render-side options and compile-time render
 // variants: per-tic web_state_hash() with the FULL RENDER PATH EXECUTING,
@@ -321,7 +321,7 @@ if (renderMode) {
 // of D_Display -- so R_SetupFrame, R_ShearView, R_InterpolateSectors, ST_Drawer
 // and I_FinishUpdate never execute.  Every leg claiming a render-side option
 // "leaves the playsim untouched" was asserting over code that did not run.
-// MEASURED (round 8 T1): with `prndindex++` poisoned into two render-side
+// MEASURED: with `prndindex++` poisoned into two render-side
 // blocks (the since-removed status-bar-skip and differential-blit variants),
 // the -nodraw sim gate printed "PASS -- all demos bit-identical to golden
 // (13 demos)" for both, while the same two binaries failed the render gate 13/13.
@@ -581,7 +581,7 @@ for (const [wad, engineName, demos] of MATRIX) {
             verified++;   // without this, --record ended at the 0-verified guard
             continue;
         }
-        // No auto-record: missing golden is a hard error (task 21.2).
+        // No auto-record: missing golden is a hard error.
         if (!existsSync(goldenPath)) {
             console.log(`FAIL ${name}: golden absent (run --record first)`);
             failures++;

@@ -15,7 +15,7 @@
 //   node tools/bench.mjs doom.wad 5 --json
 //
 // --json: emit a machine-readable result object (consumed by fleet runner,
-//         task 0.2, which will branch on schemaVersion == 2).
+//         which branches on schemaVersion == 2).
 //
 // Artifacts must live alongside this file: doom.js, doom.wasm, wad.
 // The engine's _web_perf_* exports are populated only when nodrawers == 0.

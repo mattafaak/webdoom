@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// tools/hostile-server-test.mjs — the direction nobody fuzzed (task 23.8).
+// tools/hostile-server-test.mjs — a hostile server against the engine.
 //
 // Every existing fuzz gate points one way: hostile CLIENT into the server
 // (net-fuzz-test, http-fuzz-test, demo-store-fuzz-test).  The other direction

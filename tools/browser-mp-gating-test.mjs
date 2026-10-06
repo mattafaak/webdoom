@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Browser test for task 16.6b: MP gating — local WADs must not appear in MP picker.
+// Browser test for MP gating — local WADs must not appear in MP picker.
 //
 // Tests covered:
 //   (1) SP picker includes local WAD (local WADs are valid for SP play).

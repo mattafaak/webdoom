@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // tools/web-contract-check.mjs — engine/web/web.h is the core<->platform
-// contract, so it has to be true (task 25.2).
+// contract, so it has to be true.
 //
 // spec.md tenet 5: a future no-OS port "starts from this repo's documentation,
 // not from folklore", and web.h is that documentation.  It described 5 of 73
@@ -16,7 +16,7 @@
 //      the compiler caught that one only because the header is included.
 //   2. every export taking a POINTER must be declared.  Those are the calls
 //      whose bound the callee cannot derive, and every one of them has already
-//      been the site of a defect (task 23).
+//      been the site of a defect.
 //   3. every declaration must resolve to a definition under engine/.  Rule 1
 //      SKIPS a declaration it cannot pair, so deleting a function and leaving
 //      its declaration behind used to pass -- the header would keep describing

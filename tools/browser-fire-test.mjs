@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Browser test for the PSX DOOM fire background (task 4.1).
+// Browser test for the PSX DOOM fire background.
 // Asserts:
 //   (a) fire canvas (#fire-bg) exists behind the menu on the landing screen
 //   (b) it is animating — pixels change between two samples taken ~300 ms apart

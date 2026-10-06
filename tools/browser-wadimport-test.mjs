@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Browser test for task 16.6a: drag-and-drop WAD import.
+// Browser test for drag-and-drop WAD import.
 //
 // Tests covered:
 //   (1) Malformed-corpus rejection — 7 hostile inputs, each rejected with a

@@ -260,7 +260,7 @@ fi
 
 # A skip that nobody counts is a gate that quietly shrank.  Half of this gate's
 # scope (engine/web + tools/archaeology C) evaporates on a version mismatch, and
-# it used to print the same "lint: OK" either way (task 21.8).  The suite passes
+# it used to print the same "lint: OK" either way.  The suite passes
 # --require-c so the host that is supposed to have the pinned toolchain cannot
 # silently run half a lint; an ad-hoc run still degrades, but says so.
 if [ "$C_CHECKED" = "0" ]; then

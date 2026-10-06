@@ -51,7 +51,7 @@ function sweepBestFit(lv) {
 
 // ── Expected mismatch counts (engine-archaeology.md §4) ───────────────────────
 // All five levels are the true minima of a 0.001-step γ sweep.
-// FINDING-3 (RESOLVED, task 6.2): the doc's level-4 row claimed γ~2.01 → 51,
+// The doc's level-4 row claimed γ~2.01 → 51,
 // which matches no γ near 2.01 (2.010→42, 2.011→34, 2.015→50 — the fit is a
 // sharp cliff). Levels 0-3's counts already matched their true minima, so only
 // the level-4 row was wrong; the doc is now corrected to γ≈2.011 → 34/256 and

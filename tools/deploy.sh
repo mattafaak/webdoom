@@ -4,10 +4,9 @@
 # WHY THIS EXISTS.  webdoom.service runs `node server/serve.js` straight out of
 # ~/projects/webdoom, so the CLIENT files it serves are whatever is on disk
 # right now, while the SERVER process is whatever was running when it started.
-# The two drift apart silently and nothing noticed: on 2026-09-17 the live
-# service had been up since before round 10, serving round-10 client files from
-# a round-9 server -- so the LAN launcher fetched /api/thumb (404) and got no
-# compression, and the only symptom was box art that never appeared.
+# The two drift apart silently: new client files from an old server can ask
+# for endpoints the server does not have yet, and the only symptom is a
+# feature quietly missing (box art that never appears).
 #
 # A restart drops everyone connected, so this refuses while anyone is -- in a
 # game, in the lobby, or spectating -- and says how many.  --force overrides.

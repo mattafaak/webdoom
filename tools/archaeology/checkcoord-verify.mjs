@@ -241,7 +241,7 @@ for (const [pos, cases] of Object.entries(byPos).sort((a,b)=>+a[0]-+b[0])) {
   }
 }
 
-// CLAIMS_JSON footer (task 6.3) — ea-027: the 9 viewpoint-region cases all
+// CLAIMS_JSON footer — ea-027: the 9 viewpoint-region cases all
 // verify, i.e. the checkcoord table is derivable, not hand-authored magic.
 // Emit the bare count so it matches the doc's "ALL 9 CASES VERIFIED" figure.
 const verifiedCases = allOk ? 9 : 0;

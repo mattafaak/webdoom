@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Browser test: rAF frame() exception → landing restore + user-visible message (ws-001 fix).
+// Browser test: rAF frame() exception → landing restore + user-visible message.
 //
 // Verifies that when an unexpected JS exception is thrown inside the rAF frame()
-// loop (the ws-001 silent-wedge path), the page recovers gracefully:
+// loop (a silent wedge), the page recovers gracefully:
 //   1. rAF loop STOPS — no further _web_frame calls (not an accumulating error)
 //   2. Landing page is restored (#landing visible, #screen hidden)
 //   3. User-visible error message is shown in #status
@@ -10,7 +10,7 @@
 //
 // Injection mechanism: after game boot, monkey-patch doom._web_frame to throw a
 // deterministic Error. This directly exercises the try/catch in frame() and
-// reproduces the ws-001 class (unexpected JS exception mid-frame) without
+// reproduces the silent-wedge class (unexpected JS exception mid-frame) without
 // depending on engine internals or wasm abort.
 //
 // Anti-vacuous RED proof: running this test against UNFIXED main.js (bare
@@ -29,7 +29,7 @@ const url = process.argv[2] ?? (await startServer()).url;
 // try -- so the gate proved the guarded line was guarded and said nothing
 // about `_doomFrameHook`, `_web_palette_version` and `renderer.draw`, which sat
 // AFTER the catch.  A throw from any of those killed the loop with no
-// endSession at all: the exact ws-001 wedge, in the loop that exists to prevent
+// endSession at all: a silent wedge, in the loop that exists to prevent
 // it.  Those three are inside the try now, and the suite runs this file once
 // per injection point so the claim covers both halves.
 const injIdx = process.argv.indexOf('--inject');
@@ -53,7 +53,7 @@ if (!await tab.bootSP(60).catch(e => fatal(`unexpected engine error before test 
 
 // ── Inject deterministic exception into the rAF frame path ───────────────────
 // Monkey-patch doom._web_frame to throw once, then restore (tracks call count).
-// This reproduces the ws-001 class: an unexpected JS exception inside the
+// This reproduces the silent-wedge class: an unexpected JS exception inside the
 // try { input.frame(); doom._web_frame(); } block.
 const domExported = await ev(`typeof window.webdoom?.doom?.${INJECT} === 'function'`);
 if (!domExported) fatal(`window.webdoom.doom.${INJECT} is not a function — game handle missing`);
@@ -98,7 +98,7 @@ const landingVisible = await ev(`!document.getElementById('landing').hidden`);
 const canvasHidden   = await ev(`document.getElementById('screen').hidden`);
 const statusText     = await ev(`document.getElementById('status')?.textContent`);
 
-check('landing page restored after rAF exception', landingVisible, 'user stuck on frozen canvas (ws-001 wedge)');
+check('landing page restored after rAF exception', landingVisible, 'user stuck on a frozen canvas');
 check('game canvas hidden after rAF exception', canvasHidden);
 check('a user-visible error message in #status', statusText && statusText.trim() !== '', `got: ${JSON.stringify(statusText)}`);
 check('#status text contains "engine error"', !statusText || statusText.includes('engine error'), `got: ${JSON.stringify(statusText)}`);
@@ -109,5 +109,5 @@ const unexpectedErrors = errors.filter(e =>
     !/(synthetic-rafdeath-ws001|abort|RuntimeError|unreachable)/i.test(e));
 check('no unexpected JS exceptions', unexpectedErrors.length === 0, unexpectedErrors.join('; '));
 
-summary(`rAF exception recovery via ${INJECT}: landing restored, status shown, loop stopped (ws-001 fixed)`);
+summary(`rAF exception recovery via ${INJECT}: landing restored, status shown, loop stopped`);
 process.exit();

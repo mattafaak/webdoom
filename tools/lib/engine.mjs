@@ -21,10 +21,8 @@ export async function bootEngine(buildDir, wads, { print = () => {}, printErr = 
         // `webfiles[n].data = data`, it does not copy -- so the registry points
         // at this block for the module's whole life and every W_WebFile() hit
         // reads through it.  A harness that frees it has handed the engine a
-        // dangling pointer.  opl-mode-test.mjs did exactly that for three
-        // instances (round 13); it happened to be the last use of each module
-        // every time, so nothing read freed memory, which is the kind of luck
-        // that stops holding the moment someone adds a line.
+        // dangling pointer, even when it happens to be the last use of the
+        // module: the luck stops holding the moment someone adds a line.
     }
     return doom;
 }

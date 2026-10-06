@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // tools/browser-teardown-test.mjs — play -> quit -> play must not accumulate
-// (task 23.7b).  MEASURED across cycles, not asserted by inspection.
+// MEASURED across cycles, not asserted by inspection.
 //
 // WHAT WAS WRONG
 // --------------
@@ -12,10 +12,10 @@
 //   * qol.js's rAF loop, which stopTickIfIdle() only stops when BOTH live
 //     features are off — with "level stats" on it ran forever, its exceptions
 //     swallowed by a bare catch — plus five nodes appended to #stage
-//     (qol.js was deleted in round 7 with the QoL overlays)
-//   * a second #settings panel sharing the first one's id (settings.js was
-//     deleted in round 7; its counter went with it rather than being left to
-//     pass over a selector that can no longer match — see below)
+//     (qol.js no longer exists)
+//   * a second #settings panel sharing the first one's id (settings.js no
+//     longer exists; its counter went with it rather than being left to pass
+//     over a selector that can no longer match — see below)
 //   * a program, two shaders, a VBO and two textures on the same GL context,
 //     since getContext returns the SAME context for the same canvas
 //

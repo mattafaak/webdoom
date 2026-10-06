@@ -171,7 +171,7 @@ console.log('');
 // That is exactly what tools/golden/browser-pipeline-wbox.json did: it is in the
 // pre-run1/run2 schema, so all six checks took the "no run1/run2 in baseline"
 // branch and wbox — one of the four reference hosts — was gated by a green that
-// measured nothing, indefinitely (task 21.10).
+// measured nothing, indefinitely.
 const compared = rows.filter(r => r.status !== 'SKIP').length;
 if (compared === 0) {
     console.log(`browser-pipeline-compare: FAIL — 0 of ${rows.length} checks actually compared.`);

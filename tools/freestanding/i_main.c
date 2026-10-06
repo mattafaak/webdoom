@@ -467,7 +467,7 @@ static void emit_attrib_json (const char* path, int tics, int n)
     fclose (f);
 }
 
-// ── zone stats emitter (task 13.2b, WEB_PERF_ZONE_STATS only) ────────────────
+// ── zone stats emitter (WEB_PERF_ZONE_STATS only) ───────────────────────────
 // Write render-ON zone HWM + purge-pressure stats to -zonestats output file.
 // Reads the zone stat globals defined in z_zone.c (compiled with the flag).
 #ifdef WEB_PERF_ZONE_STATS

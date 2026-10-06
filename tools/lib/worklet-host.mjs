@@ -3,7 +3,7 @@
 // The browser can only take the worklet synth so far under test: headless
 // Chrome — and headed Chrome under xvfb — arms the AudioContext and
 // instantiates the module, but never calls process(), because there is no
-// audio device to pull the graph.  Measured both ways in round 11:
+// audio device to pull the graph.  Measured both ways:
 // `{ready:true, playing:1, rendered:0}`.  So the browser leg proves the WIRING
 // engages, and the rendering is proved here, against the same file that ships,
 // driven through the same message protocol.

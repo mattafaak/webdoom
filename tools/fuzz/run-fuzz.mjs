@@ -87,7 +87,7 @@ if (!existsSync(IWAD_PATH)) {
 // Existence was never the question: a nat-doom built before the engine changed
 // is a reference to code that is no longer in the tree, and the differential
 // reports green because both sides agree about the past.  Found 2026-09-11 to
-// be 6 engine/core sources behind (task 21.4).  Gate mode refuses; ad-hoc runs
+// be 6 engine/core sources behind.  Gate mode refuses; ad-hoc runs
 // warn, mirroring the absent-binary policy immediately below.
 {
     const { inspect, provenance } = await import('../artifact-freshness.mjs');

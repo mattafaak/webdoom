@@ -2,7 +2,7 @@
 // Spectate fuzz + abuse suite: throws hostile clients at /ws/spectate and
 // verifies the server survives with its caps intact.
 //
-// This is the open half of task 23.6. `spectate` proves an observer
+// `spectate` proves an observer
 // re-simulates the identical world and `spectate-inject` proves it cannot
 // write ticcmds; NOTHING drove the spectate path with malformed or abusive
 // clients, so every resource cap on it -- MAX_SPECTATORS, maxPayload, the

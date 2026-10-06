@@ -16,7 +16,7 @@ source tools/emsdk-env.sh
 
 # The toggle builds back the byte-identity claims in docs/optimization-ledger.md.
 # Those are claims about a specific compiler; emsdk-env.sh only warned on drift,
-# into a stderr stream the build log trimmed away (task 21.8).
+# into a stderr stream the build log trimmed away.
 if [ "${EMSDK_PIN_OK:-0}" != "1" ] && [ "${WEBDOOM_ALLOW_EMCC_DRIFT:-0}" != "1" ]; then
     echo "FAIL build-toggle: emcc is not the pinned toolchain; byte-identity claims are not"
     echo "                   meaningful across compiler versions."

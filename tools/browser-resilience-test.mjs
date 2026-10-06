@@ -468,9 +468,8 @@ await runTest('8-empty-menu-screen', async () => {
 //    doomfont's column walk demanded TWO readable bytes before reading the
 //    one-byte 0xff terminator, so a column whose terminator is the last byte
 //    of the lump was flagged truncated -- 24 of doom.wad's 63 STCFN glyphs,
-//    measured.  No pixels were lost, and nothing read the flag, so it was
-//    wrong on every boot for the life of the project; round 6's "degrade
-//    loudly" change surfaced it on the first run.
+//    measured.  No pixels are lost, but a decoder that flags a good font
+//    warns on every boot.
 //    Both arms, because "no warning" is also what a decoder that stopped
 //    checking produces.
 // ═══════════════════════════════════════════════════════════════════════════

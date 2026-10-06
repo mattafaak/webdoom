@@ -54,7 +54,7 @@ let buildDir = 'build';
 let parallelism = Math.min(4, Math.max(1, Math.ceil(cpus().length / 4)));
 // --adversarial-gate: run adversarial seeds only, exit 0 iff ALL results are
 // clean or I_Error exits (fail-soft); exit 1 if ANY ASan/UBSan report.
-// This is the re-runnable yes/no check wired into the CI gate (task 12.3).
+// This is the re-runnable yes/no check wired into the suite.
 let adversarialGate = false;
 for (let i = 2; i < process.argv.length; i++) {
     if (process.argv[i] === '--seeds-benign' && process.argv[i + 1]) {
@@ -92,7 +92,7 @@ if (adversarialGate && !existsSync(join(root, 'tools/native-sanitize/nat-doom'))
 
 // ...and requires it to be a reference to THIS engine.  A stale sanitizer build
 // reports 0 findings about code that is no longer in the tree, which is the same
-// vacuous green the existence check above was written to prevent (task 21.4).
+// vacuous green the existence check above was written to prevent.
 {
     const { inspect, provenance } = await import('../artifact-freshness.mjs');
     const nd = inspect('nat-doom');

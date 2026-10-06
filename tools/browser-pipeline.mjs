@@ -285,7 +285,7 @@ try {
     chromeVer = (await cdp('Browser.getVersion')).result?.product ?? 'unknown';
 } catch (_) {}
 
-// task 18.3: record canvas dimensions at end of run (wide mode off = 320).
+// record canvas dimensions at end of run (always 320 wide).
 // Not a timing stage; not in CHECKS; baseline entry has no run1/run2 so
 // browser-pipeline-compare.mjs will SKIP it (by design).
 const canvasWidth  = await evaluate(`document.getElementById('screen')?.width ?? 320`);
@@ -322,7 +322,7 @@ const result = {
         // (e) input latency
         input_latency: { ...inputLatStats,
             note: 'Measurement: keydown event.timeStamp → renderer.draw() returns (GPU upload submitted, not compositing). Exact tic-consumption attribution omitted (no engine changes); this is event→next-rAF-draw latency.' },
-        // task 18.3: canvas_info — metadata stage, not a timing distribution.
+        // canvas_info — metadata stage, not a timing distribution.
         // Not in browser-pipeline-compare.mjs CHECKS; baseline has no run1/run2
         // so compare SKIPS it.  Records canvas dimensions + renderer kind at
         // end of the collection run.  320×200 is the only size there is.

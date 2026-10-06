@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Demo verification tool + divergence visualizer (task 19.4).
+// Demo verification tool + divergence visualizer.
 //
 // Verifies a .lmp file against a per-tic sim trace attestation (golden JSON).
 // Uses web_play_demo_buf (the same replay path as demo-replay-test.mjs) to
@@ -327,7 +327,7 @@ export const ALL_MATRIX = [
 // denominator counted only what was found: a denominator that cannot disagree
 // with its numerator is not a measurement.
 //
-// demo-test.mjs got this control in task 21.2 and demo-verify-test.mjs has its
+// demo-test.mjs has this control and demo-verify-test.mjs has its
 // own MIN_ASSERTIONS floor, so the tool under test was the only one of the
 // three without one.
 const ALL_EXPECTED = ALL_MATRIX.reduce((n, [, , demos]) => n + demos.length, 0);

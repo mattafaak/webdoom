@@ -1,6 +1,6 @@
 // Trace goldens on disk: {tics, trace, provenance}.  `trace` is one hex
-// string, eight characters per tic (round 10; it was a decimal JSON array,
-// 3.15 MB for the same 133,740 hashes).  Readers get numbers either way, so
+// string, eight characters per tic (a decimal JSON array of the same 133,740
+// hashes is 3.15 MB).  Readers get numbers either way, so
 // a golden written by an older tool still verifies, and the C writers keep
 // emitting decimal arrays that these helpers accept unchanged.
 import { existsSync, readFileSync } from 'node:fs';

@@ -1,5 +1,5 @@
 // save in E1M1, reload the page, assert the savegame was restored into
-// the fresh engine FS from IndexedDB. Also tests ws-008 teardown: after
+// the fresh engine FS from IndexedDB. Also tests teardown: after
 // doom.onQuit() the sync interval must stop firing (no unhandled rejections).
 import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
@@ -39,7 +39,7 @@ await bootSP();
 const restored = await ev(`window.webdoom.doom['fileMap']?.get('doomsav0.dsg')?.length ?? 0`);
 console.log('savegame bytes restored after reload:', restored);
 check('the savegame is restored into the engine after a reload', restored > 0, 'savegame not restored after reload');
-// ── Phase 2b: Load Game slot visibility (task 16.1) ──────────────────────────
+// ── Phase 2b: Load Game slot visibility ────────────────────────────────────
 // After reload the six Load-Game slots must be populated via the web bridge
 // (M_ReadSaveStrings → Web_FileLen / Web_FileCopyN).  Slot 0 was saved above
 // so it must be selectable (status 1).
@@ -66,7 +66,7 @@ console.log('load-game slot 0 selectable (menuactive cleared):', slotLoaded);
 check('Load Game slot 0 is selectable after a reload', slotLoaded,
       'menuactive did not clear (M_ReadSaveStrings bridge not working)');
 
-// ── Phase 4: quit-within-3s durability (task 16.2) ───────────────────────────
+// ── Phase 4: quit-within-3s durability ─────────────────────────────────────
 // Scenario: player saves, then quits before the 3-second sync interval fires.
 // The save must survive via write-through (doom.onFileWrite) and/or the final
 // flush triggered in doom.onQuit. Without the fix the save is lost.
@@ -155,7 +155,7 @@ console.log('status after a refused save:', JSON.stringify(failNotice));
 check('a save IndexedDB refuses is reported to the player', /would not store your save/.test(failNotice),
       'the refusal was silent: the player believes it was kept');
 
-// ── Phase 3: teardown test (ws-008) ──────────────────────────────────────────
+// ── Phase 3: teardown test ───────────────────────────────────────────────
 // Set up an unhandled-rejection listener, trigger doom.onQuit() to stop the
 // sync interval, wait > 3 s, then assert no wasm/sync rejections fired.
 await ev(`window.__urj = []; window.addEventListener('unhandledrejection', e => window.__urj.push(String(e.reason)));`);

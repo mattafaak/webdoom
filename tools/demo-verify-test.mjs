@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Gate: demo verification + divergence tool (task 19.4).
+// Gate: demo verification + divergence tool.
 //
 // Four sub-gates (all must pass):
 //
@@ -49,7 +49,7 @@ const doomJsPath = join(root, buildDir, 'doom.js');
 if (!existsSync(doomJsPath)) {
     // NOT exit 0.  Without the engine this gate makes zero assertions and then
     // printed "0 passed, 0 failed" followed by "PASS — all gates green": a
-    // full green over an empty set (task 21.8).
+    // full green over an empty set.
     console.log(`FAIL demo-verify-test: engine not built (${buildDir}/doom.js absent) — verified nothing`);
     process.exit(1);
 }

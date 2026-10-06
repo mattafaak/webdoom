@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Browser test: I_Error / onDoomError recovery (task 12.3 tenet-4 closure).
+// Browser test: I_Error / onDoomError recovery (spec.md tenet 4).
 //
 // Verifies that when the engine fires I_Error (onDoomError callback), the page
 // recovers gracefully:

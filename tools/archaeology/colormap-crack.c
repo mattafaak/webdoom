@@ -34,7 +34,7 @@ int main (int argc, char** argv)
     fread (cm, 1, 34 * 256, fp);
     fclose (fp);
     const char* mn[] = {"euclid", "manhat", "luma  "};
-    // webdoom task 6.3: capture the [metric][scale-variant] grid so the
+    // capture the [metric][scale-variant] grid so the
     // CLAIMS_JSON footer can report the specific cells the archaeology doc
     // cites.  euclid/sv2 (round) is the cracked recipe → ea-018.
     int grid[3][4];
@@ -87,7 +87,7 @@ int main (int argc, char** argv)
         }
     }
 
-    // CLAIMS_JSON footer (task 6.3) — the cells engine-archaeology.md §6 cites:
+    // CLAIMS_JSON footer — the cells engine-archaeology.md §6 cites:
     //   ea-018 euclid + round        → the cracked recipe (expect 0/8192)
     //   ea-019 euclid + truncation   → 313
     //   ea-020 euclid + (31-L)/31    → 2373

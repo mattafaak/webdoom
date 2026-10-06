@@ -51,11 +51,11 @@ const claims = [
       expected: 20480,
       verify: () => grabDefine('engine/core/r_plane.h', 'MAXOPENINGS') },
 
-    { id: 'rdr-006', desc: 'MAXVISPLANES webdoom = 128 (reverted to vanilla, task 14.2d)',
+    { id: 'rdr-006', desc: 'MAXVISPLANES webdoom = 128 (the vanilla value)',
       expected: 128,
       verify: () => grabDefine('engine/core/r_plane.c', 'MAXVISPLANES') },
 
-    { id: 'rdr-008', desc: 'MAXDRAWSEGS webdoom = 256 (reverted to vanilla, task 14.2e)',
+    { id: 'rdr-008', desc: 'MAXDRAWSEGS webdoom = 256 (the vanilla value)',
       expected: 256,
       verify: () => grabDefine('engine/core/r_defs.h', 'MAXDRAWSEGS') },
 
