@@ -13,10 +13,12 @@ const SAVES = [...Array(6).keys()].map(i => `doomsav${i}.dsg`);
 const CONFIG = '.doomrc';
 const ALL_FILES = [...SAVES, CONFIG];
 // What the engine writes is never near these; a larger entry did not come from
-// it, and handing one to the engine aborts every boot until it is removed
-// (the bytes are copied into its 32 MB heap).  A config is ~2 KB, a save under
-// SAVEGAMESIZE (512 KB).
-const MAX_BYTES = name => name === CONFIG ? 64 * 1024 : 1024 * 1024;
+// it, and handing one to the engine can abort every boot until it is removed
+// (the bytes are copied into its 32 MB heap).  A config is ~2 KB.  A save is
+// sized from its level and can pass 1 MB (6,000 monsters: 1,056,607 bytes),
+// but everything it archives lives in the 4 MB zone (ZONESIZE, web.h), so no
+// save the engine writes is bigger than that.
+const MAX_BYTES = name => name === CONFIG ? 64 * 1024 : 4 * 1024 * 1024;
 
 const db = () => openDB(DB, 1, [STORE]);
 const tx = (d, mode, fn) => idbTx(d, STORE, mode, fn);

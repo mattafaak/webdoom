@@ -121,6 +121,27 @@ console.log('savegame bytes restored after quit-within-3s:', restoredAfterQuickQ
 if (!restoredAfterQuickQuit) fail('save lost after quit-within-3s — write-through or final flush broken');
 console.log('quit-within-3s test: PASS');
 
+// ── Phase 2d: a save as big as the engine writes comes back ──────────────────
+// Saves are sized from the level, so a map with thousands of monsters writes
+// one past 1 MB: a 4096-unit room with 6,000 imps saves 1,056,607 bytes
+// through the menu.  Stored, it must be restored after a reload, not dropped
+// as "larger than the engine writes".
+const BIG = 1056607;
+await ev(`(async () => {
+    const d = await new Promise((res, rej) => { const r = indexedDB.open('webdoom', 1);
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    await new Promise((res, rej) => { const t = d.transaction('files', 'readwrite');
+        t.objectStore('files').put(new Uint8Array(${BIG}).fill(32), 'doom.wad:doomsav2.dsg');
+        t.oncomplete = res; t.onerror = () => rej(t.error); });
+    d.close();
+})()`);
+await cdp('Page.reload');
+await bootSP();
+const bigRestored = await ev(`window.webdoom.doom['fileMap']?.get('doomsav2.dsg')?.length ?? 0`);
+console.log('a 1,056,607-byte save restored after reload:', bigRestored);
+if (bigRestored !== BIG) fail(`a ${BIG}-byte save, which the engine can write, was not restored (got ${bigRestored} bytes)`);
+console.log('big-save test: PASS');
+
 // ── Phase 2c: a save the browser will not store is not silent ─────────────────
 // The engine prints "game saved" before IndexedDB has the bytes; when the
 // write fails (quota, private mode, a revoked origin) the player must be told.
@@ -148,5 +169,5 @@ const badRej = urjList.filter(r => /wasm|RuntimeError|abort|sync|save/i.test(r))
 if (badRej.length) fail(`unhandled rejections after quit: ${badRej.join(', ')}`);
 console.log(`teardown test: ${urjList.length} total unhandled rejections, ${badRej.length} wasm/sync related — OK`);
 
-console.log('PASS — savegame survives a page reload; load slots visible; quit-within-3s durable; a refused save is reported; interval stops cleanly on quit');
+console.log('PASS — savegame survives a page reload; load slots visible; quit-within-3s durable; a save past 1 MB is restored; a refused save is reported; interval stops cleanly on quit');
 chrome.kill(); process.exit(0);
