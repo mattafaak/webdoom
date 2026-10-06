@@ -528,6 +528,11 @@ void R_InitTextures (void)
 	    // legal texture is at least one pixel tall
 	    if (texture->height < 1)
 		texture->height = 1;
+	    // and a width below 1 sizes the column tables at zero or negative
+	    // bytes (a read past them, a memset of (size_t)-1, a zone block
+	    // header written before its block)
+	    if (texture->width < 1)
+		texture->width = 1;
 	    texture->patchcount = pcount;
 	}
 

@@ -122,27 +122,34 @@ function musLump(score) {
 // renderer hung on the first wall.  R_InitTextures clamps both to 1, so each
 // must render exactly as a height of 1 does.  64 is the control: a legal
 // height must still change the frame, or the cases above see nothing.
+//
+// The width likewise.  0 left the column tables zero bytes long, so
+// R_GetColumn read past them (a different frame); -1 reached an alloca and a
+// memset of (size_t)-1 (a trap); other negatives made Z_Malloc write a block
+// header before its block.  R_InitTextures clamps the width to 1 too.
 const TEX_HEIGHTS = { 'texheight-zero': 0, 'texheight-negative': -32768 };
-function textureHeights(h) {
+const TEX_WIDTHS = { 'texwidth-zero': 0, 'texwidth-minus-one': -1, 'texwidth-negative': -32768 };
+// maptexture_t: name[8], masked (4), width at 12, height at 14
+const TEX_FIELD = { height: 14, width: 12 };
+function textureField(field, h) {
     const wad = readFileSync(join(root, 'wads/lib/doom.wad'));
     const n = wad.readInt32LE(4), dir = wad.readInt32LE(8);
     for (let i = 0; i < n; i++) {
         const e = dir + 16 * i;
         if (wad.toString('latin1', e + 8, e + 16).replace(/\0.*$/, '') !== 'TEXTURE1') continue;
         const t = Buffer.from(wad.subarray(wad.readInt32LE(e), wad.readInt32LE(e) + wad.readInt32LE(e + 4)));
-        // maptexture_t: name[8], masked, width, height
-        for (let k = 0, count = t.readInt32LE(0); k < count; k++) t.writeInt16LE(h, t.readInt32LE(4 + 4 * k) + 14);
+        for (let k = 0, count = t.readInt32LE(0); k < count; k++) t.writeInt16LE(h, t.readInt32LE(4 + 4 * k) + TEX_FIELD[field]);
         return pwad([['TEXTURE1', t]]);
     }
     throw new Error('no TEXTURE1 in doom.wad');
 }
 
-const texIdx = process.argv.indexOf('--texheight');
+const texIdx = process.argv.indexOf('--tex');
 if (texIdx >= 0) {
-    const h = Number(process.argv[texIdx + 1]);
+    const field = process.argv[texIdx + 1], h = Number(process.argv[texIdx + 2]);
     const createDoom = (await import(join(root, buildDir, 'doom.js'))).default;
     const doom = await createDoom({ noInitialRun: true, print() {}, printErr() {} });
-    for (const [n, bytes] of [['doomu.wad', readFileSync(join(root, 'wads/lib/doom.wad'))], ['tex.wad', textureHeights(h)]]) {
+    for (const [n, bytes] of [['doomu.wad', readFileSync(join(root, 'wads/lib/doom.wad'))], ['tex.wad', textureField(field, h)]]) {
         const p = doom._malloc(bytes.length);
         doom.HEAPU8.set(bytes, p);
         doom.ccall('web_register_file', 'null', ['string', 'number', 'number'], [n, p, bytes.length]);
@@ -342,31 +349,31 @@ const CONFIG_CASES = ['gamma-clamped', 'gamma-control'];
     c ? passes++ : failures++;
 }
 
-// ── hostile texture heights, each in a child with a timeout (one hung) ──────
-{
+// ── hostile texture heights and widths, each in a child with a timeout ──────
+for (const [field, CASES_OF] of [['height', TEX_HEIGHTS], ['width', TEX_WIDTHS]]) {
     const frameFor = h => {
-        const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--build-dir', buildDir, '--texheight', String(h)],
+        const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--build-dir', buildDir, '--tex', field, String(h)],
                             { timeout: CASE_MS, encoding: 'utf8' });
         if (r.error && r.error.code === 'ETIMEDOUT') return { why: `HUNG (no exit within ${CASE_MS / 1000}s)` };
         const m = /CHILD-OK frame=(\d+)/.exec(r.stdout || '');
         return m ? { frame: m[1] } : { why: `exit ${r.status}: ${(r.stderr || '').trim().split('\n').pop()?.slice(0, 90) ?? ''}` };
     };
     const one = frameFor(1);
-    for (const [name, h] of Object.entries(TEX_HEIGHTS)) {
+    for (const [name, h] of Object.entries(CASES_OF)) {
         const r = frameFor(h);
         const ok = one.frame && r.frame === one.frame;
-        console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${name} - ${ok ? `height ${h} renders as height 1` : (r.why ?? one.why ?? `height ${h} renders differently from height 1`)}`);
+        console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${name} - ${ok ? `${field} ${h} renders as ${field} 1` : (r.why ?? one.why ?? `${field} ${h} renders differently from ${field} 1`)}`);
         ok ? passes++ : failures++;
     }
     const c = frameFor(64);
     const live = one.frame && c.frame && c.frame !== one.frame;
-    console.log(`  ${live ? 'ok  ' : 'FAIL'} texheight CONTROL: a legal height still changes the frame - `
-        + `${live ? 'height 64 differs from height 1' : (c.why ?? 'height 64 == height 1, so the cases above see nothing')}`);
+    console.log(`  ${live ? 'ok  ' : 'FAIL'} tex${field} CONTROL: a legal ${field} still changes the frame - `
+        + `${live ? `${field} 64 differs from ${field} 1` : (c.why ?? `${field} 64 == ${field} 1, so the cases above see nothing`)}`);
     live ? passes++ : failures++;
 }
 
 const EXPECTED = Object.keys(CASES).length + SERVER_CASES.length + THUMB_CASES.length + CONFIG_CASES.length
-    + Object.keys(TEX_HEIGHTS).length + 1;
+    + Object.keys(TEX_HEIGHTS).length + 1 + Object.keys(TEX_WIDTHS).length + 1;
 console.log(`\n  ${passes} passed, ${failures} failed`);
 if (failures) { console.log(`FAIL wad-content-fuzz-test: ${failures} case(s)`); process.exit(1); }
 if (passes !== EXPECTED) { console.log(`FAIL wad-content-fuzz-test: ran ${passes} of ${EXPECTED} cases`); process.exit(1); }
