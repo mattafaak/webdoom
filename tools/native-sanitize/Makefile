@@ -71,11 +71,23 @@ SRC := $(CORE_SRC) $(PLAT_SRC)
 OBJ := $(patsubst $(CORE_DIR)/%.c,obj/core/%.o,$(filter $(CORE_DIR)/%,$(SRC))) \
        $(patsubst %.c,obj/plat/%.o,$(PLAT_SRC))
 
-all: $(OUT)
+all: $(OUT) $(OUT)-vp128
 
 $(OUT): $(OBJ)
 	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
 	@echo "built $@"
+
+# The same engine with vanilla's 128 visplanes, so a real map (SIGIL E5M6)
+# reaches the R_CheckPlane bound that the shipped 256 leaves out of reach.
+# Only r_plane.c reads MAXVISPLANES.
+$(OUT)-vp128: $(filter-out obj/core/r_plane.o,$(OBJ)) obj/vp128/r_plane.o
+	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
+	@echo "built $@"
+
+obj/vp128/r_plane.o: $(CORE_DIR)/r_plane.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -DMAXVISPLANES=128 -MMD -MP -c $< -o $@
+-include obj/vp128/r_plane.d
 
 obj/core/%.o: $(CORE_DIR)/%.c
 	@mkdir -p $(dir $@)

@@ -427,26 +427,26 @@ The wasm linear-memory layout (perf.md §3):
 |--------|------|
 | C shadow stack | 1 MiB (`-sSTACK_SIZE=1MB`, engine/Makefile) |
 | Initialised data (DATA) | ~74 KiB (perf.md §1) |
-| Zero-initialised BSS | ~379 KiB (DATA + BSS = 453 KiB) |
-| **`__heap_base`** | **1.44 MiB** (1,512,384 bytes) |
+| Zero-initialised BSS | ~462 KiB (DATA + BSS = ~536 KiB) |
+| **`__heap_base`** | **1.52 MiB** (1,598,752 bytes, `size-budget`, 2026-10-06) |
 
-BSS is dominated by renderer scratch arrays: `visplanes[128]` (~83 KiB),
+BSS is dominated by renderer scratch arrays: `visplanes[256]` (~166 KiB),
 `vissprites[1024]` (~50 KiB), `openings[20480]` (40 KiB) and
-`drawsegs[256]` (~12 KiB). Only `MAXVISSPRITES` (1024, vanilla 128) and
-`MAXSEGS` (64, vanilla 32) are raised above vanilla; the visplane, opening
-and drawseg limits are vanilla's. The trig tables are BSS too (§4.1). The
+`drawsegs[256]` (~12 KiB). `MAXVISPLANES` (256, vanilla 128),
+`MAXVISSPRITES` (1024, vanilla 128) and `MAXSEGS` (64, vanilla 32) are raised
+above vanilla; the opening and drawseg limits are vanilla's. The trig tables are BSS too (§4.1). The
 screen buffers (250 KiB) are not in BSS; `I_AllocLow` places them (§1.5).
 
-**What a native target needs**: 453 KiB of writable data and BSS, plus a
+**What a native target needs**: about 537 KiB of writable data and BSS, plus a
 stack, plus the 250 KiB screen block. One MiB of stack is proven enough:
 `make check-stack-1m` in `tools/freestanding/` replays all 13 demos, rendering,
 under `ulimit -s 1024`. The true requirement is lower but not measured. With
-a 1 MiB stack the floor is **1.44 MiB** (`__heap_base`), and **~1.68 MiB**
+a 1 MiB stack the floor is **1.52 MiB** (`__heap_base`), and **~1.76 MiB**
 with the screen buffers. That is before the zone and the WAD. The budget
 tables below use these figures.
 
-The N64 build at `7f5c682`, measured with its toolchain, puts `.data + .bss`
-at 3,373,068 bytes, of which 2,621,440 are the zone arena and 256,000 the
+The N64 build, measured with its toolchain, puts `.data + .bss` at 3,458,164
+bytes, of which 2,621,440 are the zone arena and 256,000 the
 screen block ([retro.md](retro.md) §2, Memory).
 
 ### 2.2 Zone (heap)
@@ -527,13 +527,13 @@ IWAD sizes:
 
 | Region | Size |
 |--------|------|
-| Static (stack + DATA + BSS, = `__heap_base`) | 1.44 MiB |
+| Static (stack + DATA + BSS, = `__heap_base`) | 1.52 MiB |
 | Screen buffers (`I_AllocLow`) | 0.24 MiB |
 | Zone | 4 MiB |
 | WAD | 11.83 MiB |
-| **Total** | **~17.5 MiB** |
+| **Total** | **~17.6 MiB** |
 
-A 16 MiB PSRAM part does not fit doom.wad this way (it is 1.5 MiB over), and
+A 16 MiB PSRAM part does not fit doom.wad this way (it is 1.6 MiB over), and
 none of the commercial IWADs fit. Use (c) or (d), or the shareware WAD.
 
 #### (b) Shareware doom1.wad (~4 MiB class)
@@ -542,11 +542,11 @@ The shareware IWAD (episode 1 only) is about 4 MiB.
 
 | Region | Size |
 |--------|------|
-| Static (= `__heap_base`) | 1.44 MiB |
+| Static (= `__heap_base`) | 1.52 MiB |
 | Screen buffers (`I_AllocLow`) | 0.24 MiB |
 | Zone | 4 MiB |
 | WAD | ~4 MiB |
-| **Total** | **~9.7 MiB** |
+| **Total** | **~9.8 MiB** |
 
 It fits in 16 MiB of PSRAM with margin, and the shareware WAD may be
 redistributed. The 13 golden demos need the commercial IWADs, so a port
@@ -1005,7 +1005,7 @@ ESP32-S3 class:
 
 ### 7.2 Memory fit
 
-The static segment needs 1.44 MiB with a 1 MiB stack (§2.1), plus the 250 KiB
+The static segment needs 1.52 MiB with a 1 MiB stack (§2.1), plus the 250 KiB
 screen block (§1.5). 512 KiB of internal SRAM cannot hold the static segment,
 so PSRAM is mandatory. Internal SRAM is best spent on `screens[0]` (§1.5
 hybrid), which addresses the §7.3 bottleneck.
@@ -1014,12 +1014,12 @@ hybrid), which addresses the §7.3 bottleneck.
 
 | Region | Size | Location |
 |--------|------|----------|
-| Static (stack + DATA + BSS, = `__heap_base`) | 1.44 MiB | PSRAM |
+| Static (stack + DATA + BSS, = `__heap_base`) | 1.52 MiB | PSRAM |
 | `screens[0]` (render target) | 64,000 B | internal SRAM (§1.5 hybrid) |
 | `I_AllocLow` block (`screens[1..3]`, save workspace) | 250 KiB | PSRAM |
 | Zone | 4 MiB | PSRAM |
 | WAD (doom1.wad, fully loaded) | ~4 MiB | PSRAM |
-| **Total PSRAM** | **~9.7 MiB** | |
+| **Total PSRAM** | **~9.8 MiB** | |
 | Code | ~275 KiB (wasm CODE section, perf.md §1; native code size differs) | flash (XIP) |
 | Trig corrections | ~11 KiB | flash (XIP) |
 | `rndtable` + `gammatable` | ~1.5 KiB | flash (XIP) |
@@ -1027,7 +1027,7 @@ hybrid), which addresses the §7.3 bottleneck.
 A 16 MiB PSRAM part leaves about 6 MiB of margin, enough for the zone to grow
 to 8 MiB.
 
-**Full doom.wad in PSRAM** needs ~17.5 MiB (§2.3a), over 16 MiB. Map the WAD
+**Full doom.wad in PSRAM** needs ~17.6 MiB (§2.3a), over 16 MiB. Map the WAD
 from flash instead (§2.3c, §2.3d), or use a 32 MiB PSRAM part.
 
 ### 7.3 Expected bottleneck

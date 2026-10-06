@@ -2,7 +2,7 @@
   "_note": "Ceilings, never exact figures: a change that fits needs no edit here. Raise one only with the reason in the commit message.",
   "doom_wasm_bytes":   { "max": 307200, "why": "README promises under 300 KB of wasm" },
   "synth_wasm_bytes":  { "max": 24576,  "why": "the AudioWorklet synth; 24 KiB" },
-  "heap_base_bytes":   { "max": 1572864, "why": "__heap_base: stack + DATA + BSS below the heap. INITIAL_MEMORY is a fixed 32 MB with no growth, and the WADs are malloc'd above this line, so every byte here comes out of PWAD headroom" },
+  "heap_base_bytes":   { "max": 1638400, "why": "__heap_base: stack + DATA + BSS below the heap. INITIAL_MEMORY is a fixed 32 MB with no growth, and the WADs are malloc'd above this line, so every byte here comes out of PWAD headroom" },
   "payload_gzip_bytes": { "max": 250000, "why": "cold page load: every sw.js SHELL_FILES entry, gzip -9" },
   "surface_gzip_bytes": { "max": 88000,  "why": "the same without the engine: JS + CSS + HTML" }
 }

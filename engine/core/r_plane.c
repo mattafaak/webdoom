@@ -81,12 +81,13 @@ planefunction_t		ceilingfunc;
 //
 
 // Here comes the obnoxious "visplane".
-#define MAXVISPLANES	128	// vanilla's value.  The peak over the 13 demos is
-				// 118 (plutonia-demo1), a 1.08× margin, so busy
-				// community maps can reach it.  Raising it to 1024
-				// would cost 581 KiB of BSS (896 × 664 B).  Vanilla's
-				// I_Error in R_FindPlane is the failure surface: loud,
-				// never a silent overrun.
+// webdoom: 256, twice vanilla's.  SIGIL E5M6 needs 134 in its opening view,
+// and the library's busiest views measured up to 156; the 13 demos peak at
+// 118.  Each visplane is 664 B of BSS.  R_FindPlane and R_CheckPlane both
+// stop with an I_Error at the bound.  nat-doom-vp128 builds it at 128.
+#ifndef MAXVISPLANES
+#define MAXVISPLANES	256
+#endif
 visplane_t		visplanes[MAXVISPLANES];
 visplane_t*		lastvisplane;
 visplane_t*		floorplane;
@@ -353,6 +354,11 @@ R_CheckPlane
     }
 	
     // make a new visplane
+    // webdoom: bounded as in R_FindPlane (and Chocolate Doom); vanilla wrote
+    // past visplanes[] here and noticed only in R_DrawPlanes' RANGECHECK
+    if (lastvisplane - visplanes == MAXVISPLANES)
+	I_Error ("R_CheckPlane: no more visplanes");
+
     lastvisplane->height = pl->height;
     lastvisplane->picnum = pl->picnum;
     lastvisplane->lightlevel = pl->lightlevel;

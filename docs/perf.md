@@ -87,7 +87,7 @@ measurement that decided it.
 | not whole-program `-Os` / `-Oz` | `-Os`: sim −9.3% on wbox (2026-07-16); `-Oz`: sim −11% on alder (2026-09-16) | ledger K5 |
 | not `-O2` | −2.7% gzip against `-O3`; alder sim +3.4% on one rep, never fleet-benched (2026-07-16) | ledger K5 |
 | `--closure 1` | doom.js 8,264 vs 19,097 B raw, 3,582 vs 6,000 B gzip (2026-07-16); the wasm is unchanged | ledger K5 |
-| `-sINITIAL_MEMORY=32MB`, no growth | worst real WAD combination peaks at 23.06 MiB (§3) | ledger C3 |
+| `-sINITIAL_MEMORY=32MB`, no growth | worst real WAD combination peaks at 23.15 MiB (§3) | ledger C3 |
 | `-sSTACK_SIZE=1MB` | measured stack peak ≈14 KiB over 13 demos | ledger C7 |
 | `-sMALLOC=emmalloc` | the engine makes two large mallocs (zone, WAD) and few small ones; dlmalloc's extra code buys nothing for that pattern (reasoned, not measured) | — |
 
@@ -96,13 +96,13 @@ measurement that decided it.
 ## 3. Linear memory
 
 The wasm memory is a flat 32 MiB (33,554,432 B) with growth off. Layout on the
-7f5c682 build:
+current build (2026-10-06, 256 visplanes):
 
 | region | size | source |
 |---|---|---|
 | C shadow stack, at the start of memory | 1 MiB | `STACK_SIZE` |
-| static data (DATA + BSS) | 463,936 B (453 KiB) | `__heap_base` − 1 MiB |
-| `__heap_base` | 1,512,512 B (1.44 MiB) | read from the wasm by `size-budget.mjs` |
+| static data (DATA + BSS) | 550,176 B (537 KiB) | `__heap_base` − 1 MiB |
+| `__heap_base` | 1,598,752 B (1.52 MiB) | read from the wasm by `size-budget.mjs` |
 | zone pool, one `malloc` | 4 MiB | `ZONESIZE` in `engine/web/web.h` |
 | WAD copies, one `malloc` each | IWAD + optional PWAD | |
 
@@ -112,10 +112,10 @@ own ceiling. Peak address for the worst real combinations in the library
 
 | combination | WAD bytes | peak | headroom under 32 MiB |
 |---|---|---|---|
-| tnt.wad + tnt31.wad | 18,195,736 + 282,000 | 23.06 MiB | 8.94 MiB |
-| doom2.wad + nerve.wad | 14,604,584 + 3,819,855 | 23.01 MiB | 8.99 MiB |
-| plutonia.wad | 17,420,824 | 22.06 MiB | 9.94 MiB |
-| doom.wad + sigil.wad | 12,408,292 + 4,640,210 | 21.70 MiB | 10.30 MiB |
+| tnt.wad + tnt31.wad | 18,195,736 + 282,000 | 23.15 MiB | 8.85 MiB |
+| doom2.wad + nerve.wad | 14,604,584 + 3,819,855 | 23.10 MiB | 8.90 MiB |
+| plutonia.wad | 17,420,824 | 22.14 MiB | 9.86 MiB |
+| doom.wad + sigil.wad | 12,408,292 + 4,640,210 | 21.78 MiB | 10.22 MiB |
 
 `hacx.wad` (51 MB) is skipped by the library because it is not a
 vanilla-engine IWAD, so it is not a row here.
@@ -146,14 +146,15 @@ has no flag in the tree):
 
 | limit | size | corpus peak | margin | on overflow |
 |---|---|---|---|---|
-| `MAXVISPLANES` | 128 | 118 (plutonia demo1) | 1.08× | vanilla's `I_Error` |
+| `MAXVISPLANES` | 256 (vanilla 128) | 118 (plutonia demo1); library views about 156 | 2.17× | `I_Error` in either allocator |
 | `MAXDRAWSEGS` | 256 | 205 (doom demo4) | 1.25× | the wall seg is not drawn |
 | `MAXOPENINGS` | 320 × 64 = 20,480 | 2,527 (tnt demo3) | 8.1× | clip arrays dropped, fail-soft |
 | `MAXSEGS` (solidsegs) | 64 (vanilla 32) | 17 | 3.8× | the wall is dropped |
 
-The visplane and drawseg margins are thin for community maps. They stay at
-vanilla's size because raising them costs BSS, and therefore WAD headroom: the
-visplane array at 1,024 entries was 581 KiB more.
+The drawseg margin is thin for community maps; it stays at vanilla's size
+because raising it costs BSS, and therefore WAD headroom. The visplane array
+is 256 entries because a served map, SIGIL E5M6, needs 134 in its opening
+view; at 664 B each that is 84,992 B more than vanilla's 128.
 
 ---
 

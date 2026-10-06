@@ -47,12 +47,12 @@ const claims = [
       expected: 64,
       verify: () => grabDefine('engine/core/r_bsp.c', 'MAXSEGS') },
 
-    { id: 'rdr-004', desc: 'MAXOPENINGS webdoom (SCREENWIDTH×64) = 20480 (vanilla ×64 ratio per 14.2f; the 854 cap went with widescreen)',
+    { id: 'rdr-004', desc: 'MAXOPENINGS webdoom (SCREENWIDTH×64) = 20480 (the vanilla value)',
       expected: 20480,
       verify: () => grabDefine('engine/core/r_plane.h', 'MAXOPENINGS') },
 
-    { id: 'rdr-006', desc: 'MAXVISPLANES webdoom = 128 (the vanilla value)',
-      expected: 128,
+    { id: 'rdr-006', desc: 'MAXVISPLANES webdoom = 256 (vanilla 128; SIGIL E5M6 needs 134)',
+      expected: 256,
       verify: () => grabDefine('engine/core/r_plane.c', 'MAXVISPLANES') },
 
     { id: 'rdr-008', desc: 'MAXDRAWSEGS webdoom = 256 (the vanilla value)',

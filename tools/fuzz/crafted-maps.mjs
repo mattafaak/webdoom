@@ -58,6 +58,18 @@
 //                    computed an off-screen x from the garbage and drew
 //                    nothing, in both engines.
 //
+// One limit is reached by a real map rather than a crafted one:
+//
+//   sigil-e5m6       SIGIL's E5M6 (sigil.wad on doom.wad) needs 134 visplanes
+//                    in its opening view.  With vanilla's 128 the engine died
+//                    on the first frame; R_CheckPlane also took the 129th with
+//                    no bound and wrote past visplanes[] before R_DrawPlanes'
+//                    RANGECHECK noticed.  It must draw in wasm and in nat-doom
+//                    with no sanitizer report, and nat-doom-vp128 (the same
+//                    engine with 128 visplanes) must stop at R_CheckPlane's
+//                    I_Error with no sanitizer report: the bound, not an
+//                    overrun.
+//
 // usage: node tools/fuzz/crafted-maps.mjs [--build-dir DIR]
 // Copyright (C) 2026, GPL-2.0-or-later.
 import { spawnSync } from 'node:child_process';
@@ -71,7 +83,9 @@ import { check, summary, fatal } from '../lib/report.mjs';
 
 const BUILD = buildDirArg();
 const NAT_DOOM = join(root, 'tools/native-sanitize/nat-doom');
-if (!existsSync(NAT_DOOM)) fatal('needs tools/native-sanitize/nat-doom (make -C tools/native-sanitize): the sanitizer is half of every native case');
+const NAT_DOOM_VP128 = join(root, 'tools/native-sanitize/nat-doom-vp128');
+if (!existsSync(NAT_DOOM) || !existsSync(NAT_DOOM_VP128))
+    fatal('needs tools/native-sanitize/nat-doom and nat-doom-vp128 (make -C tools/native-sanitize): the sanitizer is half of every native case');
 const STARTAN = { mid: 'STARTAN3' };
 const ROOM = { floor: 0, ceil: 256, floorpic: 'FLOOR4_8', ceilpic: 'CEIL3_5', light: 192 };
 const idle = n => Array.from({ length: n }, () => [{}]);
@@ -278,4 +292,48 @@ const REFUSED = [
 ];
 for (const [name, build, expected] of REFUSED) await refuses(name, build(), expected);
 
-summary(`crafted maps reach their limits through the real loader and a demo (${3 + RENDERED.length + REFUSED.length} cases)`);
+// ── a real map past vanilla's visplane limit ─────────────────────────────────
+// doom.wad as the engine's doomu.wad, sigil.wad, and a demo that stands at
+// E5M6's start for 35 tics, drawn.
+const SIGIL = { tics: idle(37), demo: { episode: 5, map: 6, skill: 2 } };
+function nativeRun(bin, c) {
+    const dir = mkdtempSync(join(tmpdir(), 'webdoom-crafted-'));
+    try {
+        symlinkSync(join(root, 'wads/lib/doom.wad'), join(dir, 'doomu.wad'));
+        symlinkSync(join(root, 'wads/lib/sigil.wad'), join(dir, 'sigil.wad'));
+        writeFileSync(join(dir, 'demo.wad'), pwad([['DEMO', demoLump({ tics: c.tics, ...c.demo })]]));
+        const r = spawnSync(bin, ['-waddir', dir, '-file', 'sigil.wad', 'demo.wad', '-timedemo', 'DEMO'],
+                            { encoding: 'utf8', timeout: 120_000,
+                              env: { ...process.env, ASAN_OPTIONS: 'halt_on_error=1:abort_on_error=0', UBSAN_OPTIONS: 'halt_on_error=1' } });
+        const err = r.stderr ?? '';
+        const san = /(AddressSanitizer[^\n]*|runtime error:[^\n]*|ERROR: [^\n]*)/.exec(err);
+        if (san) return { sanitizer: san[1].trim() };
+        const ie = /I_Error: ([^\n]*)/.exec(err);
+        if (ie) return { ierror: ie[1].trim() };
+        if (r.status === 0) return { ran: true };
+        return { crash: `exit ${r.status}${r.signal ? ` ${r.signal}` : ''}` };
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}
+if (!existsSync(join(root, 'wads/lib/sigil.wad'))) fatal('needs wads/lib/sigil.wad for sigil-e5m6');
+{
+    let err = null;
+    const doom = await bootEngine(BUILD, [['doomu.wad', loadWad('doom.wad')], ['sigil.wad', loadWad('sigil.wad')],
+                                          ['demo.wad', pwad([['DEMO', demoLump({ tics: SIGIL.tics, ...SIGIL.demo })]])]],
+                                  { onDoomError: m => { err = m; } });
+    let frames = 0;
+    try {
+        doom.callMain(['-file', 'sigil.wad', 'demo.wad', '-playdemo', 'DEMO']);
+        doom._web_set_singletics(1);
+        for (let i = 0; i < SIGIL.tics.length - 2 && !err; i++) { doom._web_wipe_skip(); doom._web_frame(); frames++; }
+    } catch (e) { err ??= `trapped: ${String(e.message ?? e).split('\n')[0]}`; }
+    check(`sigil-e5m6: wasm draws ${SIGIL.tics.length - 2} frames of E5M6 (${frames} drawn)`, !err, err);
+    const n = nativeRun(NAT_DOOM, SIGIL);
+    check('sigil-e5m6: nat-doom draws E5M6 with no sanitizer report', n.ran, n.sanitizer ?? n.crash ?? n.ierror);
+    const v = nativeRun(NAT_DOOM_VP128, SIGIL);
+    check(`sigil-e5m6: with 128 visplanes nat-doom stops at R_CheckPlane, no sanitizer report (${Object.values(v)[0]})`,
+          /^R_CheckPlane/.test(v.ierror ?? ''), v.sanitizer ?? v.crash ?? v.ierror ?? 'it ran on');
+}
+
+summary(`crafted maps reach their limits through the real loader and a demo (${4 + RENDERED.length + REFUSED.length} cases)`);

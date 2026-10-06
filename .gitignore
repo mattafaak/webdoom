@@ -9,6 +9,7 @@ node_modules/
 tools/native-sanitize/obj/
 tools/native-sanitize/out/
 tools/native-sanitize/nat-doom
+tools/native-sanitize/nat-doom-vp128
 tools/native-sanitize/nat-doom-nosanity
 tools/native-sanitize/nat-doom-cov
 tools/native-sanitize/cov-obj/

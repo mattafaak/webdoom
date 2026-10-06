@@ -608,16 +608,21 @@ baseyscale = -FixedDiv(finesine[angle], centerxfrac)
 These rotate the span stepping with the view, so flats turn correctly with
 the player.
 
-### 5.6 Overflow: `I_Error` in both vanilla and webdoom
+### 5.6 Overflow: a bound in both allocators
 
-`MAXVISPLANES` is vanilla's 128 (r_plane.c:93). When a 129th plane is needed,
-`R_FindPlane` calls `I_Error("R_FindPlane: no more visplanes")`, the same
-hard stop as vanilla.
+`MAXVISPLANES` is 256, twice vanilla's 128 (r_plane.c). A plane is allocated
+in two places, and both stop with an `I_Error` at the bound:
+`R_FindPlane` ("no more visplanes", as in vanilla) and `R_CheckPlane`, which
+splits a plane when a new wall range overlaps columns it already holds.
+Vanilla's `R_CheckPlane` had no bound: it wrote past `visplanes[]` and the
+overrun was noticed only afterwards, by `R_DrawPlanes`' `RANGECHECK`.
 
-The 13-demo corpus peaks at 118 visplanes (plutonia-demo1), a 1.08× margin.
-The limit stays at 128 because a loud `I_Error` is the right failure for a
-map that needs more, and a 1024-plane array would cost 581 KiB of BSS
-([optimization-ledger.md](optimization-ledger.md) C4). Like every renderer
+The 13-demo corpus peaks at 118 visplanes (plutonia-demo1). The library goes
+higher: SIGIL E5M6's opening view needs 134, which is why the limit is 256,
+and views of the busiest SIGIL and NRFTL maps reach about 156. Each visplane
+costs 664 B of BSS ([optimization-ledger.md](optimization-ledger.md) C4,
+C4b). `crafted-maps` (sigil-e5m6) draws E5M6 in wasm and under ASan, and a
+128-plane native build stops at `R_CheckPlane`'s bound. Like every renderer
 limit, it cannot affect demo compatibility (§10).
 
 ---
@@ -1103,7 +1108,7 @@ The trig tables the sky and everything else read are covered by
 
 | limit | vanilla | webdoom | defined at | overflow: vanilla | overflow: webdoom |
 |-------|---------|---------|------------|-------------------|-------------------|
-| `MAXVISPLANES` | 128 | 128 | r_plane.c:93 | `I_Error` | `I_Error` (same) |
+| `MAXVISPLANES` | 128 | 256 | r_plane.c | `I_Error` in `R_FindPlane`; `R_CheckPlane` writes past the array | `I_Error` in either |
 | `MAXDRAWSEGS` | 256 | 256 | r_defs.h:55 | wall silently not drawn | same |
 | `MAXVISSPRITES` | 128 | 1024 | r_things.h:31 | extra sprites share `overflowsprite` | same |
 | `MAXSEGS` (solidsegs) | 32 | 64 | r_bsp.c:106 | out-of-bounds write | clip entry dropped, wall still drawn |
@@ -1116,7 +1121,7 @@ Measured peaks over the 13 golden demos, which the limits are sized against:
 
 | limit | peak | margin | witness | ledger entry |
 |-------|------|--------|---------|--------------|
-| `MAXVISPLANES` | 118 | 1.08× | plutonia-demo1 | C4 |
+| `MAXVISPLANES` | 118 (library views: about 156) | 2.17× | plutonia-demo1 | C4, C4b |
 | `MAXDRAWSEGS` | 205 | 1.25× | doom-demo4 | C5 |
 | `MAXOPENINGS` | 2527 | 8.1× | | C6 |
 | `MAXSEGS` | 17 | 3.8× | | NC2 |

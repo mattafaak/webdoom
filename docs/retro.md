@@ -157,18 +157,18 @@ the ROM is built and compiled in, because the shim has no filesystem to ask.
 
 ### Memory
 
-Footprint build at `7f5c682` (`N64_WAD=`, default zone), measured on alder
-2026-10-05 with `mips64-elf-size` and `mips64-elf-nm`:
+Footprint build (`N64_WAD=`, default zone) with 256 visplanes, measured on
+alder 2026-10-06 with `mips64-elf-size` and `mips64-elf-nm`:
 
 | item | bytes |
 |---|---|
-| `.text` (code + rodata) | 394,852 |
+| `.text` (code + rodata) | 396,116 |
 | `.data` | 57,032 |
-| `.bss` | 3,316,036 |
-| **RDRAM in use (`.data` + `.bss`)** | **3,373,068** of 4,194,304 (821,236 free on a stock console) |
+| `.bss` | 3,401,132 |
+| **RDRAM in use (`.data` + `.bss`)** | **3,458,164** of 4,194,304 (736,140 free on a stock console) |
 | of which `n64_arena`, the zone | 2,621,440 |
 | `n64_screenbufs` (four 320×200 screens) | 256,000 |
-| `visplanes` | 84,992 |
+| `visplanes` | 169,984 |
 | `n64_shadow_fb` (headless video stub) | 64,000 |
 | `vissprites` | 61,440 |
 | `n64_trace` (the hash trace) | 40,000 |
