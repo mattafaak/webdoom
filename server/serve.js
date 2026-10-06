@@ -181,8 +181,8 @@ const server = createServer((req, res) => {
         // The WAD name is a hint stored beside the demo and returned in the
         // x-demo-wad header, so it must be a value a header can carry:
         // printable Latin-1 (a local WAD imported as "café.wad" included), no
-        // control characters.  One writeHead rejects would be stored with a
-        // 201 and then throw on every GET of that id, which never answered.
+        // control characters.  A value writeHead rejects would be stored with
+        // a 201 and then throw on every GET of that id, leaving it unanswered.
         const wad = url.searchParams.get('wad') ?? '';
         if (!WAD_HINT.test(wad)) return send(req, res, 400, 'invalid wad name');
         const chunks = [];

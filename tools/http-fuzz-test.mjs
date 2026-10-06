@@ -523,10 +523,10 @@ await checkWire();
 // ── request shapes the router must still answer ──────────────────────────────
 //
 // An absolute-form request target that llhttp accepts and the WHATWG URL
-// parser rejects threw from the request listener: survive() logged it and the
-// request was never answered.  Methods other than GET and HEAD reached the
-// static mounts and served the file; HEAD on a WAD streamed the whole file
-// into a response that discards it.  The HEAD arm counts the bytes the server
+// parser rejects must be answered, not thrown on inside the request listener
+// (survive() would log it and the request would hang).  Methods other than
+// GET and HEAD must not reach the static mounts, and HEAD on a WAD must not
+// stream the whole file into a response that discards it.  The HEAD arm counts the bytes the server
 // process reads (/proc/<pid>/io rchar), on a temporary tree holding one
 // 4 MiB WAD, so it runs without the WAD library.
 async function checkRequestShapes() {
@@ -585,9 +585,8 @@ await checkRequestShapes();
 
 // ── the startup banner names only addresses the server listens on ────────────
 //
-// It listed every LAN and tailnet address of the host even when bound to
-// 127.0.0.1, so an operator who chose loopback was told to share URLs nobody
-// can reach.  The harness binds 127.0.0.1, so the banner must name that and
+// Listing every LAN and tailnet address of the host while bound to 127.0.0.1
+// would tell an operator who chose loopback to share URLs nobody can reach.  The harness binds 127.0.0.1, so the banner must name that and
 // nothing else.
 async function checkBanner() {
     let out = '';

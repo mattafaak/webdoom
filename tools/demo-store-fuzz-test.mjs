@@ -233,11 +233,10 @@ ok('server did not crash', !didCrash());
 
 // ── 8. An upload costs the same whether or not the store is full ─────────────
 //
-// Eviction sorted the whole store by expiry on every upload past the quota,
-// and the TTL sweep scanned every record on every upload: O(n log n) per
-// upload on the one thread that also runs the tic relay.  Every record gets
-// the same TTL, so upload order IS expiry order, and both can take from the
-// front.  Driven through the real HTTP route with a quota of 20,000 tiny
+// Eviction must not sort the whole store by expiry, nor the TTL sweep scan
+// every record, on each upload: that is O(n log n) per upload on the one
+// thread that also runs the tic relay.  Every record gets the same TTL, so
+// upload order IS expiry order, and both can take from the front.  Driven through the real HTTP route with a quota of 20,000 tiny
 // demos: 1,000 uploads timed while the store is filling, 1,000 more timed
 // while every one of them evicts.  The bodies are distinct 4-byte counters.
 //
@@ -298,9 +297,9 @@ ok('server did not crash', !didCrash());
 // ── 9. The WAD hint, and the bytes held by uploads still arriving ───────────
 //
 // `?wad=` is stored beside the demo and returned in the x-demo-wad header, so
-// a value writeHead rejects -- CR/LF, a character above U+00FF -- was accepted
-// with 201 and then threw on every GET, which never answered.  Every id the
-// POST hands out must be fetchable.  Latin-1 is a header's own charset: a
+// a value writeHead rejects -- CR/LF, a character above U+00FF -- must be
+// refused at upload: stored, it would throw on every GET and leave it
+// unanswered.  Every id the POST hands out must be fetchable.  Latin-1 is a header's own charset: a
 // local WAD imported as "café.wad" round-trips today and must keep doing so.
 //
 // Bodies are buffered whole, so uploads still arriving hold memory: with a

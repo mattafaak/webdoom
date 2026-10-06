@@ -546,8 +546,8 @@ export function createGame(log = console.log, servedWads = () => []) {
     // spectate endpoint has no message handler at all.  perMessageDeflate
     // off: compressing 12-byte latency-critical packets only adds delay.
     // autoPong off: ws would answer every ping itself, outside the rate guard
-    // and the send backlog cap, so a peer flooding pings and never reading
-    // grew the heap without bound; `capped` answers them instead.
+    // and the send backlog cap, where a peer flooding pings and never reading
+    // grows the heap without bound; `capped` answers them instead.
     const opts = maxPayload => ({ noServer: true, maxPayload, perMessageDeflate: false, autoPong: false });
     const lobbyWss    = new WebSocketServer(opts(1024));
     const gameWss     = new WebSocketServer(opts(64));
