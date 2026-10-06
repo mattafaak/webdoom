@@ -6,8 +6,6 @@ behind the current state live in `spec.md` and `docs/`.
 
 ## Client
 
-- On an insecure origin, the IndexedDB WAD cache never prunes a WAD the server
-  has replaced.
 - `idb.js` leaks a connection when `onblocked` fires and the open succeeds
   later.
 - Hostile colour strings from a server grow the glyph cache.

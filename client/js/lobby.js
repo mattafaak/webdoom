@@ -11,6 +11,7 @@ import { createCountdown } from './countdown.js';
 import { createFire } from './fire.js';
 import { identifyWad, WadError } from './wad-import.js';
 import { libraryAdd, libraryList } from './wad-library.js';
+import { wadCachePrune } from './wad-cache.js';
 import { parseDemoUrl, startReplay, stopAndShare, showSharePanel, showWadWarning } from './demo.js';
 import {
     ACTIONS, loadSettings, saveSettings, defaultSettings, captureBind,
@@ -676,6 +677,10 @@ function lobbyScreen() {
             }
             manifest.push(e);
         }
+        // without a service worker, main.js caches server WADs in IndexedDB by
+        // sha256; the ones this manifest no longer lists go (not awaited: the
+        // launcher does not wait on housekeeping, and the prune never throws)
+        if (!navigator.serviceWorker?.controller) wadCachePrune(serverShas);
 
         loading.set('DECODING THE MENU FONT…', 0.66);
         font = await loadDoomFont();

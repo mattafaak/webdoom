@@ -35,3 +35,25 @@ export async function wadCachePut(sha256, bytes) {
         console.warn('wad-cache: IDB write error:', err);
     }
 }
+
+// Delete every cached WAD whose sha256 is not in keepShas (the server's
+// manifest).  A replaced or removed WAD can never be asked for again, and
+// would otherwise keep its 4-18 MB here for good.  An empty set says nothing
+// about what to keep, so it prunes nothing.  Never throws: a launcher that
+// cannot prune still starts.  Resolves with the keys it deleted.
+export async function wadCachePrune(keepShas) {
+    if (!keepShas?.size) return [];
+    try {
+        return await withDB(DB, db => tx(db, 'wads', 'readwrite', s => {
+            const dropped = [];
+            s.getAllKeys().onsuccess = e => {
+                for (const k of e.target.result)
+                    if (!keepShas.has(k)) { s.delete(k); dropped.push(k); }
+            };
+            return dropped;
+        }));
+    } catch (err) {
+        console.warn('wad-cache: prune failed:', err);
+        return [];
+    }
+}

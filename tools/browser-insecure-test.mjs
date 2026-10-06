@@ -13,7 +13,8 @@
 //
 // Session 1: boot SP → WAD downloaded from network (server logs /wads/ hit).
 // Session 2: fresh tab, same Chrome profile (same IDB) → WAD served from IDB;
-//            server receives ZERO /wads/ requests.
+//            server receives ZERO /wads/ requests, and a WAD seeded between
+//            the sessions under a sha256 the server does not serve is pruned.
 //
 // RED-PROOF: stash the wad-cache.js + main.js changes and run — session 2
 // will re-download the WAD (wadHits.s2 > 0) and the assertion fails.
@@ -127,6 +128,27 @@ await sleep(500);
 check('session 1: the WAD was downloaded from the server', wadHits.s1 > 0,
       'session 1 made zero /wads/ server requests');
 console.log(`  session 1: ${wadHits.s1} /wads/ server hit(s) — WAD downloaded from network`);
+
+// A WAD the server no longer serves: a sha256 no manifest lists.  The next
+// launcher load must prune it, keeping the WAD it does serve.
+const STALE = 'f'.repeat(64);
+const seeded = await tab1.ev(`(async () => {
+    try {
+        const db = await new Promise((res, rej) => {
+            const r = indexedDB.open('webdoom-wads', 1);
+            r.onupgradeneeded = () => r.result.createObjectStore('wads');
+            r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+        });
+        await new Promise((res, rej) => {
+            const t = db.transaction('wads', 'readwrite');
+            t.objectStore('wads').put(new Uint8Array(4096), '${STALE}');
+            t.oncomplete = res; t.onerror = () => rej(t.error);
+        });
+        db.close();
+        return true;
+    } catch (e) { return String(e); }
+})()`);
+if (seeded !== true) fatal(`could not seed a stale WAD into IndexedDB: ${seeded}`);
 tab1.close();
 
 // Brief pause to let IDB write settle (wadCachePut is fire-and-forget async).
@@ -152,8 +174,8 @@ check('session 2: the WAD came from IndexedDB, with no /wads/ request', wadHits.
       ' RED-PROOF: on unfixed client session 2 always re-downloads.');
 console.log(`  session 2: ${wadHits.s2} /wads/ server request(s) — WAD served from IDB cache`);
 
-// Confirm IDB has the WAD stored.
-const idbHasWad = await tab2.ev(`
+// Confirm IDB has the WAD stored, and only the WADs the server serves.
+const idbKeys = await tab2.ev(`
     (async () => {
         try {
             const db = await new Promise((res, rej) => {
@@ -168,13 +190,19 @@ const idbHasWad = await tab2.ev(`
                 t.onerror = () => rej(t.error);
             });
             db.close();
-            return keys.length > 0;
-        } catch (e) { return false; }
+            return keys;
+        } catch (e) { return null; }
     })()
-`);
-check('the IDB webdoom-wads store holds the WAD', idbHasWad,
-      'the store is empty after session 2 (wad was not persisted in session 1)');
-console.log('  IDB webdoom-wads store has entries — WAD cached in IndexedDB');
+`) ?? [];
+const served = new Set(((await tab2.ev(`fetch('/api/wads').then(r => r.json()).catch(() => null)`))?.wads ?? []).map(w => w.sha256));
+const servedKeys = idbKeys.filter(k => served.has(k));
+console.log(`  IDB webdoom-wads keys after session 2: ${idbKeys.length} (${servedKeys.length} the server serves)`);
+check('the IDB webdoom-wads store holds the WAD', servedKeys.length > 0,
+      'the store holds no WAD the server serves after session 2 (wad was not persisted in session 1)');
+check('a cached WAD the server no longer serves was pruned', !idbKeys.includes(STALE),
+      `the stale ${STALE.slice(0, 8)}… entry is still there: ${idbKeys.length} keys`);
+check('nothing but served WADs is left in the cache', idbKeys.length === servedKeys.length,
+      `${idbKeys.length - servedKeys.length} unserved keys remain`);
 
 // ── Music fallback assertion (real insecure context, no synthetic forcing) ────
 // arm() has not been called yet: JS-simulated element.click() calls in
@@ -243,5 +271,6 @@ const allErrors = [...tab1.errors, ...tab2.errors].filter(
 check('no uncaught JS exceptions in either session', allErrors.length === 0, allErrors.join('; '));
 
 tab2.close();
-summary('insecure origin: IDB WAD cache hit + BufferSink music fallback confirmed (no synthetic forcing)');
+summary('insecure origin: IDB WAD cache hit, an unserved WAD pruned, BufferSink music fallback confirmed (no synthetic forcing)',
+        { min: 14 });
 process.exit();
