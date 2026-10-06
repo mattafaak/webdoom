@@ -154,10 +154,18 @@ const WAD_HINT = /^[\x20-\x7e\xa0-\xff]{0,64}$/;
 const LOG_REQ = !!process.env.LOG_REQUESTS;   // per-request log to stderr, for smoke tests
 
 const server = createServer((req, res) => {
-    const url = new URL(req.url, 'http://x');
+    // an absolute-form target llhttp accepts can still be one the WHATWG
+    // parser rejects, and a throw here leaves the request unanswered
+    let url;
+    try { url = new URL(req.url, 'http://x'); }
+    catch { return send(req, res, 400, 'bad request target'); }
     let path = normalize(url.pathname);
     if (LOG_REQ) process.stderr.write(`${req.method} ${path} ${req.headers['user-agent'] ?? '-'}\n`);
     if (path.includes('..')) return send(req, res, 400, 'bad path');
+    // every route below is read-only; POST /api/demos is the one write
+    const write = path === '/api/demos' && req.method === 'POST';
+    if (!write && req.method !== 'GET' && req.method !== 'HEAD')
+        return send(req, res, 405, 'method not allowed', { allow: 'GET, HEAD' });
 
     if (path === '/api/wads') {
         const m = manifest();
@@ -291,6 +299,7 @@ const server = createServer((req, res) => {
             'content-length': st.size,
             'cache-control': prefix === '/wads/' ? 'public, max-age=31536000, immutable' : 'no-cache',
         });
+        if (req.method === 'HEAD') return res.end();
         // a file that vanishes between stat and open errors the stream;
         // headers are out, so the honest recovery is a truncated body
         const stream = createReadStream(file);

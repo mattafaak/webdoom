@@ -520,6 +520,69 @@ async function checkWire() {
 console.log('\nthe wire — negotiated encoding and revalidation:');
 await checkWire();
 
+// ── request shapes the router must still answer ──────────────────────────────
+//
+// An absolute-form request target that llhttp accepts and the WHATWG URL
+// parser rejects threw from the request listener: survive() logged it and the
+// request was never answered.  Methods other than GET and HEAD reached the
+// static mounts and served the file; HEAD on a WAD streamed the whole file
+// into a response that discards it.  The HEAD arm counts the bytes the server
+// process reads (/proc/<pid>/io rchar), on a temporary tree holding one
+// 4 MiB WAD, so it runs without the WAD library.
+async function checkRequestShapes() {
+    const s = await spawnServer();
+    for (const target of ['http://[/', 'http://a:99999/', 'http://%zz/', 'http://[::1/', 'http://x:-1/']) {
+        const r = await rawHttp(s.host, s.port, `GET ${target} HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`);
+        check(`absolute-form target ${JSON.stringify(target)}: answered 400, not left hanging`, r.status === 400,
+              `status=${r.status ?? 'no answer in 3 s'}`);
+    }
+    for (const [method, path] of [['POST', '/'], ['PUT', '/index.html'], ['DELETE', '/api/wads'],
+                                  ['POST', '/api/ui-assets'], ['PATCH', '/js/lobby.js']]) {
+        const r = await rawHttp(s.host, s.port,
+            `${method} ${path} HTTP/1.1\r\nHost: x\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+        check(`${method} ${path}: 405 with Allow: GET, HEAD`, r.status === 405 && /^allow: GET, HEAD$/mi.test(r.headers),
+              `status=${r.status}`);
+    }
+    check('request shapes: server still up', await healthCheck(s.host, s.port) && !s.didCrash(), 'GET / after');
+    s.kill();
+
+    const { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, copyFileSync, rmSync, readdirSync, readFileSync } =
+        await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const tree = mkdtempSync(join(tmpdir(), 'webdoom-head-'));
+    let srv = null;
+    try {
+        for (const d of ['server', 'wads/lib', 'client', 'build']) mkdirSync(join(tree, d), { recursive: true });
+        for (const f of readdirSync(join(root, 'server')).filter(f => /\.(js|json)$/.test(f)))
+            copyFileSync(join(root, 'server', f), join(tree, 'server', f));
+        symlinkSync(join(root, 'server/node_modules'), join(tree, 'server/node_modules'));
+        writeFileSync(join(tree, 'client/index.html'), '<!doctype html><title>x</title>');
+        const SIZE = 4 * 2 ** 20;
+        writeFileSync(join(tree, 'wads/lib/big.wad'), Buffer.alloc(SIZE, 0x5a));
+        writeFileSync(join(tree, 'wads/manifest.json'), JSON.stringify({ wads: [{ file: 'big.wad' }] }));
+        srv = await startServer({ servePath: join(tree, 'server/serve.js') });
+        const rchar = () => +/^rchar: (\d+)$/m.exec(readFileSync(`/proc/${srv.proc.pid}/io`, 'utf8'))[1];
+        const r0 = rchar();
+        const head = await rawHttp('127.0.0.1', srv.port, 'HEAD /wads/big.wad HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n');
+        await sleep(200);
+        const read = rchar() - r0;
+        check('HEAD /wads/<file>: 200 with the length and no body',
+              head.status === 200 && new RegExp(`^content-length: ${SIZE}$`, 'mi').test(head.headers) && head.body.length === 0,
+              `status=${head.status} body=${head.body.length} B`);
+        check('HEAD /wads/<file>: the server does not read the file to answer it', read < SIZE / 4,
+              `server read ${read} bytes for a HEAD of a ${SIZE}-byte WAD`);
+        const get = await rawHttp('127.0.0.1', srv.port, 'GET /wads/big.wad HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n');
+        check('CONTROL: GET /wads/<file> still serves every byte', get.status === 200 && get.body.length === SIZE,
+              `status=${get.status} body=${get.body.length} B`);
+    } finally {
+        srv?.stop();
+        rmSync(tree, { recursive: true, force: true });
+    }
+}
+
+console.log('\nrequest shapes — absolute-form targets, methods, HEAD:');
+await checkRequestShapes();
+
 const failed = results.filter(r => !r.ok);
 const total = results.length;
 console.log(`\n${failed.length
