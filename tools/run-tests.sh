@@ -574,6 +574,7 @@ leg spectate-fuzz   build,wad  "hostile clients against /ws/spectate (23.6)" -- 
 leg edge            build,wad  "drop-in edge cases"                    -- node tools/edge-test.mjs
 leg churn           build,wad  "connect/disconnect churn"              -- node tools/churn-test.mjs
 leg net-hidden      build,wad  "a hidden tab survives 3 s in lockstep; told when dropped" -- node tools/net-hidden-test.mjs
+leg launch-args     build,wad  "RULES reach the engine; hostile launch params are refused" -- node tools/launch-args-test.mjs
 
 # ── demo tooling ─────────────────────────────────────────────────────────────
 leg demo-seek       build,wad  "scrubber seek == linear replay (19.3)" -- node tools/demo-seek-test.mjs

@@ -393,6 +393,10 @@ function enterMultiplayer() {
         .on('countdown', m => { if (!booted) countdown.show(m.n); })
         .on('launch', async m => {
             if (booted) return;
+            // before the countdown: a launch that cannot be played is refused
+            let args;
+            try { args = launchArgs(m.params, isCommercial(entry(m.params?.wad))); }
+            catch (err) { resetToLauncher(err.message); return; }
             if (!m.join) countdown.show('GO');    // drop-ins get the catch-up bar, not a countdown
             // Size the jitter buffer from the 75th-percentile spread above the
             // fastest of 12 pings: the mean is already lockstep's own lag and
@@ -402,10 +406,9 @@ function enterMultiplayer() {
             for (let i = 0; i < 12; i++) rtts.push((await lobby.ping()) ?? 50);
             rtts.sort((a, b) => a - b);
             const jitterMs = rtts[Math.floor(rtts.length * 0.75)] - rtts[0];
-            const e = entry(m.params.wad);
             enterGame({
                 wads: stackFor(m.params.wad),
-                args: launchArgs(m.params, isCommercial(e)),
+                args,
                 net: { slot: lobby.slot, numplayers: m.numplayers, jitterMs, names: m.names, slots: m.slots,
                        join: !!m.join, frontier: m.frontier },
                 after: () => { countdown.dismiss(); lobby.close(); },
@@ -497,9 +500,12 @@ function spectateGame() {
     const s = ipSummary; if (!s) return;
     const names = [null, null, null, null];
     (s.players ?? []).forEach(pl => { names[pl.slot] = pl.name ?? pl.color; });
+    let args;
+    try { args = launchArgs(s.params, isCommercial(entry(s.params.wad))); }
+    catch (err) { status(err.message); return; }
     enterGame({
         wads: stackFor(s.params.wad),
-        args: launchArgs(s.params, isCommercial(entry(s.params.wad))),
+        args,
         net: { numplayers: 4, slots: (s.players ?? []).map(pl => pl.slot), names,
                spectate: true, frontier: s.frontier ?? 0 },
         after: () => lobby.close(),

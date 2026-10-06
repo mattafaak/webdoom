@@ -358,16 +358,35 @@ export function attachSpectate(doom, baseUrl, { numplayers, slots = null, names 
     });
 }
 
-// Engine argv for a launch message — identical on every client.
+// Engine argv for a launch message — identical on every client, joiners and
+// spectators included, since each builds it from the same params.
 // `commercial` = MAP01-style wad (doom2/finaldoom family): single -warp N.
+//
+// The params come off the wire, so each must be a value the server's own
+// clamps can produce; anything else throws and the launch is refused.  The
+// engine parses argv with no such care: a value starting with '@' is read as
+// a response file.
 export function launchArgs(params, commercial) {
+    const p = params && typeof params === 'object' ? params : {};
+    const int = (v, lo, hi, what) => {
+        if (!Number.isInteger(v) || v < lo || v > hi)
+            throw new Error(`refusing launch: ${what} ${JSON.stringify(v)}`);
+        return String(v);
+    };
     const args = ['-warp'];
     if (commercial)
-        args.push(String(params.map));
+        args.push(int(p.map, 1, 32, 'map'));
     else
-        args.push(String(params.episode), String(params.map));
-    args.push('-skill', String(params.skill));
-    if (params.mode === 'deathmatch') args.push('-deathmatch');
-    if (params.mode === 'altdeath') args.push('-altdeath');
+        args.push(int(p.episode, 1, 9, 'episode'), int(p.map, 1, 32, 'map'));
+    args.push('-skill', int(p.skill, 1, 5, 'skill'));
+    if (!['coop', 'deathmatch', 'altdeath'].includes(p.mode ?? 'coop'))
+        throw new Error(`refusing launch: mode ${JSON.stringify(p.mode)}`);
+    if (p.mode === 'deathmatch') args.push('-deathmatch');
+    if (p.mode === 'altdeath') args.push('-altdeath');
+    // the RULES screen
+    if (p.nomonsters === true) args.push('-nomonsters');
+    if (p.fast === true) args.push('-fast');
+    if (p.respawn === true) args.push('-respawn');
+    if (p.timer !== undefined && p.timer !== 0) args.push('-timer', int(p.timer, 1, 30, 'timer'));
     return args;
 }
