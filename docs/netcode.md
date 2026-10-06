@@ -21,8 +21,14 @@ WAD library on the same port:
 | endpoint | carries |
 |---|---|
 | `/ws/lobby` | JSON control: roster, params, countdown, launch, ping, drop-in requests |
-| `/ws/game?slot=N` | binary tic channel for the player in slot N |
+| `/ws/game?slot=N&token=T` | binary tic channel for the player in slot N |
 | `/ws/spectate` | binary, receive-only: the history, then live bundles |
+
+A seat is bound to the lobby socket it was given to. At launch, and on a
+drop-in reservation, the server sends each seat's random token only in that
+seat's own `launch` frame, and `/ws/game` binds a slot only with its current
+token. The token dies when the relay socket holding the slot closes, so a
+player who drops comes back through the lobby's drop-in.
 
 WebSocket runs over TCP, so delivery is ordered and reliable and there is no
 resend protocol. The cost is head-of-line blocking after a lost segment; the
@@ -149,7 +155,9 @@ A player can join a game that is already running.
    playing, free slots) instead of a seat. `join` reserves a free slot; the
    reservation lapses after 30 s if the joiner never goes live.
 2. The server answers `welcome` and a `launch` with `join: true` and the
-   current frontier. The client boots and connects to `/ws/game?slot=N`.
+   current frontier, carrying the reservation's token. The client boots and
+   connects to `/ws/game?slot=N&token=T`. A reservation that lapsed still
+   binds with its token until another newcomer reserves the slot.
 3. The relay streams the whole sealed history, then live bundles. The client
    replays it unpaced, one `web_replay_tic` per bundle, yielding every 512
    tics to let more arrive and driving the loading bar. If no tic advances
@@ -209,12 +217,12 @@ of `[A-Za-z0-9 _-]`, and a WAD not in the server's library is refused.
 → {t:'slot', slot}          (pick a free colour: colour is slot)
 → {t:'params', params}      (wad, episode, map, skill, mode, nomonsters, fast, respawn, timer)
 → {t:'start'}               ← {t:'countdown', n:3..1}
-                            ← {t:'launch', params, numplayers:4, slots, names}
+                            ← {t:'launch', params, numplayers:4, slots, names, token}
 → {t:'ping', t0}            ← {t:'pong', t0}
                             ← {t:'full', reason}
 while a game is live:
 → (connect)                 ← {t:'inprogress', params, frontier, players:[{slot,color,name,live}], freeSlots}
-→ {t:'join', slot, name}    ← {t:'welcome', …}, {t:'launch', …, join:true, frontier}
+→ {t:'join', slot, name}    ← {t:'welcome', …}, {t:'launch', …, join:true, frontier, token}
 ```
 
 Slots are taken in join order: 0 Green, 1 Indigo, 2 Brown, 3 Red, which are
