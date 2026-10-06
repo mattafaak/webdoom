@@ -448,6 +448,7 @@ leg archaeology     gcc  "every derived engine figure reproduces from its script
 leg docs            -    "doc links resolve; spec's named gates are legs" -- node tools/check-docs.mjs
 leg sw-precache     -    "sw.js SHELL list <-> app-shell imports"   -- node tools/check-sw-precache.mjs
 leg sw-wad-stream   -    "sw.js streams a WAD to the page and caches it behind" -- node tools/sw-wad-stream-test.mjs
+leg audio-stop-race -    "audio stopped while arming starts nothing afterwards" -- node tools/audio-stop-race-test.mjs
 leg http-fuzz       -    "static HTTP path attacks (ws-005)"        -- node tools/http-fuzz-test.mjs
 leg demo-store-fuzz -    "demo-store cap enforcement (19.2)"        -- node tools/demo-store-fuzz-test.mjs
 leg net-fuzz        -    "malformed/hostile WebSocket clients"      -- node tools/net-fuzz-test.mjs

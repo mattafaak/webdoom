@@ -96,6 +96,9 @@ export function createAudio(doom) {
     const buffers = new Map();          // sfx id → AudioBuffer
     const active = new Map();           // handle → {src, gain, pan}
     let sink = null, musicScratch = 0, pumpTimer = 0;
+    // stop() can run while arm() is suspended in an await (the player quits
+    // as the audio starts); arm() then must start nothing
+    let stopped = false;
     let workletNode = null;             // set on any worklet tier
     let oplMode = 0;                    // mirrored into both synths
     let synthLive = false;              // tier 1: the worklet owns the synth
@@ -142,6 +145,7 @@ export function createAudio(doom) {
             return;
         }
         if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
+        if (stopped) return;
         doom._web_music_init(ctx.sampleRate);
         if (window.__wd_perf) window.__wd_perf.sampleRate = ctx.sampleRate;
 
@@ -159,6 +163,7 @@ export function createAudio(doom) {
         // WorkletSink on a secure origin, BufferSink anywhere else
         try {
             await ctx.audioWorklet.addModule('js/music-worklet.js');
+            if (stopped) return;
             const node = new AudioWorkletNode(ctx, 'music-sink', { outputChannelCount: [2] });
             node.connect(ctx.destination);
             workletNode = node;
@@ -183,6 +188,7 @@ export function createAudio(doom) {
             // Anything short of a `ready` reply leaves the pump in charge, so a
             // failure here costs the thread move and nothing else.
             const wasm = await synthWasm;
+            if (stopped) return;
             const st = wasm && musicState();
             if (st && st.genmidi) {
                 synthLive = await new Promise(resolve => {
@@ -221,6 +227,7 @@ export function createAudio(doom) {
             }
         }
 
+        if (stopped) return;
         // Tier 1 needs no pump at all: the worklet renders its own samples.
         if (synthLive) {
             doom._free(musicScratch);
@@ -369,13 +376,14 @@ export function createAudio(doom) {
         // called on quit: stop the render pump and release the context so
         // the interval doesn't poke a force-exited wasm instance
         stop() {
+            stopped = true;
             if (pumpTimer) clearInterval(pumpTimer);
             synthLive = false;
             workletNode = null;
             for (const evt of ['keydown', 'mousedown', 'touchstart'])
                 window.removeEventListener(evt, arm, { capture: true });
             document.removeEventListener('visibilitychange', onVisible);
-            try { ctx?.close(); } catch { /* already closed */ }
+            ctx?.close().catch(() => { /* already closed */ });
             ctx = null;
         },
     };
