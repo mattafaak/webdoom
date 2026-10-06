@@ -102,8 +102,13 @@ async function openTab(port, url = 'about:blank') {
             return false;
         },
         inGame: () => tab.ev(`!document.getElementById('screen').hidden && document.getElementById('status')?.textContent === ''`),
-        // SINGLE PLAYER → the first Doom entry → the engine running
+        // SINGLE PLAYER → the first Doom entry → the engine running.  "Running"
+        // is a handle other than the one present when this started: a page
+        // that kept the previous session's handle would otherwise satisfy the
+        // wait while this boot is still downloading.  The old handle is marked
+        // rather than held, so the wait cannot keep a dead engine reachable.
         async bootSP(secs = 90) {
+            await tab.ev(`(() => { const d = window.webdoom?.doom; if (d) d.__bootSPStale = true; })()`);
             let clicked = false;
             for (let i = 0; i < secs * 2; i++) {
                 await sleep(500);
@@ -117,7 +122,8 @@ async function openTab(port, url = 'about:blank') {
                         return g ? (g.click(), true) : false; })()`);
                     continue;
                 }
-                if (await tab.ev(`!!window.webdoom?.doom && document.getElementById('status')?.textContent === ''`)) return true;
+                if (await tab.ev(`(() => { const d = window.webdoom?.doom;
+                        return !!d && !d.__bootSPStale && document.getElementById('status')?.textContent === ''; })()`)) return true;
             }
             return false;
         },

@@ -172,10 +172,41 @@ const snapshot = () => ev(`(() => ({
 const wadCount = await ev(`(async () => { try { return ((await (await fetch('/api/wads')).json()).wads ?? []).length; } catch { return -1; } })()`);
 if (wadCount <= 0) fatal(`/api/wads returned ${wadCount} — cannot boot, so nothing was measured`);
 
+// Cycle 2's WAD is held for 3 s.  A boot wait that a previous session's handle
+// can satisfy returns while this boot is still downloading; the quit below then
+// lands on nothing, and cycle 3 finds a game where it expected the launcher.
+// The page's own request is the one held, so the service worker is bypassed;
+// interception ends only after the release, since Fetch.disable continues
+// every paused request at once.
+const HOLD_MS = 3000;
+const holdWads = async on => {
+    await cdp('Network.enable');
+    await cdp('Network.setBypassServiceWorker', { bypass: on });
+    await cdp(on ? 'Fetch.enable' : 'Fetch.disable', on ? { patterns: [{ urlPattern: '*/wads/*' }] } : {});
+};
+let wadsHeld = 0;
+tab.on('Fetch.requestPaused', p => {
+    wadsHeld++;
+    setTimeout(async () => {
+        await cdp('Fetch.continueRequest', { requestId: p.requestId });
+        await holdWads(false);
+    }, HOLD_MS);
+});
+
 const marks = [];
 const inPlay = [];
 for (let cycle = 1; cycle <= 3; cycle++) {
+    if (cycle === 2) await holdWads(true);
+    const t0 = Date.now();
     if (!await tab.bootSP(35).catch(e => fatal(e.message))) fatal(`boot timeout on cycle ${cycle}`);
+    if (cycle === 2) {
+        const waited = Date.now() - t0;
+        console.log(`  cycle 2: boot wait returned ${waited} ms after it started, `
+                  + `with ${wadsHeld} WAD request(s) held ${HOLD_MS} ms`);
+        if (!wadsHeld) fatal('cycle 2 held no WAD request, so its boot wait was not tested');
+        check(`cycle 2's boot wait outlasted its held WAD (${waited} ms, hold ${HOLD_MS} ms)`, waited >= HOLD_MS,
+              'it returned on the previous session\'s handle while this boot was still downloading');
+    }
     await sleep(400);
     // A second reading, taken WHILE THE ENGINE IS RUNNING.  The per-cycle
     // growth check above cannot see a timer that is created once for the page
@@ -254,5 +285,6 @@ for (const [k, label] of [['listeners', 'net event listeners'],
 // duplicate-id leak it guarded cannot recur for an element that is not created.
 summary('browser-teardown-test: play->quit->play x3, 5 measured dimensions stable '
       + '(event listeners, #stage children, GL objects, live timers, '
-      + 'wasm instances released) + no launcher timer during gameplay');
+      + 'wasm instances released) + no launcher timer during gameplay '
+      + '+ a boot wait no previous session can satisfy');
 process.exit();
