@@ -395,9 +395,9 @@ trap cleanup EXIT INT TERM
 # THE LEG REGISTRY
 #
 # One line per leg: id, prerequisites, description, command.  The id is what
-# --only takes and what the summary table prints.  Compound legs were split so
-# each reports its own verdict — "engine smoke (doom, doom2)" used to be two
-# commands under one heading, and the second was unreachable if the first failed.
+# --only takes and what the summary table prints.  A leg that runs several
+# cases reports each one, and a case that fails never makes a later one
+# unreachable.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # --list reads the registry out of this file; a discovery that finds almost
@@ -489,8 +489,9 @@ leg freshness       build      "build/ + native refs not older than sources" -- 
 leg size-budget     build      "doom.wasm, synth.wasm, __heap_base and page load under their ceilings" -- node tools/size-budget.mjs
 
 # ── engine boots and makes sound ─────────────────────────────────────────────
-leg smoke-doom      build,wad  "boots doom.wad headless, 700 frames"   -- node tools/smoke-test.mjs doom.wad 700
-leg smoke-doom2     build,wad  "boots doom2.wad headless, 1100 frames" -- node tools/smoke-test.mjs doom2.wad 1100
+# callMain([]) and the attract loop at wall-clock pacing, the path a browser
+# takes; the demo goldens replay under -timedemo and do not cover it.
+leg smoke-iwads     build,wad  "boots doom.wad (700 frames) and doom2.wad (1100) headless" -- node tools/smoke-test.mjs doom.wad 700 doom2.wad 1100
 # rme-008: the demo goldens cover the four demo-bearing IWADs. The other 24
 # entries in wads/manifest.json -- SIGIL, NRFTL, Chex Quest and the 20 Master
 # Levels -- had no automated test of any kind, so a shipped WAD that failed to

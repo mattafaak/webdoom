@@ -23,7 +23,7 @@ shipped, gated feature that the contract never claimed at all.
 
 | what | gate |
 |------|------|
-| Single player from a browser, no install | `browser-sp`, `smoke-doom`, `smoke-doom2` |
+| Single player from a browser, no install | `browser-sp`, `smoke-iwads` |
 | Zero-config LAN co-op and deathmatch, 2–4 players | `net-2p`, `net-4p`, `browser-net` |
 | Drop-in: join a game already running, re-simulated to the frontier | `join-coop`, `join-dm`, `churn`, `edge`, `browser-join` |
 | **Spectators**: receive-only observers, structurally unable to inject | `spectate`, `spectate-inject` |
