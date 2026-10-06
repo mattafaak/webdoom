@@ -389,7 +389,7 @@ Safari coverage is documented policy, not oversight.
 
 **Amended 2026-07-21 (round 4, the floor campaign).** The atlas is the doctrine,
 and it has not changed: no hardware target is attempted before its row in
-[docs/feasibility-atlas.md](docs/feasibility-atlas.md) exists, with arithmetic.
+[docs/retro.md](docs/retro.md) exists, with arithmetic.
 What changed is that a row may now sanction a real-hardware test bed.
 
 | target | status | what that means here |

@@ -39,7 +39,6 @@ section heading rather than at the top.
 | [perf.md](perf.md) | **long** (1,869). The memory, size and per-stage baseline. Note: still describes a four-host fleet in places; `spec.md`'s 2026-09-11 amendment retired pi5 |
 | [optimization-ledger.md](optimization-ledger.md) | every candidate considered, measured, and landed or killed — with the kill rule it was judged against |
 | [divergence-atlas.md](divergence-atlas.md) | where this port diverges from vanilla, and why each one is sanctioned |
-| [feasibility-atlas.md](feasibility-atlas.md) | the retro-hardware arithmetic: what could run this, and what provably cannot. Has its own table of contents |
 | [bare-metal.md](bare-metal.md) | **long** (1,198). The core ↔ platform contract a no-OS port starts from |
 
 ## The verification machinery
@@ -54,9 +53,6 @@ Read the banner first — all three carry a dated status.
 
 | document | what it is |
 |---|---|
-| [n64/DEMO-GATE-STATUS.md](n64/DEMO-GATE-STATUS.md) | the N64 sim-hash gate: 13/13, 44,580 tics bit-identical, wired as leg `n64-demos` |
-| [n64/BRING-UP.md](n64/BRING-UP.md) | libdragon bring-up notes; superseded by the above for gate status |
-| [n64/MIPS-ABI-LANDMINES.md](n64/MIPS-ABI-LANDMINES.md) | the ABI audit done before any MIPS code was written |
 
 ## Archive
 
