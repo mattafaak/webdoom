@@ -215,14 +215,18 @@ export async function identifyWad(bytes, filename) {
     // Canonicalize filename: basename, lowercase
     const rawName = filename.replace(/^.*[/\\]/, '').toLowerCase();
 
-    // Engine name limit: files.c uses name[32] (31 chars + null terminator)
-    if (rawName.length > 31) {
-        throw new WadError(
-            `filename too long: "${rawName}" is ${rawName.length} chars; engine limit is 31`,
-        );
-    }
     if (!rawName.endsWith('.wad')) {
         throw new WadError(`not a .wad file: "${rawName}"`);
+    }
+    // The name becomes an engine argument (-file NAME) and a files.c entry of
+    // at most 31 bytes.  A leading '@' makes the engine read it as a response
+    // file and a leading '-' as an option; anything outside printable ASCII
+    // is cut by bytes, not characters.
+    if (!/^[a-z0-9][\x20-\x7e]{0,26}\.wad$/.test(rawName)) {
+        throw new WadError(
+            `cannot import "${rawName}": rename it to start with a letter or digit, ` +
+            'use plain ASCII, and keep it to 31 characters',
+        );
     }
 
     const known = KNOWN[rawName];

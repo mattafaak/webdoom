@@ -145,6 +145,14 @@ const corpusResult = await tab.ev(`
                 return b;
             })(), name: 'test.wad' },
         ];
+        // A well-formed empty PWAD under names the engine would misread.
+        const emptyPwad = () => { const b = new Uint8Array(12); b.set([0x50, 0x57, 0x41, 0x44]); new DataView(b.buffer).setInt32(8, 12, true); return b; };
+        for (const [desc, name] of [
+            ['name starting with @ (an engine response file)', '@x.wad'],
+            ['name starting with - (an engine option)', '-x.wad'],
+            ['non-ASCII name', 'café.wad'],
+            ['name over 31 characters', 'a'.repeat(28) + '.wad'],
+        ]) cases.push({ desc, bytes: emptyPwad(), name });
         for (const { desc, bytes, name } of cases) {
             try {
                 await identifyWad(bytes, name);
@@ -156,6 +164,9 @@ const corpusResult = await tab.ev(`
                 });
             }
         }
+        // and the rule refuses names, not spaces: an ordinary file still imports
+        try { await identifyWad(emptyPwad(), 'My Map 2.wad'); results.push({ desc: 'an ordinary name is accepted', passed: true, msg: 'accepted' }); }
+        catch (e) { results.push({ desc: 'an ordinary name is accepted', passed: false, error: 'refused: ' + e.message }); }
         return JSON.stringify(results);
     })()
 `);
@@ -189,7 +200,8 @@ if (tab.errors.length > 0) {
     console.error(`FAIL: uncaught JS exceptions during corpus tests: ${tab.errors.join('; ')}`);
     cleanup(1);
 }
-console.log('  ok  malformed corpus: all 7 inputs rejected cleanly, zero uncaught exceptions');
+console.log(`  ok  malformed corpus: all ${corpus.length} inputs handled, zero uncaught exceptions`);
+if (corpus.length < 12) { console.error(`FAIL: only ${corpus.length} corpus cases ran`); cleanup(1); }
 
 // ── [2] Import flow — synthetic PWAD via DataTransfer drop ───────────────────
 // Exercises the real drag-drop path (DataTransfer → landing drop event →
