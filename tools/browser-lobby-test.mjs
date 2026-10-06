@@ -600,7 +600,78 @@ await runTest('mp-lobby-full', async () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Test 8: mp-launch-wad-fail
+// Test 8: mp-lobby-hostile-colours
+// A roster's player colours come off the wire and become glyph-cache keys and
+// palette remaps in doomfont.js.  Fifty distinct unknown colours must not
+// grow the cache (counted as glyph decodes: doomfont's putImageData calls),
+// and a colour named like an Object.prototype member must still draw lit
+// glyphs, not a NaN remap's black.
+// The frames enter through the page's own lobby socket.
+// ═══════════════════════════════════════════════════════════════════════════
+await waitForCleanServer(16);
+await runTest('mp-lobby-hostile-colours', async () => {
+    const tab = await chrome.tab(url);
+    try {
+        assert(await tab.waitForMenu(), 'root menu did not appear');
+        await patchWS(tab);
+        await tab.ev(`(() => {
+            const put = CanvasRenderingContext2D.prototype.putImageData;
+            window.__decodes = 0;
+            CanvasRenderingContext2D.prototype.putImageData = function (...a) {
+                if (/\\/js\\/doomfont\\.js/.test(new Error().stack || '')) window.__decodes++;
+                return put.apply(this, a);
+            };
+        })()`);
+        assert(await tab.click('MULTIPLAYER'), 'MULTIPLAYER not found');
+        let inLobby = false;
+        for (let i = 0; i < 20 && !inLobby; i++) {
+            inLobby = await tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`);
+            if (!inLobby) await sleep(300);
+        }
+        assert(inLobby, 'MP-LOBBY did not appear');
+
+        const deliver = colour => `window.__lobbyWS.onmessage({ data: JSON.stringify({ t: 'roster',
+            players: [{ slot: 3, name: 'QZJ', color: ${JSON.stringify(colour)} }], freeSlots: [0, 1, 2],
+            params: { wad: 'doom.wad', episode: 1, map: 1, skill: 3, mode: 'coop' } }) })`;
+        const d0 = await tab.ev(`window.__decodes`);
+        await tab.ev(deliver('X0'));
+        await sleep(200);
+        const d1 = await tab.ev(`window.__decodes`);
+        await tab.ev(Array.from({ length: 50 }, (_, i) => deliver(`X${i + 1}`)).join(';\n'));
+        await sleep(300);
+        const d2 = await tab.ev(`window.__decodes`);
+        console.log(`  glyph decodes: ${d1 - d0} for the first unknown colour, ${d2 - d1} for 50 more`);
+        assert(d1 - d0 > 0, 'CONTROL: the first roster decoded no glyphs, so the counter sees nothing');
+
+        // A name the remap table answers with something that is not a palette
+        // base: an Object.prototype member.  Its remap is NaN, which draws black.
+        await tab.ev(deliver('constructor'));
+        await sleep(200);
+        const px = await tab.ev(`(() => {
+            const c = document.querySelector('#dmenu .mheader canvas[data-pname="QZJ"]');
+            if (!c) return null;
+            const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+            let opaque = 0, lit = 0;
+            for (let i = 0; i < d.length; i += 4)
+                if (d[i + 3]) { opaque++; if (d[i] || d[i + 1] || d[i + 2]) lit++; }
+            return { opaque, lit };
+        })()`);
+        console.log(`  the name drawn in colour "constructor": ${px ? `${px.opaque} opaque pixels, ${px.lit} lit` : 'not found'}`);
+        assert(px && px.opaque > 0, 'CONTROL: the header did not draw the name');
+        const bad = [];
+        if (d2 - d1 !== 0) bad.push(`50 unknown colours decoded ${d2 - d1} more glyphs: the cache grows per colour string`);
+        if (px.lit <= px.opaque / 2) bad.push(`colour "constructor" drew ${px.opaque - px.lit} of ${px.opaque} pixels black`);
+        assert(bad.length === 0, bad.join('; '));
+        await tab.esc();
+        await sleep(300);
+        assert(tab.errors.length === 0, `exceptions: ${tab.errors.join('; ')}`);
+    } finally {
+        await tab.close();
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Test 9: mp-launch-wad-fail
 
 // Covers T16: MP-LOADING → LANDING (WAD failure) + impossible-state Bug#2
 // Also exercises the same catch path for T20 (DROP-IN-LOADING → LANDING,
@@ -678,5 +749,5 @@ await runTest('mp-launch-wad-fail', async () => {
 // Results
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('\n── lobby state-machine test results ────────────────────────');
-summary('lobby state-machine edges covered and clean');
+summary('lobby state-machine edges covered and clean, hostile roster colours bounded', { min: 9 });
 process.exit();

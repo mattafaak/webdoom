@@ -6,7 +6,6 @@ behind the current state live in `spec.md` and `docs/`.
 
 ## Client
 
-- Hostile colour strings from a server grow the glyph cache.
 - A lost Enter keyup can arm a key rebind.
 - Each `ping()` replaces the lobby's single `pong` handler, so two pings in
   flight would take each other's replies. The one caller sends them one at a

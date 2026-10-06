@@ -86,16 +86,18 @@ export async function loadDoomFont() {
         return canvas;
     }
 
-    // glyph cache: color → char code → canvas
+    // glyph cache: color → char code → canvas.  A colour is a key only if the
+    // remap table has it as its own property: player colours come off the
+    // wire, so any other string would open a cache of its own, and one like
+    // "constructor" would remap through a function to NaN and draw black.
     const glyphs = new Map();
     const glyph = (c, color) => {
-        const key = color ?? 'Red';
+        const key = typeof color === 'string' && Object.hasOwn(COLOR_BASE, color) ? color : 'Red';
         if (!glyphs.has(key)) glyphs.set(key, new Map());
         const cache = glyphs.get(key);
         if (!cache.has(c)) {
             const lump = lumps[`STCFN${String(c).padStart(3, '0')}`];
-            cache.set(c, lump ? decodePatch(b64(lump),
-                color && color !== 'Red' ? COLOR_BASE[color] : null) : null);
+            cache.set(c, lump ? decodePatch(b64(lump), key !== 'Red' ? COLOR_BASE[key] : null) : null);
         }
         return cache.get(c);
     };
