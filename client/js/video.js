@@ -13,10 +13,8 @@
 // before createRenderer() is called, but the draw() hot-path only pays for a
 // single null-check per frame when profiling is disabled.
 //
-// The framebuffer is 320x200 and cannot change size.  Task 18.3 made it
-// resizable for Hor+ widescreen and layered a Panini remap on top of that in
-// the fragment shader; both were removed with widescreen itself, so there is
-// no resize() and no shader uniform left to set.
+// The framebuffer is 320x200 and cannot change size, so there is no resize()
+// and no shader uniform to set.
 
 const VS = `#version 300 es
 layout(location=0) in vec2 pos;

@@ -2,8 +2,8 @@
 //
 // Every module that keeps something in IndexedDB (persist, wad-cache,
 // wad-library) goes through these three, so the error paths --
-// onerror, onabort, and onblocked, the one that hung the launcher when an
-// open raced a version change in another tab -- are handled once.
+// onerror, onabort, and onblocked, which would otherwise hang the launcher
+// when an open races a version change in another tab -- are handled once.
 
 // stores: object-store names to create on upgrade, guarded so adding a store
 // to an existing database is a version bump, never a "store exists" throw.

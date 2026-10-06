@@ -1,13 +1,13 @@
 // WebAudio bridge: SFX (DMX PCM lumps → AudioBuffers, per-channel vol/sep/
 // pitch as vanilla) and music from the OPL sequencer.
 //
-// Three music tiers, best first (ledger NC6):
+// Three music tiers, best first:
 //   WORKLET SYNTH — the worklet runs build/synth.wasm and renders the music
 //                   itself.  No pump, no per-frame thread crossing, and
 //                   web_music_render never touches the main thread.
 //   WorkletSink   — AudioWorklet without the module (its fetch failed): the
 //                   100 ms pump renders on the main thread and pushes chunks.
-//   BufferSink    — no AudioWorklet at all (insecure origin, spec.md §203):
+//   BufferSink    — no AudioWorklet at all (insecure origin, see spec.md):
 //                   the same pump into an AudioBufferSourceNode chain.
 //
 // The engine's own mus_opl keeps running in tier 1 -- mus_play/mus_stop only
@@ -56,8 +56,8 @@ function makeBufferSink(ctx) {
     let _lastChunk = null;   // test hook: captured on every push()
     return {
         kind: 'buffer',
-        // computed live: a cached value never decayed as playback drained and
-        // the pump deadlocked once the backlog crossed TARGET_BACKLOG
+        // computed live: a cached value would not decay as playback drains,
+        // and the pump would stall once the backlog crossed TARGET_BACKLOG
         get queued() {
             return Math.max(0, (schedClock - ctx.currentTime) * ctx.sampleRate);
         },
@@ -172,9 +172,8 @@ export function createAudio(doom) {
             sink = makeWorkletSink(node, window.__wd_perf ?? null);
             // One handler for the port, installed over the sink's: `ready` and
             // `stats` are answers to questions this module asks, everything
-            // else is the sink's backlog accounting.  The first cut left the
-            // sink's handler in place after init and every stats reply was
-            // dropped on the floor.
+            // else is the sink's backlog accounting.  Left in place, the
+            // sink's handler would swallow every stats reply.
             const sinkOnMessage = node.port.onmessage;
             let onReady = null;
             node.port.onmessage = e => {

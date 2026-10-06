@@ -42,10 +42,10 @@ html, body {
     font-family: ui-monospace, monospace;
 }
 
-/* An EMPTY status must still exist for a screen reader to attach to.  This was
-   `display: none`, which takes the element out of the accessibility tree
-   entirely — so the live region announced nothing until its first message, and
-   on some engines not even then.  Invisible, not absent. */
+/* An EMPTY status must still exist for a screen reader to attach to:
+   `display: none` takes the element out of the accessibility tree, and the
+   live region would announce nothing until its first message, on some engines
+   not even then.  Invisible, not absent. */
 #status:empty { padding: 0; background: none; }
 
 /* bottom-anchored loading panel with a Heretic/Hexen-style vertebrae bar:
@@ -124,10 +124,9 @@ html, body {
     opacity: 0.45;
 }
 
-/* Keyboard focus was invisible everywhere.  There were ZERO :focus rules in
-   this stylesheet, so a keyboard user tabbing through the launcher, the
-   settings dialog or the scrubber had no idea where they were.  :focus-visible
-   rather than :focus, so a mouse click does not leave a ring behind.
+/* The keyboard focus ring for the launcher, the settings and the scrubber.
+   :focus-visible rather than :focus, so a mouse click does not leave a ring
+   behind.
    #screen is deliberately excluded: it is the game canvas, it takes pointer
    lock, and a ring around the game is noise. */
 :focus-visible {
@@ -143,11 +142,9 @@ html, body {
     align-items: center;
 }
 
-/* Drag a WAD onto the launcher.  lobby.js has toggled `.drop-hover`
-   on this element since WAD import shipped and there was no rule for it, so
-   drag-and-drop had ZERO visual feedback: the drop worked and nothing on
-   screen ever acknowledged the file was over the window.  An inset ring
-   rather than a border, so nothing reflows while the pointer moves. */
+/* Drag a WAD onto the launcher: lobby.js sets `.drop-hover` while a file is
+   over #landing, and this is the only acknowledgement on screen.  An inset
+   ring rather than a border, so nothing reflows while the pointer moves. */
 #landing.drop-hover {
     outline: 3px dashed #d33;
     outline-offset: -12px;
@@ -192,10 +189,10 @@ html, body {
 
 /* fixed row height (covers the ×3 skull) so the cursor appearing on a
    row never grows it — menu items stay put as selection moves */
-/* Row height is skull-driven and used to be a hard 60px, which is right for a
-   5-item menu and overflows the viewport on a 12-row CONTROLS list.  menu.js
-   sets --rowh/--skullw from the scale it picked, so a long single-column
-   screen shrinks instead of running off the bottom. */
+/* Row height is skull-driven.  60px suits a 5-item menu and would overflow
+   the viewport on a 12-row CONTROLS list, so menu.js sets --rowh/--skullw
+   from the scale it picked and a long single-column screen shrinks instead of
+   running off the bottom. */
 #dmenu .row {
     display: flex;
     align-items: center;
@@ -230,12 +227,10 @@ html, body {
 
 
 /* ── prefers-reduced-motion ───────────────────────────────────────────────
-   spec.md promises "prefers-reduced-motion gets a static frame" and this
-   stylesheet had NO @media block of any kind.  The promise was half-kept:
-   fire.js checks the query in JS, so the background stops animating, while
-   every CSS transition kept running.  The JS half is now gated too --
-   tools/browser-fire-test.mjs runs a second arm under Chrome's
-   --force-prefers-reduced-motion, which closes promises-index spc-003.
+   spec.md promises "prefers-reduced-motion gets a static frame".  fire.js
+   checks the query in JS for the background (tools/browser-fire-test.mjs
+   runs an arm under Chrome's --force-prefers-reduced-motion); this block
+   covers the CSS transitions.
    Not `animation: none`: a transition cut to 0.01ms still FIRES, so state
    changes that rely on transitionend still complete. */
 @media (prefers-reduced-motion: reduce) {
@@ -244,8 +239,7 @@ html, body {
     }
 }
 
-/* the bar's fill.  ui.js sets its width; there was no rule for it, so the
-   loading bar never showed a fill at all. */
+/* the bar's fill; ui.js sets its width */
 #loading-fill {
     height: 100%;
     background: linear-gradient(180deg, #e6b34d, #a34a1c);

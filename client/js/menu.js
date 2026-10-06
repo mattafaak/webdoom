@@ -89,9 +89,7 @@ export function createMenu(font, host, opts = {}) {
             }
         } else {
             // single column: largest scale that fits the block width AND the
-            // viewport height.  Height used to be unchecked, because every
-            // single-column screen was short; CONTROLS is twelve rows and ran
-            // straight off the bottom behind a scrollbar.  Row height is
+            // viewport height (CONTROLS is twelve rows).  Row height is
             // skull-driven, so it has to come down with the scale -- the two
             // custom properties below are what let it.
             while (scale > 2 && (SKULL + w1 * scale > availW
@@ -100,9 +98,9 @@ export function createMenu(font, host, opts = {}) {
         root.style.setProperty('--rowh', `${Math.round(12 * scale)}px`);
         root.style.setProperty('--skullw', `${Math.round(13 * scale)}px`);
         const titleScale = Math.min(6, scale + 1);
-        // The header is one line and was scaled off `scale` alone, so a long
-        // one ran off both edges of the viewport and put a horizontal
-        // scrollbar under the menu.  Fit it to the width like everything else.
+        // The header is one line, fitted to the width like everything else;
+        // scaled off `scale` alone, a long one would run off both edges and
+        // put a horizontal scrollbar under the menu.
         let headerScale = Math.min(4, scale);
         if (s.header) {
             const hw = s.header.reduce((n, p) => n + font.text(p.text, { scale: 1 }).width, 0);
@@ -140,14 +138,11 @@ export function createMenu(font, host, opts = {}) {
             row.appendChild(sk);
             let label;
             // Matched by LABEL, not by object identity.  refresh() rebuilds
-            // every item object from scratch, so after the first roster update
-            // `entry.item === item` was never true again: the caret and the
-            // characters you had typed vanished, the row reverted to the
-            // committed value, and `entry` was still live -- so keystrokes kept
-            // accumulating into a buffer nobody could see and Enter committed
-            // it.  Typing your name while another player joined did it.
-            // `entry.item` is still the original object, because that is what
-            // carries the commit callback.
+            // every item object from scratch, so after a roster update
+            // `entry.item === item` is never true: the typed characters would
+            // vanish while keystrokes kept accumulating into a buffer nobody
+            // can see.  `entry.item` is still the original object, because
+            // that is what carries the commit callback.
             if (entry && entry.label === item.label)
                 label = `${item.label}${entry.value}_`;
             else if (capture && capture.label === item.label)
@@ -163,7 +158,7 @@ export function createMenu(font, host, opts = {}) {
             row.setAttribute('aria-label', label);
             // Roving tabindex: the menu is one tab stop, and the arrow keys
             // move within it (the pattern for role=menu).  Without a tabindex
-            // anywhere the whole launcher was unreachable by Tab.
+            // anywhere the whole launcher is unreachable by Tab.
             row.tabIndex = i === sel ? 0 : -1;
             if (i === sel) row.setAttribute('aria-current', 'true');
             // '.sel' has no CSS rule and stays: the blink queries it and the
@@ -186,16 +181,9 @@ export function createMenu(font, host, opts = {}) {
         // constrain columns to the menu's fixed width so they never run off
         // the screen. Measure the widest row, then cap the height so it
         // wraps into only as many columns as fit.
-        // `wrapped`, not a second guess at it.  This read
-        // `!hasThumb && list.children.length > 8` -- the same shape as the
-        // scale decision at the top of render() but WITHOUT its `!s.nowrap`
-        // term, so the two disagreed for exactly the screens that opt out of
-        // columns.  CONTROLS is twelve rows with nowrap: true; on a short
-        // viewport the scale loop drops to 2, the measured row width shrinks,
-        // `cols` comes out 2 or 3, and CONTROLS renders in columns against its
-        // own contract.  browser-options drives it at 1280x960, where it does
-        // not reproduce.  One variable, computed once, cannot drift from
-        // itself.
+        // `wrapped`, not a second guess at it: the same decision as the
+        // scale at the top of render(), `!s.nowrap` included, or a nowrap
+        // screen (CONTROLS) renders in columns on a short viewport.
         if (wrapped) {
             const rows = [...list.children];
             const rowH = rows[0].offsetHeight, gapV = 6, gapH = 56;
@@ -250,7 +238,7 @@ export function createMenu(font, host, opts = {}) {
         if (stack.length <= 1) return;
         // a screen with onBack owns its exit (e.g. leaving the lobby
         // resets to root); plain screens just pop one level.
-        // onBack handlers (leaveLobby) call menu.reset() themselves,
+        // onBack handlers (toLauncher) call menu.reset() themselves,
         // which fires onTransition('reset') — no need to fire here too.
         if (screen().onBack) { screen().onBack(); return; }
         stack.pop();
@@ -319,14 +307,11 @@ export function createMenu(font, host, opts = {}) {
         // re-render current screen after data changes (roster updates — NOT a
         // screen transition; no flare, no onTransition)
         // A roster update must not move the cursor onto a different ACTION.
-        // This clamped an out-of-range `sel` to 0, and index 0 is the most
-        // destructive row on both lobby screens -- START GAME, and DROP IN on
-        // the in-progress screen.  The lobby's COLOR row exists only while a
-        // slot is free, so the fourth player joining shortened the list and
-        // silently moved a cursor parked on COLOR to START GAME; the next
-        // Enter launched the game, or joined one you were only browsing.
-        // So: keep the row the user was actually on, by label, and fall back
-        // to the LAST row rather than the first when it is gone.
+        // Index 0 is the most destructive row on both lobby screens -- START
+        // GAME, and DROP IN on the in-progress screen -- and the lobby's
+        // COLOR row exists only while a slot is free, so the list can shrink
+        // under a parked cursor.  So: keep the row the user was actually on,
+        // by label, and fall back to the LAST row rather than the first.
         refresh(s) {
             const wasOn = screen()?.items[sel]?.label;
             if (s) stack[stack.length - 1] = s;

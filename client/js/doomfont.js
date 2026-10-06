@@ -12,10 +12,9 @@ const FONT_RANGE = [0xb0, 0xbf];        // STCFN glyphs live in the red run
 
 export async function loadDoomFont() {
     // The server answers 404 with PLAIN TEXT when it has no IWAD in wads/lib --
-    // an ordinary, documented state, not a failure.  Without a res.ok check,
-    // .json() threw a SyntaxError, which lobby.js's one catch reported as
-    // "cannot reach server": the server was up and answering, and the operator
-    // was sent to look at the network.
+    // an ordinary, documented state, not a failure.  Without the res.ok check,
+    // .json() would throw a SyntaxError that lobby.js's one catch reports as
+    // "cannot reach server", sending the operator to a network that is fine.
     const res = await fetch('/api/ui-assets');
     if (!res.ok)
         throw new Error(res.status === 404
@@ -45,11 +44,10 @@ export async function loadDoomFont() {
         // unvalidated u32 straight out of the lump, and past the end of the
         // array `bytes[o]` is undefined -- so `top === 0xff` is never true,
         // `len` is undefined, `o += len + 4` makes o NaN, and `for (;;)` NEVER
-        // TERMINATES.  Reproduced 2026-09-11 with a 64-byte patch whose
-        // columnofs point past the end: 5,000,000 iterations and still going.
-        // This runs on the main thread while the launcher builds the menu
-        // font, so the symptom is a frozen tab before anything renders, with
-        // no error and no way back.
+        // TERMINATES; a 64-byte patch whose columnofs point past its end is
+        // enough.  This runs on the main thread while the launcher builds the
+        // menu font, so the symptom would be a frozen tab before anything
+        // renders, with no error and no way back.
         let truncated = false;
         for (let x = 0; x < w; x++) {
             let o = v.getUint32(8 + 4 * x, true);
@@ -82,8 +80,7 @@ export async function loadDoomFont() {
             }
         }
         // Degrade loudly, per the insecure-origin contract: a half-drawn glyph
-        // is better than a frozen tab, but it should not be silent.  It WAS
-        // silent: this set canvas.truncated and nothing anywhere read it.
+        // is better than a frozen tab, but it should not be silent.
         if (truncated) console.warn('webdoom: a UI patch is truncated — the IWAD lump ended mid-column; drawing what there is');
         ctx.putImageData(img, 0, 0);
         return canvas;

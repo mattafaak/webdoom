@@ -71,10 +71,9 @@ async function flushDirect(doom, iwad) {
 // mirror fileMap changes out every few seconds (+ on tab hide + on file write).
 // Savegames change only through the engine's own write, which flags them
 // dirty and writes through at once; the interval writes whatever is still
-// dirty (a write-through that failed is retried, which it never was before).
-// .doomrc is rewritten by M_SaveDefaults on every sync, so it is compared
-// byte for byte to the last copy stored instead of hashed with the six
-// savegames every three seconds.
+// dirty, so a write-through that failed is retried.  .doomrc is rewritten by
+// M_SaveDefaults on every sync, so it alone is compared byte for byte to the
+// last copy stored.
 export function startSync(doom, iwad, intervalMs = 3000) {
     const dirty = new Set();
     // The engine has already said "game saved" when a write here fails, so

@@ -1,4 +1,4 @@
-// Client-side WAD identification — ported from tools/wad-identify.mjs.
+// Client-side WAD identification.
 //
 // SHA-256 strategy:
 //   crypto.subtle.digest('SHA-256', ...) requires a secure context (HTTPS,
@@ -90,19 +90,11 @@ async function sha256hex(bytes) {
 }
 
 // ---------------------------------------------------------------------------
-// Known-WAD table — THE source, not a copy.
+// Known-WAD tables — THE source, not a copy.
 //
-// tools/wad-identify.mjs used to carry its own transcription of both tables
-// under a comment saying they mirrored each other, and nothing compared them.
-// They drifted: the server-side copy read "Mephisto’s Maosoleum" against this
-// one's "Mephisto's Mausoleum" -- a misspelling AND a curly apostrophe, so the
-// same WAD got a different title depending on whether it arrived from the
-// library or from a local import.  `minos.wad` and `virgil.wad` differed by
-// apostrophe alone, and `hacx.wad` carried its skipReason here and not there,
-// which matters because check-menu-reachable reads only this copy.
-//
-// The tool imports these now.  A mirror that cannot be compared should not be
-// a mirror.
+// tools/wad-identify.mjs imports them (check-wire-constants holds it to that)
+// and check-menu-reachable reads this file, so a WAD gets one title whether it
+// arrives from the server's library or from a local import.
 // ---------------------------------------------------------------------------
 export const KNOWN = {
     'doom.wad':          { title: 'The Ultimate Doom' },

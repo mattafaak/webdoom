@@ -2,11 +2,9 @@
 // funnel into the engine's event queue / gamepad globals; bindings and
 // tuning persist in localStorage ('webdoom.input').
 
-// doomdef.h key codes
 import { teardownLedger } from './ui.js';
 
-// Doom key codes (d_event.h).  Not exported: nothing outside this module has
-// ever imported it, and the two test files that mention DK do so in comments.
+// Doom key codes (d_event.h).
 const DK = {
     RIGHT: 0xae, LEFT: 0xac, UP: 0xad, DOWN: 0xaf,
     ESCAPE: 27, ENTER: 13, TAB: 9, BACKSPACE: 127, PAUSE: 0xff,
@@ -88,11 +86,9 @@ function sanitizeSettings(stored) {
         else if (rule.num && typeof v === 'number' && Number.isFinite(v))
             out[k] = Math.min(rule.num[1], Math.max(rule.num[0], v));
     }
-    // binds PER ACTION, never wholesale.  ACTIONS grows between releases, and
-    // the spread replaced the whole object -- so an action added after a user's
-    // last save had no key, and the settings panel of the day rendered
-    // keyName(undefined) as the literal string "undefined" on a button with no
-    // way back to its default.
+    // binds PER ACTION, never wholesale: ACTIONS grows between releases, and
+    // an action added after a user's last save must keep its default key
+    // rather than come back unbound.
     const b = stored.binds;
     if (b && typeof b === 'object' && !Array.isArray(b))
         for (const a of ACTIONS)
@@ -111,8 +107,8 @@ export function loadSettings() {
     // preference.
     if (stored.mouseMove === true && stored.mouseY === undefined) s.mouseY = 'move';
     // A stored opl3:true with no musicBackend is an older preference; promote
-    // it.  `opl3` is no longer in the defaults or the schema, so only the RAW
-    // object still carries it.
+    // it.  `opl3` is not in the defaults or the schema, so only the RAW
+    // object carries it.
     if (stored.opl3 === true && stored.musicBackend === undefined) s.musicBackend = 'opl3';
     return s;
 }
@@ -143,9 +139,8 @@ export function captureBind(settings, actionId, onDone) {
     function onKey(e) {
         e.preventDefault();
         e.stopPropagation();
-        // Escape is how a person says "no".  It used to BECOME the binding,
-        // and then the action could only be reached by the key that also
-        // opens the engine menu.
+        // Escape is how a person says "no".  As a binding it would leave the
+        // action reachable only by the key that also opens the engine menu.
         if (e.code === 'Escape') { endCapture(null); return; }
         // A key already bound elsewhere SWAPS rather than duplicating: two
         // actions on one key is unreachable for one of them, and silently
@@ -212,8 +207,8 @@ export function createInput(doom, canvas, settings) {
     };
 
     // --- keyboard --------------------------------------------------------
-    // Rebinding is not handled here any more: it happens on the launcher's
-    // OPTIONS screen, before an engine exists, through captureBind() above.
+    // Rebinding is not handled here: it happens on the launcher's OPTIONS
+    // screen, before an engine exists, through captureBind() above.
     const onKey = down => e => {
         let dk = codeToDk(e.code, e.key);
         if (dk === null && e.key.length === 1) {
@@ -292,11 +287,9 @@ export function createInput(doom, canvas, settings) {
     let padSeen = (navigator.getGamepads?.() ?? []).some(Boolean);
     on(window, 'gamepadconnected', () => { padSeen = true; });
     on(window, 'gamepaddisconnected', () => { padPrev = 0; padSeen = false; });
-    // Which buttons are edge-triggered, by mode.  LB/RB used to appear in both
-    // tables guarded by `uiMode || cycleWeapon(...)`, which reads as dead code
-    // in the game table (uiMode is 0 there, so the guard never fires) and is
-    // load-bearing in the UI table (uiMode is truthy, so it makes them inert).
-    // Membership says the same thing without a variable read per press.
+    // Which buttons are edge-triggered, by mode.  LB/RB cycle weapons only in
+    // the game table; leaving them out of the UI table keeps them inert in
+    // menus without a variable read per press.
     const EDGES_BOTH = [
         [9, () => tapKey(DK.ESCAPE)],                        // start
         [8, () => tapKey(DK.TAB)],                           // select: automap

@@ -1,5 +1,5 @@
 // The UI plumbing every other client module shares: the status line, the
-// loading panel, the server config, and a listener ledger.
+// loading panel, and a listener ledger.
 
 let statusTimer = 0;
 // Looks the element up each time and tolerates its absence: modules load in
@@ -12,10 +12,9 @@ export function setStatus(msg, ttlMs = 0) {
     if (!el) return;
     el.textContent = msg;
     // Test seam: the last message actually WRITTEN to the line, which outlives
-    // its ttl.  The browser gates used to read #status live; that was sound
-    // while every message was permanent, and becomes a race the moment one is
-    // not.  Asserting on this proves the user-visible line was written, which
-    // is what the insecure-origin contract promises -- an internal flag would
+    // its ttl, so a browser gate does not race a message that clears itself.
+    // Asserting on this proves the user-visible line was written, which is
+    // what the insecure-origin contract promises -- an internal flag would
     // only prove the code took the branch.
     if (msg && typeof window !== 'undefined') window.__wdLastStatus = msg;
     clearTimeout(statusTimer);
@@ -30,11 +29,9 @@ export const loading = {
     _el(id) { return typeof document === 'undefined' ? null : document.getElementById(id); },
     _set(label, pct) {
         const l = this._el('loading-label'); if (l) l.textContent = label;
-        // pct === null means INDETERMINATE.  Written as `${pct}%` that is the
-        // literal string "null%", which a CSSStyleDeclaration discards -- so
-        // the bar silently kept whatever fill it had while claiming to be
-        // indeterminate.  aria-valuenow was removed correctly; only the
-        // visual lied.
+        // pct === null means INDETERMINATE.  Written as `${pct}%` it would be
+        // the literal string "null%", which a CSSStyleDeclaration discards,
+        // leaving the old fill on a bar that claims to be indeterminate.
         const f = this._el('loading-fill');
         if (f) f.style.width = pct === null ? '0%' : `${pct}%`;
         const b = this._el('loading-bar');

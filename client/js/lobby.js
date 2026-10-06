@@ -43,9 +43,9 @@ const isCommercial = e => e?.maps?.[0]?.startsWith('MAP');
 
 // Savegames are kept per game: an IWAD under its own name (the keys every
 // existing save has), a PWAD under its base and itself.  A shared namespace
-// let a Master Level's save fill Doom II's slot, and loading it there read
-// the PWAD's map data against Doom II's map.  Auto-stacked patches (tnt31)
-// change nothing about a save and are left out.
+// would let a Master Level's save fill Doom II's slot, and loading it there
+// would read the PWAD's map data against Doom II's map.  Auto-stacked
+// patches (tnt31) change nothing about a save and are left out.
 function saveNamespace(file) {
     const e = entry(file);
     return e?.kind === 'PWAD' && e.base ? `${e.base}+${e.file}` : file;
@@ -229,10 +229,9 @@ async function handleWadImport(file) {
 
         // Refresh the menu so the new entry appears immediately -- but ONLY
         // the screens the new entry actually changes.  Drag-and-drop works
-        // anywhere on #landing, so importing while in OPTIONS, CONTROLS or the
-        // lobby replaced whatever you were on with CHOOSE GAME; in the lobby
-        // that left a live socket holding your colour slot behind a screen you
-        // had not asked for, with Esc the only way back.
+        // anywhere on #landing, so an import can land on OPTIONS, CONTROLS or
+        // the lobby; replacing the lobby would leave a live socket holding
+        // your colour slot behind a screen you had not asked for.
         const on = menu.current()?.id;
         if (menu.depth() <= 1) menu.reset(rootScreen());
         else if (on === 'sp') menu.refresh(spGameScreen());
@@ -283,10 +282,9 @@ function resetToLauncher(reason) {
 
 
 // Quit Game (→ Y) inside the engine returns here.
-// One wrapper for both exits.  There were two identical ones, returnToMenu
-// and leaveLobby; both exist to DROP their caller's argument, because
-// resetToLauncher(reason) would print whatever onQuit/onBack passed as a
-// status line.
+// One wrapper for both exits (onQuit, onBack).  It exists to DROP its
+// caller's argument, because resetToLauncher(reason) would print whatever
+// onQuit/onBack passed as a status line.
 function toLauncher() { resetToLauncher(); }
 
 // ── one way into a game ──────────────────────────────────────────────────────

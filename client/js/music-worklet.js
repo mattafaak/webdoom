@@ -10,10 +10,10 @@
 //            thread's 100 ms pump and drained here.  The tier for a secure
 //            origin where the fetch of synth.wasm failed.
 //
-// Why the synth moved here (ledger NC6): `web_music_render` ran on the MAIN
-// thread from a 100 ms timer, measured at 1.84 ms p99 per call on alder, 4.09
-// on tank and 19.7 on wbox — against a 16.7 ms frame budget.  On wbox that is
-// a dropped frame every sixth frame, in a burst rAF cannot absorb.
+// Why the synth runs here: on the MAIN thread, `web_music_render` from a
+// 100 ms timer measures 1.84 ms p99 per call on alder, 4.09 on tank and 19.7
+// on wbox — against a 16.7 ms frame budget.  On wbox that is a dropped frame
+// every sixth frame, in a burst rAF cannot absorb.
 //
 // AudioWorkletGlobalScope has no fetch and no import.meta, so the module
 // arrives as BYTES over the port and is instantiated here.  synth.wasm imports

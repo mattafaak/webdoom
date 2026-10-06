@@ -80,16 +80,13 @@ export function createScrubberUI(doom, demoBytes, { container = document.body, s
     strip.setAttribute('role', 'presentation');
     strip.setAttribute('aria-hidden', 'true');
 
-    // One pixel per tic was unbounded.  The longest demo in the matrix is 7,403
-    // tics, but the server accepts a 1 MiB .lmp, which is ~260,000 tics -- and
-    // it is the UPLOAD that sets this bound, not the matrix.  Against Firefox's
-    // 32,767 px canvas limit, where an
-    // over-limit canvas yields a context that cannot be drawn into.  The throw
-    // escapes createScrubberUI, out of bootDoom's `after` callback, into
-    // enterGame's .catch.  Chrome's limits are higher, so this never showed
-    // here.  Cap the canvas and down-sample: the strip is a 16 px-tall
-    // decorative overview scaled by CSS anyway, so pixel-per-tic was never
-    // something a reader could resolve.
+    // Capped and down-sampled.  The longest demo in the matrix is 7,403 tics,
+    // but the server accepts a 1 MiB .lmp, which is ~260,000 tics -- and it is
+    // the UPLOAD that sets this bound, not the matrix.  Past Firefox's 32,767
+    // px canvas limit the context cannot be drawn into, and the throw escapes
+    // createScrubberUI, out of bootDoom's `after` callback, into enterGame's
+    // .catch.  The strip is a 16 px-tall decorative overview scaled by CSS
+    // anyway, so pixel-per-tic is not something a reader could resolve.
     const STRIP_MAX_PX = 8192;
     const stripW = Math.max(1, Math.min(totalTics, STRIP_MAX_PX));
     // tic index -> x, and never a zero-width mark

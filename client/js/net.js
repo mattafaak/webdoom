@@ -11,16 +11,15 @@ const MAXPLAYERS = 4;
 // threat model this whole file is written against is an impostor answering
 // ws://host:8666/ws/lobby, which on a plain-HTTP LAN is anything on the wire.
 //
-// `slot` was bounded (see the welcome handler) and `numplayers` was NOT, and
-// numplayers is a LOOP BOUND on two fixed-size allocations in makeBundlePump:
-// an 8-byte _malloc for the per-tic ingame ring, and the engine's
-// `static ticcmd_t scratch[MAXPLAYERS]`, which is 32 bytes.  A launch frame
-// carrying numplayers 1000 plus one correctly-sized 8,006-byte bundle wrote
-// ~1 KB and ~8 KB of attacker-chosen bytes past them.
+// `numplayers` is a LOOP BOUND on two fixed-size allocations in
+// makeBundlePump: an 8-byte _malloc for the per-tic ingame ring, and the
+// engine's `static ticcmd_t scratch[MAXPLAYERS]`, which is 32 bytes.
+// Unchecked, a launch frame carrying numplayers 1000 plus one correctly-sized
+// 8,006-byte bundle writes ~1 KB and ~8 KB of attacker-chosen bytes past them.
 //
 // The engine's own guard in web_net_setup rejects numplayers > MAXPLAYERS, but
 // it runs BEFORE the pump and only protects the C-side write loop -- so it
-// cannot stop this, and a gate that exercises it proves the wrong boundary.
+// cannot stop this, and a gate that exercises it tests the wrong boundary.
 // The check has to be here, at the point the value crosses out of the wire.
 //
 // This REFUSES rather than clamps.  A server sending either value out of range
@@ -86,13 +85,10 @@ export function connectLobby(baseUrl, WS = WebSocket) {
         catch { return; }                       // not JSON: not a message
         if (!m || typeof m !== 'object' || typeof m.t !== 'string') return;
         // A `roster` or `inprogress` frame reaches lobby.js's screen builders,
-        // and those guarded the CONTAINER and not the MEMBER:
-        // `roster?.players.find(...)` throws on `{"t":"roster"}`, because `?.`
-        // only covers `roster` being nullish -- while the two lines under it
-        // correctly used `?? []` and `?? {}`.  The throw propagates out of this
-        // very handler, so the UI wedges on CONNECTING with an empty status
-        // line and the socket stops being useful, which is the failure shape
-        // CLAUDE.md records under "one case can disarm the next".
+        // which read MEMBERS: `roster?.players.find(...)` throws on
+        // `{"t":"roster"}`, because `?.` only covers `roster` being nullish.
+        // That throw would propagate out of this very handler, wedging the UI
+        // on CONNECTING with an empty status line and a useless socket.
         //
         // Normalised HERE rather than at each read, for the same reason
         // checkNetShape sits here: this is where the value crosses out of the
@@ -258,7 +254,7 @@ function attachCommon(doom, url, { numplayers, slots, names }, WS, consoleSlotOf
     // A name is copied onto the engine's 1 MB stack before the engine can
     // bound it, so it is cleaned here exactly as the server cleans one it
     // accepts (server/game.js cleanName): a 1.2M-character name from a
-    // hostile server overran the stack into the engine's static data.
+    // hostile server would overrun the stack into the engine's static data.
     (Array.isArray(names) ? names.slice(0, numplayers) : []).forEach((n, i) => {
         const clean = typeof n === 'string' ? n.replace(/[^A-Za-z0-9 _-]/g, '').trim().slice(0, 10) : '';
         if (clean) doom.ccall('web_set_player_name', null, ['number', 'string'], [i, clean]);
@@ -282,7 +278,7 @@ function attachCommon(doom, url, { numplayers, slots, names }, WS, consoleSlotOf
 }
 
 // Call before doom.callMain(): configures the engine for the session and
-// installs the send/receive hooks. rttMs sizes the input delay. slots =
+// installs the send/receive hooks. jitterMs sizes the input delay. slots =
 // occupied lobby slots (sparse: color choice = slot choice); the bundle
 // is always numplayers wide with phantoms marked not-ingame.  token is the
 // seat token from this client's own `launch` frame; the server binds the

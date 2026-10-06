@@ -148,9 +148,9 @@ export function createCountdown(font, host) {
             current = null;
             // background tabs pause rAF — the overlay may never finish
             // melting there, but it must still come down.  The handle is kept
-            // so reset() can cancel it: a countdown dismissed and then reset
-            // (aborted launch, host left, back to the lobby) used to re-hide
-            // the host 2.5 s later, on top of whatever had replaced it.
+            // so reset() can cancel it: otherwise a countdown dismissed and
+            // then reset (aborted launch, host left, back to the lobby) would
+            // re-hide the host 2.5 s later, on top of whatever replaced it.
             clearTimeout(fallbackTimer);
             fallbackTimer = setTimeout(() => { fallbackTimer = 0; finish(); }, 2500);
         },
