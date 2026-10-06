@@ -42,12 +42,11 @@
 import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
 import { startServer } from './lib/server.mjs';
+import { check, summary, fatal } from './lib/report.mjs';
 const chrome = await launchChrome();
 const url = process.argv[2] ?? (await startServer()).url;
 const tab = await chrome.tab(url);
 const { cdp, ev } = tab;
-const done = c => { chrome.kill(); process.exit(c); };
-const fail = m => { console.error('FAIL:', m); done(1); };
 
 // The shim must be installed before anything attaches.
 await ev(`(() => {
@@ -169,29 +168,14 @@ const snapshot = () => ev(`(() => ({
     rendererKind: window.webdoom?._renderer?.kind ?? '(none)',
 }))()`);
 
-async function bootSP() {
-    for (let i = 0; i < 30; i++) {
-        await sleep(500);
-        if (await ev(`(() => { const r = document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]');
-            if (r) r.click();
-            const g = document.querySelector('#dmenu .row[data-label*="ULTIMATE"]') || document.querySelector('#dmenu .row[data-wad]');
-            return g ? (g.click(), true) : false; })()`)) break;
-    }
-    for (let i = 0; i < 40; i++) {
-        await sleep(500);
-        if (await ev(`!!window.webdoom && document.getElementById('status')?.textContent === ''`)) return true;
-    }
-    return false;
-}
-
 // A run that never booted proves nothing; that must be a failure, not a pass.
 const wadCount = await ev(`(async () => { try { return ((await (await fetch('/api/wads')).json()).wads ?? []).length; } catch { return -1; } })()`);
-if (wadCount <= 0) fail(`/api/wads returned ${wadCount} — cannot boot, so nothing was measured`);
+if (wadCount <= 0) fatal(`/api/wads returned ${wadCount} — cannot boot, so nothing was measured`);
 
 const marks = [];
 const inPlay = [];
 for (let cycle = 1; cycle <= 3; cycle++) {
-    if (!await bootSP()) fail(`boot timeout on cycle ${cycle}`);
+    if (!await tab.bootSP(35).catch(e => fatal(e.message))) fatal(`boot timeout on cycle ${cycle}`);
     await sleep(400);
     // A second reading, taken WHILE THE ENGINE IS RUNNING.  The per-cycle
     // growth check above cannot see a timer that is created once for the page
@@ -212,7 +196,6 @@ for (let cycle = 1; cycle <= 3; cycle++) {
     if (s.timerSites) console.log(`            live timers by site: ${s.timerSites}`);
 }
 
-let bad = 0;
 const growth = (k) => marks[2][k] - marks[1][k];
 // Vacuity is measured on GROSS creations, never on the net: a clean quit is
 // SUPPOSED to leave net 0, so grading that as "never moved" would fail exactly
@@ -220,13 +203,13 @@ const growth = (k) => marks[2][k] - marks[1][k];
 // no GL at all -- a missed prototype, or a canvas2d fallback, either of which
 // would let the GL half pass while measuring nothing.
 if (marks[2].glCreated === 0)
-    fail('no GL objects were created across three boots — the shim saw no WebGL '
+    fatal('no GL objects were created across three boots — the shim saw no WebGL '
        + `(renderer reported "${marks[2].rendererKind}"), so the GL half measured nothing`);
 if (marks[2].rendererKind !== 'webgl2')
-    fail(`renderer is "${marks[2].rendererKind}", not webgl2 — this run cannot speak for the WebGL teardown path`);
+    fatal(`renderer is "${marks[2].rendererKind}", not webgl2 — this run cannot speak for the WebGL teardown path`);
 
 if (marks[2].timersCreated === 0)
-    fail('no timers were created across three boots — the timer shim saw nothing, so that half measured nothing');
+    fatal('no timers were created across three boots — the timer shim saw nothing, so that half measured nothing');
 
 // The launcher is not on screen while the engine is running, so nothing it
 // owns should still be ticking.  This is a LIVENESS check, not a growth check:
@@ -235,14 +218,12 @@ if (marks[2].timersCreated === 0)
 // querySelector ran through every frame of gameplay for it.
 const LAUNCHER_OWNED = /\/js\/(menu|countdown|fire|lobby)\.js/;
 if (inPlay.every(p => !p))
-    fail('no timer at all was live during play across three cycles — the during-play reading '
+    fatal('no timer at all was live during play across three cycles — the during-play reading '
        + 'saw nothing, so it asserted nothing');
-for (let i = 0; i < inPlay.length; i++) {
-    const bad = (inPlay[i] || '').split(' | ').filter(x => LAUNCHER_OWNED.test(x));
-    if (bad.length)
-        fail(`cycle ${i + 1}: launcher timers still running during gameplay: ${bad.join(', ')}`);
-}
-console.log('  ok  no launcher-owned timer runs during gameplay (3 cycles)');
+const stillTicking = inPlay.map((p, i) => [i + 1, (p || '').split(' | ').filter(x => LAUNCHER_OWNED.test(x))])
+                          .filter(([, bad]) => bad.length);
+check('no launcher-owned timer runs during gameplay (3 cycles)', stillTicking.length === 0,
+      stillTicking.map(([c, bad]) => `cycle ${c}: launcher timers still running during gameplay: ${bad.join(', ')}`).join('; '));
 
 // Three full GCs: a WeakRef is only cleared by a collection that actually runs,
 // and one pass can leave a just-dropped object on a young-generation edge.
@@ -253,27 +234,25 @@ const mods = await ev(`(() => ({
 }))()`);
 console.log(`  wasm instances: ${mods.built} built across 3 boots, ${mods.alive} still reachable after a full GC`);
 if (mods.built === 0)
-    fail('no wasm instance was ever published to window.webdoom — the retention hook saw nothing, so this measured nothing');
-if (mods.alive > 1)
-    fail(`${mods.alive} of ${mods.built} wasm instances are still reachable after a full GC — `
-       + `only the live one should be; each retained instance holds its whole WebAssembly.Memory`);
-console.log(`  ok  wasm instances released (${mods.built} built, ${mods.alive} reachable)`);
+    fatal('no wasm instance was ever published to window.webdoom — the retention hook saw nothing, so this measured nothing');
+check(`wasm instances released (${mods.built} built, ${mods.alive} reachable)`, mods.alive <= 1,
+      `${mods.alive} of ${mods.built} wasm instances are still reachable after a full GC — `
+    + `only the live one should be; each retained instance holds its whole WebAssembly.Memory`);
 
 for (const [k, label] of [['listeners', 'net event listeners'],
                           ['stageKids', '#stage children'],
                           ['glObjects', 'net GL objects'],
                           ['liveTimers', 'live timers']]) {
     const g = growth(k);
-    if (g > 0) { console.error(`FAIL: ${label} grew by ${g} between cycle 2 and cycle 3 — accumulating per boot`); bad++; }
-    else console.log(`  ok  ${label} stable across cycles (${marks[1][k]} -> ${marks[2][k]})`);
+    check(`${label} stable across cycles (${marks[1][k]} -> ${marks[2][k]})`, g <= 0,
+          `grew by ${g} between cycle 2 and cycle 3 — accumulating per boot`);
 }
 // The '#settings panels' assertion lived here and was REMOVED with settings.js
 // rather than left in place: `querySelectorAll('#settings')` can no longer
 // match anything, so it would have read "ok  #settings panels: 0" forever
 // while measuring nothing.  A gate that cannot fail is not a gate, and the
 // duplicate-id leak it guarded cannot recur for an element that is not created.
-if (bad) fail(`${bad} teardown leak(s)`);
-console.log('PASS — browser-teardown-test: play->quit->play x3, 5 measured dimensions stable '
-          + '(event listeners, #stage children, GL objects, live timers, '
-          + 'wasm instances released) + no launcher timer during gameplay');
-done(0);
+summary('browser-teardown-test: play->quit->play x3, 5 measured dimensions stable '
+      + '(event listeners, #stage children, GL objects, live timers, '
+      + 'wasm instances released) + no launcher timer during gameplay');
+process.exit();
