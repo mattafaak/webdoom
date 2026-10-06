@@ -349,10 +349,11 @@ server.on('error', err => {
 
 server.listen(PORT, HOST, async () => {
     started = true;
-    // one lobby, any route in: LAN and tailnet clients land in the same game
+    // one lobby, any route in: LAN and tailnet clients land in the same game --
+    // when listening on every interface; bound to one address, that is the URL
     const { networkInterfaces } = await import('node:os');
     const urls = [];
-    for (const addrs of Object.values(networkInterfaces()))
+    if (HOST === '0.0.0.0' || HOST === '::') for (const addrs of Object.values(networkInterfaces()))
         for (const a of addrs ?? [])
             if (a.family === 'IPv4' && !a.internal) {
                 const kind = a.address.startsWith('100.') ? 'tailnet' : 'LAN';

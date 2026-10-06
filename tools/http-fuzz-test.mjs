@@ -583,6 +583,25 @@ async function checkRequestShapes() {
 console.log('\nrequest shapes — absolute-form targets, methods, HEAD:');
 await checkRequestShapes();
 
+// ── the startup banner names only addresses the server listens on ────────────
+//
+// It listed every LAN and tailnet address of the host even when bound to
+// 127.0.0.1, so an operator who chose loopback was told to share URLs nobody
+// can reach.  The harness binds 127.0.0.1, so the banner must name that and
+// nothing else.
+async function checkBanner() {
+    let out = '';
+    const srv = await startServer({ onStdout: t => { out += t; } });
+    await sleep(200);
+    const urls = out.match(/https?:\/\/[^\s/]+/g) ?? [];
+    check('banner: a loopback-bound server names only its loopback URL',
+          urls.length > 0 && urls.every(u => u === `http://127.0.0.1:${srv.port}`), urls.join(' ') || '(no URL)');
+    srv.stop();
+}
+
+console.log('\nstartup banner:');
+await checkBanner();
+
 const failed = results.filter(r => !r.ok);
 const total = results.length;
 console.log(`\n${failed.length
