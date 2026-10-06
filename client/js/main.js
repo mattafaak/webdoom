@@ -123,11 +123,12 @@ export function endActiveSession(reason = null) {
     return true;
 }
 
-export async function bootDoom({ wads, saves = wads[0].file, args = [], net = null, onQuit = null, record = false }) {
+export async function bootDoom({ wads, saves = null, args = [], net = null, onQuit = null, record = false }) {
     // a `launch` naming a WAD this client has no copy of arrives as [] from
     // stackFor(); refuse with a reason before the landing page is hidden
     if (!Array.isArray(wads) || wads.length === 0 || !wads[0]?.file)
         throw new Error('this browser has no copy of that WAD — ask the host which one the game is using');
+    saves ??= wads[0].file;
     const canvas = document.getElementById('screen');
     document.getElementById('landing').hidden = true;
     canvas.hidden = false;
