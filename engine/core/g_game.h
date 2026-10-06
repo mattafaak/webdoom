@@ -27,6 +27,9 @@
 #include "d_event.h"
 
 
+// gamekeydown[] is indexed by a key event's data1
+#define NUMKEYS		256
+
 
 //
 // GAME

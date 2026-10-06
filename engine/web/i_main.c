@@ -10,6 +10,7 @@
 #include "d_event.h"
 #include "d_main.h"
 #include "d_player.h"
+#include "g_game.h" // NUMKEYS
 #include "m_argv.h"
 #include "r_main.h"
 #include "st_stuff.h"
@@ -40,6 +41,12 @@ EMSCRIPTEN_KEEPALIVE void web_input_event (int type, int data1, int data2,
                                            int data3)
 {
     event_t ev;
+
+    // A key's data1 indexes gamekeydown[] in G_Responder, which checks only
+    // the upper bound, and the menu, chat and cheat responders read it too.
+    if ((type == ev_keydown || type == ev_keyup) &&
+        (data1 < 0 || data1 >= NUMKEYS))
+        return;
 
     ev.type = (evtype_t) type;
     ev.data1 = data1;

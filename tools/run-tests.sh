@@ -608,6 +608,9 @@ leg wad-content-fuzz build,wad "hostile GENMIDI/MUS/TEXTURE1 lump payloads (23.2
 # Limits only a purpose-built map reaches (tools/lib/mapkit.mjs: one
 # subsector, no node builder), each through the loader and a demo.
 leg crafted-maps    build,wad  "purpose-built maps reach engine limits through a demo" -- node tools/fuzz/crafted-maps.mjs
+# The web layer's own entry points (input, state hash, argv) with what a page
+# script, a corrupted client or a hostile server could pass them.
+leg hostile-calls   build,wad  "web entry points refuse hostile arguments" -- node tools/hostile-calls-test.mjs
 
 # ── browser suite ────────────────────────────────────────────────────────────
 # One shared server for the 19 legs that only need a page to load.  Started
