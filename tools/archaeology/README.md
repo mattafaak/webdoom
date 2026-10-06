@@ -12,7 +12,7 @@ figure quoted in prose is kept in step with `run.mjs` by whoever edits either.
 
 | reproducer | what it recomputes |
 |---|---|
-| `source-constant-verify.mjs` | constants in `engine/core`, including the raised renderer and playsim limits (MAXSEGS, MAXVISSPRITES, MAXSPECIALCROSS, SAVEGAMESIZE), which no demo golden would notice being lowered |
+| `source-constant-verify.mjs` | constants in `engine/core`, including the raised renderer and playsim limits (MAXSEGS, MAXVISSPRITES, MAXSPECIALCROSS), which no demo golden would notice being lowered |
 | `wad-verify.mjs` | figures read from `doom.wad` (needs `wads/`) |
 | `finesine-stats.mjs`, `gamma-crack.mjs`, `rndtable-stats.c` | the sine, gamma and random tables from their recipes |
 | `fixeddiv-proof.c`, `fixedmul-proof.c`, `angle-roundtrip-check.c`, `aprox-distance-crack.c` | the fixed-point arithmetic proofs |

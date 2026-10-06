@@ -17,6 +17,13 @@
 //      tic against the hashes the fixture's own build produced;
 //   3. the same for this build's own save, which must land on the same state.
 //
+// Then the biggest levels in the library, at UV: the menu save must not
+// outgrow its buffer.  Vanilla built the save at screens[1]+0x4000, 175,616
+// bytes from the end of the screen block, and these levels need more at
+// their start, so the save wrote past the block and the engine died.  The
+// engine that saved must keep running, and the save must put the player back
+// where he stood and replay.
+//
 // usage: node tools/save-compat-test.mjs [--build-dir DIR]
 //        node tools/save-compat-test.mjs --record   (writes the fixtures; only
 //          from the build whose saves are being frozen, never to make a red go away)
@@ -37,14 +44,26 @@ const CASES = [
     { name: 'doom2-map01', wad: 'doom2.wad', engineName: 'doom2.wad', warp: ['1'] },
 ];
 
+// ~172-175 KB at their start at UV, against the 175,616 bytes vanilla's
+// buffer had; the auditor measured all five past it
+const BIG = [
+    { name: 'blacktwr-map25', wad: 'doom2.wad', engineName: 'doom2.wad', pwad: 'blacktwr.wad', warp: ['25'] },
+    { name: 'nerve-map05',    wad: 'doom2.wad', engineName: 'doom2.wad', pwad: 'nerve.wad',    warp: ['5'] },
+    { name: 'sigil-e5m7',     wad: 'doom.wad',  engineName: 'doomu.wad', pwad: 'sigil.wad',    warp: ['5', '7'] },
+];
+
 const sha = b => createHash('sha256').update(b).digest('hex');
 
-async function boot(c, argv, files = new Map()) {
+// An engine error (I_Error) ends the test unless `strict` is off, in which
+// case step() throws it for the caller to judge.
+class EngineError extends Error {}
+
+async function boot(c, argv, files = new Map(), { strict = true } = {}) {
     let fatalMsg = null;
-    const doom = await bootEngine(BUILD, [[c.engineName, loadWad(c.wad)]],
-                                  { onDoomError: m => { fatalMsg = m; } });
+    const wads = [[c.engineName, loadWad(c.wad)], ...(c.pwad ? [[c.pwad, loadWad(c.pwad)]] : [])];
+    const doom = await bootEngine(BUILD, wads, { onDoomError: m => { fatalMsg = m; } });
     doom.fileMap = files;
-    doom.callMain(argv);
+    doom.callMain([...(c.pwad ? ['-file', c.pwad] : []), ...argv]);
     if (fatalMsg) fatal(`${c.name}: I_Error during init: ${fatalMsg}`);
     doom._web_set_singletics(1);
     // Drawing off: D_Display and the renderer call NetUpdate, which builds a
@@ -55,8 +74,10 @@ async function boot(c, argv, files = new Map()) {
     const step = n => {
         for (let i = 0; i < n; i++) {
             doom._web_wipe_skip();
-            doom._web_frame();
-            if (fatalMsg) fatal(`${c.name}: I_Error at tic ${doom._web_gametic()}: ${fatalMsg}`);
+            try { doom._web_frame(); }
+            catch (e) { if (!fatalMsg) throw e; }    // I_Error unwinds through abort()
+            if (fatalMsg && strict) fatal(`${c.name}: I_Error at tic ${doom._web_gametic()}: ${fatalMsg}`);
+            if (fatalMsg) throw new EngineError(fatalMsg);
         }
     };
     const tap = (key, held = 1) => {
@@ -129,9 +150,50 @@ for (const c of CASES) {
     }
 }
 
+// Player 0's x, y, angle and health, as web_demo_state reports them.
+function playerTuple(doom) {
+    const p = doom._malloc(6 * 4);    // web_demo_state writes six ints
+    doom._web_demo_state(p);
+    const t = Array.from(doom.HEAP32.subarray(p / 4 + 1, p / 4 + 5));
+    doom._free(p);
+    return t.join(',');
+}
+
+async function bigLevel(c) {
+    const { doom, step, tap } = await boot(c, ['-warp', ...c.warp, '-skill', '4', '-nodraw'], new Map(), { strict: false });
+    step(5);
+    tap(KEY_F2); tap(KEY_ENTER); tap('a'.charCodeAt(0)); tap(KEY_ENTER);
+    // the save lands a few tics after the menu closes; read the player the
+    // moment it does
+    let stood = null;
+    for (let i = 0; i < 10 && !doom.fileMap.has('doomsav0.dsg'); i++) step(1);
+    const bytes = doom.fileMap.get('doomsav0.dsg');
+    if (!bytes) return { error: 'no doomsav0.dsg written' };
+    stood = playerTuple(doom);
+    step(105);    // the engine that saved keeps running
+    const { doom: d2, step: step2 } = await boot(c, ['-loadgame', '0', '-nodraw'],
+        new Map([['doomsav0.dsg', new Uint8Array(bytes)]]), { strict: false });
+    step2(1);
+    const back = playerTuple(d2);
+    step2(105);   // and the save replays
+    return { bytes: bytes.length, stood, back };
+}
+
+if (!RECORD) {
+    for (const c of BIG) {
+        let r;
+        try { r = await bigLevel(c); }
+        catch (e) { r = { error: `${e instanceof EngineError ? 'I_Error' : 'trapped'}: ${String(e.message ?? e).split('\n')[0]}` }; }
+        if (!check(`${c.name} (UV): the menu save is written and both engines run on`, !r.error, r.error)) continue;
+        check(`${c.name} (UV): the ${r.bytes}-byte save puts the player back where he stood`,
+              r.back === r.stood, `saved at ${r.stood}, loaded at ${r.back}`);
+    }
+}
+
 if (RECORD) {
     writeFileSync(EXPECTED, JSON.stringify(recorded, null, 2) + '\n');
     summary(`save-compat fixtures recorded from ${recorded.source} (${CASES.length} cases)`);
 } else {
-    summary(`savegames from ${expected.source} load in this build (${CASES.length} cases)`);
+    summary(`savegames from ${expected.source} load in this build (${CASES.length} cases), `
+            + `and ${BIG.length} UV big-level saves round-trip`);
 }

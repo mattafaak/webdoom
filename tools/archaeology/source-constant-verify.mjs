@@ -81,10 +81,6 @@ const claims = [
       expected: 35,
       verify: () => grabDefine('engine/core/d_net.h', 'BACKUPTICS') },
 
-    { id: 'ps-008', desc: 'SAVEGAMESIZE webdoom (0x80000) = 524288',
-      expected: 524288,
-      verify: () => grabDefine('engine/core/g_game.c', 'SAVEGAMESIZE') },
-
     { id: 'ps-009', desc: 'MAX_DEATHMATCH_STARTS = 10',
       expected: 10,
       verify: () => grabDefine('engine/core/p_setup.c', 'MAX_DEATHMATCH_STARTS') },
@@ -201,6 +197,16 @@ const claims = [
       verify: () => {
           // SAVEGAMENAME = "doomsav" in dstrings.h; slots 0..5 = 6
           return /doomsav/.test(src('engine/core/dstrings.h')) ? 6 : null;
+      }},
+
+    { id: 'fmt-035', desc: 'Savegame header = 50 bytes (formats.md 5.1 [0..49])',
+      expected: 50,
+      verify: () => {
+          // description + version string + skill/episode/map + playeringame[] + leveltime
+          const d = grabDefine('engine/core/g_game.c', 'SAVESTRINGSIZE');
+          const v = grabDefine('engine/core/g_game.c', 'VERSIONSIZE');
+          const maxp = grabDefine('engine/core/doomdef.h', 'MAXPLAYERS');
+          return d !== null && v !== null && maxp !== null ? d + v + 3 + maxp + 3 : null;
       }},
 
     { id: 'fmt-034', desc: 'MUS percussion channel = 15',

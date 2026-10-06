@@ -40,6 +40,48 @@ byte*		save_p;
 #define PADSAVEP()	save_p += (4 - ((int) save_p & 3)) & 3
 
 
+//
+// P_ArchiveSize
+// An upper bound on what the four P_Archive* functions write for the
+// current level, so the caller can size the buffer before writing into it.
+// Every thinker is archived at most once, as a class byte, up to 3 bytes of
+// padding and its struct, and mobj_t is the largest struct archived.
+//
+_Static_assert(sizeof(mobj_t) >= sizeof(ceiling_t)
+	       && sizeof(mobj_t) >= sizeof(vldoor_t)
+	       && sizeof(mobj_t) >= sizeof(floormove_t)
+	       && sizeof(mobj_t) >= sizeof(plat_t)
+	       && sizeof(mobj_t) >= sizeof(lightflash_t)
+	       && sizeof(mobj_t) >= sizeof(strobe_t)
+	       && sizeof(mobj_t) >= sizeof(glow_t),
+	       "P_ArchiveSize bounds every archived thinker by sizeof(mobj_t)");
+
+int P_ArchiveSize (void)
+{
+    thinker_t*	th;
+    int		size;
+    int		i;
+    int		j;
+
+    size = MAXPLAYERS * (3 + sizeof(player_t));
+
+    size += numsectors * 7 * sizeof(short);
+    for (i=0 ; i<numlines ; i++)
+    {
+	size += 3 * sizeof(short);
+	for (j=0 ; j<2 ; j++)
+	    if (lines[i].sidenum[j] != -1)
+		size += 5 * sizeof(short);
+    }
+
+    for (th = thinkercap.next ; th != &thinkercap ; th=th->next)
+	size += 1 + 3 + sizeof(mobj_t);
+
+    // tc_end and tc_endspecials
+    return size + 2;
+}
+
+
 
 //
 // P_ArchivePlayers

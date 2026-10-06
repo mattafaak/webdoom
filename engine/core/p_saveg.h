@@ -31,6 +31,7 @@
 
 // Persistent storage/archiving.
 // These are the load / save game routines.
+int P_ArchiveSize (void);
 void P_ArchivePlayers (void);
 void P_UnArchivePlayers (void);
 void P_ArchiveWorld (void);
