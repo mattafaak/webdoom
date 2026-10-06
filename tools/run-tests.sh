@@ -15,6 +15,7 @@
 #   tools/run-tests.sh --jobs N        # N legs at a time (round 10); 1 = serial
 #   tools/run-tests.sh --list          # print the leg registry and exit
 #   tools/run-tests.sh --require-complete   # a SKIP is a failure
+#   tools/run-tests.sh --keep-logs DIR      # keep every leg's full log in DIR
 #
 # Copyright (C) 2026, GPL-2.0-or-later.
 
@@ -31,6 +32,7 @@ REQUIRE_COMPLETE=0
 ONLY=()
 LIST=0
 JOBS=1
+KEEP_LOGS=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --quick)            TIER=quick; shift ;;
@@ -72,6 +74,9 @@ while [ $# -gt 0 ]; do
         --only)             ONLY+=("$2"); shift 2 ;;
         --list)             LIST=1; shift ;;
         --require-complete) REQUIRE_COMPLETE=1; shift ;;
+        # passing legs' logs are otherwise deleted with LOGDIR; a before/after
+        # comparison of what each leg asserted needs all of them
+        --keep-logs)        KEEP_LOGS="$2"; shift 2 ;;
         -h|--help)          sed -n '/^# usage:/,/^#$/p' "$0"; exit 0 ;;
         *) echo "unknown argument '$1' (see --list, --help)" >&2; exit 2 ;;
     esac
@@ -233,6 +238,7 @@ skip_leg() {   # skip_leg <id> <why>
 record_leg() {   # record_leg <id> <rc> <secs>
     local id="$1" rc="$2" secs="$3" log="$LOGDIR/$1.log" head
     head="$(headline "$log" "$rc")"
+    if [ -n "$KEEP_LOGS" ]; then mkdir -p "$KEEP_LOGS" && cp "$log" "$KEEP_LOGS/$id.log"; fi
     if [ "$rc" -eq 0 ]; then
         PASSED=$((PASSED + 1))
         printf '%s\tPASS\t%s\t%s\n' "$id" "$secs" "$head" >> "$SUMMARY"
@@ -612,6 +618,7 @@ leg churn           build,wad  "connect/disconnect churn"              -- node t
 # ── demo tooling ─────────────────────────────────────────────────────────────
 leg demo-seek       build,wad  "scrubber seek == linear replay (19.3)" -- node tools/demo-seek-test.mjs
 leg demo-verify     build,wad  "13 goldens + doctored + hostile (19.4)" -- node tools/demo-verify-test.mjs
+leg save-compat     build,wad  "savegames written by 2a6a2de load and replay identically" -- node tools/save-compat-test.mjs
 
 # ── tenet 4: the sanitizer IS the gate ───────────────────────────────────────
 leg adversarial-map native,wad,heavy "30 adversarial maps, 0 ASan/UBSan reports" -- node tools/fuzz/run-map-fuzz.mjs --adversarial-gate
@@ -748,6 +755,7 @@ fi   # QUICK_ONLY
 # rows land in completion order under --jobs; the table is registry order
 ORDERED="$LOGDIR/ordered.tsv"
 for id in ${ORDER[@]+"${ORDER[@]}"}; do grep -m1 "^$id"$'\t' "$SUMMARY" || true; done > "$ORDERED"
+[ -n "$KEEP_LOGS" ] && cp "$ORDERED" "$KEEP_LOGS/summary.tsv"
 echo
 echo "══════════════════════════════════════════════════════════════════════════════"
 printf '  %-22s %-11s %5s  %s\n' LEG VERDICT SECS "WHAT IT REPORTED"

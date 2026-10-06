@@ -1,0 +1,25 @@
+{
+  "source": "2a6a2de",
+  "cases": {
+    "doom-e1m1": {
+      "bytes": 27498,
+      "sha256": "2bd592dbdd14a1a0273bf79b4ec8ae994814835325e70023165de04e7d6a3428",
+      "afterLoad": [
+        "1:85bcd6f5",
+        "36:4a2c3437",
+        "71:693e96ab",
+        "106:720d7ecc"
+      ]
+    },
+    "doom2-map01": {
+      "bytes": 16611,
+      "sha256": "f570f97b7a8b0712639e92d491f18e44e7f0f9280c2deb8355f20ad59ab73dad",
+      "afterLoad": [
+        "1:fa317d91",
+        "36:2cc4afbe",
+        "71:bda242d1",
+        "106:3ca2bb00"
+      ]
+    }
+  }
+}
