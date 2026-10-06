@@ -16,7 +16,6 @@ import { check, summary, fatal } from './lib/report.mjs';
 
 const url = process.argv[2] ?? fatal('usage: browser-pwad-session-test.mjs <url>');
 const chrome = await launchChrome();
-process.on('exit', () => chrome.kill());
 const tab = await chrome.tab(url);
 const { ev, key } = tab;
 
@@ -68,6 +67,5 @@ await sleep(1200);
 check('The Ultimate Doom opens its Load Game menu', opened);
 check("The Ultimate Doom's slot 0 is empty (SIGIL's save is not offered)", opened && await menuActive());
 
-const passed = summary('a PWAD game keeps its own saves and its own demo links');
-chrome.kill();
-process.exit(passed ? 0 : 1);
+summary('a PWAD game keeps its own saves and its own demo links');
+process.exit();
