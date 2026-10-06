@@ -310,8 +310,8 @@ EMSCRIPTEN_KEEPALIVE void web_replay_tic (void)
 // Called once a drop-in has replayed to the frontier and is about to go live.
 // Replay advanced gametic but never maketic, so without this the joiner would
 // build cmds from maketic 0 — ancient tics the relay discards — and freeze
-// until maketic crawled back up to gametic. Snap maketic to gametic (and the
-// clocks to now) so the very next NetUpdate sends cmds for CURRENT tics.
+// until maketic crawled back up to gametic. Snap maketic to gametic so the
+// very next NetUpdate sends cmds for CURRENT tics.
 //
 EMSCRIPTEN_KEEPALIVE void web_end_catchup (void)
 {

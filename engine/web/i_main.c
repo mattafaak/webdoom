@@ -1,5 +1,5 @@
-// webdoom i_main: D_DoomMain runs init and returns (the loop was split
-// out); JS then drives D_DoomFrame from requestAnimationFrame. Input
+// webdoom i_main: D_DoomMain runs init and returns (the loop is split out
+// into D_DoomFrame); JS then drives it from requestAnimationFrame. Input
 // events are posted from JS through web_input_event.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <stdio.h>
@@ -110,11 +110,9 @@ void ST_Start (void);
 EMSCRIPTEN_KEEPALIVE void web_set_console (int player)
 {
     // ST_Start() dereferences &players[consoleplayer] immediately, and
-    // players[] is MAXPLAYERS wide.  Today every caller passes
-    // web_first_ingame()'s return, which is in range -- so this is latent, not
-    // live.  It is still an exported wasm entry point with no guard, and the
-    // two beside it (web_net_setup, web_net_bundle) were the same shape and
-    // were not latent.
+    // players[] is MAXPLAYERS wide.  Every caller passes web_first_ingame()'s
+    // return, which is in range, but this is an exported wasm entry point and
+    // checks its argument like web_net_setup and web_net_bundle do.
     if (player < 0 || player >= MAXPLAYERS)
         return;
 
@@ -201,7 +199,7 @@ EMSCRIPTEN_KEEPALIVE void web_set_smooth (int on)
 // web_set_fractic: pin the interpolation fraction (0..FRACUNIT), -1 to unpin.
 // Test-only, and deliberately absent from the shipping build -- see the note on
 // doom_fractic_override in r_main.c.  Adding an export to build/ would move
-// __heap_base and turn perf-009 red.
+// __heap_base (tools/size-budget.mjs).
 //
 extern int doom_fractic_override;
 
@@ -252,14 +250,14 @@ EMSCRIPTEN_KEEPALIVE int web_state_hash (void)
             h = (h ^ (unsigned) players[i].mo->angle) * 0x01000193u;
             h = (h ^ (unsigned) players[i].health) * 0x01000193u;
         }
-    // 18.4: sector floor/ceiling heights — catches moving floors/ceilings
+    // sector floor/ceiling heights — catches moving floors/ceilings
     // that are invisible to player-mo-only hashing (door, lift, stair sectors).
     for (i = 0; i < numsectors; i++)
     {
         h = (h ^ (unsigned) sectors[i].floorheight) * 0x01000193u;
         h = (h ^ (unsigned) sectors[i].ceilingheight) * 0x01000193u;
     }
-    // 18.4: thinker count — catches spawn/despawn of active thinkers
+    // thinker count — catches spawn/despawn of active thinkers
     // (projectiles, specials, mobjs) that don't manifest in player state.
     {
         thinker_t* th;

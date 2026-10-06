@@ -3,8 +3,9 @@
 // the authentic AdLib sound, no external assets.
 //
 // The sequencer steps MUS events at 140Hz between rendered sample
-// blocks; JS pulls samples through web_music_render() and feeds an
-// AudioWorklet. Everything here is driven by that pull — no timers.
+// blocks; samples are pulled through web_music_render(), by the main-thread
+// pump in doom.wasm or by the AudioWorklet in build/synth.wasm. Everything
+// here is driven by that pull — no timers.
 //
 // OPL2/OPL3 mode:
 //   opl_mode=0 → authentic mono 9-voice OPL2 (NEW=0, default)
@@ -490,7 +491,7 @@ void mus_init (int rate)
     init_volatten ();
 
     // The browser re-inits when the AudioContext arms, possibly mid-song:
-    // the reset zeroed every operator (attack 0 = silent forever), so
+    // the reset zeroes every operator (attack 0 = silent forever), so
     // reprogram live voices and keep the sequencer's clock consistent.
     for (v = 0; v < opl_nvoices (); v++)
         if (voice[v].muschan >= 0)

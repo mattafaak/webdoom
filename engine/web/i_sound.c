@@ -1,7 +1,8 @@
 // webdoom i_sound: SFX lumps are handed to JS (WebAudio decodes DMX PCM
 // once per lump and plays per-channel with vanilla vol/sep/pitch);
-// music goes through the MUS+OPL sequencer in mus_opl.c, pulled by an
-// AudioWorklet via web_music_render.
+// music goes through the MUS+OPL sequencer in mus_opl.c, pulled through
+// web_music_render, or mirrored by js_music_event into the AudioWorklet's
+// own copy of the synth.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <stddef.h>
 #include <stdio.h>
@@ -94,7 +95,7 @@ void I_UpdateSoundParams (int handle, int vol, int sep, int pitch)
 static void* songdata;
 static int songlen;
 // What JS would have to reconstruct otherwise.  client/js/audio.js is created
-// AFTER callMain, so it never saw the boot-time I_SetMusicVolume and
+// AFTER callMain, so it never sees the boot-time I_SetMusicVolume and
 // I_PlaySong; it reads the state instead of replaying events it missed.
 static int songlooping;
 static int songpaused;

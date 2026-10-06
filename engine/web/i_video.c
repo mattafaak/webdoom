@@ -51,8 +51,8 @@ void I_ReadScreen (byte* scr)
 
 // screens[0] itself, column-major.  The address is stable for the session:
 // V_Init allocates it once with I_AllocLow.  fnv1aRender() in demo-test.mjs
-// visits it in row-major order, so the render goldens did not move when the
-// untranspose copy went.
+// visits it in row-major order, so the render goldens do not depend on this
+// layout.
 EMSCRIPTEN_KEEPALIVE byte* web_framebuffer (void)
 {
     return screens[0];
