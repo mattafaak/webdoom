@@ -24,7 +24,7 @@ const JOIN_TIMEOUT_MS = envInt('WEBDOOM_JOIN_TIMEOUT', 30000);   // reclaim a st
 const MAX_CONNS = envInt('WEBDOOM_MAX_CONNS', 50);
 // spectators need no slot and no credential, so they get their own cap
 const MAX_SPECTATORS = envInt('WEBDOOM_MAX_SPECTATORS', 8);
-// a peer with more than this queued is not keeping up and is dropped
+// a peer with more than this queued is not reading and is dropped (sendTo)
 const SEND_BACKLOG_CAP = envInt('WEBDOOM_SEND_BACKLOG', 4 * 1024 * 1024);
 // The sealed history -- one 38-byte bundle per tic -- is kept from tic 0
 // because drop-in and spectator catch-up replay it whole; a ring would hand
@@ -64,6 +64,21 @@ function refuse(ws, log = null, why = '') {
     if (why) (log ?? console.log)(why);
     if (!ws.listenerCount('error')) ws.on('error', () => {});
     try { ws.terminate(); } catch { /* already gone */ }
+}
+
+// The one way to send.  ws.send() queues in the Node heap once the kernel
+// buffers are full, so a peer that stops reading would pull everything sent to
+// it -- a history burst, every live bundle, every roster -- into server
+// memory.  Past SEND_BACKLOG_CAP it is refused instead.  Returns whether the
+// data was queued.
+function sendTo(ws, data, log, who) {
+    if (ws.readyState !== 1) return false;
+    if (ws.bufferedAmount > SEND_BACKLOG_CAP) {
+        refuse(ws, log, `${who}: not reading (${ws.bufferedAmount} B queued) — dropping`);
+        return false;
+    }
+    ws.send(data);
+    return true;
 }
 
 function safeWs(ws, log, tag) {
@@ -119,7 +134,7 @@ export function createGame(log = console.log, servedWads = () => []) {
     });
     const cast = msg => {
         const s = JSON.stringify(msg);
-        for (const p of lobby.values()) if (p.ws.readyState === 1) p.ws.send(s);
+        for (const p of lobby.values()) sendTo(p.ws, s, log, 'lobby');
     };
 
     // A lobby socket is one of two things: a seat in the lobby (slot >= 0,
@@ -127,7 +142,7 @@ export function createGame(log = console.log, servedWads = () => []) {
     // slot only on `join` -- so merely looking never blocks one.
     function lobbyConnect(ws) {
         safeWs(ws, log, 'lobby');
-        const reply = m => ws.send(JSON.stringify(m));
+        const reply = m => sendTo(ws, JSON.stringify(m), log, 'lobby');
         let slot = -1;          // lobby seat
         let reserved = -1;      // drop-in reservation
         let reservedIn = null;  // ...and the session it was made in
@@ -286,18 +301,14 @@ export function createGame(log = console.log, servedWads = () => []) {
         cast(roster());
     }
 
-    // Stream the whole sealed history to a joining socket.  ws.send() buffers
-    // in the Node heap, so a stalled peer is refused rather than allowed to
-    // pull the whole history into memory.  Returns false when refused.
+    // Stream the whole sealed history to a joining socket.  Returns false when
+    // the socket was refused for not reading it.
     function burstHistory(ws, who) {
         const size = 6 + CMD_SIZE * session.numplayers;
         for (let i = 0; i < session.historyLen; i++) {
-            if (ws.bufferedAmount > SEND_BACKLOG_CAP) {
-                refuse(ws, log, `${who} too slow to catch up (${ws.bufferedAmount} B buffered) — dropping`);
-                return false;
-            }
             const off = (i % SLAB_TICS) * size;
-            ws.send(session.slabs[Math.floor(i / SLAB_TICS)].subarray(off, off + size));
+            if (!sendTo(ws, session.slabs[Math.floor(i / SLAB_TICS)].subarray(off, off + size), log, who))
+                return false;
         }
         return true;
     }
@@ -519,9 +530,9 @@ export function createGame(log = console.log, servedWads = () => []) {
         buf[4] = mask;
         buf[5] = fab;
         for (const p of session.players)
-            if (p.ws?.readyState === 1) p.ws.send(buf);
+            if (p.ws) sendTo(p.ws, buf, log, `game: ${COLORS[p.slot]}`);
         for (const sw of session.spectators)
-            if (sw.readyState === 1) sw.send(buf);
+            sendTo(sw, buf, log, 'spectate: observer');
     }
 
     // --- ws mounting ---------------------------------------------------------
