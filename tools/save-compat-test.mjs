@@ -7,13 +7,15 @@
 // holds in IndexedDB stops loading.  No golden notices: demos never touch a
 // savegame, and `persist` saves and loads within one build.
 //
-// For each case this does two things against the committed fixture:
+// For each case, against the committed fixture:
 //   1. play a scripted, single-tic session and save through the real menu
-//      (F2, slot 0, a name, Enter) -- the bytes must equal the fixture, so the
-//      format and the simulation that produced it are both unchanged;
+//      (F2, slot 0, a name, Enter); the save must be the fixture's length.
+//      Not its bytes: a vanilla save stores raw heap pointers (snext, target,
+//      ...) that the loader discards, and they move with any layout change;
 //   2. boot a fresh engine with the fixture as doomsav0.dsg and `-loadgame 0`,
 //      run 105 tics with no input, and compare the state hash at every 35th
-//      tic against the hashes the fixture's own build produced.
+//      tic against the hashes the fixture's own build produced;
+//   3. the same for this build's own save, which must land on the same state.
 //
 // usage: node tools/save-compat-test.mjs [--build-dir DIR]
 //        node tools/save-compat-test.mjs --record   (writes the fixtures; only
@@ -45,6 +47,10 @@ async function boot(c, argv, files = new Map()) {
     doom.callMain(argv);
     if (fatalMsg) fatal(`${c.name}: I_Error during init: ${fatalMsg}`);
     doom._web_set_singletics(1);
+    // Drawing off: D_Display and the renderer call NetUpdate, which builds a
+    // ticcmd and drains input events for every wall-clock tic that passed
+    // during the frame, so a slow frame would take a keypress a tic early.
+    doom._web_set_nodraw(1);
     // the melt wipe is paced by wall time and holds the sim; it is cosmetic
     const step = n => {
         for (let i = 0; i < n; i++) {
@@ -110,15 +116,17 @@ for (const c of CASES) {
     if (!check(`${c.name}: fixture present`, existsSync(fixturePath) && want, fixturePath)) continue;
     const fixture = readFileSync(fixturePath);
     check(`${c.name}: fixture matches its recorded sha256`, sha(fixture) === want.sha256);
-    check(`${c.name}: this build's save is byte-identical to the fixture (${fixture.length} B)`,
-          saved.equals(fixture), `got ${saved.length} B, sha ${sha(saved).slice(0, 12)}`);
+    check(`${c.name}: this build's save is the fixture's length (${fixture.length} B)`,
+          saved.length === fixture.length, `got ${saved.length} B`);
     // a layout change typically traps inside G_DoLoadGame rather than
     // returning, so a throw is this check failing, not the test giving up
-    let got;
-    try { got = (await loadAndRun(c, fixture)).join(' '); }
-    catch (e) { got = `threw: ${String(e.message ?? e).split('\n')[0]}`; }
-    check(`${c.name}: the fixture loads and replays to the recorded state hashes`,
-          got === want.afterLoad.join(' '), `got ${got} want ${want.afterLoad.join(' ')}`);
+    for (const [what, bytes] of [['the fixture', fixture], [`this build's own save`, saved]]) {
+        let got;
+        try { got = (await loadAndRun(c, bytes)).join(' '); }
+        catch (e) { got = `threw: ${String(e.message ?? e).split('\n')[0]}`; }
+        check(`${c.name}: ${what} loads and replays to the recorded state hashes`,
+              got === want.afterLoad.join(' '), `got ${got} want ${want.afterLoad.join(' ')}`);
+    }
 }
 
 if (RECORD) {
