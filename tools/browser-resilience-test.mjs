@@ -568,6 +568,32 @@ await runTest('9-ui-lumps-decode-clean', async () => {
     } finally { tab2.close(); }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 10. AN OVERSIZED FILE IN THE BROWSER'S SAVE STORE.
+//     persist.js hands every stored file to the engine before it boots.  A
+//     20 MB .doomrc (nothing webdoom writes; anything with the origin's
+//     storage can) made every boot abort until the store was cleared by hand.
+// ═══════════════════════════════════════════════════════════════════════════
+await runTest('10-oversized-stored-config', async () => {
+    const tab = await openTab();
+    try {
+        if (!await waitForMenu(tab)) throw new Error('menu did not appear');
+        await tab.ev(`(async () => {
+            const d = await new Promise((res, rej) => { const r = indexedDB.open('webdoom', 1);
+                r.onupgradeneeded = () => r.result.createObjectStore('files');
+                r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+            await new Promise(res => { const t = d.transaction('files', 'readwrite');
+                t.objectStore('files').put(new Uint8Array(20 * 1024 * 1024).fill(32), 'config:.doomrc');
+                t.oncomplete = res; });
+            d.close(); })()`);
+        await tab.cdp('Page.reload');
+        await sleep(1000);
+        if (!await waitForMenu(tab)) throw new Error('menu did not appear after reload');
+        const ok = await tab.bootSP(60).catch(e => { throw new Error(String(e.message ?? e)); });
+        assert(ok, 'the game did not boot with an oversized config in the store');
+    } finally { tab.close(); }
+});
+
 // ── Results ───────────────────────────────────────────────────────────────────
 console.log('\n── resilience results ──────────────────────────────────────');
 let allPassed = true;

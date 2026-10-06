@@ -12,6 +12,11 @@ const STORE = 'files';
 const SAVES = [...Array(6).keys()].map(i => `doomsav${i}.dsg`);
 const CONFIG = '.doomrc';
 const ALL_FILES = [...SAVES, CONFIG];
+// What the engine writes is never near these; a larger entry did not come from
+// it, and handing one to the engine aborts every boot until it is removed
+// (the bytes are copied into its 32 MB heap).  A config is ~2 KB, a save under
+// SAVEGAMESIZE (512 KB).
+const MAX_BYTES = name => name === CONFIG ? 64 * 1024 : 1024 * 1024;
 
 const db = () => openDB(DB, 1, [STORE]);
 const tx = (d, mode, fn) => idbTx(d, STORE, mode, fn);
@@ -29,7 +34,12 @@ export async function loadPersisted(iwad) {
         for (const name of ALL_FILES) {
             const bytes = await tx(d, 'readonly', s => s.get(keyFor(iwad, name)))
                 ?? await tx(d, 'readonly', s => s.get(legacyKeyFor(iwad, name)));
-            if (bytes instanceof Uint8Array) files.set(name, bytes);
+            if (!(bytes instanceof Uint8Array)) continue;
+            if (bytes.length > MAX_BYTES(name)) {
+                console.warn(`persistence: ignoring a ${bytes.length}-byte ${name}; the engine never writes one that size`);
+                continue;
+            }
+            files.set(name, bytes);
         }
         d.close();
     } catch (err) {
