@@ -38,20 +38,15 @@
 import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
 import { startServer } from './lib/server.mjs';
+import { check, summary, fatal } from './lib/report.mjs';
 const chrome = await launchChrome();
 const url = process.argv[2] ?? (await startServer()).url;
 const tab = await chrome.tab(url);
 const { cdp, ev, key } = tab;
 // first line of each exception, as the assertions below compare them
 const excs = tab.errors;
-const done = c => { chrome.kill(); process.exit(c); };
-
-const results = [];
-const check = (name, ok, detail) => {
-    results.push({ name, ok, detail });
-    console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${name} — ${detail}`);
-};
-const hardFail = m => { console.error('FAIL:', m); done(1); };
+// the detail is part of the label: the value in force is the evidence
+const checkWith = (name, ok, detail) => check(`${name} — ${detail}`, ok);
 
 // ── menu helpers ─────────────────────────────────────────────────────────────
 // Rows carry data-label = the rendered text, uppercased (menu.js), so a row is
@@ -105,8 +100,8 @@ const HOSTILE = {
     smooth: 0,
     binds: 'not an object',
 };
-if (!await bootLauncher(HOSTILE)) hardFail('launcher never came up with hostile settings — nothing was measured');
-if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing below could be read');
+if (!await bootLauncher(HOSTILE)) fatal('launcher never came up with hostile settings — nothing was measured');
+if (!await openOptions()) fatal('OPTIONS screen would not open — nothing below could be read');
 
 {
     // Any row change calls saveSettings() on the live object, so a toggle and a
@@ -116,20 +111,20 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
     await sleep(200);
     const live = await stored();
     const num = (k, lo, hi) => typeof live[k] === 'number' && Number.isFinite(live[k]) && live[k] >= lo && live[k] <= hi;
-    check('IN FORCE: corrupt mouseSens is not the live value',
+    checkWith('IN FORCE: corrupt mouseSens is not the live value',
         num('mouseSens', 1, 12), `settings.mouseSens = ${JSON.stringify(live.mouseSens)}`);
-    check('IN FORCE: corrupt padTurnSpeed is not the live value',
+    checkWith('IN FORCE: corrupt padTurnSpeed is not the live value',
         num('padTurnSpeed', 0.4, 2), `settings.padTurnSpeed = ${JSON.stringify(live.padTurnSpeed)}`);
-    check('IN FORCE: out-of-range padDeadzone is clamped',
+    checkWith('IN FORCE: out-of-range padDeadzone is clamped',
         num('padDeadzone', 0, 0.9), `settings.padDeadzone = ${JSON.stringify(live.padDeadzone)}`);
-    check('IN FORCE: an unknown musicBackend is not the live value',
+    checkWith('IN FORCE: an unknown musicBackend is not the live value',
         ['opl2', 'opl3'].includes(live.musicBackend), `settings.musicBackend = ${JSON.stringify(live.musicBackend)}`);
-    check('IN FORCE: an unknown mouseY is not the live value',
+    checkWith('IN FORCE: an unknown mouseY is not the live value',
         ['off', 'look', 'move'].includes(live.mouseY), `settings.mouseY = ${JSON.stringify(live.mouseY)}`);
-    check('IN FORCE: non-boolean flags are booleans',
+    checkWith('IN FORCE: non-boolean flags are booleans',
         typeof live.smooth === 'boolean' && typeof live.alwaysRun === 'boolean',
         `smooth=${JSON.stringify(live.smooth)} alwaysRun=${JSON.stringify(live.alwaysRun)}`);
-    check('IN FORCE: binds is a complete map of action -> key string',
+    checkWith('IN FORCE: binds is a complete map of action -> key string',
         live.binds && typeof live.binds === 'object' && !Array.isArray(live.binds)
         && Object.keys(live.binds).length >= 11
         && Object.values(live.binds).every(v => typeof v === 'string' && v.length > 0),
@@ -138,10 +133,10 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
     // The rendered row is the value in force here, not a widget that launders
     // it -- so this reads the screen and it means something.
     const labels = await rows();
-    check('no NaN/undefined/null reaches the rendered OPTIONS screen',
+    checkWith('no NaN/undefined/null reaches the rendered OPTIONS screen',
         Array.isArray(labels) && labels.length > 0 && !labels.some(l => /NaN|UNDEFINED|NULL/.test(l)),
         (labels ?? []).filter(l => /NaN|UNDEFINED|NULL/.test(l)).join(',') || `none, ${labels?.length} rows`);
-    check('every OPTIONS row shows a value, not an empty one',
+    checkWith('every OPTIONS row shows a value, not an empty one',
         (labels ?? []).filter(l => /: <?\s*>?$/.test(l)).length === 0,
         `${labels?.length ?? 0} rows: ${(labels ?? []).slice(0, 3).join(' | ')}…`);
 }
@@ -154,31 +149,31 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
 // that cannot be read and has no way back to its default.
 {
     const partial = { binds: { forward: 'KeyW', back: 'KeyS' } };   // the other nine are missing
-    if (!await bootLauncher(partial)) hardFail('launcher never came up with a partial bind map');
-    if (!await openOptions()) hardFail('OPTIONS would not open (partial binds)');
-    if (!await openControls()) hardFail('CONTROLS would not open (partial binds)');
+    if (!await bootLauncher(partial)) fatal('launcher never came up with a partial bind map');
+    if (!await openOptions()) fatal('OPTIONS would not open (partial binds)');
+    if (!await openControls()) fatal('CONTROLS would not open (partial binds)');
     const labels = (await rows()) ?? [];
     const binds = labels.filter(l => l.includes(':'));
     const bad = binds.filter(l => /UNDEFINED/.test(l) || /:\s*$/.test(l));
-    check('an action missing from stored binds falls back to its default key',
+    checkWith('an action missing from stored binds falls back to its default key',
         binds.length >= 11 && bad.length === 0,
         `${bad.length} of ${binds.length} unreadable: ${bad.join(',') || 'none'}`);
     const fwd = await rowText('MOVE FORWARD');
-    check('CONTROL: a bind that WAS stored is still honoured',
+    checkWith('CONTROL: a bind that WAS stored is still honoured',
         /:\s*W$/.test(String(fwd ?? '')), `row reads ${JSON.stringify(fwd)}`);
 }
 
 // ── 3. Reset defaults has to reset what the player can see ───────────────────
 {
-    if (!await bootLauncher({})) hardFail('launcher never came up for the reset case');
-    if (!await openOptions()) hardFail('OPTIONS would not open (reset case)');
+    if (!await bootLauncher({})) fatal('launcher never came up for the reset case');
+    if (!await openOptions()) fatal('OPTIONS would not open (reset case)');
 
     await clickRow('ALWAYS RUN');       // OFF -> ON
     await sleep(150);
     await clickRow('MOUSE SENSITIVITY');// 4 -> 5
     await sleep(150);
     const changed = await stored();
-    check('CONTROL: changing rows changes the stored settings',
+    checkWith('CONTROL: changing rows changes the stored settings',
         changed.alwaysRun === true && changed.mouseSens === 5,
         `alwaysRun=${changed.alwaysRun} mouseSens=${changed.mouseSens}`);
 
@@ -187,19 +182,19 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
     const after = await stored();
     const run = await rowText('ALWAYS RUN');
     const sens = await rowText('MOUSE SENSITIVITY');
-    check('Reset defaults restores the stored settings',
+    checkWith('Reset defaults restores the stored settings',
         after.alwaysRun === false && after.mouseSens === 4,
         `alwaysRun=${after.alwaysRun} mouseSens=${after.mouseSens}`);
-    check('Reset defaults is visible on the screen, not just in storage',
+    checkWith('Reset defaults is visible on the screen, not just in storage',
         /OFF/.test(String(run ?? '')) && /<\s*4\s*>/.test(String(sens ?? '')),
         `${JSON.stringify(run)} / ${JSON.stringify(sens)}`);
 }
 
 // ── 4. rebinding ─────────────────────────────────────────────────────────────
 {
-    if (!await bootLauncher({})) hardFail('launcher never came up for the rebind case');
-    if (!await openOptions()) hardFail('OPTIONS would not open (rebind case)');
-    if (!await openControls()) hardFail('CONTROLS would not open (rebind case)');
+    if (!await bootLauncher({})) fatal('launcher never came up for the rebind case');
+    if (!await openOptions()) fatal('OPTIONS would not open (rebind case)');
+    if (!await openControls()) fatal('CONTROLS would not open (rebind case)');
 
     // (a) THE ENTER THAT ARMS THE CAPTURE MUST NOT BECOME THE BINDING.
     // activate() runs on the Enter keydown, so a capture armed synchronously is
@@ -222,10 +217,10 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
     await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
     await sleep(250);
     const armed = await rowText('AUTOMAP');
-    check('CONTROL: Enter on a bind row enters capture',
+    checkWith('CONTROL: Enter on a bind row enters capture',
         /PRESS A KEY/.test(String(armed ?? '')), `row reads ${JSON.stringify(armed)}`);
     let binds = (await stored()).binds ?? {};
-    check('a HELD Enter that armed the capture does not become the binding',
+    checkWith('a HELD Enter that armed the capture does not become the binding',
         binds.automap !== 'Enter', `automap = ${JSON.stringify(binds.automap)}`);
 
     // (b) WHILE ARMED, THE MENU MUST NOT ACT ON THE KEY.
@@ -239,10 +234,10 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
     await sleep(200);
     const idxAfter = await ev(`[...document.querySelectorAll('#dmenu .row')].findIndex(r => r.classList.contains('sel'))`);
     binds = (await stored()).binds ?? {};
-    check('the menu does not move the cursor on a key the capture consumed',
+    checkWith('the menu does not move the cursor on a key the capture consumed',
         idxBefore >= 0 && idxBefore === idxAfter,
         `row index ${idxBefore} -> ${idxAfter} (was ${JSON.stringify(selBefore)})`);
-    check('CONTROL: that key did reach the capture and became the binding',
+    checkWith('CONTROL: that key did reach the capture and became the binding',
         binds.automap === 'ArrowDown', `automap = ${JSON.stringify(binds.automap)}`);
 
     // (c) Escape cancels a FRESH capture and does NOT pop the screen.
@@ -253,12 +248,12 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
     const afterEsc = await rowText('AUTOMAP');
     const stillHere = await ev(`!!document.querySelector('#dmenu .row[data-label^="MOVE FORWARD"]')`);
     binds = (await stored()).binds ?? {};
-    check('Escape does not become the binding',
+    checkWith('Escape does not become the binding',
         binds.automap !== 'Escape', `stored bind = ${JSON.stringify(binds.automap)}`);
-    check('Escape leaves capture, so the row is readable again',
+    checkWith('Escape leaves capture, so the row is readable again',
         !/PRESS A KEY/.test(String(afterEsc ?? '')) && String(afterEsc ?? '').trim().length > 0,
         `row reads ${JSON.stringify(afterEsc)}`);
-    check('Escape cancels the capture WITHOUT leaving the CONTROLS screen',
+    checkWith('Escape cancels the capture WITHOUT leaving the CONTROLS screen',
         stillHere === true, `CONTROLS still shown = ${stillHere}`);
 
     // (d) a key another action holds SWAPS, losing neither.
@@ -268,7 +263,7 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
     await key('w', 87);
     await sleep(250);
     binds = (await stored()).binds ?? {};
-    check('binding a key another action holds swaps the two, losing neither',
+    checkWith('binding a key another action holds swaps the two, losing neither',
         binds.automap === 'KeyW' && binds.forward === before,
         `automap=${JSON.stringify(binds.automap)} forward=${JSON.stringify(binds.forward)} (forward should be the old automap key ${JSON.stringify(before)})`);
 }
@@ -280,22 +275,22 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
 // instance -- so the assertion below states the structure, and the one after
 // it is the real successor: what was chosen here is what the engine receives.
 {
-    if (!await bootLauncher({})) hardFail('launcher never came up for the boot case');
-    if (!await openOptions()) hardFail('OPTIONS would not open (boot case)');
+    if (!await bootLauncher({})) fatal('launcher never came up for the boot case');
+    if (!await openOptions()) fatal('OPTIONS would not open (boot case)');
     const noEngine = await ev(`!window.webdoom?.doom`);
     const canvasHidden = await ev(`document.getElementById('screen')?.hidden !== false`);
-    check('no engine instance exists while OPTIONS is open',
+    checkWith('no engine instance exists while OPTIONS is open',
         noEngine === true && canvasHidden === true,
         `doom=${!noEngine} canvasVisible=${!canvasHidden}`);
 
     // Rebind forward to K, then boot and read what the engine got.
-    if (!await openControls()) hardFail('CONTROLS would not open (boot case)');
+    if (!await openControls()) fatal('CONTROLS would not open (boot case)');
     await clickRow('MOVE FORWARD');
     await sleep(200);
     await key('k', 75);
     await sleep(250);
     const chosen = ((await stored()).binds ?? {}).forward;
-    check('CONTROL: the rebind was stored', chosen === 'KeyK', `forward = ${JSON.stringify(chosen)}`);
+    checkWith('CONTROL: the rebind was stored', chosen === 'KeyK', `forward = ${JSON.stringify(chosen)}`);
 
     await key('Escape', 27); await sleep(200);   // CONTROLS -> OPTIONS
     await key('Escape', 27); await sleep(200);   // OPTIONS  -> root
@@ -307,7 +302,7 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
             const g = document.querySelector('#dmenu .row[data-label*="ULTIMATE"]') || document.querySelector('#dmenu .row[data-wad]');
             return g ? (g.click(), true) : false; })()`);
     }
-    if (!booted) hardFail('never reached a game — the successor assertion measured nothing');
+    if (!booted) fatal('never reached a game — the successor assertion measured nothing');
     for (let i = 0; i < 40; i++) { await sleep(500); if (await ev(`!!window.webdoom?.doom`)) break; }
 
     // Get OUT of the engine's own menu and into a level.  codeToDk() passes a
@@ -323,7 +318,7 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
         await sleep(400);
         inLevel = (await ev(`window.webdoom?.doom?._web_ui_mode?.() ?? 1`)) === 0;
     }
-    if (!inLevel) hardFail('never reached a level — a bind is not consulted in ui mode, so this would measure 0');
+    if (!inLevel) fatal('never reached a level — a bind is not consulted in ui mode, so this would measure 0');
 
     // Not "the JS object still holds KeyK" -- that only proves an assignment.
     // Wrap the engine's own input entry point and press the rebound key: the
@@ -340,17 +335,17 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
         };
         return 'wrapped';
     })()`);
-    if (wrapped !== 'wrapped') hardFail(`could not wrap the engine input path (${wrapped})`);
+    if (wrapped !== 'wrapped') fatal(`could not wrap the engine input path (${wrapped})`);
     await key('k', 75);
     const sawForward = await ev(`window.__fwdKeydowns`);
-    check('the key bound on OPTIONS drives forward in the running engine',
+    checkWith('the key bound on OPTIONS drives forward in the running engine',
         sawForward > 0, `engine saw ${sawForward} forward keydown(s) for K`);
 }
 
 // ── 6. the accessibility surface of the new screens ─────────────────────────
 {
-    if (!await bootLauncher({})) hardFail('launcher never came up for the a11y case');
-    if (!await openOptions()) hardFail('OPTIONS would not open (a11y case)');
+    if (!await bootLauncher({})) fatal('launcher never came up for the a11y case');
+    if (!await openOptions()) fatal('OPTIONS would not open (a11y case)');
     const a11y = await ev(`(() => {
         const st = document.getElementById('status');
         const bar = document.getElementById('loading-bar');
@@ -369,34 +364,34 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
                 .filter(r => !r.closest('[role=menu]')).length,
         };
     })()`);
-    check('#status is a polite live region',
+    checkWith('#status is a polite live region',
         a11y?.statusRole === 'status' && a11y.statusLive === 'polite',
         `role=${a11y?.statusRole} aria-live=${a11y?.statusLive}`);
-    check('#loading-bar is a progressbar', a11y?.barRole === 'progressbar', `role=${a11y?.barRole}`);
-    check('OPTIONS is a labelled menu with rows in it',
+    checkWith('#loading-bar is a progressbar', a11y?.barRole === 'progressbar', `role=${a11y?.barRole}`);
+    checkWith('OPTIONS is a labelled menu with rows in it',
         a11y?.menuRole === 'menu' && a11y.menuLabel === 'OPTIONS' && a11y.rows > 1,
         `role=${a11y?.menuRole} label=${JSON.stringify(a11y?.menuLabel)}, ${a11y?.rows} rows`);
-    check('every OPTIONS row carries an accessible name',
+    checkWith('every OPTIONS row carries an accessible name',
         a11y?.labelled === a11y?.rows, `${a11y?.labelled} of ${a11y?.rows} rows`);
-    check('exactly one OPTIONS row is in the tab order (roving tabindex)',
+    checkWith('exactly one OPTIONS row is in the tab order (roving tabindex)',
         a11y?.tabbable === 1, `${a11y?.tabbable} of ${a11y?.rows} rows have tabindex 0`);
-    check('no role="menuitem" is orphaned outside a role="menu"',
+    checkWith('no role="menuitem" is orphaned outside a role="menu"',
         a11y?.orphanItems === 0, `${a11y?.orphanItems} orphaned`);
 }
 
 // ── 7. the MUSIC row cycles the two OPL flavours and nothing else ──────────
 {
-    if (!await bootLauncher({ musicBackend: 'opl2' })) hardFail('launcher never came up for the music case');
-    if (!await openOptions()) hardFail('OPTIONS would not open (music case)');
+    if (!await bootLauncher({ musicBackend: 'opl2' })) fatal('launcher never came up for the music case');
+    if (!await openOptions()) fatal('OPTIONS would not open (music case)');
     await sleep(300);
     const m0 = await rowText('MUSIC');
-    check('the MUSIC row reads the stored backend', /OPL2/.test(String(m0 ?? '')), `row reads ${JSON.stringify(m0)}`);
+    checkWith('the MUSIC row reads the stored backend', /OPL2/.test(String(m0 ?? '')), `row reads ${JSON.stringify(m0)}`);
     await clickRow('MUSIC'); await sleep(300);
     const m1 = await rowText('MUSIC');
-    check('a click steps MUSIC to OPL3', /OPL3/.test(String(m1 ?? '')), `row reads ${JSON.stringify(m1)}`);
+    checkWith('a click steps MUSIC to OPL3', /OPL3/.test(String(m1 ?? '')), `row reads ${JSON.stringify(m1)}`);
     await clickRow('MUSIC'); await sleep(300);
     const m2 = await rowText('MUSIC');
-    check('and back to OPL2 -- there is no third backend', /OPL2/.test(String(m2 ?? '')), `row reads ${JSON.stringify(m2)}`);
+    checkWith('and back to OPL2 -- there is no third backend', /OPL2/.test(String(m2 ?? '')), `row reads ${JSON.stringify(m2)}`);
 }
 
 // ── CONTROLS must stay one column on a short viewport ────────────────────────
@@ -417,8 +412,8 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
     await cdp('Emulation.setDeviceMetricsOverride',
               { width: 900, height: 540, deviceScaleFactor: 1, mobile: false });
     await sleep(400);
-    if (!await openOptions())  hardFail('OPTIONS would not open at 900x540');
-    if (!await openControls()) hardFail('CONTROLS would not open at 900x540');
+    if (!await openOptions())  fatal('OPTIONS would not open at 900x540');
+    if (!await openControls()) fatal('CONTROLS would not open at 900x540');
     const geom = await ev(`(() => {
         const list = document.querySelector('#dmenu .items');
         const rs = [...list.children];
@@ -426,22 +421,20 @@ if (!await openOptions()) hardFail('OPTIONS screen would not open — nothing be
                  cols: [...new Set(rs.map(r => Math.round(r.offsetLeft)))].length,
                  maxHeight: list.style.maxHeight || '' };
     })()`);
-    check('CONTROLS stays ONE column at 900x540 (nowrap honoured by both decisions)',
+    checkWith('CONTROLS stays ONE column at 900x540 (nowrap honoured by both decisions)',
           geom.n > 8 && geom.cols === 1 && geom.maxHeight === '',
           `${geom.n} rows in ${geom.cols} column(s), maxHeight="${geom.maxHeight}"`);
     await cdp('Emulation.clearDeviceMetricsOverride');
     await sleep(200);
 }
 
-// A run that asserted nothing must not pass.  The old F8 test held 28; this
-// screen has more surface, so the floor goes up rather than down.
-if (results.length < 30) hardFail(`only ${results.length} assertions ran — the suite did not complete`);
 const uncaught = excs.filter(e => !/ResizeObserver/.test(e));
-check('no uncaught exception while abusing the OPTIONS surface',
+checkWith('no uncaught exception while abusing the OPTIONS surface',
     uncaught.length === 0, uncaught.slice(0, 3).join(' | ') || 'none');
 
-const bad = results.filter(r => !r.ok);
-console.log(bad.length
-    ? `FAIL — browser-options: ${bad.length} of ${results.length} assertions failed`
-    : `PASS — browser-options: all ${results.length} assertions (hostile localStorage, partial binds, reset defaults, rebind capture, boot round trip, a11y, the MUSIC row)`);
-done(bad.length ? 1 : 0);
+// A run that asserted nothing must not pass.  The old F8 test held 28; this
+// screen has more surface, so the floor goes up rather than down: 30 cases
+// before the exception sweep above.
+summary('browser-options: hostile localStorage, partial binds, reset defaults, rebind capture, boot round trip, a11y, the MUSIC row',
+        { min: 31 });
+process.exit();
