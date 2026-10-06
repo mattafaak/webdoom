@@ -21,6 +21,7 @@
 import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
 import { startServer } from './lib/server.mjs';
+import { check, summary, fatal } from './lib/report.mjs';
 
 const url = process.argv[2] ?? (await startServer()).url;
 // WHICH engine export to make throw.  This used to be hardcoded to
@@ -38,60 +39,16 @@ if (!/^_web_[a-z_]+$/.test(INJECT)) {
     process.exit(2);
 }
 const chrome = await launchChrome();
-const cleanup = code => { chrome.kill(); process.exit(code); };
 const tab = await chrome.tab(url);
-const { cdp, ev, errors } = tab;
+const { ev, errors } = tab;
 
-// ── Wait for service worker ────────────────────────────────────────────────────
-for (let i = 0; i < 30; i++) {
-    if (await ev(`!!navigator.serviceWorker.controller`)) break;
-    if (i === 29) { console.error('FAIL: service worker did not take control within 15s'); cleanup(1); }
-    await sleep(500);
-}
-
-// ── Wait for lobby menu ────────────────────────────────────────────────────────
-let menuReady = false;
-for (let i = 0; i < 40; i++) {
-    menuReady = await ev(`!!document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]')`);
-    if (menuReady) break;
-    const s = await ev(`document.getElementById('status')?.textContent`);
-    if (s?.startsWith('cannot')) { console.error(`FAIL: lobby error: ${s}`); cleanup(1); }
-    await sleep(500);
-}
-if (!menuReady) { console.error('FAIL: lobby menu did not appear within 20s'); cleanup(1); }
-
-// ── Boot the game (click SINGLE PLAYER → first available game) ────────────────
-let clicked = false;
-let booted = false;
-for (let i = 0; i < 120; i++) {
-    await sleep(500);
-    const s = await ev(`document.getElementById('status')?.textContent`);
-    if (s?.startsWith('engine error') || s?.startsWith('Error')) {
-        console.error(`FAIL: unexpected engine error before test trigger: ${s}`);
-        cleanup(1);
-    }
-    if (!clicked) {
-        clicked = await ev(`(() => {
-            const sp = document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]');
-            if (!sp) return false;
-            sp.click();
-            const g = document.querySelector('#dmenu .row[data-label*="ULTIMATE"]')
-                   || document.querySelector('#dmenu .row[data-label*="DOOM"]');
-            if (!g) return false;
-            g.click();
-            return true;
-        })()`);
-        continue;
-    }
-    const running = await ev(
-        `!document.getElementById('screen').hidden &&
-         document.getElementById('status')?.textContent === ''`);
-    if (running) { booted = true; break; }
-}
-if (!booted) {
-    console.error('FAIL: game did not boot within 60s');
+if (!await tab.waitForSW(15)) fatal('service worker did not take control within 15s');
+if (!await tab.waitForMenu(20).catch(e => fatal(`lobby error: ${e.message}`))) fatal('lobby menu did not appear within 20s');
+// Boot the game (click SINGLE PLAYER → first available game); an engine error
+// before the injection below is a failure of the boot, not of the recovery.
+if (!await tab.bootSP(60).catch(e => fatal(`unexpected engine error before test trigger: ${e.message}`))) {
     console.error('  status:', await ev(`document.getElementById('status')?.textContent`));
-    cleanup(1);
+    fatal('game did not boot within 60s');
 }
 
 // ── Inject deterministic exception into the rAF frame path ───────────────────
@@ -99,10 +56,7 @@ if (!booted) {
 // This reproduces the ws-001 class: an unexpected JS exception inside the
 // try { input.frame(); doom._web_frame(); } block.
 const domExported = await ev(`typeof window.webdoom?.doom?.${INJECT} === 'function'`);
-if (!domExported) {
-    console.error(`FAIL: window.webdoom.doom.${INJECT} is not a function — game handle missing`);
-    cleanup(1);
-}
+if (!domExported) fatal(`window.webdoom.doom.${INJECT} is not a function — game handle missing`);
 console.log(`  injecting a throw into doom.${INJECT}`);
 
 // Install the throw patch; count how many times it fires.
@@ -122,10 +76,8 @@ await sleep(300);
 
 // ── Assert: rAF loop stopped (no accumulating exceptions) ─────────────────────
 const throwCount = await ev(`window.__rafThrowCount ?? 0`);
-if (throwCount !== 1) {
-    console.error(`FAIL: ${INJECT} throw fired ${throwCount} times (expected 1) — rAF loop not stopping cleanly`);
-    cleanup(1);
-}
+check(`the ${INJECT} throw fired once`, throwCount === 1,
+      `fired ${throwCount} times (expected 1) — rAF loop not stopping cleanly`);
 
 // Wait a little longer to confirm no further frames queued (would increment throwCount
 // if the original throw-patch were still in place, but we already restored it above;
@@ -138,47 +90,24 @@ await ev(`(() => {
 })()`);
 await sleep(500);
 const postCount = await ev(`window.__rafPostCount ?? 0`);
-if (postCount > 0) {
-    console.error(`FAIL: rAF loop continued after exception — ${postCount} extra ${INJECT} calls observed`);
-    cleanup(1);
-}
+check(`the rAF loop stopped: no ${INJECT} calls after the exception`, postCount === 0,
+      `rAF loop continued after exception — ${postCount} extra ${INJECT} calls observed`);
 
 // ── Assert recovery ───────────────────────────────────────────────────────────
 const landingVisible = await ev(`!document.getElementById('landing').hidden`);
 const canvasHidden   = await ev(`document.getElementById('screen').hidden`);
 const statusText     = await ev(`document.getElementById('status')?.textContent`);
 
-let failed = false;
-
-if (!landingVisible) {
-    console.error('FAIL: landing page not restored after rAF exception — user stuck on frozen canvas (ws-001 wedge)');
-    failed = true;
-}
-if (!canvasHidden) {
-    console.error('FAIL: game canvas still visible after rAF exception');
-    failed = true;
-}
-if (!statusText || statusText.trim() === '') {
-    console.error(`FAIL: no user-visible error message in #status after rAF exception (got: ${JSON.stringify(statusText)})`);
-    failed = true;
-}
-if (statusText && !statusText.includes('engine error')) {
-    console.error(`FAIL: #status text does not contain "engine error" (got: ${JSON.stringify(statusText)})`);
-    failed = true;
-}
+check('landing page restored after rAF exception', landingVisible, 'user stuck on frozen canvas (ws-001 wedge)');
+check('game canvas hidden after rAF exception', canvasHidden);
+check('a user-visible error message in #status', statusText && statusText.trim() !== '', `got: ${JSON.stringify(statusText)}`);
+check('#status text contains "engine error"', !statusText || statusText.includes('engine error'), `got: ${JSON.stringify(statusText)}`);
 
 // Unexpected uncaught exceptions (filter expected: the synthetic-rafdeath itself
 // may surface as a console error before the catch handler swallows it).
 const unexpectedErrors = errors.filter(e =>
     !/(synthetic-rafdeath-ws001|abort|RuntimeError|unreachable)/i.test(e));
-if (unexpectedErrors.length > 0) {
-    console.error(`FAIL: unexpected JS exceptions: ${unexpectedErrors.join('; ')}`);
-    failed = true;
-}
+check('no unexpected JS exceptions', unexpectedErrors.length === 0, unexpectedErrors.join('; '));
 
-if (failed) {
-    cleanup(1);
-}
-
-console.log(`PASS — rAF exception recovery via ${INJECT}: landing restored, status shown, loop stopped (ws-001 fixed)`);
-cleanup(0);
+summary(`rAF exception recovery via ${INJECT}: landing restored, status shown, loop stopped (ws-001 fixed)`);
+process.exit();
