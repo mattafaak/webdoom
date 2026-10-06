@@ -72,9 +72,8 @@ Several schemes reuse the same letters, which is why this section exists.
 | `Q1`–`Q10` | [playsim.md](playsim.md) §15 | a vanilla quirk, with its demo evidence |
 | `T01`–`T31` | [state-machine.md](state-machine.md) | a transition in the lobby state machine, each mapped to a test |
 | `C`, `K`, `NC` | [optimization-ledger.md](optimization-ledger.md) | optimisation candidates: landed, killed, and the non-core set |
-| `ws-NNN` | [web-scrutiny.md](web-scrutiny.md) | a client-side review finding, with its disposition |
+| `ws-NNN` | retired: `git show 2a6a2de:docs/web-scrutiny.md` | a client-side review finding, with its disposition; the open ones are in [Plans.md](../Plans.md) |
 | `N.M`, round numbers | [Plans.md](../Plans.md), `git log` | a task, or a working pass over the repository. History; the reference documents do not cite them |
 
 **Watch the `F`.** `F1`–`F7` in the divergence atlas are behavioural forks;
-`F1`–`F4` in [the 2026-09-11 suite baseline](2026-09-11-suite-baseline.md)
-are that run's failures. They are unrelated.
+`F1`–`F4` in the optimization ledger are candidates. They are unrelated.

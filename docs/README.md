@@ -19,7 +19,6 @@ section heading rather than at the top.
 | [../spec.md](../spec.md) | **the product contract, and the SSOT.** Precedence: spec > sub-specs > Plans.md. Read the tenets before changing anything. |
 | [../Plans.md](../Plans.md) | the current planning round: task table, statuses, verdicts, open findings |
 | [glossary.md](glossary.md) | **start here if a word is doing work you cannot see.** DOOM's vocabulary, the terms this project invented (`leg`, `golden`, `regold`, `red-proof`, `vacuous gate`, `the cascade`), and the key to all fifteen identifier schemes |
-| [2026-09-11-suite-baseline.md](2026-09-11-suite-baseline.md) | a **frozen** full-suite run kept as evidence, with every red and its disposition. It records 71 legs; the registry has grown since, so read it as a dated record and not as the current state |
 
 ## Reference — how the engine works
 
@@ -47,7 +46,6 @@ section heading rather than at the top.
 
 | document | what it is |
 |---|---|
-| [web-scrutiny.md](web-scrutiny.md) | the ws-NNN review ledger: 14 findings, each with a disposition |
 
 ## Hardware bring-ups
 
@@ -64,14 +62,6 @@ Read the banner first — all three carry a dated status.
 
 | document | what it is |
 |---|---|
-| [archive/decision-18.1-wide-limits.md](archive/decision-18.1-wide-limits.md) | widescreen: the BSS arithmetic and the limits it forced. **Archived 2026-09-12** — widescreen was removed; kept because its §5 arithmetic is what the revert was checked against |
-| [archive/perf-18.4-wide-mode.md](archive/perf-18.4-wide-mode.md) | the 854 px Hor+ render cost, task 18.4. **Archived 2026-09-17** — it was `perf.md §18.4`, already banner-marked superseded; widescreen was removed in round 12, so nothing in it is reproducible on the current tree |
-| [archive/retrospective.md](archive/retrospective.md) | the 2026-07-16 refinement-pass retrospective. Self-declared archive: its body describes that date, not this one |
-| [archive/Plans-refinement-complete.md](archive/Plans-refinement-complete.md) | the refinement initiative's task table, 26/26. Holds the regold lesson `tools/golden-provenance.mjs` cites by line |
-| [archive/Plans-understanding-complete.md](archive/Plans-understanding-complete.md) | phases 6–11, understanding-on-trial |
-| [archive/Plans-floor-initiative-complete.md](archive/Plans-floor-initiative-complete.md) | phases 12–15, 32/32 at `8305c4a` |
-| [archive/Plans-round3-retired.md](archive/Plans-round3-retired.md) | the nine round-3 rows retired in round 11: the four FastDoom toggles (deleted from the engine in round 10) and the five N64 rows past the emulator gate, each under the verdict that retired it |
-| [archive/Plans-field-fixes-complete.md](archive/Plans-field-fixes-complete.md) | round 3, phases 16–19, 22/22 at `1f9f1e5`. The tasks `Plans.md`'s round-3 planning sections rank and sequence |
 
 These eight live under `archive/` (round 8, plus the round-11 retirement and the
 round-13 move); the five `Plans-*` files are closed
