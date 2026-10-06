@@ -295,6 +295,62 @@ ok('server did not crash', !didCrash());
     }
 }
 
+// ── 9. The WAD hint, and the bytes held by uploads still arriving ───────────
+//
+// `?wad=` is stored beside the demo and returned in the x-demo-wad header, so
+// a value writeHead rejects -- CR/LF, a character above U+00FF -- was accepted
+// with 201 and then threw on every GET, which never answered.  Every id the
+// POST hands out must be fetchable.  Latin-1 is a header's own charset: a
+// local WAD imported as "café.wad" round-trips today and must keep doing so.
+//
+// Bodies are buffered whole, so uploads still arriving hold memory: with a
+// 1 KiB per-demo cap the in-flight budget is 16 KiB, and twenty uploads that
+// each send 1,000 of their 1,024 bytes and stall must not all be held.
+{
+    const s4 = await spawnServer({ WEBDOOM_DEMO_CAP: '1024' });
+    const getWithin = (id, ms) => Promise.race([
+        request('GET', `${s4.base}/api/demos/${id}`),
+        sleep(ms).then(() => ({ status: 'no answer' })),
+    ]);
+    try {
+        const HOSTILE = [['CJK name (above U+00FF)', '%E6%97%A5%E6%9C%AC.wad'], ['CR/LF', 'a%0D%0Ax-evil:%201'],
+                         ['a control character', 'a%07b.wad'], ['65 characters', 'a'.repeat(61) + '.wad']];
+        for (const [label, q] of HOSTILE) {
+            const up = await request('POST', `${s4.base}/api/demos?wad=${q}`, minimalDemo(20 + label.length));
+            const got = up.status === 201 ? await getWithin(JSON.parse(up.body).id, 1000) : null;
+            ok(`wad hint with ${label}: refused at upload, not stored to hang its GET ` +
+               `(POST ${up.status}${got ? `, GET ${got.status}` : ''})`, up.status === 400);
+        }
+        const latin1 = await request('POST', `${s4.base}/api/demos?wad=caf%C3%A9.wad`, minimalDemo(40));
+        const back = latin1.status === 201 ? await getWithin(JSON.parse(latin1.body).id, 1000) : { status: 'none' };
+        ok(`CONTROL: a Latin-1 WAD name is stored and round-trips (POST ${latin1.status}, GET ${back.status}, ` +
+           `x-demo-wad ${JSON.stringify(back.headers?.['x-demo-wad'])})`,
+           back.status === 200 && back.headers['x-demo-wad'] === 'café.wad');
+
+        const stalled = [];
+        let refusedNow = 0;
+        for (let i = 0; i < 20; i++) {
+            const sock = createConnection(s4.port, '127.0.0.1');
+            sock.on('error', () => {});
+            sock.on('data', d => { if (/^HTTP\/1\.1 503/.test(String(d))) refusedNow++; });
+            await new Promise(r => sock.once('connect', r));
+            sock.write(`POST /api/demos HTTP/1.1\r\nHost: x\r\nContent-Length: 1024\r\n\r\n`);
+            sock.write(Buffer.alloc(1000, i));
+            stalled.push(sock);
+        }
+        await sleep(500);
+        ok(`uploads in flight are capped: ${refusedNow} of 20 stalled uploads refused at once (want 4)`,
+           refusedNow === 4);
+        for (const sock of stalled) sock.destroy();
+        await sleep(200);
+        const after = await request('POST', `${s4.base}/api/demos`, minimalDemo(900));
+        ok(`the budget comes back when stalled uploads go away (POST ${after.status})`, after.status === 201);
+        ok('no crash across the wad-hint and in-flight suite', !s4.didCrash());
+    } finally {
+        s4.kill();
+    }
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n  ${passes} passed, ${failures} failed`);

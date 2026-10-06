@@ -144,6 +144,13 @@ function send(req, res, code, body, headers = {}, key = null) {
     res.end(data);
 }
 
+// Demo uploads are buffered whole before they are stored, so the bytes held
+// by uploads still arriving are capped across all of them: a thousand stalled
+// uploads would otherwise each hold up to PER_DEMO_CAP.
+const UPLOADING_CAP = 16 * PER_DEMO_CAP;
+let uploading = 0;
+const WAD_HINT = /^[\x20-\x7e\xa0-\xff]{0,64}$/;
+
 const LOG_REQ = !!process.env.LOG_REQUESTS;   // per-request log to stderr, for smoke tests
 
 const server = createServer((req, res) => {
@@ -163,19 +170,38 @@ const server = createServer((req, res) => {
     // GET  /api/demos/<sha256>     raw .lmp, x-demo-wad header; 404 if expired
     // GET  /api/demos/stats        counts and bytes only, never ids or content
     if (path === '/api/demos' && req.method === 'POST') {
+        // The WAD name is a hint stored beside the demo and returned in the
+        // x-demo-wad header, so it must be a value a header can carry:
+        // printable Latin-1 (a local WAD imported as "café.wad" included), no
+        // control characters.  One writeHead rejects would be stored with a
+        // 201 and then throw on every GET of that id, which never answered.
         const wad = url.searchParams.get('wad') ?? '';
+        if (!WAD_HINT.test(wad)) return send(req, res, 400, 'invalid wad name');
         const chunks = [];
-        let size = 0;
-        // drain an oversized body so the 413 goes out cleanly, without a RST
+        let size = 0, held = 0, refused = false;
+        const release = () => { uploading -= held; held = 0; chunks.length = 0; };
         req.on('data', chunk => {
             size += chunk.length;
-            if (size <= PER_DEMO_CAP) chunks.push(chunk);
+            // drain an oversized or refused body so the answer goes out
+            // cleanly, without a RST, holding none of it
+            if (refused || size > PER_DEMO_CAP) return release();
+            if (uploading + chunk.length > UPLOADING_CAP) {
+                refused = true;
+                release();
+                return send(req, res, 503, 'too many uploads in progress — try again shortly');
+            }
+            chunks.push(chunk);
+            held += chunk.length;
+            uploading += chunk.length;
         });
+        req.on('close', release);
         req.on('error', () => send(req, res, 400, 'read error'));
         req.on('end', () => {
+            const bytes = Buffer.concat(chunks);
+            release();
+            if (refused) return;
             if (size > PER_DEMO_CAP)
                 return send(req, res, 413, `demo exceeds ${PER_DEMO_CAP} byte cap`);
-            const bytes = Buffer.concat(chunks);
             let id;
             try { id = putDemo(bytes, wad); }
             catch (e) { return send(req, res, e.status ?? 500, e.message ?? 'store error'); }
