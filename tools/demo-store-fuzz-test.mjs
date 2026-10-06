@@ -9,7 +9,7 @@ import { root } from './lib/util.mjs';
 
 // Caps stated in server/demo-store.js — import as source-of-truth.
 // We read them dynamically so the test stays in sync with the policy file.
-const { PER_DEMO_CAP, TOTAL_QUOTA, TTL_MS, FRAGMENT_MAX } =
+const { PER_DEMO_CAP, TOTAL_QUOTA, TTL_MS, FRAGMENT_MAX, RECORD_OVERHEAD } =
     await import(join(root, 'server/demo-store.js'));
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -228,6 +228,70 @@ ok('server did not crash', !didCrash());
         ok('no crash across the reclamation suite', !s2.didCrash());
     } finally {
         s2.kill();
+    }
+}
+
+// ── 8. An upload costs the same whether or not the store is full ─────────────
+//
+// Eviction sorted the whole store by expiry on every upload past the quota,
+// and the TTL sweep scanned every record on every upload: O(n log n) per
+// upload on the one thread that also runs the tic relay.  Every record gets
+// the same TTL, so upload order IS expiry order, and both can take from the
+// front.  Driven through the real HTTP route with a quota of 20,000 tiny
+// demos: 1,000 uploads timed while the store is filling, 1,000 more timed
+// while every one of them evicts.  The bodies are distinct 4-byte counters.
+//
+// A dedup refresh must move a demo to the back of that order, or the oldest
+// position would evict a demo whose TTL was just renewed: X is re-uploaded
+// before the store wraps round to it, and must outlive Y, uploaded after it.
+{
+    const { Agent, request: httpRequest } = await import('node:http');
+    const N = 20_000;
+    const s3 = await spawnServer({ WEBDOOM_DEMO_QUOTA: String(N * (4 + RECORD_OVERHEAD)) });
+    const agent = new Agent({ keepAlive: true, maxSockets: 16 });
+    const post = body => new Promise((res, rej) => {
+        const r = httpRequest({ agent, method: 'POST', hostname: '127.0.0.1', port: s3.port,
+                                path: '/api/demos', headers: { 'content-length': body.length } }, rs => {
+            const c = []; rs.on('data', d => c.push(d));
+            rs.on('end', () => res({ status: rs.statusCode, id: JSON.parse(Buffer.concat(c) || '{}').id }));
+        });
+        r.on('error', rej); r.end(body);
+    });
+    let k = 0;
+    const counter = () => { const b = Buffer.alloc(4); b.writeUInt32LE(k++, 0); return b; };
+    const upload = async n => {                 // n uploads, 16 in flight; returns ms and the ids
+        const ids = [], t0 = performance.now();
+        for (let i = 0; i < n; i += 16)
+            for (const r of await Promise.all(Array.from({ length: Math.min(16, n - i) }, () => post(counter()))))
+                ids.push(r.status === 201 ? r.id : null);
+        return { ms: performance.now() - t0, ids };
+    };
+    const status = async id => (await request('GET', `${s3.base}/api/demos/${id}`)).status;
+    try {
+        const warm = await upload(1000);
+        const filling = await upload(1000);
+        const X = (await post(Buffer.from('X'))).id;
+        const Y = (await post(Buffer.from('Y'))).id;
+        await upload(N - 2002);                 // the store is now full
+        await post(Buffer.from('X'));           // refresh X: it moves to the back
+        const evicting = await upload(1000);
+        const tail = await upload(1500);        // wraps past X's old position
+        const st = JSON.parse((await request('GET', `${s3.base}/api/demos/stats`)).body);
+        const all201 = [warm, filling, evicting, tail].every(u => u.ids.every(Boolean));
+        ok(`every upload answered 201 (${k} uploads)`, all201);
+        console.log(`  ${filling.ms.toFixed(0)} ms for 1,000 uploads filling, ` +
+                    `${evicting.ms.toFixed(0)} ms for 1,000 that each evict`);
+        ok('an upload that evicts costs no more than one that does not (within 3x + 100 ms)',
+           evicting.ms < 3 * filling.ms + 100);
+        ok(`the store holds its quota of ${N} demos`, st.count === N);
+        ok('the oldest demo was evicted first', await status(warm.ids[0]) === 404);
+        ok('the newest demo is still served', await status(tail.ids.at(-1)) === 200);
+        ok('a refreshed demo outlives the one uploaded after it',
+           await status(X) === 200 && await status(Y) === 404);
+        ok('no crash across the eviction-cost suite', !s3.didCrash());
+    } finally {
+        agent.destroy();
+        s3.kill();
     }
 }
 

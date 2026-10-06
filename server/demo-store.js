@@ -35,7 +35,12 @@ export const FRAGMENT_MAX  = 6_000;               // raw bytes; above this, use 
 export const RECORD_OVERHEAD = 256;
 const costOf = rec => rec.bytes.length + RECORD_OVERHEAD;
 
-// Map<id, { bytes: Buffer, wad: string, expires: number }>
+// Map<id, { bytes: Buffer, wad: string, expires: number }>, kept in expiry
+// order: every record gets the same TTL, so upload order is expiry order, and
+// a dedup refresh deletes and re-inserts.  Expiry and eviction then take from
+// the front and stop at the first record they keep, instead of scanning or
+// sorting the whole store on every upload -- up to ~522k records at the
+// quota, on the thread that also runs the tic relay.
 const store = new Map();
 let usedBytes = 0;
 
@@ -43,29 +48,19 @@ function sha256hex(buf) {
     return createHash('sha256').update(buf).digest('hex');
 }
 
-// Remove all demos whose TTL has expired.
-//
-// This file used to carry a second store beside `store`: per-tic attestations
-// posted by tools/demo-verify.mjs through POST /api/demos/:id/verify.  Task A3
-// found that all three deletion sites here dropped the demo and left its
-// attestation behind, leaking up to 800 KB of trace per evicted demo.  The
-// endpoint had no product caller in client/ at all -- it was a CLI workflow
-// wired into the live multiplayer server -- so it is gone rather than fixed,
-// and demo-verify.mjs, which never opened a socket, is unaffected.
+// Remove the demos whose TTL has expired: the oldest, from the front.
 function gcExpired() {
     const now = Date.now();
     for (const [id, rec] of store) {
-        if (rec.expires <= now) {
-            usedBytes -= costOf(rec);
-            store.delete(id);
-        }
+        if (rec.expires > now) break;
+        usedBytes -= costOf(rec);
+        store.delete(id);
     }
 }
 
-// Evict oldest demos (by expiry time) until usedBytes + needed <= TOTAL_QUOTA.
+// Evict the oldest demos until usedBytes + needed <= TOTAL_QUOTA.
 function evictOldest(needed) {
-    const sorted = [...store.entries()].sort((a, b) => a[1].expires - b[1].expires);
-    for (const [id, rec] of sorted) {
+    for (const [id, rec] of store) {
         if (usedBytes + needed <= TOTAL_QUOTA) break;
         usedBytes -= costOf(rec);
         store.delete(id);
@@ -81,10 +76,14 @@ export function putDemo(bytes, wad = '') {
 
     gcExpired();
 
-    // Dedup: same content → same id, just extend TTL.
+    // Dedup: same content → same id, just extend TTL -- and move it to the
+    // back, where its new expiry belongs.
     const id = sha256hex(bytes);
-    if (store.has(id)) {
-        store.get(id).expires = Date.now() + TTL_MS;
+    const rec = store.get(id);
+    if (rec) {
+        rec.expires = Date.now() + TTL_MS;
+        store.delete(id);
+        store.set(id, rec);
         return id;
     }
 
