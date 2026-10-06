@@ -55,8 +55,10 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
+      # npm ci alone: it fails when package.json and package-lock.json
+      # disagree, and an `|| npm install` fallback would re-resolve and pass.
       - name: Install the server dependency
-        run: cd server && npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+        run: cd server && npm ci --no-audit --no-fund
 
       - name: Show what this runner has
         run: |
