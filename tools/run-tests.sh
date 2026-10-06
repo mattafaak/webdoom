@@ -605,6 +605,9 @@ leg hostile-lobby   -          "hostile server frames vs the lobby client"  -- n
 # nothing validated what is inside a lump, and a PWAD lump overrides the
 # IWAD's, so an imported WAD can hand the engine any bytes under a known name.
 leg wad-content-fuzz build,wad "hostile GENMIDI/MUS lump payloads (23.2)" -- node tools/wad-content-fuzz-test.mjs
+# Limits only a purpose-built map reaches (tools/lib/mapkit.mjs: one
+# subsector, no node builder), each through the loader and a demo.
+leg crafted-maps    build,wad  "purpose-built maps reach engine limits through a demo" -- node tools/fuzz/crafted-maps.mjs
 
 # ── browser suite ────────────────────────────────────────────────────────────
 # One shared server for the 19 legs that only need a page to load.  Started

@@ -606,20 +606,23 @@ PIT_AddLineIntercepts (line_t* ld)
     }
     
 	
+    // webdoom: an intercept past the last slot is dropped; vanilla wrote
+    // past the array on long traces
+    if (intercept_p == intercepts + MAXINTERCEPTS)
+	return true;
     intercept_p->frac = frac;
     intercept_p->isaline = true;
     intercept_p->d.line = ld;
-    if (intercept_p - intercepts < MAXINTERCEPTS-1)
-	intercept_p++;	// webdoom: clamp, vanilla overran on long traces
+    intercept_p++;
 
 #ifdef WEBDOOM_INVARIANTS
     // §16 invariant: intercepts[] bounds — intercept_p must never exceed the
-    // array end.  The clamp above prevents an advance past [MAXINTERCEPTS-1];
-    // this assert verifies the invariant holds at the call site.
-    // Not tautological: checks the actual pointer arithmetic, not the
+    // array end.  The check above drops an intercept once all MAXINTERCEPTS
+    // slots are full; this assert verifies the invariant holds at the call
+    // site.  Not tautological: checks the actual pointer arithmetic, not the
     // conditional that was just evaluated; also catches any future refactor
-    // that breaks the clamp.
-    DOOM_ASSERT(intercept_p - intercepts <= MAXINTERCEPTS - 1
+    // that breaks the check.
+    DOOM_ASSERT(intercept_p - intercepts <= MAXINTERCEPTS
 		&& "PIT_AddLineIntercepts: intercept_p overran intercepts[]");
 #endif
 
@@ -683,15 +686,17 @@ boolean PIT_AddThingIntercepts (mobj_t* thing)
     if (frac < 0)
 	return true;		// behind source
 
+    // webdoom: an intercept past the last slot is dropped (as for lines)
+    if (intercept_p == intercepts + MAXINTERCEPTS)
+	return true;
     intercept_p->frac = frac;
     intercept_p->isaline = false;
     intercept_p->d.thing = thing;
-    if (intercept_p - intercepts < MAXINTERCEPTS-1)
-	intercept_p++;	// webdoom: clamp, vanilla overran on long traces
+    intercept_p++;
 
 #ifdef WEBDOOM_INVARIANTS
     // §16 invariant: intercepts[] bounds (things path — same guard as lines).
-    DOOM_ASSERT(intercept_p - intercepts <= MAXINTERCEPTS - 1
+    DOOM_ASSERT(intercept_p - intercepts <= MAXINTERCEPTS
 		&& "PIT_AddThingIntercepts: intercept_p overran intercepts[]");
 #endif
 
