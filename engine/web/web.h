@@ -41,7 +41,7 @@ void web_net_setup (int player, int numplayers, int ingamemask);
 // sim has advanced), -1 = never valid (negative, INT_MAX, or already run).
 int web_net_bundle (int tic, ticcmd_t* cmds, byte* ingame, int fabmask);
 
-// out must point to at least 5 ints; it takes no size and cannot check.
+// out must point to at least 6 ints; it takes no size and cannot check.
 void web_demo_state (int* out);
 
 // out must hold nframes * 2 floats (interleaved stereo).  nframes is NOT

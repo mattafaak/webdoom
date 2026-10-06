@@ -277,16 +277,31 @@ EMSCRIPTEN_KEEPALIVE int web_ingame_mask (void)
 }
 
 //
-// Raw player-0 tuple for cross-validation against a reference port
-// (Chocolate Doom instrumented to print the same fields per tic).
+// The per-tic fingerprint a reference port prints for cross-validation
+// (Chocolate Doom with tools/choco-trace.patch): player 0, and a hash of what
+// player 0 does not show -- every sector's floor and ceiling height and the
+// number of thinkers -- computed identically on both sides.
 //
 EMSCRIPTEN_KEEPALIVE void web_demo_state (int* out)
 {
+    unsigned world = 0x811c9dc5u, count = 0;
+    thinker_t* th;
+    int i;
+
     out[0] = prndindex;
     out[1] = players[0].mo ? players[0].mo->x : 0;
     out[2] = players[0].mo ? players[0].mo->y : 0;
     out[3] = players[0].mo ? (int) players[0].mo->angle : 0;
     out[4] = players[0].health;
+    for (i = 0; i < numsectors; i++)
+    {
+        world = (world ^ (unsigned) sectors[i].floorheight) * 0x01000193u;
+        world = (world ^ (unsigned) sectors[i].ceilingheight) * 0x01000193u;
+    }
+    if (thinkercap.next)
+        for (th = thinkercap.next; th != &thinkercap; th = th->next)
+            count++;
+    out[5] = (int) ((world ^ count) * 0x01000193u);
 }
 
 //

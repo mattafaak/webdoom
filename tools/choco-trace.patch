@@ -1,25 +1,42 @@
 diff --git a/src/doom/g_game.c b/src/doom/g_game.c
-index 4258712..6fae857 100644
+index 4258712..6aa58d3 100644
 --- a/src/doom/g_game.c
 +++ b/src/doom/g_game.c
-@@ -907,6 +907,16 @@ boolean G_Responder (event_t* ev)
+@@ -907,6 +907,33 @@ boolean G_Responder (event_t* ev)
  // G_Ticker
  // Make ticcmd_ts for the players.
  //
-+// webdoom demo-compat cross-validation: per-tic fingerprint on stderr
++// webdoom demo-compat cross-validation: per-tic fingerprint on stderr.  The
++// last field hashes what player 0 does not show: every sector's floor and
++// ceiling height and the number of thinkers (webdoom's web_demo_state out[5]).
++#include "r_state.h"
 +extern int prndindex;
 +static void WebdoomTrace (void)
 +{
 +    if (demoplayback && gamestate == GS_LEVEL && players[0].mo)
-+        fprintf(stderr, "T %d %d %d %u %d\n", prndindex,
++    {
++        unsigned world = 0x811c9dc5u, count = 0;
++        thinker_t *th;
++        int i;
++
++        for (i = 0; i < numsectors; i++)
++        {
++            world = (world ^ (unsigned) sectors[i].floorheight) * 0x01000193u;
++            world = (world ^ (unsigned) sectors[i].ceilingheight) * 0x01000193u;
++        }
++        for (th = thinkercap.next; th != &thinkercap; th = th->next)
++            count++;
++        world = (world ^ count) * 0x01000193u;
++        fprintf(stderr, "T %d %d %d %u %d %u\n", prndindex,
 +                players[0].mo->x, players[0].mo->y,
-+                (unsigned) players[0].mo->angle, players[0].health);
++                (unsigned) players[0].mo->angle, players[0].health, world);
++    }
 +}
 +
  void G_Ticker (void) 
  { 
      int		i;
-@@ -1078,6 +1088,7 @@ void G_Ticker (void)
+@@ -1078,6 +1105,7 @@ void G_Ticker (void)
  	D_PageTicker (); 
  	break;
      }        

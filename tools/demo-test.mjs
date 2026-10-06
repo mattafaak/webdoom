@@ -545,7 +545,7 @@ for (const [wad, engineName, demos] of MATRIX) {
 
         const trace = [];
         const raw = [];
-        const rawBuf = chocoBin ? doom._malloc(20) : 0;
+        const rawBuf = chocoBin ? doom._malloc(24) : 0;
         try {
             doom.callMain(['-timedemo', demo, '-nodraw']);
             let lastTic = -1;
@@ -556,8 +556,8 @@ for (const [wad, engineName, demos] of MATRIX) {
                     trace.push(doom._web_state_hash() >>> 0);
                     if (chocoBin) {
                         doom._web_demo_state(rawBuf);
-                        const v = doom.HEAP32.subarray(rawBuf >> 2, (rawBuf >> 2) + 5);
-                        raw.push(`${v[0]} ${v[1]} ${v[2]} ${v[3] >>> 0} ${v[4]}`);
+                        const v = doom.HEAP32.subarray(rawBuf >> 2, (rawBuf >> 2) + 6);
+                        raw.push(`${v[0]} ${v[1]} ${v[2]} ${v[3] >>> 0} ${v[4]} ${v[5] >>> 0}`);
                     }
                     lastTic = tic;
                 }
