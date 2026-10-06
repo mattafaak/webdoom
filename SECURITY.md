@@ -27,8 +27,12 @@ Each of these was a real defect with a reproducer before it was a gate.
 | A hostile SERVER against the lobby client | `hostile-lobby` |
 | A hostile server's frames into the engine | `hostile-server` |
 | Adversarial HTTP paths, and a hostile data directory | `http-fuzz` |
-| Hostile WAD lump content (GENMIDI, MUS) | `wad-content-fuzz` |
-| Adversarial maps under ASan/UBSan | `adversarial-map`, `native-asan` |
+| Hostile WAD lump content (GENMIDI, MUS, TEXTURE1) | `wad-content-fuzz` |
+| Adversarial maps: bad geometry indices refused at load, and no sanitizer report | `adversarial-map`, `native-asan` |
+| Maps built to reach engine limits (intercepts, solidsegs, openings, missing sprites and starts) | `crafted-maps` |
+| A savegame from another WAD, cut short or edited | `save-compat` |
+| The web layer's entry points (key codes, argv, the state hash) | `hostile-calls` |
+| An imported WAD's name as an engine argument | `browser-wadimport` |
 | Mutated demos, wasm vs native | `fuzz-diff` |
 | Demo-store caps, quotas and ids | `demo-store-fuzz` |
 | localStorage and the rebind UI as user input | `browser-options` |
@@ -45,7 +49,7 @@ Saying so plainly is part of the contract.
   server sends only that socket a token, and the game channel binds the
   seat only with it.
 - **There is no transport encryption.** Plain HTTP on a LAN is the
-  primary environment (`spec.md` §"Deployment reality: insecure origins")
+  primary environment (`spec.md`, Insecure origins)
   and the client degrades loudly rather than silently there.
 - **Do not expose the server to the public internet.** Nothing here is
   written for that, the caps are sized for a LAN table, and the demo

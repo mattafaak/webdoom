@@ -1,22 +1,38 @@
 # webdoom — working notes for automated contributors
 
+The rules that keep a change honest here, and the traps that have actually
+cost runs. `CONTRIBUTING.md` is the short human version; `spec.md` is the
+contract.
+
+## Where to work
+
+- **The main checkout serves real players.** `webdoom.service` runs
+  `node server/serve.js` out of the main checkout on :8666, and it serves
+  `build/` and `client/` from disk. Build or branch there and LAN players get
+  it. Work in a worktree (`git worktree add ../webdoom-x -b x`; symlink
+  `wads/lib`, `wads/manifest.json` and `wads/zips`; run `npm ci` in
+  `server/`). Never touch port 8666, and deploy only with the owner
+  (`tools/deploy.sh`; `--check` reports drift and changes nothing).
+- **After any engine, Makefile or engine-flag change, rebuild everything the
+  suite reads** before trusting a leg: `source tools/emsdk-env.sh && bash
+  tools/lint.sh --fix --c-only && make -C engine && bash tools/build-toggle.sh
+  WEBDOOM_INVARIANTS build-invariants && make -C tools/native-sanitize && make
+  -C tools/freestanding`. The `freshness` leg fails on a stale artifact;
+  `n64-demos` builds its own ROMs.
+
 ## Verifying a gate: never read `$?` after a pipe
 
-This project's test gates are only meaningful if their exit codes are read
-correctly, and the single most repeated mistake here — **six times** — is
-reading an exit status that belongs to the wrong process:
+The most repeated mistake here is reading an exit status that belongs to the
+wrong process:
 
 ```bash
 node tools/demo-test.mjs | tail -1     # the gate FAILS
 rc=$?                                  # rc == 0  — that is tail's status
 ```
 
-A red gate gets reported green, and the regression lands. It is not a
-carelessness problem; the command and the status check are two separate steps,
-so there is always an opportunity to check the wrong one.
-
-**Use `tools/gate.sh`.** It runs the command outside any pipeline, so the code
-it prints is exact, and it prints that code as part of the same output:
+**Use `tools/gate.sh`.** It runs the command outside any pipeline, trims the
+output (widening the tail on failure), prints the exact code as part of the
+same output, and exits with it:
 
 ```bash
 bash tools/gate.sh sim -- node tools/demo-test.mjs
@@ -24,88 +40,77 @@ bash tools/gate.sh sim -- node tools/demo-test.mjs
 #   GATE sim rc=0
 ```
 
-It trims output for you (that is why people reach for `| tail` to begin with),
-widens the tail automatically on failure, and exits with the real code so it
-still composes with `set -e`, `&&`, and CI.
+A shell script that does pipe must set `pipefail`;
+`tools/check-pipe-exit.mjs` enforces it from `tools/lint.sh`.
 
-If you do write a pipeline in a shell script, the script **must** enable
-`pipefail` — with it, `cmd | tail` correctly reports `cmd`'s failure.
-`tools/check-pipe-exit.mjs` enforces this and runs inside `tools/lint.sh`.
+## Quote the count
 
-## Gates can pass vacuously — quote the count
-
-A gate that verified nothing exits 0. A WAD-less checkout once skipped all 13
-demos and still printed `PASS`, so a broken renderer change reached review with
-a clean-looking gate table. Golden legs now print how many demos they actually
-verified:
-
-```
-PASS — all render goldens pixel-identical (13 demos)
-```
-
-When reporting a gate as green, quote that line including the count. "rc=0" on
-its own is not evidence that anything ran.
-
-## Two related traps worth knowing
+A gate that verified nothing exits 0. Golden legs print how many demos they
+verified (`PASS — all render goldens pixel-identical (13 demos)`). Quote that
+line, count included; "rc=0" alone is not evidence that anything ran.
 
 - **Unknown flags are ignored.** `demo-test.mjs` parses with
-  `process.argv.includes(...)`, so a typo'd flag silently runs a *different*
-  suite and passes. Copy gate invocations verbatim from `tools/run-tests.sh`
-  and confirm the mode tag in the output (`[low-detail]`, or none for the
-  vanilla path) matches what you intended.
+  `process.argv.includes(...)`, so a typo'd flag silently runs a different
+  suite and passes. Copy invocations from `tools/run-tests.sh` and check the
+  mode tag in the output (`[low-detail]`, or none for the vanilla path).
 - **Measurements must be symmetric.** A before/after comparison with different
-  flags, demos, or build settings on each side manufactures its own result.
-  State the build flags, the demo, and the host on both sides.
+  flags, demos or build settings on each side manufactures its own result.
+  State the build, the demo and the host on both sides.
+
+## The engine
+
+- **Tic-identity is the contract.** A change to the simulation keeps all 13
+  sim and render goldens bit-identical. Never regold to make a change pass. A
+  regold needs an external reference: the Chocolate Doom cross-check
+  (`tools/build-choco-reference.sh`, `tools/choco-trace.patch`, `node
+  tools/demo-test.mjs --cross <binary>`), compared on every demo before the
+  golden moves.
+- **A comment-only edit can change `doom.wasm`.** Vanilla's `Z_ChangeTag`
+  macro puts `__FILE__:__LINE__` in its error string, so a comment that adds
+  or removes lines above a `Z_ChangeTag` call moves a constant. Check the
+  sha256 of `build/doom.wasm` after any edit you believe is comment-only.
+- **No `printf` in `engine/web`.** stdio's buffer is written below the
+  tic-array base, and `hostile-server` reports it. Diagnostics go through
+  `I_Error` or an `EM_JS` call into JS.
+- **Saves hold raw pointers.** A savegame's bytes change with heap layout, so
+  compare what a save loads to (`save-compat`), never its bytes. Saves and
+  maps are untrusted input: every index read from one is checked before use.
+- **Harnesses that step the engine turn drawing off.** `NetUpdate` runs inside
+  the renderer, so with drawing on, single tics and live input, the sim
+  depends on wall-clock time. Use `_web_set_nodraw(1)`, and `_web_wipe_skip()`
+  for the melt wipe, which is paced by wall time.
 
 ## Three ways a gate you just wrote can lie to you
 
-All three were found by writing gates in round 5, not by theory. Each cost a
-run that read green or read the wrong colour entirely.
+- **Grade vacuity on the quantity that only rises.** After a clean quit a net
+  leak count is supposed to be zero, so "the net count never moved" cannot be
+  the did-not-run condition. Count gross creations for vacuity, net for the
+  leak. Alarming on correct behaviour is a defect too.
+- **An `uncaughtException` handler lets a test exit 0 after giving up.** Module
+  evaluation aborts where it threw, the event loop drains, and node exits 0.
+  Make the summary the only sanctioned exit: `tools/lib/report.mjs` fails from
+  `process.on('exit')` when `summary()` never ran, and `check-test-exits.mjs`
+  (from `lint.sh`) flags a handler that does not.
+- **One case can disarm the next.** A malformed frame that throws out of
+  `ws.onmessage` leaves that socket delivering nothing, so every later
+  assertion on the same socket passes by observing nothing. Give each hostile
+  case its own connection, process or tree, and assert afterwards that the
+  subject is still alive, not merely quiet.
 
-- **Grade vacuity on the quantity that only rises.** The teardown leg's new GL
-  counter first refused any run where the net count "never moved" — but after a
-  clean quit the net is *supposed* to be zero, so that guard would have failed
-  precisely the runs where the fix works. Net is the pass condition; it cannot
-  also be the did-not-run condition. Count gross creations for vacuity, net for
-  the leak. Alarming on correct behaviour is a defect too.
-- **An `uncaughtException` handler lets a test exit 0 after giving up.** With
-  one registered — which you need if you are *observing* throws — an uncaught
-  error no longer kills the process: module evaluation aborts where it threw,
-  the event loop drains, and node exits **0**. `hostile-lobby-test.mjs` printed
-  14 FAIL lines, died before its own summary, and exited zero. Make the summary
-  the only sanctioned exit: set a flag when it prints, and fail from
-  `process.on('exit')` if it did not.
-- **One case can disarm the next.** That same test reused a single socket and
-  read 24 PASS / 1 FAIL against the broken client, which looked like "only the
-  first frame is a problem". It was not: the first malformed frame throws out of
-  `ws.onmessage`, after which that socket delivers nothing, so every later
-  assertion passed by observing *nothing*. Give each hostile case its own
-  connection, process or tree — and assert afterwards that the subject is still
-  alive, not merely quiet.
-
-And one about the thing being gated rather than the gate: **a fix can ship into
-a branch that cannot run it.** Task 23.7b's GL `dispose()` sat in
-`createRenderer2D`, whose scope has no `gl`, so the WebGL2 path — the one every
-browser takes — had no `dispose` at all, and `h?.dispose?.()` skipped it in
-silence. Optional-call and a swallowing `catch` will hide that indefinitely. If
-a fix is worth a comment saying what it reclaims, it is worth a gate that counts
+And one about the thing being gated: **a fix can ship into a branch that
+cannot run it.** An optional call (`h?.dispose?.()`) or a swallowing `catch`
+hides a method that does not exist. Call the method the object has, and if a
+fix is worth a comment saying what it reclaims, it is worth a gate that counts
 the thing reclaimed.
 
 ## A gate can test the layer next to the hole
 
-Round 12 found three hostile-input gates that stayed green while the defect
-they existed for shipped. Each ran, and each verified something real, one call
-away from where the attacker enters:
-
-- `hostile-server-test.mjs` called `web_net_setup`'s C export directly. A
-  hostile `launch` reaches `client/js/net.js` first and corrupted the heap there.
-- `browser-rafdeath-test.mjs` threw from the one statement inside the frame
-  loop's `try`. The three statements after the `catch` were the unguarded ones.
-- `hostile-lobby-test.mjs` hardened `net.js` and never registered `lobby.js`'s
-  own handlers, which held the unguarded dereferences.
-
-So ask of every hostile-input gate: does it enter through the attacker's door?
-Move the assertion to the real boundary and red-proof it there. Testing both
-layers is fine; testing only the inner one reports safety nobody checked. No
-survey for this shape has been run (`tools/vacuity-census.mjs` grades the other
-rules), so all three were found by tracing a bug.
+A hostile-input gate can stay green while its defect ships, because it
+verifies something real one call away from where the attacker enters: a C
+export called directly while the hostile frame reaches `client/js/net.js`
+first; a throw injected into the one statement inside a `try` while the
+statements after the `catch` are unguarded; a hardened `net.js` while
+`lobby.js`'s own handlers hold the unguarded dereferences. Ask of every
+hostile-input gate whether it enters through the attacker's door, and
+red-proof it there. Testing both layers is fine; testing only the inner one
+reports safety nobody checked.

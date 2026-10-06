@@ -7,10 +7,9 @@ are what keep it small.
 
 1. `bash tools/run-tests.sh` before you open anything. It needs a WAD
    library, a built engine and Chrome. Use `--jobs 6`: on a 24-thread host
-   the whole thing takes about ten minutes, most of it the N64 leg, and a
-   sweep of 3, 6 and 10 jobs gave identical verdicts with the curve
-   flattening at 6. On a host with fewer cores, try 3. The runner prints
-   its own time at the end.
+   the whole thing takes about ten minutes, most of it the N64 leg, and
+   verdicts do not depend on the job count. On a host with fewer cores, try
+   3. The runner prints its own time at the end.
 2. A change to the simulation must be **tic-identical**: 13/13 demo
    goldens, byte for byte. If it is not, it is wrong, however good it
    looks.
@@ -34,12 +33,15 @@ failure, which is what you want before claiming a clean run.
 
 **Accuracy is non-negotiable.** `spec.md` tenet 1. Any change that moves a
 single `P_Random` call is a regression. `sim-goldens` is the gate and it
-is not negotiable either — never regold a golden to make a change pass.
-`docs/optimization-ledger.md` records a regold that encoded a real bug.
+is not negotiable either: never regold a golden to make a change pass. A
+golden that must move is checked first against an instrumented Chocolate
+Doom (`node tools/demo-test.mjs --cross <binary>`), because a regold checked
+only against itself can make a real bug permanent.
 
-**Never read `$?` after a pipe.** This project's single most repeated
-mistake, six times. Use `bash tools/gate.sh <name> -- <cmd>`; see
-`CLAUDE.md`, which exists for contributors as much as for agents.
+**Never read `$?` after a pipe.** It is this project's most repeated
+mistake. Use `bash tools/gate.sh <name> -- <cmd>`; `CLAUDE.md` has the
+details and the other traps, and is written for contributors as much as for
+agents.
 
 **Quote the count, not `rc=0`.** A gate that verified nothing exits 0. Say
 "13 demos", "29 assertions", "47 fuzz cases" — the number is the evidence.
@@ -59,10 +61,9 @@ vague is not.
 
 ## What will be declined
 
-- Gameplay-visible changes beyond vanilla (render-side is fine, and
-  opt-in render-side is how freelook landed — though note widescreen came in
-  the same way and was removed again in 2026-09-12 for not being used).
-- Safari/iOS support — an explicit non-goal with a decision record.
+- Gameplay-visible changes beyond vanilla. Render-side and opt-in is fine;
+  that is how freelook ships.
+- Safari/iOS support: an explicit non-goal (`spec.md`, Browsers).
 - A new dependency, unless it replaces more code than it adds.
 - Anything that needs game data to be redistributed.
 

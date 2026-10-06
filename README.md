@@ -6,7 +6,7 @@ source. Under 300 KB of wasm, zero client install, zero-config multiplayer.
 
 - Runs in stock Chrome and Firefox (WASM + WebGL2 + WebAudio), and in Edge,
   which is Chromium and is therefore not separately tested (`spec.md`,
-  Browser matrix)
+  Browsers)
 - Uncapped framerate with 35 Hz-exact game logic (Crispy-style
   interpolation; "vanilla mode" toggle under OPTIONS on the launcher menu)
 - Modern controls: pointer-lock mouse, WASD, rebindable keys, analog
@@ -29,9 +29,7 @@ source. Under 300 KB of wasm, zero client install, zero-config multiplayer.
 ![webdoom running Ultimate Doom E1M1 in Chrome](docs/screenshots/e1m1-320x200.png)
 
 *Ultimate Doom E1M1, captured from a headless Chrome by `browser-sp`. The
-framebuffer is DOOM's own 320×200, scaled 4:3 with nearest-neighbour — a
-widescreen mode existed between 2026-07 and 2026-09 and was removed; see
-spec.md §"Widescreen view — REVERSED".*
+framebuffer is DOOM's own 320×200, scaled 4:3 with nearest-neighbour.*
 
 Contributing: [CONTRIBUTING.md](CONTRIBUTING.md) — the tic-identity rule
 is the one that will bite. Security model, and what is deliberately not
@@ -87,10 +85,11 @@ that table, and `--require-complete` turns any skip into a failure.
 
 **What CI covers.** Game data is not distributable, so the GitHub runner has no
 IWADs and runs the `--quick` tier: lint, the archaeology reproducers, the
-precache, wire and contract checks, the doc-link check, and the three fuzz
-suites. Everything that needs a WAD, a built engine or a browser (the sim and
-render goldens, netplay, the ASan and cross-architecture legs, the browser legs)
-runs locally and says so. The workflow prints the list it did not cover.
+doc-link check, the service-worker, wire, registry and contract checks, the
+three server fuzz suites, and the deploy and service-unit checks. Everything
+that needs a WAD, a built engine or a browser (the sim and render goldens,
+netplay, the ASan and cross-architecture legs, the browser legs) runs locally
+and says so. The workflow prints the list it did not cover.
 
 Three legs deserve a sentence the registry cannot give them:
 

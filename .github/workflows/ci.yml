@@ -115,11 +115,12 @@ jobs:
             echo
             echo '- 13 sim goldens, and 2 render golden families (26 more comparisons)'
             echo '- the armed sim-invariance build and its freelook/interpolation leg'
-            echo '- netplay 2p/4p, drop-in, spectator, churn, mixed-width'
-            echo '- the differential fuzzer and the adversarial ASan map gate'
-            echo '- the freestanding and 32-bit-ARM cross-architecture legs'
+            echo '- netplay 2p/4p, drop-in, spectator, churn, a hidden tab, launch arguments'
+            echo '- the differential fuzzer, the adversarial and crafted map gates, hostile'
+            echo '  lump content, hostile web-layer calls and hostile server frames'
+            echo '- the freestanding, ARM32 and big-endian cross-architecture legs'
             echo '- the browser legs and the browser-pipeline baseline'
-            echo '- the size budget, savegame compatibility, and the N64 leg'
+            echo '- the size budget, savegame compatibility, demo replay, and the N64 leg'
             echo '- the WAD-reading archaeology reproducers (the leg reports this itself)'
             echo '- the two build-output paths in sw-precache (/engine/doom.js, doom.wasm)'
             echo
