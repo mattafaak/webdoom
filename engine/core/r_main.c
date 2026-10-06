@@ -859,15 +859,15 @@ fixed_t		fractic = FRACUNIT;
 //
 // Frame interpolation cannot be exercised through -timedemo at all: that path
 // sets singletics, whose branch in D_DoomFrame never calls run_tic(), and
-// run_tic() is the ONLY writer of web_lastticms (engine/web/d_net.c:289).
+// run_tic() is the ONLY writer of web_lastticms (engine/web/d_net.c).
 // I_GetTimeFrac() therefore measures against a stale timestamp, f > 1.0 clamps,
 // and fractic saturates at FRACUNIT -- bit-identical to smoothrender = false.
 // Every golden family is blind to interpolation for that reason, and a gate
 // that merely sets smoothrender = 1 proves nothing (measured: --smooth alone
 // changed 0 of 1710 frames).  Pinning fractic to an intermediate value makes
 // the lerp both ACTIVE and deterministic, which is what the sim-invariance
-// claim actually needs.  Invariants build only: a new global in the shipping
-// build would move __heap_base and turn perf-009 red.
+// claim actually needs.  Invariants build only: the shipping build carries no
+// global it does not use.
 int		doom_fractic_override = -1;
 #endif
 
