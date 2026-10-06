@@ -6,8 +6,6 @@ behind the current state live in `spec.md` and `docs/`.
 
 ## Client
 
-- A service-worker update drops the cached API responses until the next online
-  visit.
 - On an insecure origin, the IndexedDB WAD cache never prunes a WAD the server
   has replaced.
 - `idb.js` leaks a connection when `onblocked` fires and the open succeeds

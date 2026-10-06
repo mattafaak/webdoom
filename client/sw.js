@@ -3,6 +3,13 @@
 // loads are instant and single player works offline once a WAD is cached.
 const SHELL = 'webdoom-shell-v18'; // bump whenever a shell file changes
 const WADS = 'webdoom-wads-v1';
+// What the launcher reads before it can show a menu (the game list, the font
+// and palette, the box art) lives apart from the shell, because activate drops
+// every older shell cache: kept there, an update leaves the next offline visit
+// with no game list.  Demos and the live status are not needed to start, and a
+// demo is one entry per link, so they stay with the shell and go with it.
+const API = 'webdoom-api-v1';
+const LAUNCHER_API = /^\/api\/(wads|ui-assets|thumb\/)/;
 
 // The app shell, one entry per file.  tools/check-sw-precache.mjs parses THIS
 // array against the real import graph, so it is the list, not a copy of it.
@@ -35,8 +42,21 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
     e.waitUntil((async () => {
-        for (const k of await caches.keys())
-            if (k.startsWith('webdoom-shell-') && k !== SHELL) await caches.delete(k);
+        for (const k of await caches.keys()) {
+            if (!k.startsWith('webdoom-shell-') || k === SHELL) continue;
+            // a worker older than the API cache kept the launcher's reads in
+            // its shell; carry them over rather than lose them with it, and
+            // never let a failed copy keep the old shell alive
+            try {
+                const old = await caches.open(k), api = await caches.open(API);
+                for (const req of await old.keys())
+                    if (LAUNCHER_API.test(new URL(req.url).pathname) && !await api.match(req))
+                        await api.put(req, await old.match(req));
+            } catch (err) {
+                console.warn(`webdoom sw: could not carry the launcher's reads out of ${k}: ${err?.message ?? err}`);
+            }
+            await caches.delete(k);
+        }
         await self.clients.claim();
     })());
 });
@@ -79,12 +99,13 @@ self.addEventListener('fetch', e => {
     }
 
     // shell: network-first (dev-friendly), cache fallback (offline SP)
+    const store = LAUNCHER_API.test(url.pathname) ? API : SHELL;
     e.respondWith(
         fetch(e.request).then(res => {
             // best-effort: a rejected cache write (quota, opaque response) must
             // not become an unhandled rejection in the worker
             if (res.ok)
-                caches.open(SHELL)
+                caches.open(store)
                     .then(c => c.put(e.request, res.clone()))
                     .catch(err => console.warn(`webdoom sw: could not cache ${e.request.url}: ${err?.message ?? err}`));
             return res.clone();
