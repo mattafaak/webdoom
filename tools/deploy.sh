@@ -9,8 +9,11 @@
 # a round-9 server -- so the LAN launcher fetched /api/thumb (404) and got no
 # compression, and the only symptom was box art that never appeared.
 #
-# A restart drops anyone mid-game, so this refuses while a game is live and
-# says how many players.  --force overrides.
+# A restart drops everyone connected, so this refuses while anyone is -- in a
+# game, in the lobby, or spectating -- and says how many.  --force overrides.
+# It also refuses unless the unit serves THIS checkout: the unit runs
+# `node server/serve.js` from its own WorkingDirectory, so run from any other
+# tree every step below would gate and stamp this one and restart the other.
 #
 # usage:
 #   bash tools/deploy.sh            # gate, then restart if nobody is playing
@@ -43,13 +46,23 @@ if ! systemctl is-active --quiet "$UNIT"; then
     echo "  start it with: sudo systemctl start $UNIT"
     exit 1
 fi
+SERVED="$(systemctl show -p WorkingDirectory --value "$UNIT" 2>/dev/null)"
+SERVED_REAL=""
+[ -n "$SERVED" ] && SERVED_REAL="$(cd "$SERVED" 2>/dev/null && pwd -P)"
+if [ "$SERVED_REAL" != "$(pwd -P)" ]; then
+    echo "deploy: REFUSING — $UNIT serves WorkingDirectory=${SERVED:-(unset)}, not this tree ($(pwd -P))"
+    echo "  run tools/deploy.sh from that checkout, or point the unit at this one"
+    exit 1
+fi
 STARTED="$(systemctl show -p ActiveEnterTimestamp --value "$UNIT")"
 STARTED_S="$(date -d "$STARTED" +%s 2>/dev/null || echo 0)"
-# The newest thing the RUNNING process would have read at startup.
-NEWEST_S="$(find server -type f -name '*.js' -printf '%T@\n' 2>/dev/null | sort -rn | head -1 | cut -d. -f1)"
+# The newest thing the RUNNING process would have read at startup: its code,
+# and the package files that decide which `ws` it loaded.
+NEWEST_S="$(find server -type f \( -name '*.js' -o -name package.json -o -name package-lock.json \) \
+            -printf '%T@\n' 2>/dev/null | sort -rn | head -1 | cut -d. -f1)"
 NEWEST_S="${NEWEST_S:-0}"
 if [ "$NEWEST_S" -gt "$STARTED_S" ]; then
-    say "STALE: server/ was modified $(( (NEWEST_S - STARTED_S) / 60 )) min after the service started"
+    say "STALE: server/ (code or package files) was modified $(( (NEWEST_S - STARTED_S) / 60 )) min after the service started"
     STALE=1
 else
     say "fresh: the running service is newer than everything in server/"
@@ -59,13 +72,14 @@ say "unit started: $STARTED"
 
 # ── 2. who would a restart drop ──────────────────────────────────────────────
 STATUS="$(curl -fsS --max-time 5 "$BASE/api/status" 2>/dev/null)"
+count () { local n; n="$(printf '%s' "$STATUS" | grep -oE "\"$1\":[0-9]+" | cut -d: -f2)"; echo "${n:-0}"; }
+PLAYERS="$(count players)"; LOBBY="$(count lobby)"; SPECTATORS="$(count spectators)"
+CONNECTED=$((PLAYERS + LOBBY + SPECTATORS))
 if [ -z "$STATUS" ]; then
     say "WARNING: $BASE/api/status did not answer — this build predates it, or the server is wedged"
-    PLAYERS=0
 else
-    PLAYERS="$(printf '%s' "$STATUS" | grep -oE '"players":[0-9]+' | cut -d: -f2)"
-    PLAYERS="${PLAYERS:-0}"
     say "live: $STATUS"
+    say "a restart now would drop: $PLAYERS in a game, $LOBBY in the lobby, $SPECTATORS spectating"
 fi
 
 if [ "$CHECK" = "1" ]; then
@@ -74,9 +88,9 @@ if [ "$CHECK" = "1" ]; then
     exit 0
 fi
 
-if [ "$PLAYERS" -gt 0 ] && [ "$FORCE" = "0" ]; then
-    echo "deploy: REFUSING — $PLAYERS player(s) are in a game right now."
-    echo "  A restart drops them mid-level.  Re-run with --force when the LAN is idle."
+if [ "$CONNECTED" -gt 0 ] && [ "$FORCE" = "0" ]; then
+    echo "deploy: REFUSING — $PLAYERS in a game, $LOBBY in the lobby, $SPECTATORS spectating right now."
+    echo "  A restart drops every one of them.  Re-run with --force when the LAN is idle."
     exit 1
 fi
 

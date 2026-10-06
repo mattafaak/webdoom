@@ -469,6 +469,10 @@ leg menu-reachable  -    "no GAME_ORDER entry is unreachable"         -- node to
 # `systemd-analyze verify` alone would be a quiet exit-0: on a good unit it
 # exits 0 and prints NOTHING, so it cannot tell a sound unit from a dead check.
 leg service-file    systemd  "webdoom.service is a ready unit (rme-009)" -- bash tools/service-check.sh
+# deploy.sh restarts whatever tree the unit's WorkingDirectory names, so it
+# must refuse to be run from any other; driven through --check only, against a
+# stub systemctl.
+leg deploy-check    -        "deploy.sh --check: right tree, package files, everyone connected" -- node tools/deploy-check-test.mjs
 
 if [ "$TIER" = "quick" ]; then
     QUICK_ONLY=1
