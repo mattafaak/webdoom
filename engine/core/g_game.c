@@ -1540,19 +1540,17 @@ void G_ReadDemoTiccmd (ticcmd_t* cmd)
 
 void G_WriteDemoTiccmd (ticcmd_t* cmd) 
 { 
-    if (gamekeydown['q'])           // press q to end demo recording 
-	G_CheckDemoStatus (); 
+    // webdoom: a recording ends when JS calls web_demo_stop.  Vanilla ended it
+    // on the 'q' key and on a full buffer through G_CheckDemoStatus, whose
+    // I_Error ends the browser session and loses the recording; a full buffer
+    // now keeps what it holds, with room left for the marker.
+    if (demo_p > demoend - 16)
+	return;
     *demo_p++ = cmd->forwardmove; 
     *demo_p++ = cmd->sidemove; 
     *demo_p++ = (cmd->angleturn+128)>>8; 
     *demo_p++ = cmd->buttons; 
     demo_p -= 4; 
-    if (demo_p > demoend - 16)
-    {
-	// no more space 
-	G_CheckDemoStatus (); 
-	return; 
-    } 
 	
     G_ReadDemoTiccmd (cmd);         // make SURE it is exactly the same 
 } 

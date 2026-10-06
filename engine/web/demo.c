@@ -139,8 +139,8 @@ EMSCRIPTEN_KEEPALIVE void web_set_singletics (int on)
 
 // Append the marker and stop; returns the .lmp byte count (0 if not
 // recording).  Not G_CheckDemoStatus, whose I_Error would abort the runtime.
-// A recording that fills the 0x20000-byte buffer (15.6 min) ends in
-// G_WriteDemoTiccmd's own I_Error instead -- fail-soft, docs/formats.md 4.2.
+// A recording that fills its buffer (0x20000 bytes, 15.6 min) keeps the tics
+// it has, and this still ends it.
 EMSCRIPTEN_KEEPALIVE int web_demo_stop (void)
 {
     if (!demorecording)

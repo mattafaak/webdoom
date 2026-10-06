@@ -11,7 +11,8 @@
 //   3. a demo recorded with -fast survives repeated seeks (run in a child
 //      process, so a hang is a failure rather than a stuck suite);
 //   4. a two-player demo replays as vanilla replays it (-timedemo of the
-//      same bytes from a PWAD), which needs netgame set for a net demo.
+//      same bytes from a PWAD), which needs netgame set for a net demo;
+//   5. a recording survives the Q key and a full buffer, and replays.
 //
 // usage: node tools/demo-replay-test.mjs [--build-dir DIR]
 import { spawnSync } from 'node:child_process';
@@ -172,5 +173,34 @@ for (const [file, engineName, names] of IWADS) {
     check(`a two-player demo replays as vanilla does (${same} of ${T} tics identical)`, same === T && viaTimedemo.length === T);
 }
 
+// 5. recording: Q is an ordinary key, and a full buffer keeps what it holds.
+//    Vanilla ended a recording on either through I_Error, which ends the
+//    browser session and loses the recording.
+for (const [label, extra, press] of [['Q (and iddqd) while recording', [], true],
+                                      ['a full recording buffer (-maxdemo 1)', ['-maxdemo', '1'], false]]) {
+    const state = { error: null };
+    const wad = loadWad('doom.wad');
+    const rec = await bootEngine(BUILD, [['doomu.wad', wad]], { onDoomError: m => { state.error = m; } });
+    try {
+        rec.callMain(['-warp', '1', '1', '-skill', '3', '-record', 'webdemo', ...extra]);
+        rec._web_set_singletics(1);
+        rec._web_set_nodraw(1);
+        for (let t = 0; t < 400 && !state.error; t++) {
+            if (press && t === 50) for (const c of 'iddqd') { rec._web_input_event(0, c.charCodeAt(0), 0, 0); rec._web_frame(); rec._web_input_event(1, c.charCodeAt(0), 0, 0); }
+            if (press && t === 60) rec._web_input_event(0, 'q'.charCodeAt(0), 0, 0);
+            if (press && t === 65) rec._web_input_event(1, 'q'.charCodeAt(0), 0, 0);
+            rec._web_wipe_skip(); rec._web_frame();
+        }
+    } catch (e) { state.error ??= String(e.message ?? e); }
+    const n = state.error ? 0 : rec._web_demo_stop();
+    check(`${label}: recording continues and stops cleanly`, !state.error && n > 13, state.error ?? `${n} bytes`);
+    if (n > 13) {
+        const lmp = rec.HEAPU8.slice(rec._web_demo_buf_ptr(), rec._web_demo_buf_ptr() + n);
+        const r = await replay([['doomu.wad', wad]], lmp);
+        if (r) while (r.doom._web_demo_playing() && !r.state.error) r.step();
+        check(`${label}: the recording replays to its marker`, r && !r.state.error, r ? r.state.error : 'refused');
+    }
+}
+
 if (demos !== 13) fatal(`replayed ${demos} of 13 IWAD demos`);
-summary(`replay through web_play_demo_buf: 13 IWAD demos (${tics} tics) identical to the goldens and past their markers; seek, -fast and two-player demos as vanilla`);
+summary(`replay through web_play_demo_buf: 13 IWAD demos (${tics} tics) identical to the goldens and past their markers; seek, -fast, two-player, and recordings that survive Q and a full buffer`);
