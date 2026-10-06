@@ -40,6 +40,16 @@ const MAXWEBFILES = 40;     // the engine's file registry cap; mirrored in engin
 const entry = file => manifest.find(w => w.file === file);
 const isCommercial = e => e?.maps?.[0]?.startsWith('MAP');
 
+// Savegames are kept per game: an IWAD under its own name (the keys every
+// existing save has), a PWAD under its base and itself.  A shared namespace
+// let a Master Level's save fill Doom II's slot, and loading it there read
+// the PWAD's map data against Doom II's map.  Auto-stacked patches (tnt31)
+// change nothing about a save and are left out.
+function saveNamespace(file) {
+    const e = entry(file);
+    return e?.kind === 'PWAD' && e.base ? `${e.base}+${e.file}` : file;
+}
+
 function stackFor(file) {
     const e = entry(file);
     if (!e) return [];
@@ -279,16 +289,16 @@ function toLauncher() { resetToLauncher(); }
 // spectator, a demo permalink -- comes through here: the guard, the fire and
 // menu state, the recording overlay, and the one catch.
 //   after(doom): runs once the engine is up (start a replay, close the lobby)
-function enterGame({ wads, args = [], net = null, record = false, after = null }) {
+function enterGame({ game, args = [], net = null, record = false, after = null }) {
     if (booted) return;
     booted = true;
     fire?.pause();
     menu.hide();
     if (record) recOverlay.show();
-    bootDoom({ wads, args, net, record, onQuit: toLauncher })
+    bootDoom({ wads: stackFor(game), saves: saveNamespace(game), args, net, record, onQuit: toLauncher })
         .then(doom => {
             if (!doom) return;             // the launcher took over during the boot
-            if (record) recOverlay.arm(doom, wads[0].file);
+            if (record) recOverlay.arm(doom, game);   // a replay needs the game, not its base
             after?.(doom);
         })
         .catch(err => resetToLauncher(err));
@@ -350,7 +360,7 @@ function spGameScreen() {
     // Game would start the base IWAD's MAP01 instead
     const boot = w => {
         const m = singleMap(w);
-        enterGame({ wads: stackFor(w.file), args: m ? ['-warp', String(m), '-skill', '3'] : [], record: recordNext });
+        enterGame({ game: w.file, args: m ? ['-warp', String(m), '-skill', '3'] : [], record: recordNext });
     };
     return {
         id: 'sp',
@@ -409,7 +419,7 @@ function enterMultiplayer() {
             rtts.sort((a, b) => a - b);
             const jitterMs = rtts[Math.floor(rtts.length * 0.75)] - rtts[0];
             enterGame({
-                wads: stackFor(m.params.wad),
+                game: m.params.wad,
                 args,
                 net: { slot: lobby.slot, numplayers: m.numplayers, jitterMs, names: m.names, slots: m.slots,
                        join: !!m.join, frontier: m.frontier },
@@ -506,7 +516,7 @@ function spectateGame() {
     try { args = launchArgs(s.params, isCommercial(entry(s.params.wad))); }
     catch (err) { status(err.message); return; }
     enterGame({
-        wads: stackFor(s.params.wad),
+        game: s.params.wad,
         args,
         net: { numplayers: 4, slots: (s.players ?? []).map(pl => pl.slot), names,
                spectate: true, frontier: s.frontier ?? 0 },
@@ -759,8 +769,7 @@ function lobbyScreen() {
         }
         status('REPLAYING DEMO — watch the recording', 6000);
         enterGame({
-
-            wads: stackFor(wadEntry.file),
+            game: wadEntry.file,
             after: doom => {
                 if (startReplay(doom, bytes) !== 0) { resetToLauncher('demo replay failed: version mismatch'); return; }
                 // the scrubber sits under the canvas; bootDoom installs attachScrubber

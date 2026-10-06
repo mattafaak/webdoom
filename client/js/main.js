@@ -123,7 +123,7 @@ export function endActiveSession(reason = null) {
     return true;
 }
 
-export async function bootDoom({ wads, args = [], net = null, onQuit = null, record = false }) {
+export async function bootDoom({ wads, saves = wads[0].file, args = [], net = null, onQuit = null, record = false }) {
     // a `launch` naming a WAD this client has no copy of arrives as [] from
     // stackFor(); refuse with a reason before the landing page is hidden
     if (!Array.isArray(wads) || wads.length === 0 || !wads[0]?.file)
@@ -207,7 +207,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
         };
         blocks = await Promise.all(wads.map((w, i) =>
             fetchWad(doom, w.file, w.sha, (g, t) => { got[i] = g; tot[i] = t; report(); })));
-        persisted = await loadPersisted(wads[0].file);
+        persisted = await loadPersisted(saves);
     } catch (err) {
         restoreOnFailure(canvas);
         throw err;
@@ -273,7 +273,7 @@ export async function bootDoom({ wads, args = [], net = null, onQuit = null, rec
         scrubberHandle = createScrubberUI(doom, demoBytes, { container, seekHook: n => { seekPending = n; } });
     };
 
-    syncHandle = startSync(doom, wads[0].file);
+    syncHandle = startSync(doom, saves);
     disposers.push(() => syncHandle?.stop?.());
 
     const renderer = createRenderer(canvas);

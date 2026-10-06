@@ -1,8 +1,8 @@
 // Savegame + config persistence. The engine has no filesystem: small
 // files (savegames, .doomrc) live in a JS Map (Module.fileMap) bridged
 // through three wasm imports. This module fills the Map from IndexedDB
-// before boot and mirrors changes back — savegames keyed per IWAD,
-// config shared.
+// before boot and mirrors changes back — savegames keyed per game (lobby.js
+// saveNamespace: the IWAD's name, or base+pwad), config shared.
 
 import { openDB, tx as idbTx } from './idb.js';
 

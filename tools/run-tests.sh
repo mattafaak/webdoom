@@ -640,6 +640,7 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
     leg browser-options       browser,build,wad,shared "hostile localStorage + the OPTIONS screen" -- node tools/browser-options-test.mjs "$U"
     leg browser-resilience    browser,build,wad,shared "fetch/sw/visibility/gamepad failures" -- node tools/browser-resilience-test.mjs "$U"
     leg browser-boot-abort    browser,build,wad,shared "a session ended mid-boot leaves nothing running" -- node tools/browser-boot-abort-test.mjs "$U"
+    leg browser-pwad-session  browser,build,wad,shared "a PWAD game keeps its own saves and demo links" -- node tools/browser-pwad-session-test.mjs "$U"
         # rme-004's analog half.  browser-resilience covers hotplug only; this
         # drives a synthetic pad through the deadzone curve and the axis mapping
         # and reads what the ENGINE's own web_gamepad entry point receives --
