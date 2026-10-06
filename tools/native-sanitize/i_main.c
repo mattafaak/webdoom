@@ -42,6 +42,10 @@ static int nat_state_hash (void)
     unsigned h = 0x9e3779b9u ^ (unsigned) gametic;
     int i;
 
+    // no thinker ring before the first level (as web_state_hash)
+    if (!thinkercap.next)
+        return 0;
+
     h = (h ^ (unsigned) prndindex) * 0x01000193u;
     for (i = 0; i < MAXPLAYERS; i++)
         if (playeringame[i] && players[i].mo)

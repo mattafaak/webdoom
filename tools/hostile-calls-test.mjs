@@ -10,9 +10,17 @@
 //                as the same session without them.  The control: a legal key
 //                (up arrow) still moves the player, or the comparison sees
 //                nothing.
+//   state-hash   web_state_hash before the first level.  It walks the
+//                thinker ring from thinkercap.next, which is NULL until
+//                P_InitThinkers, so it never got back to &thinkercap and the
+//                call never returned.  Called before callMain and at the
+//                title screen it must return 0, in a child process with a
+//                timeout; the control is a non-zero hash once a level runs.
 //
 // usage: node tools/hostile-calls-test.mjs [--build-dir DIR]
 // Copyright (C) 2026, GPL-2.0-or-later.
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { bootEngine, loadWad } from './lib/engine.mjs';
 import { buildDirArg } from './lib/util.mjs';
 import { check, summary } from './lib/report.mjs';
@@ -45,6 +53,17 @@ async function session(feed) {
     return { hash: doom._web_state_hash() >>> 0, at: `${x >> 16},${y >> 16}` };
 }
 
+// ── state-hash, child side ───────────────────────────────────────────────────
+if (process.argv.includes('--state-hash-child')) {
+    const doom = await bootEngine(BUILD, [['doomu.wad', loadWad('doom.wad')]]);
+    const before = doom._web_state_hash() >>> 0;
+    doom.callMain(['-nodraw']);
+    const title = doom._web_state_hash() >>> 0;
+    console.log(`CHILD-OK before=${before} title=${title}`);
+    summary('state-hash child: the parent judges the line above');
+    process.exit(0);
+}
+
 // ── input-keys ───────────────────────────────────────────────────────────────
 {
     const codes = [-0x10000000, -0x80000000, 0x7fffffff];
@@ -69,4 +88,18 @@ async function session(feed) {
           !walked.error && walked.at !== quiet.at, walked.error ?? 'the up arrow did nothing');
 }
 
-summary('the web layer\'s entry points refuse hostile arguments (1 case + control)');
+// ── state-hash ───────────────────────────────────────────────────────────────
+{
+    const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--build-dir', BUILD, '--state-hash-child'],
+                        { encoding: 'utf8', timeout: 60_000 });
+    const m = /CHILD-OK before=(\d+) title=(\d+)/.exec(r.stdout ?? '');
+    const what = r.error?.code === 'ETIMEDOUT' ? 'HUNG (no return within 60s)'
+               : m ? `before callMain ${m[1]}, at the title ${m[2]}`
+               : `exit ${r.status}: ${(r.stderr ?? '').trim().split('\n').pop()}`;
+    check(`state-hash: returns 0 before any level (${what})`, m && m[1] === '0' && m[2] === '0', what);
+    const live = await session(() => {});
+    check(`state-hash CONTROL: a running level hashes non-zero (${live.hash?.toString(16)})`,
+          !live.error && live.hash !== 0, live.error ?? 'hash 0 in a level');
+}
+
+summary('the web layer\'s entry points refuse hostile arguments (2 cases + controls)');

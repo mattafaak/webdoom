@@ -238,6 +238,11 @@ EMSCRIPTEN_KEEPALIVE int web_state_hash (void)
     unsigned h = 0x9e3779b9u ^ (unsigned) gametic;
     int i;
 
+    // Until the first level's P_InitThinkers the thinker list is not a
+    // ring: thinkercap.next is NULL, and the walk below would never end.
+    if (!thinkercap.next)
+        return 0;
+
     h = (h ^ (unsigned) prndindex) * 0x01000193u;
     for (i = 0; i < MAXPLAYERS; i++)
         if (playeringame[i] && players[i].mo)
