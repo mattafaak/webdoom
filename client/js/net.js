@@ -62,14 +62,17 @@ export function connectLobby(baseUrl, WS = WebSocket) {
         start() { api.send({ t: 'start' }); },
         // Resolves null on timeout rather than hanging or rejecting: the
         // caller's 12-ping loop runs between `launch` and bootDoom, and an
-        // unanswered ping is not a zero-latency ping.
+        // unanswered ping is not a zero-latency ping.  The server echoes t0,
+        // and only the pong carrying this ping's t0 answers it: one that
+        // arrives after its own ping gave up would otherwise be counted for
+        // the next.
         ping() {
             return new Promise(res => {
                 const t0 = performance.now();
                 let done = false;
                 const finish = v => { if (!done) { done = true; clearTimeout(timer); res(v); } };
                 const timer = setTimeout(() => finish(null), PING_TIMEOUT_MS);
-                handlers.set('pong', () => finish(performance.now() - t0));
+                handlers.set('pong', m => { if (m.t0 === t0) finish(performance.now() - t0); });
                 if (!api.send({ t: 'ping', t0 })) finish(null);
             });
         },

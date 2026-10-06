@@ -167,6 +167,28 @@ const answered = await withClient(async (api, server) => {
 ok('an answered ping still returns a latency', typeof answered === 'number' && answered >= 0,
     `got ${answered}`);
 
+// 4b. A pong that arrives after its ping gave up belongs to that ping.  The
+//     server echoes t0; this one answers ping 1 only after the client's 3 s
+//     timeout -- about 300 ms into ping 2 -- and ping 2 after 1000 ms.  Ping 2
+//     must measure its own pong, not ping 1's.
+const LATE_MS = 3300, SECOND_MS = 1000;
+const latePing = await withClient(async (api, server) => {
+    let n = 0;
+    server.on('message', raw => {
+        let m; try { m = JSON.parse(raw); } catch { return; }
+        if (m.t !== 'ping') return;
+        const delay = ++n === 1 ? LATE_MS : SECOND_MS;
+        setTimeout(() => { try { server.send(JSON.stringify({ t: 'pong', t0: m.t0 })); } catch { /* closed */ } }, delay);
+    });
+    const first = await api.ping();
+    const second = await Promise.race([api.ping(), sleep(5000).then(() => 'HUNG')]);
+    return { first, second };
+});
+ok('CONTROL: a ping answered after its timeout resolves null', latePing.first === null, `got ${latePing.first}`);
+ok(`the next ping measures its own pong (${typeof latePing.second === 'number' ? Math.round(latePing.second) : latePing.second} ms, answered at ${SECOND_MS})`,
+    typeof latePing.second === 'number' && latePing.second >= SECOND_MS - 100,
+    'it took the previous ping\'s late pong, which arrived about 300 ms in');
+
 console.log('\n── sending on a dead socket ─────────────────────────────────────');
 
 // 5. ws.send throws InvalidStateError after close; net.js's relay half already
@@ -267,7 +289,7 @@ try { wss.close(); } catch { /* sockets already torn down */ }
 // three about the unanswered ping, an answered ping, and two about
 // send-after-close. A floor, so a section that stops running is a red rather
 // than a shorter list.
-const NAMED_AFTER_LOOPS = 7 + 1;   // +1: the well-formed-roster anti-vacuity case
+const NAMED_AFTER_LOOPS = 7 + 1 + 2;   // +1: the well-formed-roster anti-vacuity case; +2: the late pong
 const EXPECTED = GARBAGE.length + BAD_SLOTS.length + SHAPES.length + NAMED_AFTER_LOOPS;
 summaryPrinted = true;
 console.log(`\n  ${passes} passed, ${failures} failed`);
@@ -278,5 +300,5 @@ if (passes + failures !== EXPECTED) {
 if (failures) { console.log(`hostile-lobby-test: ${failures} failure(s)`); process.exit(1); }
 console.log(`PASS — hostile-lobby-test: ${passes} assertions — ${GARBAGE.length} malformed frames, ` +
             `${BAD_SLOTS.length} hostile welcome slots, ${SHAPES.length} malformed rosters read as lobby.js reads them, ` +
-            `the unanswered-ping wedge, and send-after-close`);
+            `the unanswered-ping wedge, a late pong, and send-after-close`);
 process.exit(0);

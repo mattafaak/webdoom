@@ -4,12 +4,6 @@ What is known and not done, with what each item would take or what blocks it.
 `spec.md` outranks this file. Finished work lives in `git log`; the reasons
 behind the current state live in `spec.md` and `docs/`.
 
-## Client
-
-- Each `ping()` replaces the lobby's single `pong` handler, so two pings in
-  flight would take each other's replies. The one caller sends them one at a
-  time, and a lost ping gives up after 3 s.
-
 ## Server
 
 - `doom.js` and `doom.wasm` are served without anything binding them to the
