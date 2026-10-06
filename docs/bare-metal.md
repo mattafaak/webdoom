@@ -914,7 +914,7 @@ these groups:
 | Group | Examples |
 |-------|---------|
 | Render interpolation snapshots | `p_mobj.c`, `p_tick.c`, `R_SetupFrame` (r_main.c) |
-| Raised limits | `MAXSEGS` 32→64 (r_bsp.c), `MAXVISSPRITES` 128→1024 (r_things.h), `MAXSPECIALCROSS` 8→64 (p_local.h), `SAVEGAMESIZE` 0x2c000→0x80000 (g_game.c) |
+| Raised limits | `MAXSEGS` 32→64 (r_bsp.c), `MAXVISSPRITES` 128→1024 (r_things.h), `MAXSPECIALCROSS` 8→64 (p_local.h); the save buffer is sized from the level (`P_ArchiveSize`, p_saveg.c) |
 | Overflow clamps | intercepts (`p_maputl.c`), spechit (`p_map.c`) |
 | Netplay and timing | `BACKUPTICS` and drop-in support (d_net.h, g_game.c) |
 | Platform hooks | the file registry in `W_AddFile`/`W_ReadLump`, `T_GenerateTables`, `D_DoomFrame` |

@@ -11,7 +11,7 @@ The WAD figures quoted here were read from the IWADs in `wads/lib/`.
 `tools/archaeology/wad-verify.mjs` recomputes the doom.wad ones (directory
 size, E1M1 BLOCKMAP and NODES, DSPISTOL, D_E1M1, GENMIDI, PNAMES, TEXTURE1),
 and `tools/archaeology/source-constant-verify.mjs` checks the source constants
-(SAVEGAMESIZE, MUS_RATE, the demo header size, the save slot count, the MUS
+(MUS_RATE, the demo header size, the save slot count, the MUS
 percussion channel). Both run in the `archaeology` leg.
 
 ---
@@ -737,20 +737,28 @@ function but is still saved as `tc_ceiling` when it is in `activeceilings`.
 Thinkers of any other class (for example `T_FireFlicker`) are not saved, as in
 vanilla.
 
-### 5.3 SAVEGAMESIZE bound
+### 5.3 Save buffer size
 
-`#define SAVEGAMESIZE 0x80000` (`g_game.c`) = 524,288 bytes. Vanilla had
-0x2C000 (180,224 bytes); webdoom raised it because large PWAD maps overran
-the original.
+`G_DoSaveGame` mallocs the buffer before writing anything. Its size is the
+50-byte header plus `P_ArchiveSize()` (p_saveg.c), an upper bound computed
+from the current level. The bound counts every player slot, 14 bytes per
+sector, 6 per linedef plus 10 per sidedef, and for every thinker a class byte,
+3 bytes of padding and `sizeof(mobj_t)`, the largest archived struct (a
+`_Static_assert` keeps it so). The buffer is freed after `M_WriteFile`.
 
-The number is a backstop, not the buffer's size. `G_DoSaveGame` builds the
-save in `screens[1] + 0x4000`, inside the one 256,000-byte block `V_Init`
-allocates for `screens[0..3]`, which leaves 175,616 bytes of room. The
-`length > SAVEGAMESIZE` test runs after the save is written, so it cannot
-prevent an overrun of that region; it keeps a corrupt buffer from being
-persisted. Vanilla-sized saves stay well under 64 KB. The workspace stays
-where vanilla put it because a separate allocation would change the wasm data
-layout and every render golden.
+Vanilla built the save at `screens[1] + 0x4000`, which leaves 175,616 bytes
+before the end of `V_Init`'s screen block, and checked nothing first. The
+biggest library levels need more at their start: Black Tower MAP25, NRFTL
+MAP05 and SIGIL E5M7 save at 176–197 KB on Ultra-Violence. `save-compat` saves
+and reloads all three through the menu.
+
+A save being loaded is untrusted: it may come from another WAD, be cut short
+or be edited. `G_DoLoadGame` and the `P_UnArchive*` functions check every read
+against the loaded length (`save_end`), and every index read from the file
+(states, mobj types, players, sectors, flats, textures, weapons) against the
+array it selects, and refuse with `I_Error("Savegame does not match this
+game: ...")` or `"Savegame is truncated"` before using it. Loading drops the
+raw `target` and `tracer` pointers, as Chocolate Doom does.
 
 **Where saves go**: `M_WriteFile` → `Web_FileWrite` → `js_file_write`
 (`engine/web/files.c`) → `Module.fileMap`. `client/js/persist.js` mirrors the

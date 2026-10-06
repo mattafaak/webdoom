@@ -17,7 +17,7 @@ Three kinds of evidence back the figures here:
 
 - **Source constants.** `tools/archaeology/source-constant-verify.mjs` checks
   the constants this document relies on (MAXSPECIALCROSS, MAXINTERCEPTS,
-  BACKUPTICS, SAVEGAMESIZE, MAX_DEATHMATCH_STARTS, MAXHEALTH, BONUSADD,
+  BACKUPTICS, MAX_DEATHMATCH_STARTS, MAXHEALTH, BONUSADD,
   FLOATSPEED and the movement tables). The `archaeology` leg runs it.
 - **The 13 golden demos.** The `sim-goldens` leg compares a per-tic gamestate
   hash for every demo; `render-goldens` compares per-tic framebuffer hashes.
@@ -470,22 +470,23 @@ more than 128 objects. The overrun corrupts whatever follows the array in
 memory; the "all-ghosts" family, where shots pass through monsters, is
 attributed to it.
 
-**webdoom's clamp.** Both `PIT_AddLineIntercepts` and `PIT_AddThingIntercepts`
-advance the pointer only while there is room:
+**webdoom's guard.** Both `PIT_AddLineIntercepts` and `PIT_AddThingIntercepts`
+check for room before writing the slot:
 
 ```c
-if (intercept_p - intercepts < MAXINTERCEPTS-1)
-    intercept_p++;   // webdoom: clamp, vanilla overran on long traces
+if (intercept_p == intercepts + MAXINTERCEPTS)
+    return true;
 ```
 
-Once 127 entries are filled, `intercept_p` stays on the last slot, and each
-further intercept overwrites slot 127. The array is never written past its end.
-On a trace that really crosses more than 127 objects, everything but the last
-one added beyond the limit is lost, so distant objects act as if transparent:
-a milder form of the vanilla effect.
+All 128 slots are used, and an intercept found after the 128th is dropped. The
+array is never written past its end. On a trace that really crosses more than
+128 objects, the ones added last are lost, so distant objects act as if
+transparent: a milder form of the vanilla effect. `tools/fuzz/crafted-maps.mjs`
+(`intercepts-128`) pins the boundary with a door that is a shot's 128th
+intercept.
 
 The measured peak across the 13 golden demos is 45 (plutonia-demo3, MAP12;
-§17), far below the clamp. [divergence-atlas.md](divergence-atlas.md) F2
+§17), far below the limit. [divergence-atlas.md](divergence-atlas.md) F2
 compares this with other ports.
 
 ### 5.2 P_PathTraverse
@@ -1087,24 +1088,21 @@ deathmatch starts and ignores the rest.
 
 ## 13. Save / load
 
-### 13.1 SAVEGAMESIZE
+### 13.1 Save buffer
 
-```c
-// g_game.c:74
-#define SAVEGAMESIZE  0x80000   // webdoom: was 0x2c000; big maps overran
-```
+`G_DoSaveGame` mallocs the buffer before writing anything. Its size is the
+50-byte header plus `P_ArchiveSize()` (p_saveg.c), an upper bound computed
+from the current level. The bound counts every player slot, 14 bytes per
+sector, 6 per linedef plus 10 per sidedef, and for every thinker a class byte,
+3 bytes of padding and `sizeof(mobj_t)`, the largest archived struct (a
+`_Static_assert` keeps it so). The buffer is freed after `M_WriteFile`.
 
-Vanilla used `0x2c000` (180,224 bytes); webdoom allows `0x80000` (524,288) so
-large PWAD maps can save. `G_DoSaveGame` writes into a workspace at
-`screens[1] + 0x4000` (vanilla's choice) and, after archiving, calls
-`I_Error("Savegame buffer overrun")` if the length exceeds `SAVEGAMESIZE`.
-
-That check is a backstop, not a bound. `screens[0..3]` are one 256,000-byte
-block, so the workspace has 175,616 bytes of real room; a save larger than that
-has already overrun before the check runs, and the error only stops it reaching
-disk. Vanilla-sized saves are under 64 KB. The workspace is kept where it is
-because any separate allocation changes the wasm data segment, shifting BSS and
-heap layout under the render goldens (§19).
+Vanilla built the save at `screens[1] + 0x4000`, which leaves 175,616 bytes
+before the end of `V_Init`'s screen block, and checked nothing first. The
+biggest library levels need more at their start: Black Tower MAP25, NRFTL
+MAP05 and SIGIL E5M7 save at 176–197 KB on Ultra-Violence. `save-compat` saves
+and reloads all three through the menu. Loading is checked the same way; see
+[formats.md](formats.md) §5.3.
 
 ### 13.2 Archive format
 
@@ -1167,8 +1165,9 @@ restores with a stale pointer, a vanilla defect kept as is.
   since both are copied raw.
 - A new thinker type that `P_ArchiveSpecials`/`P_UnArchiveSpecials` do not know
   is silently not saved.
-- Changing `SAVEGAMESIZE` does not affect existing files; it only changes when
-  saving gives up.
+- Raw pointers (`snext`, `target`, ...) are stored and discarded on load, so a
+  layout change alters a save's bytes without changing what it means.
+  `save-compat` therefore compares what a save loads to, not its bytes.
 
 ---
 
@@ -1455,7 +1454,7 @@ renderer is free.
 | `FLOATSPEED = 4*FRACUNIT` | Floater vertical rate |
 | Thinker deferred-free timing | A thinker removed mid-tic survives until `P_RunThinkers` next reaches it |
 | `MAXSPECIALCROSS = 64` and the behaviour above 8 | Which specials fire in crowded maps |
-| `MAXINTERCEPTS = 128` and the clamp | Hitscan in dense maps |
+| `MAXINTERCEPTS = 128` and the guard | Hitscan in dense maps |
 | `onground` gate on player thrust (`P_MovePlayer`) | No air control; removing it desyncs demos that carry momentum off a ledge |
 
 ### 16.1 Assert mapping — every frozen row accounted for
@@ -1492,7 +1491,7 @@ one class:
 | 16 | `FLOATSPEED = 4*FRACUNIT` | static assert | p_local.h: `_Static_assert(FLOATSPEED == 4*FRACUNIT, ...)` |
 | 17 | Thinker deferred-free timing | not assertable | See below |
 | 18 | `MAXSPECIALCROSS = 64` | runtime assert | The bounds assert in `P_TryMove()` (row 9) runs every move; p_local.h also has `_Static_assert(MAXSPECIALCROSS == 64, ...)` |
-| 19 | `MAXINTERCEPTS = 128` and the clamp | runtime assert | `PIT_AddLineIntercepts()` and `PIT_AddThingIntercepts()` (p_maputl.c): `DOOM_ASSERT(intercept_p - intercepts <= MAXINTERCEPTS - 1 && ...)` after every add; p_local.h also has `_Static_assert(MAXINTERCEPTS == 128, ...)` |
+| 19 | `MAXINTERCEPTS = 128` and the guard | runtime assert | `PIT_AddLineIntercepts()` and `PIT_AddThingIntercepts()` (p_maputl.c): `DOOM_ASSERT(intercept_p - intercepts <= MAXINTERCEPTS && ...)` after every add; p_local.h also has `_Static_assert(MAXINTERCEPTS == 128, ...)` |
 | 20 | `onground` thrust gate | runtime assert | `P_MovePlayer()` (p_user.c): `DOOM_ASSERT(onground == (player->mo->z <= player->mo->floorz) && "onground definition mismatch -- S16 invariant: player thrust gate broken")` |
 
 Summary: 10 runtime assert, 4 static assert, 3 reproduced, 3 not assertable:
@@ -1607,7 +1606,7 @@ are not gated: each needs a build with an extra flag, and no leg builds one.
 | figure | value | demo |
 |--------|-------|------|
 | peak `numspechit` in one move | 8 (the vanilla limit; webdoom's is 64) | tnt-demo2, MAP12 |
-| peak intercepts in one trace | 45 (the clamp is at 127) | plutonia-demo3, MAP12 |
+| peak intercepts in one trace | 45 (the limit is 128) | plutonia-demo3, MAP12 |
 | successful `EV_Teleport` calls | 32 in 4 demos (table in Q5) | doom-demo3, doom2-demo3, plutonia-demo1, plutonia-demo3 |
 
 **How to repeat them.**
@@ -1887,10 +1886,10 @@ place).
 | site / limit | vanilla on overflow | webdoom | reached by a golden demo? | where |
 |---|---|---|---|---|
 | `spechit[MAXSPECIALCROSS = 64]` | Wrote past `spechit[8]` (vanilla limit 8) into adjacent globals | Write skipped once full; limit raised to 64 | No: peak 8 (§17) | `PIT_CheckLine`, p_map.c; §4.4 |
-| `intercepts[MAXINTERCEPTS = 128]` | Wrote past the array; the "all-ghosts" family | Pointer stops at slot 127; later intercepts reuse it | No: peak 45 (§17) | `PIT_AddLineIntercepts`, `PIT_AddThingIntercepts`, p_maputl.c; §5.1 |
-| `solidsegs[MAXSEGS = 64]` | Wrote past the array (vanilla limit 32) | After `R_StoreWallRange`, the clip entry is dropped when full; the wall is still drawn | No: render-only, never read by the sim | `R_ClipSolidWallSegment`, r_bsp.c; [renderer.md](renderer.md) §3.4, §10 |
-| `openings[MAXOPENINGS = SCREENWIDTH*64]` | Pointer overrun in a non-`RANGECHECK` build; `I_Error` in `R_DrawPlanes` with `RANGECHECK` | Each `lastopening +=` in `R_StoreWallRange` is checked first; when full, the masked midtexture is dropped or the silhouette bit cleared, never leaving a NULL clip pointer behind | No: render-only | `R_StoreWallRange`, r_segs.c; [renderer.md](renderer.md) §4.3, §10 |
-| `savebuffer` (`SAVEGAMESIZE = 0x80000`) | Vanilla workspace `screens[1]+0x4000`, 175,616 bytes of real room; no check before writing | Same workspace; `I_Error("Savegame buffer overrun")` after archiving if the length exceeds `SAVEGAMESIZE` (detect after the fact) | No: vanilla-sized saves are under 64 KB | `G_DoSaveGame`, g_game.c; §13.1 |
+| `intercepts[MAXINTERCEPTS = 128]` | Wrote past the array; the "all-ghosts" family | All 128 slots used; an intercept past the 128th is dropped before it is written | No: peak 45 (§17) | `PIT_AddLineIntercepts`, `PIT_AddThingIntercepts`, p_maputl.c; §5.1 |
+| `solidsegs[MAXSEGS = 64]` | Wrote past the array (vanilla limit 32) | After `R_StoreWallRange`, the clip entry is dropped when full; the wall is still drawn. The array has one slot past the cap, because the crunch copies the entry at `newend` (`crafted-maps.mjs` solidsegs-full) | No: render-only, never read by the sim | `R_ClipSolidWallSegment`, r_bsp.c; [renderer.md](renderer.md) §3.4, §10 |
+| `openings[MAXOPENINGS = SCREENWIDTH*64]` | Pointer overrun in a non-`RANGECHECK` build; `I_Error` in `R_DrawPlanes` with `RANGECHECK` | Each `lastopening +=` in `R_StoreWallRange` is checked first; when full, the masked midtexture is dropped (its columns too, when the sprite clips did not fit after them) or the silhouette bit cleared, never leaving a NULL clip pointer behind (`crafted-maps.mjs` masked-openings) | No: render-only | `R_StoreWallRange`, r_segs.c; [renderer.md](renderer.md) §4.3, §10 |
+| save buffer | Vanilla built the save at `screens[1]+0x4000`, 175,616 bytes from the end of the screen block, with no check; big levels wrote past it | malloc'd at `P_ArchiveSize()`, a bound computed from the level, before anything is written | No: demos never save | `G_DoSaveGame`, g_game.c; `P_ArchiveSize`, p_saveg.c; §13.1 |
 | `braintargets[MAXBRAINTARGETS = 32]` | No check; a map with more than 32 `MT_BOSSTARGET` things overwrote `numbraintargets` and `braintargeton` | Only the first 32 are stored; `A_BrainSpit` cycles through those | No: no golden demo plays MAP30 (which has 8) | `A_BrainAwake`, p_enemy.c |
 | `EV_DoDonut` `s2`/`s3` | NULL dereference when the ring or outer sector is missing (one-sided first line, or a bad two-sided line) | Skips that sector (`if (!s2) continue;`, `if (!s3) continue;`), as PrBoom does | No: no golden demo uses line special 9 | `EV_DoDonut`, p_spec.c; §10.3 |
 | `activeplats[MAXPLATS = 30]` | Vanilla already `I_Error`s | Unchanged: `I_Error("P_AddActivePlat: no more plats!")` | No | `P_AddActivePlat`, p_plats.c; §10.5 |
@@ -1922,13 +1921,6 @@ internals of any thinker. A sim change confined to those can pass
 `sim-goldens` while changing what is drawn; `render-goldens` is the backstop
 for that class. Because `prndindex` is in the hash, most such changes also move
 the random sequence and are caught anyway.
-
-**Why the savegame workspace stays at `screens[1]+0x4000`.** Moving it to a
-separate allocation would change the wasm data-segment size, shifting BSS and
-heap. With the two reads above fixed no known read depends on that layout, but
-the move would still churn the binary for no gain. The after-the-fact
-`I_Error` is acceptable because vanilla-sized saves use under 64 KB of the
-175,616 bytes available.
 
 **Chat input from the network is safe.** A chat character arrives from other
 clients in `cmd->chatchar` (d_net.c). `HU_Ticker` passes it to

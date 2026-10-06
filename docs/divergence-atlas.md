@@ -62,7 +62,7 @@ golden demo playback, so vanilla behavior is preserved over the proof corpus.
 | Divergence | Atlas | Cover over the 13 golden demos |
 |------------|-------|--------------------------------|
 | MAXSPECIALCROSS raised to 64 with a silent clamp; vanilla's 8-entry overrun not reproduced | F1 | Peak numspechit **8**; the clamp at 64 is never reached |
-| MAXINTERCEPTS kept at 128 with a clamp at 127; vanilla's overrun not reproduced | F2 | Peak intercept count **45**; the clamp at 127 is never reached |
+| MAXINTERCEPTS kept at 128, intercepts past the 128th dropped; vanilla's overrun not reproduced | F2 | Peak intercept count **45**; the clamp at 127 is never reached |
 
 Other fail-soft guards follow the same rule (fail soft on input vanilla would
 crash on, never on a path a golden demo reaches) and are too small to be fork
@@ -190,34 +190,34 @@ nothing.
 | MBF21 | 128† | yes† | Inherits MBF† |
 | PrBoom+ | 128† | yes† | No comp flag for intercepts overflow is documented† |
 | dsda-doom | 128† | yes† | Same as PrBoom+† |
-| **webdoom** | **128** | **yes** | Clamps at MAXINTERCEPTS-1; intercepts past the 127th are lost |
+| **webdoom** | **128** | **yes** | Keeps the first 128; intercepts past the 128th are dropped |
 
 ### webdoom's position
 
-`p_local.h` keeps vanilla's `MAXINTERCEPTS 128`. Both adders clamp the advance:
+`p_local.h` keeps vanilla's `MAXINTERCEPTS 128`. Both adders check for room
+before writing the slot:
 
 ```c
-if (intercept_p - intercepts < MAXINTERCEPTS-1)
-    intercept_p++;   // webdoom: clamp, vanilla overran on long traces
+if (intercept_p == intercepts + MAXINTERCEPTS)
+    return true;
 ```
 
-Once `intercept_p` reaches slot 127 it stops advancing. Each further intercept
-overwrites slot 127, and `P_TraverseIntercepts` counts only
-`intercept_p - intercepts` entries, so slot 127 is never processed. A trace
-keeps its first 127 intercepts in block-walk order. The block walk runs from
+A trace keeps its first 128 intercepts in block-walk order, and drops any found
+after them (`tools/fuzz/crafted-maps.mjs` `intercepts-128` pins the
+boundary). The block walk runs from
 the trace's origin outward, so what is lost is roughly the far end of the
 trace: the "ghosts" effect in a bounded form, only at extreme density.
 
 ### Why
 
 As F1. The peak intercept count over the 13 golden demos is **45**
-(plutonia-demo3, MAP12), well below 127, so the clamp never engages and vanilla
+(plutonia-demo3, MAP12), well below 128, so the guard never engages and vanilla
 behavior holds (tenet 1). The clamp stops a dense custom map from writing past
 the array (tenet 4).
 
 ### Evidence
 
-- Source: `MAXINTERCEPTS` in p_local.h; the clamps in `PIT_AddLineIntercepts`
+- Source: `MAXINTERCEPTS` in p_local.h; the guards in `PIT_AddLineIntercepts`
   and `PIT_AddThingIntercepts`, each followed by a `DOOM_ASSERT` on the bound
   under `WEBDOOM_INVARIANTS` (armed by the `sim-invariants` leg).
 - `_Static_assert(MAXINTERCEPTS == 128)` in p_local.h (`build-invariants`).
@@ -595,7 +595,7 @@ configuration for choosing vanilla or fixed behavior per quirk.
 Not implementing comp_* is deliberate:
 
 1. **Accuracy** (tenet 1). The 13 golden demos never reach the vanilla overruns
-   (peaks 8 and 45, against vanilla limits of 8 and 128), so the clamps cost no
+   (peaks 8 and 45, against vanilla limits of 8 and 128), so the guards cost no
    demo compatibility and there is nothing to toggle back.
 2. **Simplicity** (tenet 3). A toggle layer is significant code, and webdoom
    does not target Boom, MBF21 or PrBoom+ maps that depend on comp_* behavior.
@@ -629,7 +629,7 @@ covers only the major forks of vanilla code:
 | ID | Fork | webdoom position | Verified from source |
 |----|------|------------------|----------------------|
 | F1 | spechit[] overflow | MAXSPECIALCROSS = 64 with a clamp; vanilla 8-entry overrun not reproduced | yes |
-| F2 | intercepts[] overflow | MAXINTERCEPTS = 128 with a MAXINTERCEPTS-1 clamp; overrun not reproduced | yes |
+| F2 | intercepts[] overflow | MAXINTERCEPTS = 128, intercepts past the 128th dropped; overrun not reproduced | yes |
 | F3 | spechit[] reverse processing | vanilla reverse order (`while (numspechit--)`) | yes |
 | F4 | Wallrunning | vanilla (`hitcount == 3` limit, `stairstep` goto) | yes |
 | F5a | Blockmap edge truncation | vanilla (out-of-bounds cell returns true) | yes |
