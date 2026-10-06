@@ -246,16 +246,26 @@ export async function bootDoom({ wads, saves = null, args = [], net = null, onQu
         throw err;
     }
     if (released) return null;
-    window.doomAudio = createAudio(doom);
-    disposers.push(() => window.doomAudio?.stop?.());
-    window.webdoom = { doom };              // debug/test handle
+    // The two page globals are this session's while it runs, and nobody's
+    // after: left set, each keeps a dead engine and its 32 MB heap reachable
+    // until the next boot overwrites it.  Each is cleared only if it is still
+    // this session's, so a teardown can never blank a successor's.
+    const audio = createAudio(doom);
+    window.doomAudio = audio;
+    disposers.push(() => {
+        audio.stop?.();
+        if (window.doomAudio === audio) window.doomAudio = undefined;
+    });
+    const handle = { doom };                // debug/test handle
+    window.webdoom = handle;
+    disposers.push(() => { if (window.webdoom === handle) window.webdoom = undefined; });
 
     // The scrubber asks for a seek; the frame loop performs it on the next
     // animation callback, never mid-frame.
     let seekPending = null;
     let scrubberHandle = null;
     disposers.push(() => { scrubberHandle?.destroy(); scrubberHandle = null; });
-    window.webdoom.attachScrubber = (demoBytes, container) => {
+    handle.attachScrubber = (demoBytes, container) => {
         scrubberHandle?.destroy();
         scrubberHandle = createScrubberUI(doom, demoBytes, { container, seekHook: n => { seekPending = n; } });
     };
@@ -265,7 +275,7 @@ export async function bootDoom({ wads, saves = null, args = [], net = null, onQu
 
     const renderer = createRenderer(canvas);
     disposers.push(() => renderer.dispose());
-    window.webdoom._renderer = renderer;   // browser-pipeline reads .kind
+    handle._renderer = renderer;            // browser-pipeline reads .kind
     // memory never grows (ALLOW_MEMORY_GROWTH=0), so the views are stable
     const fb = doom._web_framebuffer();
     const pal = doom._web_palette();
@@ -282,7 +292,7 @@ export async function bootDoom({ wads, saves = null, args = [], net = null, onQu
 
     // through doomAudio, not the export: on the worklet tier the flavour has
     // to reach the worklet's own copy of the synth as well
-    window.doomAudio.setOplMode(input.settings.musicBackend === 'opl3' ? 1 : 0);
+    audio.setOplMode(input.settings.musicBackend === 'opl3' ? 1 : 0);
 
     running = true;
 

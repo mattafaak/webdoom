@@ -7,9 +7,6 @@ behind the current state live in `spec.md` and `docs/`.
 ## Client
 
 - WebGL context loss is not handled.
-- `window.webdoom` and `window.doomAudio` keep the dead engine reachable between
-  sessions. Two tests use them as seams after a session ends, so clearing them
-  needs those tests changed first.
 - A service-worker update drops the cached API responses until the next online
   visit.
 - On an insecure origin, the IndexedDB WAD cache never prunes a WAD the server

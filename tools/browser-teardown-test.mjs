@@ -165,7 +165,6 @@ const snapshot = () => ev(`(() => ({
     glObjects: [...window.__glt].reduce((n, [, v]) => n + v, 0),
     glCreated: [...window.__glc].reduce((n, [, v]) => n + v, 0),
     glBreakdown: [...window.__glt].map(([k, v]) => k + ' ' + v).join(', '),
-    rendererKind: window.webdoom?._renderer?.kind ?? '(none)',
 }))()`);
 
 // A run that never booted proves nothing; that must be a failure, not a pass.
@@ -215,10 +214,13 @@ for (let cycle = 1; cycle <= 3; cycle++) {
     // has to be read.
     const playing = await ev(`window.__tmrSites()`);
     inPlay.push(playing);
+    // the renderer is the running session's: once it quits, the page holds
+    // no handle to read it from
+    const rendererKind = await ev(`window.webdoom?._renderer?.kind ?? '(none)'`);
     console.log(`  cycle ${cycle} DURING PLAY: live timers by site: ${playing || '(none)'}`);
     await ev(`window.webdoom?.doom?.onQuit?.()`);
     await sleep(600);
-    const s = await snapshot();
+    const s = { ...await snapshot(), rendererKind };
     marks.push(s);
     console.log(`  cycle ${cycle}: net listeners ${s.listeners}, `
               + `#stage children ${s.stageKids}, net GL objects ${s.glObjects} `
@@ -266,9 +268,9 @@ const mods = await ev(`(() => ({
 console.log(`  wasm instances: ${mods.built} built across 3 boots, ${mods.alive} still reachable after a full GC`);
 if (mods.built === 0)
     fatal('no wasm instance was ever published to window.webdoom — the retention hook saw nothing, so this measured nothing');
-check(`wasm instances released (${mods.built} built, ${mods.alive} reachable)`, mods.alive <= 1,
-      `${mods.alive} of ${mods.built} wasm instances are still reachable after a full GC — `
-    + `only the live one should be; each retained instance holds its whole WebAssembly.Memory`);
+check(`wasm instances released (${mods.built} built, ${mods.alive} reachable)`, mods.alive === 0,
+      `${mods.alive} of ${mods.built} wasm instances are still reachable after a full GC, with every `
+    + `session ended — each retained instance holds its whole WebAssembly.Memory`);
 
 for (const [k, label] of [['listeners', 'net event listeners'],
                           ['stageKids', '#stage children'],

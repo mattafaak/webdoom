@@ -59,9 +59,11 @@ const domExported = await ev(`typeof window.webdoom?.doom?.${INJECT} === 'functi
 if (!domExported) fatal(`window.webdoom.doom.${INJECT} is not a function — game handle missing`);
 console.log(`  injecting a throw into doom.${INJECT}`);
 
-// Install the throw patch; count how many times it fires.
+// Install the throw patch; count how many times it fires.  The handle is kept
+// here because the page drops window.webdoom when the session ends, and the
+// loop check below must still reach the engine the throw came from.
 await ev(`(() => {
-    const d = window.webdoom.doom;
+    const d = window.__rafDoom = window.webdoom.doom;
     const orig = d.${INJECT};
     window.__rafThrowCount = 0;
     d.${INJECT} = function() {
@@ -83,7 +85,7 @@ check(`the ${INJECT} throw fired once`, throwCount === 1,
 // if the original throw-patch were still in place, but we already restored it above;
 // instead we track via an extra counter on the restored function for 500ms).
 await ev(`(() => {
-    const d = window.webdoom.doom;
+    const d = window.__rafDoom;
     const orig = d.${INJECT};
     window.__rafPostCount = 0;
     d.${INJECT} = function(...a) { window.__rafPostCount++; return orig.apply(d, a); };

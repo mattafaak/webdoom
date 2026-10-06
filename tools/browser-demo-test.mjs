@@ -324,11 +324,20 @@ try {
         const badB64 = bad.toString('base64')
             .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
         const badUrl = `${srvUrl}#demo=${encodeURIComponent(badB64)}&wad=${encodeURIComponent('doom.wad')}`;
-        tabD = await chrome.tab(badUrl);
+        // The session ends as soon as the replay is refused, and the page drops
+        // window.webdoom with it, so a poll for the handle can miss the whole
+        // session.  A setter installed before the page loads sees it published.
+        tabD = await chrome.tab('about:blank');
+        await tabD.cdp('Page.addScriptToEvaluateOnNewDocument', { source: `(() => {
+            let wd; window.__published = 0;
+            Object.defineProperty(window, 'webdoom', { configurable: true, get: () => wd,
+                set: v => { wd = v; if (v && v.doom) window.__published++; } });
+        })()` });
+        await tabD.cdp('Page.navigate', { url: badUrl });
         await until(tabD, () => tabD.ev(`!!navigator.serviceWorker.controller`), 20000);
         // the engine has to boot and then fail, so give it the boot budget
-        await tabD.waitFor(() => tabD.ev(`!!window.webdoom?.doom`), { timeout: 90000, every: 250 });
-        const booted = await tabD.ev(`!!window.webdoom?.doom`);
+        await tabD.waitFor(() => tabD.ev(`window.__published > 0`), { timeout: 90000, every: 250 });
+        const booted = await tabD.ev(`window.__published > 0`);
         check('Tab D: the engine DID boot (this is the post-boot failure path, not the ownership gate)',
            booted);
         await sleep(3000);   // let the after-callback failure settle
