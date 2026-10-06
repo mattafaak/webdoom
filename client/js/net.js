@@ -44,6 +44,9 @@ function checkNetShape(numplayers, slots) {
 // See PING_TIMEOUT_MS at the call site in lobby.js for why this exists at all.
 const PING_TIMEOUT_MS = 3000;
 
+// The page's own server, as a WebSocket origin (browser only).
+export const pageWsBase = () => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
+
 export function connectLobby(baseUrl, WS = WebSocket) {
     const ws = new WS(`${baseUrl}/ws/lobby`);
     const handlers = new Map();

@@ -2,7 +2,7 @@
 // MULTIPLAYER → the lobby, START ready on the current defaults, GAME and MAP
 // pickers and value rows for the rest.  Doing nothing = you are Green/Indigo/…
 import { bootDoom, endActiveSession } from './main.js';
-import { connectLobby, launchArgs } from './net.js';
+import { connectLobby, launchArgs, pageWsBase } from './net.js';
 import { loadDoomFont } from './doomfont.js';
 import { setStatus, loading } from './ui.js';
 
@@ -393,8 +393,7 @@ const connectingScreen = () => ({ id: 'connecting', title: 'CONNECTING…', item
 
 function enterMultiplayer() {
     if (lobby) resetToLauncher();          // a stale handle: start clean
-    const base = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
-    lobby = connectLobby(base);
+    lobby = connectLobby(pageWsBase());
     menu.push(connectingScreen());
     // roster: a lobby is forming.  inprogress: a game is live, offer to drop
     // in.  Either replaces CONNECTING, then refreshes its own screen in place.

@@ -3,7 +3,7 @@
 import { createRenderer } from './video.js';
 import { createInput, loadSettings } from './input.js';
 import { createAudio } from './audio.js';
-import { attachRelay, attachSpectate } from './net.js';
+import { attachRelay, attachSpectate, pageWsBase } from './net.js';
 import { loadPersisted, startSync } from './persist.js';
 import { wadCacheGet, wadCachePut } from './wad-cache.js';
 import { libraryGetBytes } from './wad-library.js';
@@ -85,7 +85,8 @@ async function fetchWad(doom, file, sha, onProgress = () => {}) {
     return { ptr, len: got };
 }
 
-function restoreOnFailure(canvas) {
+// Back to the launcher: no loading bar, the canvas hidden, #landing shown.
+function showLauncher(canvas) {
     loading.hide();
     canvas.hidden = true;
     document.getElementById('landing').hidden = false;
@@ -99,16 +100,12 @@ function restoreOnFailure(canvas) {
 
 // The live session's one exit, reachable from outside bootDoom's closure.
 //
-// WHY THIS EXISTS.  endSession is the only thing that stops the rAF loop,
-// releases the relay socket, the audio context and the sync interval, hides the
-// canvas and un-hides #landing -- and it was a closure local, so a caller that
-// had already got its `doom` back could not reach it.  lobby.js's
-// resetToLauncher therefore "returned to the launcher" by resetting menu state
-// while the engine kept running behind a hidden #landing: the launcher rendered
-// invisibly, the status message explaining the failure was unreadable, window
-// input listeners still fed the live engine, and `booted` was false again, so a
-// keypress could boot a SECOND engine onto the same canvas.  The reachable
-// trigger is a demo permalink whose header the engine rejects -- one click.
+// endSession is the only thing that stops the rAF loop, releases the relay
+// socket, the audio context and the sync interval, hides the canvas and shows
+// #landing.  lobby.js's resetToLauncher calls this, so returning to the
+// launcher after the engine is running (a demo permalink the engine rejects,
+// for one) ends the session rather than leaving an engine running behind the
+// launcher, fed by window input, where a keypress could boot a second one.
 //
 // Returns whether there was a session to end, so a caller can tell the two
 // cases apart.  Re-entrant by construction: the handle is cleared before
@@ -138,28 +135,13 @@ export async function bootDoom({ wads, saves = null, args = [], net = null, onQu
     // declared before createDoom: onDoomError can fire before the loop starts
     let running = false;
     let syncHandle = null;
-    // Disposers, pushed AS EACH HANDLE IS CREATED, and run in reverse.
-    //
-    // This used to be one `releaseResources = () => {...}` assignment at the
-    // END of the boot, 60 lines after the first thing it releases.  Anything
-    // that threw in between escaped cleanup entirely: the relay WebSocket
-    // (so the server kept the colour slot for the rest of the session and
-    // refused the reconnect), the AudioContext with its three window-level
-    // arm listeners, and a 3 s interval left poking a dead instance.  Two
-    // reachable triggers: a shader compile failure throwing out of
-    // createRenderer, and an I_Error during callMain.
-    //
-    // Registering beside the construction is the fix that cannot drift: a
-    // handle added later without a disposer is visible at the call site.
+    // Disposers, pushed AS EACH HANDLE IS CREATED, and run in reverse, so a
+    // throw at any point of the boot (a shader that fails to compile, an
+    // I_Error during callMain) still releases everything built before it: the
+    // relay socket and its server slot, the AudioContext and its listeners,
+    // the sync interval.  A handle added without a disposer is visible at the
+    // call site.
     const disposers = [];
-    const releaseResources = () => {
-        while (disposers.length) {
-            try { disposers.pop()(); } catch { /* dead instance */ }
-        }
-        document.exitPointerLock?.();
-        canvas.hidden = true;
-        document.getElementById('landing').hidden = false;
-    };
 
     // One exit for the quit path and both error paths.  The caller's onQuit
     // is what re-renders the launcher, so it runs on every exit; the reason
@@ -170,11 +152,12 @@ export async function bootDoom({ wads, saves = null, args = [], net = null, onQu
         released = true;
         activeEndSession = null;       // nothing outside may re-enter this
         running = false;
-        try { syncHandle?.flush?.(); } catch { /* dead instance */ }   // no wasm calls: safe after abort()
-        try { releaseResources(); } catch { /* boot died before construction */ }
-        loading.hide();
-        canvas.hidden = true;
-        document.getElementById('landing').hidden = false;
+        syncHandle?.flush();           // no wasm calls: safe after abort(); it catches its own errors
+        while (disposers.length) {
+            try { disposers.pop()(); } catch { /* dead instance */ }
+        }
+        document.exitPointerLock?.();
+        showLauncher(canvas);
         try { onQuit?.(); } catch { /* launcher gone */ }
         if (reason) { try { status(reason); } catch { /* DOM unavailable */ } }
     };
@@ -210,7 +193,7 @@ export async function bootDoom({ wads, saves = null, args = [], net = null, onQu
             fetchWad(doom, w.file, w.sha, (g, t) => { got[i] = g; tot[i] = t; report(); })));
         persisted = await loadPersisted(saves);
     } catch (err) {
-        restoreOnFailure(canvas);
+        showLauncher(canvas);
         throw err;
     }
     // the launcher took over while this was loading: start nothing
@@ -224,13 +207,13 @@ export async function bootDoom({ wads, saves = null, args = [], net = null, onQu
         const name = i === 0 ? (ENGINE_NAME[w.file] ?? w.file) : w.file;
         if (!doom.ccall('web_register_file', 'number',
                         ['string', 'number', 'number'], [name, blocks[i].ptr, blocks[i].len])) {
-            restoreOnFailure(canvas);
+            showLauncher(canvas);
             throw new Error(`cannot load ${w.file}: the engine's file registry is full`);
         }
     }
 
     const pwads = wads.slice(1).flatMap(w => ['-file', w.file]);
-    const baseWsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
+    const baseWsUrl = pageWsBase();
     const relay = net?.spectate
         ? attachSpectate(doom, baseWsUrl, net)
         : net ? attachRelay(doom, baseWsUrl, net) : null;
