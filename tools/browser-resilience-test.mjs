@@ -1,68 +1,22 @@
 #!/usr/bin/env node
 // Browser resilience tests: 5 failure-path subtests.
-// usage: node tools/browser-resilience-test.mjs [url] [outdir]
+// usage: node tools/browser-resilience-test.mjs [url]
 //
 // State-machine edge coverage (docs/state-machine.md):
 //   T05 SP-LOADING → LANDING  (bootDoom rejects: WAD fetch / engine fail)
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
 import { startServer } from './lib/server.mjs';
+import { check, summary } from './lib/report.mjs';
 
 const url = process.argv[2] ?? (await startServer()).url;
-const outdir = process.argv[3] ?? '/tmp';
 const chrome = await launchChrome();
-const cleanup = code => { chrome.kill(); process.exit(code); };
-const openTab = () => chrome.tab(url);
-
-// Wait for lobby menu to be rendered
-// Same contract as tools/lib/cdp.mjs's tab.waitForMenu: true, false on
-// timeout, throw on an error status.  This file's callers already check it.
-const waitForMenu = (tab, secs = 25) => tab.waitForMenu(secs);
-
-// Click through SP menu and wait until engine canvas is live
-async function bootIntoGame(tab, secs = 60) {
-    let clicked = false;
-    for (let i = 0; i < secs * 2; i++) {
-        await sleep(500);
-        const s = await tab.ev(`document.getElementById('status')?.textContent`);
-        if (s?.startsWith('Error') || s?.startsWith('cannot') || s?.startsWith('engine error'))
-            throw new Error(`boot error: ${s}`);
-        if (!clicked) {
-            clicked = await tab.ev(`(() => {
-                const sp = document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]');
-                if (!sp) return false;
-                sp.click();
-                const g = document.querySelector('#dmenu .row[data-label*="ULTIMATE"]')
-                       || document.querySelector('#dmenu .row[data-label*="DOOM"]');
-                if (!g) return false;
-                g.click();
-                return true;
-            })()`);
-            continue;
-        }
-        const running = await tab.ev(
-            `!document.getElementById('screen').hidden && document.getElementById('status')?.textContent === ''`,
-        );
-        if (running) return true;
-    }
-    return false;
-}
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
-
-const results = [];
 async function runTest(name, fn) {
     console.log(`\n[TEST] ${name}`);
-    try {
-        await fn();
-        results.push({ name, passed: true });
-        console.log(`  PASS`);
-    } catch (err) {
-        results.push({ name, passed: false, reason: err.message });
-        console.log(`  FAIL: ${err.message}`);
-    }
+    try { await fn(); check(name, true); }
+    catch (err) { check(name, false, err.message); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -70,10 +24,10 @@ async function runTest(name, fn) {
 //    requests are blocked; graceful = error shown + menu/landing restored.
 // ═══════════════════════════════════════════════════════════════════════════
 await runTest('1-wad-fetch-failure', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
         // Wait for the lobby menu first (so /api/wads can complete before we block)
-        if (!await waitForMenu(tab)) throw new Error('menu did not appear');
+        if (!await tab.waitForMenu()) throw new Error('menu did not appear');
 
         // Block WAD file requests at the network layer AFTER the manifest has
         // loaded.  Pattern */wads/* matches /wads/doom.wad but NOT /api/wads.
@@ -150,9 +104,9 @@ await runTest('1-wad-fetch-failure', async () => {
 //    client shows a "reload to update" notification without crashing.
 // ═══════════════════════════════════════════════════════════════════════════
 await runTest('2-sw-update-mid-session', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
-        if (!await waitForMenu(tab)) throw new Error('menu did not appear');
+        if (!await tab.waitForMenu()) throw new Error('menu did not appear');
 
         // Synthesise the event that fires when a new service worker takes control
         await tab.ev(`navigator.serviceWorker.dispatchEvent(new Event('controllerchange'))`);
@@ -176,10 +130,10 @@ await runTest('2-sw-update-mid-session', async () => {
 //    game still renders, audio context handled.
 // ═══════════════════════════════════════════════════════════════════════════
 await runTest('3-tab-hide-resume', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
-        if (!await waitForMenu(tab)) throw new Error('menu did not appear');
-        if (!await bootIntoGame(tab)) throw new Error('game did not boot');
+        if (!await tab.waitForMenu()) throw new Error('menu did not appear');
+        if (!await tab.bootSP(60)) throw new Error('game did not boot');
         await sleep(500);
 
         // Arm audio via simulated user gesture
@@ -215,10 +169,10 @@ await runTest('3-tab-hide-resume', async () => {
 //    reconnect.
 // ═══════════════════════════════════════════════════════════════════════════
 await runTest('4-gamepad-hotplug', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
-        if (!await waitForMenu(tab)) throw new Error('menu did not appear');
-        if (!await bootIntoGame(tab)) throw new Error('game did not boot');
+        if (!await tab.waitForMenu()) throw new Error('menu did not appear');
+        if (!await tab.bootSP(60)) throw new Error('game did not boot');
         await sleep(600);
 
         // Intercept _web_input_event to count ESCAPE keydown events (EV_KEYDOWN=0, DK.ESCAPE=27)
@@ -309,9 +263,9 @@ await runTest('4-gamepad-hotplug', async () => {
 //    graceful = saveSettings swallows the error, app keeps running.
 // ═══════════════════════════════════════════════════════════════════════════
 await runTest('5-storage-quota', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
-        if (!await waitForMenu(tab)) throw new Error('menu did not appear');
+        if (!await tab.waitForMenu()) throw new Error('menu did not appear');
 
         // Patch localStorage.setItem to throw for webdoom keys
         await tab.ev(`
@@ -384,9 +338,9 @@ await runTest('5-storage-quota', async () => {
 //    Graceful = a named refusal, with the launcher still on screen.
 // ═══════════════════════════════════════════════════════════════════════════
 await runTest('6-wad-this-client-lacks', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
-        if (!await waitForMenu(tab)) throw new Error('menu did not appear');
+        if (!await tab.waitForMenu()) throw new Error('menu did not appear');
 
         const r = await tab.ev(`(async () => {
             const m = await import('/js/main.js');
@@ -425,9 +379,9 @@ await runTest('6-wad-this-client-lacks', async () => {
 //    was told "cannot reach server" about a server that was up and answering.
 // ═══════════════════════════════════════════════════════════════════════════
 await runTest('7-server-has-no-iwad', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
-        if (!await waitForMenu(tab)) throw new Error('menu did not appear');
+        if (!await tab.waitForMenu()) throw new Error('menu did not appear');
 
         // Answer /api/ui-assets exactly as the server does with no IWAD.
         tab.on('Fetch.requestPaused', p => {
@@ -479,9 +433,9 @@ await runTest('7-server-has-no-iwad', async () => {
 //    EPISODE? with nothing on it.
 // ═══════════════════════════════════════════════════════════════════════════
 await runTest('8-empty-menu-screen', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
-        if (!await waitForMenu(tab)) throw new Error('menu did not appear');
+        if (!await tab.waitForMenu()) throw new Error('menu did not appear');
 
         const r = await tab.ev(`(async () => {
             const [{ loadDoomFont }, { createMenu }] =
@@ -521,9 +475,9 @@ await runTest('8-empty-menu-screen', async () => {
 //    checking produces.
 // ═══════════════════════════════════════════════════════════════════════════
 await runTest('9-ui-lumps-decode-clean', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
-        if (!await waitForMenu(tab)) throw new Error('menu did not appear');
+        if (!await tab.waitForMenu()) throw new Error('menu did not appear');
         const bad = tab.warnings.filter(w => /truncated/i.test(w));
         assert(bad.length === 0,
             `${bad.length} truncation warning(s) decoding the server's own IWAD: ${bad[0] ?? ''}`);
@@ -545,7 +499,7 @@ await runTest('9-ui-lumps-decode-clean', async () => {
     real.lumps[victim] = raw.subarray(0, Math.max(9, raw.length >> 1)).toString('base64');
     const body = Buffer.from(JSON.stringify(real)).toString('base64');
 
-    const tab2 = await openTab();
+    const tab2 = await chrome.tab(url);
     try {
         tab2.on('Fetch.requestPaused', p => {
             tab2.cdp('Fetch.fulfillRequest', {
@@ -576,9 +530,9 @@ await runTest('9-ui-lumps-decode-clean', async () => {
 //     storage can) made every boot abort until the store was cleared by hand.
 // ═══════════════════════════════════════════════════════════════════════════
 await runTest('10-oversized-stored-config', async () => {
-    const tab = await openTab();
+    const tab = await chrome.tab(url);
     try {
-        if (!await waitForMenu(tab)) throw new Error('menu did not appear');
+        if (!await tab.waitForMenu()) throw new Error('menu did not appear');
         await tab.ev(`(async () => {
             const d = await new Promise((res, rej) => { const r = indexedDB.open('webdoom', 1);
                 r.onupgradeneeded = () => r.result.createObjectStore('files');
@@ -589,7 +543,7 @@ await runTest('10-oversized-stored-config', async () => {
             d.close(); })()`);
         await tab.cdp('Page.reload');
         await sleep(1000);
-        if (!await waitForMenu(tab)) throw new Error('menu did not appear after reload');
+        if (!await tab.waitForMenu()) throw new Error('menu did not appear after reload');
         const ok = await tab.bootSP(60).catch(e => { throw new Error(String(e.message ?? e)); });
         assert(ok, 'the game did not boot with an oversized config in the store');
     } finally { tab.close(); }
@@ -597,20 +551,5 @@ await runTest('10-oversized-stored-config', async () => {
 
 // ── Results ───────────────────────────────────────────────────────────────────
 console.log('\n── resilience results ──────────────────────────────────────');
-let allPassed = true;
-for (const r of results) {
-    if (r.passed) {
-        console.log(`  PASS  ${r.name}`);
-    } else {
-        console.log(`  FAIL  ${r.name}: ${r.reason}`);
-        allPassed = false;
-    }
-}
-
-if (allPassed) {
-    console.log(`PASS — all ${results.length} resilience paths graceful`);
-    cleanup(0);
-} else {
-    console.log('FAIL — one or more resilience paths not graceful');
-    cleanup(1);
-}
+summary('every resilience path graceful');
+process.exit();
