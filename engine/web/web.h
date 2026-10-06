@@ -6,13 +6,11 @@
 #include "doomtype.h"
 #include "d_ticcmd.h" // ticcmd_t, for the web_net_bundle contract below
 
-// Zone pool size.  Single authoritative define — both i_system.c
-// (I_ZoneBase) and perf.c (web_zone_sample / web_zone_size) consume this.
-// Value chosen after measurement (see perf.md §2 and task 2.5):
-// - Non-purgeable HWM across 13 IWAD demos: 1.36 MB (plutonia demo3)
-// - 4 MB test: confirmed zero I_Error failures across all 13 demos + 2p/4p net
-// - 8 MB: 2× safety margin over 4 MB worst-case, 5.9× over HWM
-// Do not change without re-running demo-test.mjs (13/13) + net-test.mjs.
+// Zone pool size, the one definition (i_system.c's I_ZoneBase and perf.c both
+// read it).  The non-purgeable high-water mark over the 13 IWAD demos is
+// 1.36 MB (plutonia demo3); 4 MB runs all 13 and 2- and 4-player games with no
+// zone failure.  The zone's size decides what gets purged, so a change here is
+// checked against the render goldens as well as the sim ones.
 #ifndef ZONESIZE
 #define ZONESIZE (4 * 1024 * 1024)
 #endif
@@ -66,8 +64,9 @@ int web_seek_demo (int targetTic);
 // assume otherwise.
 void web_set_console (int player);
 
-// name is a NUL-terminated C string; the callee copies at most MAXPLAYERNAME
-// bytes and bounds-checks `player` itself.
+// name is a NUL-terminated C string; the callee keeps at most 10 characters of
+// it and bounds-checks `player` itself.  The string is copied onto the stack by
+// the caller's ccall first, so the CALLER must bound its length (net.js does).
 void web_set_player_name (int player, const char* name);
 
 // In-heap file registry + JS small-file bridge (files.c).  W_WebFile returns
@@ -87,11 +86,7 @@ void mus_pause (int pause);
 void mus_setvolume (int vol127);
 int web_music_debug (
     int what); /* 0 playing, 1 events, 2 noteons, 3 bank, 4 voices */
-void web_set_opl_mode (int mode); /* 0 OPL2, 1 OPL3; call before mus_init */
-/* web_music_render is declared once, above, with its bound contract.  A second
-   declaration lived here and web-contract-check could not see it: that tool
-   builds its declaration set as a Map, so a duplicate key collapses silently.
- */
+void web_set_opl_mode (int mode); /* 0 OPL2, 1 OPL3; re-inits the chip */
 
 // --- build/synth.wasm contract (engine/web/synth_main.c) ------------------
 //
@@ -100,9 +95,8 @@ void web_set_opl_mode (int mode); /* 0 OPL2, 1 OPL3; call before mus_init */
 // `malloc` and becomes the module's: it frees the previous song when a new one
 // is accepted, and frees the new one when mus_play declines it -- mus_play's
 // int return is the signal, 1 for taken and 0 for declined.  Passing the block
-// the module ALREADY owns is allowed and is a no-op replay; it used to be a
-// use-after-free.  `gm` must outlive the module (load_bank keeps no copy of the
-// lump it reads).
+// the module already owns is allowed and replays it.  `gm` must outlive the
+// module (load_bank keeps no copy of the lump it reads).
 // `out` in web_music_render must have room for nframes * 2 floats.
 void web_music_state (int* out); /* 7 ints: see engine/web/i_sound.c */
 

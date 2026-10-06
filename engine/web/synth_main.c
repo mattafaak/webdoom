@@ -1,14 +1,12 @@
 // webdoom synth_main: the entry points of build/synth.wasm, the OPL synth as a
-// standalone module for the AudioWorklet (ledger NC6).
+// standalone module for the AudioWorklet.
 //
 // WHY A SECOND MODULE AT ALL
 // --------------------------
-// `web_music_render` runs on the MAIN thread, pulled by a 100 ms timer in
-// client/js/audio.js.  Round 10 measured what that costs per call: 1.84 ms p99
-// on alder, 4.09 on tank, 19.7 on wbox — against a 16.7 ms frame.  On wbox that
-// is a dropped frame every sixth frame, in a burst the rAF budget cannot
-// absorb.  The fix is not to make the synth faster; it is to run it on the
-// thread that owns audio.
+// Run from the engine, `web_music_render` is on the MAIN thread, pulled by a
+// 100 ms timer in client/js/audio.js, and costs 1.84 ms p99 per call on alder,
+// 4.09 on tank and 19.7 on wbox -- against a 16.7 ms frame, a dropped frame
+// every sixth frame on wbox.  So the synth runs on the thread that owns audio.
 //
 // AudioWorkletGlobalScope has no `fetch` and no `import.meta`, so the worklet
 // cannot load an emscripten ES6 module: it is handed the wasm BYTES over its
@@ -44,8 +42,8 @@ static int genmidi_len;
 static byte* song;
 
 // --- the four W_ symbols mus_opl.c's load_bank() needs -------------------
-// Only "GENMIDI" is ever asked for; anything else is absent, which is a state
-// load_bank already handles (it keeps its built-in bank).
+// Only "GENMIDI" is ever asked for; anything else is absent, which load_bank
+// handles by leaving the bank unloaded (mus_play then refuses songs).
 
 int W_CheckNumForName (char* name)
 {
@@ -79,13 +77,8 @@ void* W_CacheLumpName (char* name, int tag)
 
 EMSCRIPTEN_KEEPALIVE void synth_play (byte* data, int len, int looping)
 {
-    // Replaying the block this module already owns.  Without this, the accept
-    // path below frees `song` and then assigns the freed pointer back to it,
-    // and mus_opl reads through it for the rest of the session -- a
-    // use-after-free reached by nothing more exotic than passing the same
-    // pointer twice.  The shipped client never does, because it mallocs a fresh
-    // block per song; the contract never said it could not, which is the
-    // difference between safe and safe-by-accident.
+    // Replaying the block this module already owns: the accept path below
+    // would free `song` and keep reading the freed pointer.
     if (data == song)
     {
         mus_play (data, len, looping);
@@ -93,10 +86,7 @@ EMSCRIPTEN_KEEPALIVE void synth_play (byte* data, int len, int looping)
     }
 
     // mus_play returns 1 when it has TAKEN the buffer and 0 when it declined
-    // and touched nothing -- so on a refusal the old block is still live and it
-    // is the new one that must go.  This used to read the decision out of
-    // web_music_debug(0), the `playing` flag through a debug accessor, which
-    // was correct and one added early return away from freeing the live song.
+    // it, so on a refusal the old block is still the song and the new one goes.
     if (mus_play (data, len, looping))
     {
         free (song); /* free(NULL) on the first call is fine */

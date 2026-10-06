@@ -1,9 +1,8 @@
-// webdoom i_video: the engine composes into screens[0] (column-major since
-// 14.2a: screens[0][x*SCREENHEIGHT + y] = pixel(x,y)) and JS reads it in
-// place through web_framebuffer().  There is no presentation copy: the
-// column-major bytes go up as a 200x320 R8 texture and the fragment shader
-// swaps the axes (client/js/video.js).  Until round 10 I_FinishUpdate
-// untransposed 64,000 bytes into a second buffer on every displayed frame.
+// webdoom i_video: the engine composes into screens[0], column-major
+// (screens[0][x*SCREENHEIGHT + y] = pixel(x,y)), and JS reads it in place
+// through web_framebuffer().  There is no presentation copy: the bytes go up
+// as a 200x320 R8 texture and the fragment shader swaps the axes
+// (client/js/video.js).
 //
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <emscripten.h>
@@ -24,21 +23,11 @@ void I_ShutdownGraphics (void) {}
 void I_SetPalette (byte* palette)
 {
     int i;
-    /* usegamma indexes gammatable[5][256] and arrives UNBOUNDED.  It is a
-       plain entry in m_misc.c's defaults table, and M_LoadDefaults assigns
-       `*defaults[i].location = parm` with no range check on any entry -- so a
-       .doomrc carrying `usegamma 99` reads about 24 KB past the table, here,
-       on every palette update.  On this port .doomrc is not a file on the
-       user's own disk: it round-trips through IndexedDB (client/js/persist.js),
-       which browser-options already treats as hostile input and tests as such.
-
-       spec.md tenet 4: no input from the network, the WAD, or the user may
-       corrupt memory.  This is that.
-
-       Clamped HERE rather than in m_misc.c because engine/core is vendored
-       close to id's source on purpose, and the platform layer already owns the
-       palette.  The menu path self-heals (m_menu.c wraps to 0 on F11), so this
-       is the only unguarded reader. */
+    /* usegamma comes from .doomrc, which here round-trips through
+       IndexedDB, and M_LoadDefaults assigns config values with no range
+       check: `usegamma 99` would read 24 KB past gammatable[5][256].  It is
+       clamped here, the one unguarded reader, so engine/core stays close to
+       id's source (the menu's F11 path wraps it to 0 itself). */
     int g = usegamma;
     if (g < 0 || g >= 5)
         g = 0;

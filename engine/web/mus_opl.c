@@ -6,11 +6,11 @@
 // blocks; JS pulls samples through web_music_render() and feeds an
 // AudioWorklet. Everything here is driven by that pull — no timers.
 //
-// OPL2/OPL3 mode toggle (task 17.1):
+// OPL2/OPL3 mode:
 //   opl_mode=0 → authentic mono 9-voice OPL2 (NEW=0, default)
 //   opl_mode=1 → stereo 18-voice OPL3 (NEW=1, second bank voices 9-17)
-// Mode flag is read from config only (via M_SaveDefaults/.doomrc path).
-// It never reads playsim/game-state — safe for demos and netplay determinism.
+// JS sets it (web_set_opl_mode, from the OPTIONS screen's stored setting).  It
+// never reads game state, so demos and netplay are unaffected.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <string.h>
 #include <math.h>
@@ -29,9 +29,8 @@
 #define MUS_CHANNELS 16
 #define PERCUSSION_CH 15
 
-// 0 = OPL2 authentic mono 9-voice (default, byte-identical to pre-17.1)
+// 0 = OPL2 authentic mono 9-voice (default)
 // 1 = OPL3 stereo 18-voice (second addressing scheme, second bank voices 9-17)
-// Mode flag is persisted by JS settings (localStorage) — no .doomrc entry.
 static int opl_mode = 0;
 
 // --- GENMIDI bank -------------------------------------------------------
@@ -331,16 +330,10 @@ static void channel_update (int muschan)
 // --- MUS event processing ----------------------------------------------
 
 // returns tics to wait, or -1 on score end
-// Every read past a group's first byte must be bounded.  The single
-// `ev >= ev_end` check at the top of the loop below admits ONE byte, and the
-// cases consume up to two more; the trailing delay VLQ had no bound at all and
-// would walk the zone heap until it happened on a byte with bit 7 clear.  A MUS
-// lump is WAD-owned data and a PWAD's lump overrides the IWAD's, so this is
-// reachable from a WAD the player imported (task 23.2).
-//
-// The JS twin, client/js/mus2mid.js:99-108, has always bounds-checked its VLQ
-// reader and throws "MUS: unexpected end in delay VLQ"; the C sequencer was the
-// weaker of two implementations of one format.
+// Every read past a group's first byte is bounded: the `ev >= ev_end` check at
+// the top of the loop admits one byte, the cases consume up to two more, and
+// the trailing delay VLQ is unbounded in the format.  A MUS lump is WAD data,
+// and a player-imported PWAD's lump overrides the IWAD's.
 static boolean mus_overrun;
 
 static int mus_byte (void)
@@ -459,16 +452,12 @@ static void load_bank (void)
 
     if (bank_loaded || W_CheckNumForName ("GENMIDI") < 0)
         return;
-    // The lump's LENGTH was never consulted: memcmp read 8 bytes from a lump
-    // that may be shorter, and memcpy then took a fixed 6300 bytes out of it.
-    // REPRODUCED 2026-09-11 with a PWAD whose GENMIDI is exactly the 8-byte
-    // magic: "GENMIDI lump length = 8, about to copy 6300 bytes from it" -- a
-    // 6292-byte overread into adjacent zone memory, used as instrument data.
-    // A PWAD's lump overrides the IWAD's, and PWADs are user-importable
-    // (16.6a).
+    // a PWAD's GENMIDI overrides the IWAD's, so its length is checked before
+    // the fixed-size copy; too short, the bank stays unloaded and mus_play
+    // refuses songs
     lump = W_GetNumForName ("GENMIDI");
     if (W_LumpLength (lump) < (int) (8 + sizeof bank))
-        return; // keep the built-in bank rather than garbage
+        return;
 
     g = W_CacheLumpName ("GENMIDI", PU_STATIC);
     if (memcmp (g, "#OPL_II#", 8) == 0)
@@ -485,8 +474,8 @@ void mus_init (int rate)
     samplerate = rate;
     OPL3_Reset (&chip, (Bit32u) rate);
     // OPL2 compat: leave NEW=0; enable waveform select semantics.
-    // NEW=0 is the only register write done unconditionally; it keeps the
-    // OPL2 output byte-identical to pre-17.1 builds when opl_mode==0.
+    // NEW=0 is the only register write done unconditionally, so OPL2 output
+    // is the same as a sequencer with no OPL3 support at all.
     opl_write (0x01, 0x20);
 
     if (opl_mode == 1)

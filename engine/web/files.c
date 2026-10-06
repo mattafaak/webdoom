@@ -57,11 +57,9 @@ static const char* web_basename (const char* path)
     return s ? s + 1 : path;
 }
 
-// Returns 1 if the file was registered, 0 if the registry is full.  It used to
-// return void and no-op silently at the cap, which W_WebFile below could not
-// see -- so every later lookup of that name missed, malloc'd the file again,
-// failed to register it again, and leaked.  A bounded registry that refuses
-// loudly is the contract; a silent one is a leak with a limit written on it.
+// Returns 1 if the file was registered, 0 if the registry is full.  W_WebFile
+// relies on the 0: a lookup that cannot register must not keep re-reading the
+// file and leaking the copy.
 EMSCRIPTEN_KEEPALIVE int web_register_file (const char* name, byte* data,
                                             int len)
 {

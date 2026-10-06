@@ -21,7 +21,7 @@ SRC      := $(CORE_SRC) $(WEB_SRC)
 # The unflagged default build is byte-unaffected by these declarations.
 EXTRA_CFLAGS ?=
 
-# Per-object optimisation level (round 10, ledger C8).  The renderer, the
+# Per-object optimisation level.  The renderer, the
 # playsim's hot files and the OPL synth compile at -O3; everything else at
 # -Oz.  The link runs -O3 -flto, which picks the pipeline, while clang's
 # per-function `minsize` attributes survive LTO -- so the cold code stays
@@ -42,21 +42,10 @@ CFLAGS := -flto -Dalloca=__builtin_alloca -std=gnu89 -DNORMALUNIX -Icore -Iweb \
           -Wno-unused-but-set-variable -Wno-dangling-else \
           -Wno-parentheses -Wno-missing-braces -Wno-unused-value
 
-# EXPORTED_FUNCTIONS lists ONLY what EMSCRIPTEN_KEEPALIVE cannot provide.
-#
-# It used to name 64 symbols against 72 KEEPALIVE exports -- a second,
-# incomplete copy of the export list, four of whose omissions are on the live
-# drop-in path and worked anyway.  Measured before deleting it (round 6): built
-# with the full list and with `_main,_malloc,_free`, same tree, same toolchain:
-#
-#   build/doom.wasm  b16407701c676f52976344f339790556  (both)
-#   build/doom.js    592ee0bae80c3ec2e071b86ce534db82  (both)
-#
-# Byte-identical, so the 61 KEEPALIVE names in it were inert.  _main is the
-# entry point and _malloc/_free are emscripten runtime functions with no
-# KEEPALIVE of their own -- drop those three and the client loses ccall's
-# allocation path.  A symbol needed from JS gets EMSCRIPTEN_KEEPALIVE at its
-# definition; it does not get a second mention here.
+# EXPORTED_FUNCTIONS lists ONLY what EMSCRIPTEN_KEEPALIVE cannot provide:
+# _main, and _malloc/_free, which are emscripten runtime functions with no
+# KEEPALIVE of their own (ccall's allocation path needs them).  Any other
+# symbol needed from JS gets EMSCRIPTEN_KEEPALIVE at its definition.
 LDFLAGS := -flto -sMALLOC=emmalloc -sASSERTIONS=0 --closure 1 -sINITIAL_MEMORY=32MB -sSTACK_SIZE=1MB \
            -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createDoom \
            -sINVOKE_RUN=0 \
@@ -67,7 +56,7 @@ LDFLAGS := -flto -sMALLOC=emmalloc -sASSERTIONS=0 --closure 1 -sINITIAL_MEMORY=3
 
 OBJ := $(patsubst %.c,$(BUILD)/obj/%.o,$(SRC))
 
-# build/synth.wasm — the OPL synth alone, for the AudioWorklet (ledger NC6).
+# build/synth.wasm — the OPL synth alone, for the AudioWorklet.
 # The SAME objects doom.wasm links, so the two synths cannot drift apart.
 # A reactor: --no-entry, no main, instantiated from bytes by the worklet
 # (AudioWorkletGlobalScope has no fetch).  4 MB covers the chip (~20 KB), the
@@ -87,13 +76,9 @@ $(BUILD)/obj/%.o: %.c Makefile
 	@mkdir -p $(dir $@)
 	emcc $(OPT) $(CFLAGS) $(EXTRA_CFLAGS) -MMD -MP -c $< -o $@
 
-# SYNTH_OBJ too, not just OBJ.  synth_main.c is filter-out'd from WEB_SRC (it
-# defines W_* stubs that would collide with w_wad.c in doom.wasm), so its object
-# is not in $(OBJ) -- and this line listed only $(OBJ), so build/synth.wasm has
-# never tracked a header dependency.  Editing web.h, which synth_main.c
-# includes, left synth.wasm stale and `make` said "Nothing to be done".
-# artifact-freshness caught it; make could not.  Same shape as the missing
-# -MMD -MP in the n64 and rp2040 Makefiles that round 11 fixed.
+# SYNTH_OBJ as well as OBJ: synth_main.c is filtered out of WEB_SRC (its W_*
+# stubs would collide with w_wad.c in doom.wasm), so without this
+# build/synth.wasm would not track header changes.
 -include $(OBJ:.o=.d) $(SYNTH_OBJ:.o=.d)
 
 $(SYNTH): $(SYNTH_OBJ) Makefile

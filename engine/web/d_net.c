@@ -42,8 +42,7 @@ void D_DoAdvanceDemo (void);
 void ST_Start (void);
 extern boolean advancedemo;
 
-// Send one local ticcmd to the relay. No-op stub until the JS side
-// defines it (single player, or netcode phase not wired yet).
+// Send one local ticcmd to the relay; a no-op until net.js installs netSend.
 // clang-format off
 EM_JS (void, js_net_send, (int tic, ticcmd_t* cmd, int size), {
     if (Module["netSend"]) Module["netSend"](tic, cmd, size);
@@ -61,32 +60,13 @@ static int web_ingamemask;
 EMSCRIPTEN_KEEPALIVE void web_net_setup (int player, int numplayers,
                                          int ingamemask)
 {
-    // Both values arrive from the server's lobby JSON by way of the client and
-    // were used unchecked.  players[] is MAXPLAYERS wide and is indexed by
-    // consoleplayer all over the engine (ST_Start, G_BuildTiccmd,
-    // web_level_state), and web_numplayers bounds the write loop in
-    // web_net_bundle -- so a hostile or buggy `welcome`/`launch` could place
-    // both out of range.  Note web_net_set_delay already clamps and
-    // web_set_player_name already bounds-checks; these two did not.
-    // These refusals are SILENT, deliberately, and that was re-decided in
-    // round 12 rather than inherited.
-    //
-    // The complaint was fair: a guard that declines without saying so is how
-    // the matching hole in client/js/net.js stayed invisible for so long.  But
-    // a printf here costs two things and buys nothing a user sees.  It adds its
-    // format strings to DATA, which moves __heap_base and restamps perf-009 and
-    // everything derived from it.  And tools/hostile-server-test.mjs asserts BY
-    // OBSERVATION that no hostile value causes a write below the base of the
-    // tic-indexed arrays -- so the stdio buffer a printf touches reads as
-    // exactly the violation that gate exists to catch (measured: 9 bytes,
-    // 272,936 under the base).  Loosening it to permit "benign" writes would be
-    // lowering the bar rather than fixing anything.
-    //
-    // The loudness belongs on the JS side and is there now: checkNetShape in
-    // client/js/net.js refuses the same values before they ever reach this
-    // function, with a message naming the field and the value, and that is the
-    // side a person can actually read.  This stays the silent structural floor
-    // a bare-metal port inherits.
+    // Both values come from the server's lobby JSON.  players[] is MAXPLAYERS
+    // wide and indexed by consoleplayer throughout the engine, and
+    // web_numplayers bounds the write loop in web_net_bundle, so out-of-range
+    // values are refused here -- silently: checkNetShape in client/js/net.js
+    // refuses the same values first and says why, and a printf here would
+    // write the stdio buffer below the tic arrays, which hostile-server-test
+    // treats as the violation it is looking for.
     if (player < 0 || player >= MAXPLAYERS)
         return;
     if (numplayers < 1 || numplayers > MAXPLAYERS)

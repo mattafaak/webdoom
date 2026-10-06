@@ -33,8 +33,6 @@ EM_JS (void, js_sfx_update, (int handle, int vol, int sep, int pitch), {
     if (Module["sfxUpdate"]) Module["sfxUpdate"](handle, vol, sep, pitch);
 });
 // what: 0 stop, 1 play(data,len,looping), 2 pause, 3 resume, 4 volume(arg).
-// Round 11 widened this from (int what) -- it carried play and stop only, so a
-// JS-side synth could not learn about pause, resume or a volume change at all.
 EM_JS (void, js_music_event, (int what, void* data, int len, int arg), {
     if (Module["musicEvent"]) Module["musicEvent"](what, data, len, arg);
 });
@@ -168,7 +166,8 @@ void I_StopSong (int handle)
 // pointer I_RegisterSong was handed -- valid until I_UnRegisterSong, i.e.
 // while the lump is still PU_MUSIC.
 //   0 genmidi ptr   1 genmidi len   2 song ptr   3 song len
-//   4 looping       5 paused        6 volume (0..127)
+//   4 looping       5 paused        6 volume (0..127 from the menu; S_Init's
+//                                     first call passes 127, which gives 1075)
 EMSCRIPTEN_KEEPALIVE void web_music_state (int* out)
 {
     int lump = W_CheckNumForName ("GENMIDI");
