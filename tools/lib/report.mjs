@@ -12,13 +12,17 @@ export function check(label, ok, detail = '') {
 
 // The sanctioned end: prints the summary and the verdict line, sets the exit
 // code, returns whether everything passed.  `what` is the one-line headline
-// the suite table shows.
-export function summary(what) {
+// the suite table shows.  `min` is a floor on how many checks ran: a test that
+// skipped most of its cases has nothing left to fail, so falling short of the
+// floor is a failure in its own right.
+export function summary(what, { min = 0 } = {}) {
     printed = true;
+    const ran = passes + fails, short = ran < min;
     console.log(`  ${passes} passed, ${fails} failed`);
-    console.log(`${fails ? 'FAIL' : 'PASS'} — ${what}`);
-    process.exitCode = fails ? 1 : 0;
-    return fails === 0;
+    if (short) console.log(`FAIL — ${what}: only ${ran} checks ran, at least ${min} expected`);
+    else console.log(`${fails ? 'FAIL' : 'PASS'} — ${what}`);
+    process.exitCode = fails || short ? 1 : 0;
+    return !fails && !short;
 }
 
 // Fail fast with a reason; also a sanctioned end.
