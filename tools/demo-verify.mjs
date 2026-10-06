@@ -18,13 +18,18 @@
 //   node tools/demo-verify.mjs --stdin-lmp --wad <wad> --golden <golden.json>
 //
 // Exit 0 = VERIFIED, exit 1 = DIVERGED or error, exit 2 = usage error.
+//
+// Imported, it runs nothing: tools/demo-verify-test.mjs gates extractWadLump,
+// verifyDemo and ALL_MATRIX from here, so the test exercises this file's
+// logic rather than a copy of it.
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, realpathSync } from 'node:fs';
 import { readGolden } from './lib/golden.mjs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { root } from './lib/util.mjs';
 
-const REPLAY_TIC_CAP = 200_000;  // explicit cap; reject demos that run longer
+export const REPLAY_TIC_CAP = 200_000;  // explicit cap; reject demos that run longer
 
 
 // ── CLI arg parsing ───────────────────────────────────────────────────────────
@@ -49,8 +54,6 @@ function usage() {
     process.exit(2);
 }
 
-const args = process.argv.slice(2);
-
 let lmpFile = null;
 let wadFile = null;
 let goldenFile = null;
@@ -62,20 +65,22 @@ let goldenDir = join(root, 'tools/golden');
 let ticCap = REPLAY_TIC_CAP;
 let stdinLmp = false;
 
-for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (a === '--wad')         { wadFile   = args[++i]; continue; }
-    if (a === '--golden')      { goldenFile = args[++i]; continue; }
-    if (a === '--build-dir')   { buildDir  = args[++i]; continue; }
-    if (a === '--tic-cap')     { ticCap    = +args[++i]; continue; }
-    if (a === '--wad-dir')     { wadDir    = args[++i]; continue; }
-    if (a === '--golden-dir')  { goldenDir = args[++i]; continue; }
-    if (a === '--json')        { outputJson = true; continue; }
-    if (a === '--all')         { allMode = true; continue; }
-    if (a === '--stdin-lmp')   { stdinLmp = true; continue; }
-    if (!a.startsWith('--'))   { lmpFile = a; continue; }
-    console.error(`unknown option: ${a}`);
-    usage();
+function parseArgs(args) {
+    for (let i = 0; i < args.length; i++) {
+        const a = args[i];
+        if (a === '--wad')         { wadFile   = args[++i]; continue; }
+        if (a === '--golden')      { goldenFile = args[++i]; continue; }
+        if (a === '--build-dir')   { buildDir  = args[++i]; continue; }
+        if (a === '--tic-cap')     { ticCap    = +args[++i]; continue; }
+        if (a === '--wad-dir')     { wadDir    = args[++i]; continue; }
+        if (a === '--golden-dir')  { goldenDir = args[++i]; continue; }
+        if (a === '--json')        { outputJson = true; continue; }
+        if (a === '--all')         { allMode = true; continue; }
+        if (a === '--stdin-lmp')   { stdinLmp = true; continue; }
+        if (!a.startsWith('--'))   { lmpFile = a; continue; }
+        console.error(`unknown option: ${a}`);
+        usage();
+    }
 }
 
 // ── WAD lump extractor ────────────────────────────────────────────────────────
@@ -84,7 +89,7 @@ for (let i = 0; i < args.length; i++) {
 // Format: 12-byte header (magic + numlumps + infotableofs) followed by
 // the lump directory (16 bytes per entry: filepos + size + 8-char name).
 
-function extractWadLump(wadBytes, lumpName) {
+export function extractWadLump(wadBytes, lumpName) {
     const view = new DataView(wadBytes.buffer, wadBytes.byteOffset, wadBytes.byteLength);
     const magic = String.fromCharCode(...wadBytes.slice(0, 4));
     if (magic !== 'IWAD' && magic !== 'PWAD')
@@ -124,11 +129,12 @@ async function loadEngine() {
 // Given .lmp bytes, a WAD path (to boot the engine), and an expected golden
 // trace {tics, trace}, replay the demo and compare per-tic sim hashes.
 // Returns {ok: true} or {ok: false, firstDivergentTic, expected, actual, context}.
+// `createDoom` is the build's module factory; `ticCap` bounds the replay.
 //
 // web_play_demo_buf parses the demo header and calls G_InitNew internally, so
 // the WAD just needs to be valid (engine must be initialised before calling it).
 
-async function verifyDemo(lmpBytes, wadPath, golden) {
+export async function verifyDemo(lmpBytes, wadPath, golden, { createDoom, ticCap = REPLAY_TIC_CAP }) {
     if (!existsSync(wadPath))
         return { ok: false, error: `WAD not found: ${wadPath}` };
 
@@ -273,7 +279,7 @@ async function runSingle() {
 
     const wadPath = wadFile.startsWith('/') ? wadFile : join(root, wadFile);
     await loadEngine();
-    const result = await verifyDemo(lmpBytes, wadPath, golden);
+    const result = await verifyDemo(lmpBytes, wadPath, golden, { createDoom, ticCap });
 
     if (outputJson) {
         console.log(JSON.stringify(result));
@@ -305,7 +311,7 @@ function printResult(label, result) {
 // Extracts DEMO1-4 lumps from each WAD file and verifies them against the
 // existing golden sim traces in tools/golden/.
 
-const ALL_MATRIX = [
+export const ALL_MATRIX = [
     ['doom.wad',     'doomu.wad', ['demo1', 'demo2', 'demo3', 'demo4']],
     ['doom2.wad',    'doom2.wad', ['demo1', 'demo2', 'demo3']],
     ['tnt.wad',      'tnt.wad',   ['demo1', 'demo2', 'demo3']],
@@ -361,7 +367,7 @@ async function runAll() {
                 continue;
             }
 
-            const result = await verifyDemo(lmpBytes, wadPath, golden);
+            const result = await verifyDemo(lmpBytes, wadPath, golden, { createDoom, ticCap });
             if (outputJson) {
                 console.log(JSON.stringify({ name, ...result }));
             } else {
@@ -395,8 +401,11 @@ async function runAll() {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-if (allMode) {
-    runAll();
-} else {
-    runSingle();
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+    parseArgs(process.argv.slice(2));
+    if (allMode) {
+        runAll();
+    } else {
+        runSingle();
+    }
 }

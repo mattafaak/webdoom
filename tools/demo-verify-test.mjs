@@ -4,13 +4,10 @@
 // Four sub-gates (all must pass):
 //
 //   A. 13 golden demos — each WAD demo lump is extracted and verified against
-//      the existing sim golden trace.  NOT via demo-verify.mjs: the extractor
-//      and the verify function below are COPIES of that file's (see the two
-//      section headers saying so), so nothing here exercises the shipped CLI's
-//      argv handling, its --all mode or its size cap.  The leg that does is
-//      `demo-verify-cli`, which runs `demo-verify.mjs --all` itself.  This
-//      comment used to name --all mode, which read as cover this gate has
-//      never provided.
+//      the existing sim golden trace, through demo-verify.mjs's own
+//      extractWadLump and verifyDemo.  The CLI's argv handling, its --all
+//      mode and its size cap are not exercised here; the leg that does is
+//      `demo-verify-cli`, which runs `demo-verify.mjs --all` itself.
 //
 //   B. Doctored demo red-proof — take doom-demo1's lmp bytes, flip one tic's
 //      input byte, run verify, assert that the FIRST divergent tic is reported
@@ -30,6 +27,7 @@ import { readGolden } from './lib/golden.mjs';
 import { join } from 'node:path';
 import { root } from './lib/util.mjs';
 import { pwad, buildMap } from './lib/mapkit.mjs';
+import { extractWadLump, verifyDemo, ALL_MATRIX } from './demo-verify.mjs';
 
 const buildDirIdx = process.argv.indexOf('--build-dir');
 const buildDir = buildDirIdx >= 0 ? process.argv[buildDirIdx + 1] : 'build';
@@ -45,28 +43,6 @@ function ok(label, cond) {
     else       { failures++; console.log(`  FAIL  ${label}`); }
 }
 
-// ── WAD lump extractor (mirrors demo-verify.mjs) ─────────────────────────────
-
-function extractWadLump(wadBytes, lumpName) {
-    const view = new DataView(wadBytes.buffer, wadBytes.byteOffset, wadBytes.byteLength);
-    const magic = String.fromCharCode(...wadBytes.slice(0, 4));
-    if (magic !== 'IWAD' && magic !== 'PWAD') return null;
-    const numlumps  = view.getUint32(4, true);
-    const dirOffset = view.getUint32(8, true);
-    const target = lumpName.toUpperCase().padEnd(8, '\0');
-    for (let i = 0; i < numlumps; i++) {
-        const entry = dirOffset + i * 16;
-        const name  = String.fromCharCode(...wadBytes.slice(entry + 8, entry + 16))
-            .replace(/\0.*$/, '').padEnd(8, '\0');
-        if (name === target) {
-            const filepos = view.getUint32(entry, true);
-            const size    = view.getUint32(entry + 4, true);
-            return wadBytes.slice(filepos, filepos + size);
-        }
-    }
-    return null;
-}
-
 // ── Engine loader ─────────────────────────────────────────────────────────────
 
 const doomJsPath = join(root, buildDir, 'doom.js');
@@ -79,102 +55,14 @@ if (!existsSync(doomJsPath)) {
 }
 const createDoom = (await import(doomJsPath)).default;
 
-// ── Core verify function (inlined from demo-verify.mjs for direct testing) ───
-//
-// Returns {ok, ...} same shape as demo-verify.mjs verifyDemo().
-
-const REPLAY_TIC_CAP = 200_000;
-
-async function verifyDemoBytes(lmpBytes, wadPath, golden) {
-    if (!existsSync(wadPath))
-        return { ok: false, error: `WAD not found: ${wadPath}` };
-    const wadBytes = readFileSync(wadPath);
-
-    let engineError = null;
-    const doom = await createDoom({ print: () => {}, printErr: () => {}, onDoomError: m => { engineError = m; } });
-
-    // Register WAD under the engine-expected name (doomu.wad for doom.wad,
-    // same name for doom2/tnt/plutonia).  Only ONE registration — double-loading
-    // a 12 MB WAD exceeds the WASM heap budget.
-    const wadBase    = wadPath.split('/').pop();
-    const engineName = wadBase === 'doom.wad' ? 'doomu.wad' : wadBase;
-    {
-        const p = doom._malloc(wadBytes.length);
-        doom.HEAPU8.set(wadBytes, p);
-        doom.ccall('web_register_file', null, ['string', 'number', 'number'],
-            [engineName, p, wadBytes.length]);
-    }
-
-    // Boot with -warp 1 1 so the engine initialises a level (required for
-    // Z_Zone and level data structures before web_play_demo_buf is called).
-    // web_play_demo_buf will call G_InitNew again from the demo header,
-    // resetting to the correct level — the boot level doesn't matter.
-    // (-warp 1 1 works for both doom.wad and doom2/tnt/plutonia formats.)
-    doom.callMain(['-warp', '1', '1', '-skill', '1', '-nodraw']);
-    doom._web_set_singletics(1);
-
-    const lmpPtr = doom._malloc(lmpBytes.length);
-    doom.HEAPU8.set(lmpBytes, lmpPtr);
-    const rc = doom._web_play_demo_buf(lmpPtr, lmpBytes.length);
-    if (rc !== 0)
-        return { ok: false, error: `web_play_demo_buf returned ${rc}` };
-
-    doom._web_set_nodraw(1);
-
-    const trace  = [];
-    let lastTic  = -1;
-    let cappedOut = false;
-    for (let i = 0; i < REPLAY_TIC_CAP + 10 && doom._web_demo_playing(); i++) {
-        if (trace.length >= REPLAY_TIC_CAP) { cappedOut = true; break; }
-        doom._web_wipe_skip();
-        try { doom._web_frame(); } catch (e) { engineError ??= String(e?.message ?? e); }
-        if (engineError) break;
-        // the marker tic is not a demo tic: -timedemo, which recorded the
-        // goldens, ends inside it
-        if (!doom._web_demo_playing()) break;
-        const tic = doom._web_gametic();
-        if (tic !== lastTic) {
-            trace.push(doom._web_state_hash() >>> 0);
-            lastTic = tic;
-        }
-    }
-    if (engineError) return { ok: false, error: `engine error during replay: ${engineError}` };
-    if (cappedOut) return { ok: false, error: `exceeded tic cap ${REPLAY_TIC_CAP}` };
-
-    const n = Math.min(trace.length, golden.trace.length);
-    if (n === 0) return { ok: false, error: 'replay produced 0 ticks' };
-
-    for (let i = 0; i < n; i++) {
-        if (trace[i] !== golden.trace[i]) {
-            const ctx = [];
-            for (let j = Math.max(0, i - 2); j < Math.min(n, i + 3); j++)
-                ctx.push({ tic: j, expected: golden.trace[j], actual: trace[j] });
-            return { ok: false, firstDivergentTic: i,
-                expected: '0x' + golden.trace[i].toString(16).padStart(8, '0'),
-                actual:   '0x' + trace[i].toString(16).padStart(8, '0'),
-                context: ctx };
-        }
-    }
-    if (golden.tics !== undefined && trace.length !== golden.tics)
-        return { ok: false, error: `tic count mismatch: ${trace.length} vs golden ${golden.tics}` };
-    return { ok: true, tics: trace.length };
-}
-
 // ── Gate A: 13 golden demos ───────────────────────────────────────────────────
 
 console.log('\n── demo-verify-test: Gate A — 13 golden demo verifications ────────────');
 
-const MATRIX = [
-    ['doom.wad',     'doomu.wad', ['demo1', 'demo2', 'demo3', 'demo4']],
-    ['doom2.wad',    'doom2.wad', ['demo1', 'demo2', 'demo3']],
-    ['tnt.wad',      'tnt.wad',   ['demo1', 'demo2', 'demo3']],
-    ['plutonia.wad', 'plutonia.wad', ['demo1', 'demo2', 'demo3']],
-];
-
 let goldenVerified = 0;
 let goldenTotal    = 0;
 
-for (const [wad, , demos] of MATRIX) {
+for (const [wad, , demos] of ALL_MATRIX) {
     const wadPath = join(wadDir, wad);
     if (!existsSync(wadPath)) { console.log(`  skip ${wad}: not fetched`); continue; }
     const wadBytes = readFileSync(wadPath);
@@ -195,7 +83,7 @@ for (const [wad, , demos] of MATRIX) {
             continue;
         }
 
-        const result = await verifyDemoBytes(lmpBytes, wadPath, golden);
+        const result = await verifyDemo(lmpBytes, wadPath, golden, { createDoom });
         if (result.ok) {
             ok(`${name}: VERIFIED (${result.tics} ticks)`, true);
             goldenVerified++;
@@ -210,7 +98,7 @@ for (const [wad, , demos] of MATRIX) {
 
 // goldenTotal only counts demos whose WAD was present, so "3/3" was a full
 // green over one IWAD.  Both numbers are checked against the matrix.
-const EXPECTED_DEMOS = MATRIX.reduce((n, [, , demos]) => n + demos.length, 0);
+const EXPECTED_DEMOS = ALL_MATRIX.reduce((n, [, , demos]) => n + demos.length, 0);
 console.log(`\n  Gate A: ${goldenVerified}/${goldenTotal} golden demos verified (matrix declares ${EXPECTED_DEMOS})`);
 ok(`Gate A: all ${EXPECTED_DEMOS} matrix demos were reachable (WADs fetched)`, goldenTotal === EXPECTED_DEMOS);
 ok(`Gate A: all ${goldenTotal} reachable demos verified`, goldenVerified === goldenTotal && goldenTotal > 0);
@@ -248,7 +136,7 @@ if (!existsSync(doomWadPath)) {
         const ticOffset     = HEADER_BYTES + DOCTOR_TIC * 4;
         doctored[ticOffset] = (doctored[ticOffset] + 17) & 0xff;  // xor-like mutation
 
-        const result = await verifyDemoBytes(doctored, doomWadPath, golden);
+        const result = await verifyDemo(doctored, doomWadPath, golden, { createDoom });
 
         ok('Gate B: doctored demo → DIVERGED (not VERIFIED)', !result.ok && !result.error);
         if (!result.ok && !result.error) {
@@ -264,7 +152,7 @@ if (!existsSync(doomWadPath)) {
 
 // ── Gate C: Hostile corpus ────────────────────────────────────────────────────
 //
-// Adversarial LMP inputs must be rejected gracefully by verifyDemoBytes().
+// Adversarial LMP inputs must be rejected gracefully by verifyDemo().
 // "Graceful" means: the function returns {ok: false, error: ...} rather than
 // throwing or hanging.  web_play_demo_buf's existing bounds-checked header
 // parse and marker scan guard against most attacks; this gate verifies the
@@ -286,7 +174,7 @@ async function hostileCase(label, lmpBytes) {
     let threw = false;
     let result;
     try {
-        result = await verifyDemoBytes(lmpBytes, hostileWadPath, hostileGolden);
+        result = await verifyDemo(lmpBytes, hostileWadPath, hostileGolden, { createDoom });
     } catch (e) {
         threw = true;
     }
@@ -320,7 +208,7 @@ await hostileCase('bad version (0x00)',
 }
 
 // Case 4: Oversized (> 1 MiB) — must be rejected fast (demo-verify.mjs size check).
-// verifyDemoBytes() itself doesn't check size; the CLI does.  But web_play_demo_buf
+// verifyDemo() itself doesn't check size; the CLI does.  But web_play_demo_buf
 // bounds its marker scan at 1 MiB, so a 1.1 MiB no-marker payload → ok=false.
 {
     const oversized = Buffer.alloc(1_100_000, 0x00);
