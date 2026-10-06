@@ -589,7 +589,7 @@ leg save-compat     build,wad  "savegames written by 2a6a2de load and replay ide
 leg demo-replay     build,wad  "13 IWAD demos through web_play_demo_buf, seek, -fast, two-player" -- node tools/demo-replay-test.mjs
 
 # ── tenet 4: the sanitizer IS the gate ───────────────────────────────────────
-leg adversarial-map native,wad,heavy "30 adversarial maps, 0 ASan/UBSan reports" -- node tools/fuzz/run-map-fuzz.mjs --adversarial-gate
+leg adversarial-map native,wad,heavy "30 adversarial maps, 0 ASan/UBSan reports; 34 bad-geometry maps refused at load" -- node tools/fuzz/run-map-fuzz.mjs --adversarial-gate
 
 # The other direction (task 23.8).  Every other fuzz gate points hostile CLIENT
 # at the server; this points a hostile SERVER at the engine, which is the

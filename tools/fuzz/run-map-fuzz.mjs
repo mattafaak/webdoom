@@ -18,10 +18,21 @@
 // Since nat-doom is now built (tools/native-sanitize/nat-doom), this run
 // performs tier (a): per-tic hash comparison wasm-vs-native on every seed.
 //
-// Two runs: benign (--seeds-benign, default 75) + adversarial (--seeds-adversarial, default 30).
+// Three runs: benign (--seeds-benign, default 75), adversarial
+// (--seeds-adversarial, default 30) and geometry (--seeds-geometry, default
+// 34: each of gen-map.mjs's GEOMETRY_KINDS twice).  A geometry map holds one
+// impossible index in SEGS/SSECTORS/NODES/BLOCKMAP/LINEDEFS, which no engine
+// can load without reading out of bounds, so the only pass is a refusal by
+// the loader's own check (an I_Error from P_Load*/P_Check*) in BOTH engines;
+// loading it is a failure even when no sanitizer fires, because the native
+// build's zone is one malloc and ASan cannot see a read that stays inside it.
+// The short-REJECT and glass-hack kinds are the opposite: they must load, and
+// match natively (regression guards: unfixed, both read zone memory and still
+// matched, so they cannot fail on the old engine).
 //
 // Usage:
 //   node tools/fuzz/run-map-fuzz.mjs [--seeds-benign N] [--seeds-adversarial N]
+//                                     [--seeds-geometry N]
 //                                     [--parallel J] [--build-dir DIR]
 //
 // Exit: 0 = no divergences/crashes; 1 = any finding found.
@@ -38,6 +49,7 @@ import { bootEngine } from '../lib/engine.mjs';
 // ── args ──────────────────────────────────────────────────────────────────────
 let seedsBenign = 75;
 let seedsAdversarial = 30;
+let seedsGeometry = 34;
 let buildDir = 'build';
 let parallelism = Math.min(4, Math.max(1, Math.ceil(cpus().length / 4)));
 // --adversarial-gate: run adversarial seeds only, exit 0 iff ALL results are
@@ -49,6 +61,8 @@ for (let i = 2; i < process.argv.length; i++) {
         seedsBenign = Number(process.argv[++i]);
     } else if (process.argv[i] === '--seeds-adversarial' && process.argv[i + 1]) {
         seedsAdversarial = Number(process.argv[++i]);
+    } else if (process.argv[i] === '--seeds-geometry' && process.argv[i + 1]) {
+        seedsGeometry = Number(process.argv[++i]);
     } else if (process.argv[i] === '--parallel' && process.argv[i + 1]) {
         parallelism = Number(process.argv[++i]);
     } else if (process.argv[i] === '--build-dir' && process.argv[i + 1]) {
@@ -57,7 +71,7 @@ for (let i = 2; i < process.argv.length; i++) {
         adversarialGate = true;
     } else {
         console.error(`FATAL: unknown argument '${process.argv[i]}'`);
-        console.error('usage: run-map-fuzz.mjs [--seeds-benign N] [--seeds-adversarial N] [--parallel J] [--build-dir DIR] [--adversarial-gate]');
+        console.error('usage: run-map-fuzz.mjs [--seeds-benign N] [--seeds-adversarial N] [--seeds-geometry N] [--parallel J] [--build-dir DIR] [--adversarial-gate]');
         process.exit(2);
     }
 }
@@ -96,7 +110,7 @@ if (adversarialGate && !existsSync(join(root, 'tools/native-sanitize/nat-doom'))
     }
 }
 
-const { genMutatedMap } = await import('./gen-map.mjs');
+const { genMutatedMap, genGeometryMap } = await import('./gen-map.mjs');
 
 // ── paths ─────────────────────────────────────────────────────────────────────
 const NAT_DOOM = join(root, 'tools/native-sanitize/nat-doom');
@@ -116,6 +130,11 @@ if (!natAvailable) {
     console.warn('Build nat-doom: make -C tools/native-sanitize');
 }
 const tierLabel = natAvailable ? 'a (per-tic wasm-vs-native diff)' : 'c (wasm-load-only + crash check)';
+// a geometry verdict needs both engines' refusal
+if (!natAvailable && seedsGeometry > 0) {
+    console.warn('WARNING: geometry seeds skipped -- they need nat-doom.');
+    seedsGeometry = 0;
+}
 
 // ── wasm per-tic trace ────────────────────────────────────────────────────────
 async function runWasm(pwadBytes) {
@@ -380,8 +399,36 @@ async function runSeed(seed, adversarial) {
     return { label, ok: true, msg: `seed ${label}: ${wasmResult.tics} tics OK, hashes identical [${mutStr}]` };
 }
 
+// ── geometry seeds: an expected outcome, not just "no sanitizer report" ──────
+const LOADER_CHECK = /^P_(Load|Check)\w+: /;
+async function runGeometrySeed(seed) {
+    const label = `geo-${seed}`;
+    const { pwad, mutations, expect } = genGeometryMap(seed);
+    const mutStr = mutations.join('; ');
+    let nat = null, natErr = '';
+    try { nat = await runNative(pwad, `${seed}-geo`); } catch (e) { natErr = e.message; }
+    let wasm = null, wasmErr = '';
+    try { wasm = await runWasm(pwad); } catch (e) { wasmErr = e.message; }
+    const natIErr = /I_Error: ([^|\n]+)/.exec(natErr)?.[1]?.trim() ?? '';
+    const wasmIErr = /wasm load\/play failed: (.*)$/s.exec(wasmErr)?.[1]?.trim() ?? '';
+    const sanitizer = natErr && /AddressSanitizer|runtime error|UBSan/.test(natErr);
+    let why = null;
+    if (sanitizer) why = `sanitizer report: ${natErr.slice(0, 200)}`;
+    else if (expect === 'refuse') {
+        if (!LOADER_CHECK.test(natIErr)) why = `nat-doom did not refuse it at load: ${natErr ? natErr.slice(0, 160) : `loaded, ${nat.tics} tics`}`;
+        else if (!LOADER_CHECK.test(wasmIErr)) why = `wasm did not refuse it at load: ${wasmErr ? wasmErr.slice(0, 160) : `loaded, ${wasm.tics} tics`}`;
+    } else {
+        if (!nat || !wasm) why = `did not load: nat=${natErr.slice(0, 100)} wasm=${wasmErr.slice(0, 100)}`;
+        else if (compareTraces(wasm, nat).diverged) why = 'loaded, but wasm and native diverged';
+    }
+    if (why) return { label, ok: false, geometry: true, msg: `seed ${label}: FAIL — ${why} [${mutStr}]`,
+                      finding: { seed: label, field: mutStr, trace_or_hashes: why,
+                                 root_cause: expect === 'refuse' ? 'geometry index accepted by the map loader' : 'short REJECT not loaded identically' } };
+    return { label, ok: true, msg: `seed ${label}: ${expect === 'refuse' ? `refused (${natIErr})` : `loaded, ${wasm.tics} tics, hashes identical`} [${mutStr}]` };
+}
+
 // ── parallel pool runner ──────────────────────────────────────────────────────
-async function runPool(seeds, adversarial) {
+async function runPool(seeds, adversarial, run = runSeed) {
     const results = new Array(seeds.length);
     let next = 0;
 
@@ -389,7 +436,7 @@ async function runPool(seeds, adversarial) {
         while (true) {
             const idx = next++;
             if (idx >= seeds.length) break;
-            const r = await runSeed(seeds[idx], adversarial);
+            const r = await run(seeds[idx], adversarial);
             console.log(' ', r.msg);
             results[idx] = r;
         }
@@ -405,9 +452,9 @@ console.log(`webdoom map-mutation fuzzer`);
 console.log(`  tier: ${tierLabel}`);
 console.log(`  IWAD: ${IWAD_NAME} (doom.wad, E1M1)`);
 console.log(`  demo: 35 tics idle at E1M1 spawn`);
-console.log(`  benign seeds: ${seedsBenign}, adversarial seeds: ${seedsAdversarial}`);
+console.log(`  benign seeds: ${seedsBenign}, adversarial seeds: ${seedsAdversarial}, geometry seeds: ${seedsGeometry}`);
 console.log(`  parallel: ${parallelism}`);
-console.log(`  geometry excluded: VERTEXES/SEGS/SSECTORS/NODES/BLOCKMAP (no node rebuild needed)`);
+console.log(`  benign/adversarial: geometry untouched; geometry seeds: one impossible index each`);
 console.log();
 
 // Reproducibility check
@@ -424,6 +471,8 @@ const findings = [];
 // that passed.
 let benignRan = 0;
 let adversarialRan = 0;
+let geometryRan = 0;
+const geometryFails = [];
 
 // ── benign run ────────────────────────────────────────────────────────────────
 if (seedsBenign > 0) {
@@ -460,8 +509,20 @@ if (seedsAdversarial > 0) {
     console.log();
 }
 
+// ── geometry run ──────────────────────────────────────────────────────────────
+if (seedsGeometry > 0) {
+    const geoSeeds = Array.from({ length: seedsGeometry }, (_, i) => 20000 + i);
+    console.log(`── geometry seeds (${seedsGeometry}) ────────────────────────────────────────`);
+    const geoResults = await runPool(geoSeeds, true, runGeometrySeed);
+    console.log();
+    for (const r of geoResults) if (!r.ok) geometryFails.push(r.finding);
+    geometryRan = geoResults.length;
+    console.log(`geometry summary: ${geometryRan - geometryFails.length}/${geometryRan} as expected, ${geometryFails.length} finding(s)`);
+    console.log();
+}
+
 // ── overall summary ───────────────────────────────────────────────────────────
-const totalSeeds = seedsBenign + seedsAdversarial;
+const totalSeeds = seedsBenign + seedsAdversarial + seedsGeometry;
 console.log('─────────────────────────────────────────────────────────────────');
 
 if (adversarialGate) {
@@ -482,6 +543,11 @@ if (adversarialGate) {
     const sanitizerFindings = findings.filter(f => isSanitizerHit(f.root_cause ?? ''));
     const ierrFindings = findings.filter(f => !isSanitizerHit(f.root_cause ?? ''));
 
+    if (geometryFails.length > 0 || (seedsGeometry > 0 && geometryRan === 0)) {
+        console.log(`\nGATE FAIL: ${geometryFails.length} of ${geometryRan} geometry map(s) not handled as expected`);
+        for (const f of geometryFails) console.log(`  seed=${f.seed} ${f.field}\n    ${f.trace_or_hashes.slice(0, 220)}`);
+        process.exit(1);
+    }
     if (sanitizerFindings.length > 0) {
         console.log(`\nGATE FAIL: ${sanitizerFindings.length} sanitizer report(s) — memory corruption on adversarial input`);
         for (const f of sanitizerFindings) {
@@ -507,23 +573,24 @@ if (adversarialGate) {
         }
         const clean = adversarialRan - findings.length;
         const ierr = ierrFindings.length;
-        console.log(`\nGATE PASS: adversarial corpus = ${clean} clean + ${ierr} I_Error, 0 sanitizer reports`);
+        console.log(`\nGATE PASS: adversarial corpus = ${clean} clean + ${ierr} I_Error, 0 sanitizer reports; `
+                    + `${geometryRan} geometry maps as expected (refused at load, or REJECT/glass loaded)`);
         console.log(`  Command: node tools/fuzz/run-map-fuzz.mjs --adversarial-gate [--build-dir DIR]`);
         console.log('  Rule: I_Error exits are fail-soft (allowed); ASan/UBSan reports are not.');
         process.exit(0);
     }
 }
 
+findings.push(...geometryFails);
 if (findings.length === 0) {
     // Same rule for the non-gate path: report what ran, not what was asked for.
-    const ran = benignRan + adversarialRan;
+    const ran = benignRan + adversarialRan + geometryRan;
     if (ran === 0) {
         console.log(`\nFAIL: 0 of ${totalSeeds} requested mutations ran — nothing was fuzzed`);
         process.exit(1);
     }
     console.log(`\nPASS: map-load behavior matches vanilla under ${ran} mutations`);
-    console.log(`  (${benignRan} benign + ${adversarialRan} adversarial seeds ran, tier ${tierLabel})`);
-    console.log('  geometry excluded: VERTEXES/SEGS/SSECTORS/NODES/BLOCKMAP (no node rebuild)');
+    console.log(`  (${benignRan} benign + ${adversarialRan} adversarial + ${geometryRan} geometry seeds ran, tier ${tierLabel})`);
     process.exit(0);
 } else {
     console.log(`\nFINDING(S): ${findings.length} divergence(s)/crash(es) detected`);

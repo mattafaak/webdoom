@@ -154,6 +154,24 @@ void P_LoadVertexes (int lump)
 
 
 //
+// P_NullSector
+// The back of a two-sided linedef with no back side, the "glass hack"
+// impassable window (OTTAWAU.WAD).  Vanilla read sides[-1].sector, which in
+// DOS was memory at address 0; this is the sector Chocolate Doom builds from
+// that memory under DOS 6.22, its default: zero but for the two heights.
+//
+static sector_t* P_NullSector (void)
+{
+    static sector_t	null_sector;
+
+    memset (&null_sector, 0, sizeof(null_sector));
+    null_sector.floorheight = null_sector.oldfloorheight = 0x00199257;
+    null_sector.ceilingheight = null_sector.oldceilingheight = 0x007006f4;
+    return &null_sector;
+}
+
+
+//
 // P_LoadSegs
 //
 void P_LoadSegs (int lump)
@@ -175,24 +193,47 @@ void P_LoadSegs (int lump)
     li = segs;
     for (i=0 ; i<numsegs ; i++, li++, ml++)
     {
+	/* tenet-4 fail-soft: every index below selects an array element, and
+	   a hostile map can name any short; refuse before the first use. */
+	if (SHORT(ml->v1) < 0 || SHORT(ml->v1) >= numvertexes
+	    || SHORT(ml->v2) < 0 || SHORT(ml->v2) >= numvertexes)
+	    I_Error ("P_LoadSegs: seg %d has an out-of-range vertex", i);
 	li->v1 = &vertexes[SHORT(ml->v1)];
 	li->v2 = &vertexes[SHORT(ml->v2)];
 					
 	li->angle = (SHORT(ml->angle))<<16;
 	li->offset = (SHORT(ml->offset))<<16;
 	linedef = SHORT(ml->linedef);
+	if (linedef < 0 || linedef >= numlines)
+	    I_Error ("P_LoadSegs: seg %d has out-of-range linedef %d", i, linedef);
 	ldef = &lines[linedef];
 	li->linedef = ldef;
 	side = SHORT(ml->side);
+	if (side != 0 && side != 1)
+	    I_Error ("P_LoadSegs: seg %d has side %d", i, side);
+	if (ldef->sidenum[side] == -1)
+	    I_Error ("P_LoadSegs: seg %d is on a missing side of linedef %d",
+		     i, linedef);
 	li->sidedef = &sides[ldef->sidenum[side]];
 	li->frontsector = sides[ldef->sidenum[side]].sector;
 	if (ldef-> flags & ML_TWOSIDED)
-	    li->backsector = sides[ldef->sidenum[side^1]].sector;
+	    li->backsector = ldef->sidenum[side^1] == -1 ? P_NullSector ()
+			     : sides[ldef->sidenum[side^1]].sector;
 	else
 	    li->backsector = 0;
     }
 	
     Z_Free (data);
+
+    // Subsectors load first, so their ranges are checked once segs exist.
+    // P_GroupLines reads segs[firstline] even of an empty subsector.
+    for (i=0 ; i<numsubsectors ; i++)
+	if (subsectors[i].firstline < 0 || subsectors[i].numlines < 0
+	    || subsectors[i].firstline >= numsegs
+	    || subsectors[i].firstline + subsectors[i].numlines > numsegs)
+	    I_Error ("P_LoadSegs: subsector %d has out-of-range segs %d+%d (0..%d)",
+		     i, subsectors[i].firstline, subsectors[i].numlines,
+		     numsegs - 1);
 }
 
 
@@ -207,6 +248,9 @@ void P_LoadSubsectors (int lump)
     subsector_t*	ss;
 	
     numsubsectors = W_LumpLength (lump) / sizeof(mapsubsector_t);
+    // a map with no nodes renders and locates everything in subsector 0
+    if (numsubsectors < 1)
+	I_Error ("P_LoadSubsectors: no subsectors");
     subsectors = Z_Malloc (numsubsectors*sizeof(subsector_t),PU_LEVEL,0);	
     data = W_CacheLumpNum (lump,PU_STATIC);
 	
@@ -288,6 +332,11 @@ void P_LoadNodes (int lump)
 	for (j=0 ; j<2 ; j++)
 	{
 	    no->children[j] = SHORT(mn->children[j]);
+	    if (no->children[j] & NF_SUBSECTOR
+		? (no->children[j] & ~NF_SUBSECTOR) >= numsubsectors
+		: no->children[j] >= numnodes)
+		I_Error ("P_LoadNodes: node %d has out-of-range child %d",
+			 i, no->children[j]);
 	    for (k=0 ; k<4 ; k++)
 		no->bbox[j][k] = SHORT(mn->bbox[j][k])<<FRACBITS;
 	}
@@ -377,6 +426,9 @@ void P_LoadLineDefs (int lump)
 	ld->flags = SHORT(mld->flags);
 	ld->special = SHORT(mld->special);
 	ld->tag = SHORT(mld->tag);
+	if (SHORT(mld->v1) < 0 || SHORT(mld->v1) >= numvertexes
+	    || SHORT(mld->v2) < 0 || SHORT(mld->v2) >= numvertexes)
+	    I_Error ("P_LoadLineDefs: linedef %d has an out-of-range vertex", i);
 	v1 = ld->v1 = &vertexes[SHORT(mld->v1)];
 	v2 = ld->v2 = &vertexes[SHORT(mld->v2)];
 	ld->dx = v2->x - v1->x;
@@ -431,8 +483,8 @@ void P_LoadLineDefs (int lump)
 			 i, ld->sidenum[0], numsides - 1);
 	    ld->frontsector = sides[ld->sidenum[0]].sector;
 	}
-	else
-	    ld->frontsector = 0;
+	else	/* P_GroupLines counts into frontsector; Chocolate crashes too */
+	    I_Error ("P_LoadLineDefs: linedef %d has no front side", i);
 
 	if (ld->sidenum[1] != -1)
 	{
@@ -495,10 +547,13 @@ void P_LoadBlockMap (int lump)
 {
     int		i;
     int		count;
+    int		p;
 	
     blockmaplump = W_CacheLumpNum (lump,PU_LEVEL);
     blockmap = blockmaplump+4;
     count = W_LumpLength (lump)/2;
+    if (count < 4)
+	I_Error ("P_LoadBlockMap: BLOCKMAP has no header");
 
     for (i=0 ; i<count ; i++)
 	blockmaplump[i] = SHORT(blockmaplump[i]);
@@ -507,6 +562,25 @@ void P_LoadBlockMap (int lump)
     bmaporgy = blockmaplump[1]<<FRACBITS;
     bmapwidth = blockmaplump[2];
     bmapheight = blockmaplump[3];
+
+    /* tenet-4 fail-soft: the iterators trust every offset and list in the
+       lump (offsets are signed shorts, as in vanilla); the line numbers are
+       checked by P_CheckBlockMapLines once the linedefs are loaded. */
+    if (bmapwidth <= 0 || bmapheight <= 0
+	|| count - 4 < bmapwidth*bmapheight)
+	I_Error ("P_LoadBlockMap: BLOCKMAP is too short for %dx%d blocks",
+		 bmapwidth, bmapheight);
+    for (i=0 ; i<bmapwidth*bmapheight ; i++)
+    {
+	p = blockmap[i];
+	if (p < 0 || p >= count)
+	    I_Error ("P_LoadBlockMap: block %d has out-of-range offset %d",
+		     i, p);
+	while (p < count && blockmaplump[p] != -1)
+	    p++;
+	if (p >= count)
+	    I_Error ("P_LoadBlockMap: block %d has an unterminated list", i);
+    }
 	
     // clear out mobj chains
     count = sizeof(*blocklinks)* bmapwidth*bmapheight;
@@ -514,6 +588,65 @@ void P_LoadBlockMap (int lump)
     memset (blocklinks, 0, count);
 }
 
+
+
+//
+// P_CheckBlockMapLines
+// Every line number in the blockmap lists must name a linedef.
+//
+void P_CheckBlockMapLines (void)
+{
+    int		i;
+    short*	list;
+
+    for (i=0 ; i<bmapwidth*bmapheight ; i++)
+	for (list = blockmaplump+blockmap[i] ; *list != -1 ; list++)
+	    if (*list < 0 || *list >= numlines)
+		I_Error ("P_CheckBlockMapLines: block %d lists out-of-range "
+			 "line %d", i, *list);
+}
+
+
+//
+// P_LoadReject
+// A REJECT lump shorter than numsectors^2 bits is padded as Chocolate Doom
+// pads it.  Vanilla read on past the lump into the next zone block, P_GroupLines'
+// line buffer, and these are that block's header fields: its size, an
+// owner, PU_LEVEL and the zone id.  Anything past them is zero.
+//
+void P_LoadReject (int lump)
+{
+    int		minlength;
+    int		lumplen;
+    int		totallines;
+    int		i;
+    unsigned	pad[4];
+    line_t*	li;
+
+    minlength = (int) (((long long) numsectors * numsectors + 7) / 8);
+    lumplen = W_LumpLength (lump);
+    if (lumplen >= minlength)
+    {
+	rejectmatrix = W_CacheLumpNum (lump,PU_LEVEL);
+	return;
+    }
+
+    // as P_GroupLines will count them
+    totallines = 0;
+    for (i=0, li = lines ; i<numlines ; i++, li++)
+	totallines += 1 + (li->backsector && li->backsector != li->frontsector);
+
+    pad[0] = ((totallines * 4 + 3) & ~3) + 24;
+    pad[1] = 0;
+    pad[2] = PU_LEVEL;
+    pad[3] = 0x1d4a11;
+
+    rejectmatrix = Z_Malloc (minlength, PU_LEVEL, 0);
+    W_ReadLump (lump, rejectmatrix);
+    for (i=lumplen ; i<minlength ; i++)
+	rejectmatrix[i] = i - lumplen < 16
+	    ? (pad[(i - lumplen) / 4] >> ((i - lumplen) % 4 * 8)) & 0xff : 0;
+}
 
 
 //
@@ -677,11 +810,12 @@ P_SetupLevel
     P_LoadSideDefs (lumpnum+ML_SIDEDEFS);
 
     P_LoadLineDefs (lumpnum+ML_LINEDEFS);
+    P_CheckBlockMapLines ();
     P_LoadSubsectors (lumpnum+ML_SSECTORS);
     P_LoadNodes (lumpnum+ML_NODES);
     P_LoadSegs (lumpnum+ML_SEGS);
 	
-    rejectmatrix = W_CacheLumpNum (lumpnum+ML_REJECT,PU_LEVEL);
+    P_LoadReject (lumpnum+ML_REJECT);
     P_GroupLines ();
 
     bodyqueslot = 0;

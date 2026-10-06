@@ -20,8 +20,14 @@
 //     - SIDEDEFS sector index out of range (>= numSectors)
 //     These stress the unguarded load paths ASan can catch.
 //
-// Geometry (VERTEXES/SEGS/SSECTORS/NODES/BLOCKMAP) is NEVER mutated.
-// No node rebuild is needed; the map stays loadable with original BSP data.
+// Geometry (VERTEXES/SEGS/SSECTORS/NODES/BLOCKMAP) is NEVER mutated by those
+// two modes.  No node rebuild is needed; the map stays loadable with original
+// BSP data.  genGeometryMap is the exception: it puts ONE impossible value --
+// an index past the array it selects, a missing side, a list with no end --
+// into the geometry lumps, and every such map must be refused at load.  Its
+// two accepted kinds are odd data real PWADs have, which the loader handles as
+// Chocolate Doom does: a short REJECT (padded) and a two-sided linedef with no
+// back side (the "glass hack", given Chocolate's null sector).
 //
 // Demo lump:
 //   A short idle demo (35 tics, all-zero ticcmds) for doom.wad episode 1 map 1.
@@ -164,9 +170,12 @@ const LINEDEF_SIZE = 14;  // v1(2) v2(2) flags(2) special(2) tag(2) sidenum[2](4
 const SIDEDEF_SIZE = 30;  // xoff(2) yoff(2) upper[8] lower[8] mid[8] sector(2)
 const SECTOR_SIZE  = 26;  // floorh(2) ceilh(2) floortex[8] ceiltex[8] light(2) special(2) tag(2)
 
-// ── genMutatedMap ─────────────────────────────────────────────────────────────
-// Returns { pwad: Buffer, mutations: string[], numSectors: number }.
-export function genMutatedMap(seed, { adversarial = false } = {}) {
+// The 10 map sub-lumps follow the marker
+const MAP_SUBLUMPS = ['THINGS','LINEDEFS','SIDEDEFS','VERTEXES','SEGS',
+                      'SSECTORS','NODES','SECTORS','REJECT','BLOCKMAP'];
+
+// E1M1's ten lumps from doom.wad, as fresh Buffers keyed by name.
+function readE1M1() {
     const wadBuf = readFileSync(DOOM_WAD);
     const lumps = parseWadDir(wadBuf);
 
@@ -174,9 +183,6 @@ export function genMutatedMap(seed, { adversarial = false } = {}) {
     const e1m1Idx = lumps.findIndex(l => l.name === 'E1M1');
     if (e1m1Idx < 0) throw new Error('E1M1 not found in doom.wad');
 
-    // The 10 map sub-lumps follow the marker
-    const MAP_SUBLUMPS = ['THINGS','LINEDEFS','SIDEDEFS','VERTEXES','SEGS',
-                          'SSECTORS','NODES','SECTORS','REJECT','BLOCKMAP'];
     const subLumps = {};
     for (let i = 0; i < MAP_SUBLUMPS.length; i++) {
         const l = lumps[e1m1Idx + 1 + i];
@@ -185,6 +191,13 @@ export function genMutatedMap(seed, { adversarial = false } = {}) {
         }
         subLumps[l.name] = readLump(wadBuf, l);
     }
+    return subLumps;
+}
+
+// ── genMutatedMap ─────────────────────────────────────────────────────────────
+// Returns { pwad: Buffer, mutations: string[], numSectors: number }.
+export function genMutatedMap(seed, { adversarial = false } = {}) {
+    const subLumps = readE1M1();
 
     const prng = mulberry32(seed >>> 0);
     const rng = () => prng();
@@ -404,6 +417,11 @@ export function genMutatedMap(seed, { adversarial = false } = {}) {
         'BLOCKMAP': subLumps['BLOCKMAP'],   // geometry — unchanged
     };
 
+    return { pwad: assemblePwad(mutatedLumps), mutations, numSectors };
+}
+
+// E1M1 from `mapLumps` (all ten, by name) plus the idle FUZZDEMO, as a PWAD.
+function assemblePwad(mutatedLumps) {
     // ── Build idle demo lump ──────────────────────────────────────────────────
     const DEMO_LUMP_NAME = 'FUZZDEMO';
     const DEMO_TICS = 35;
@@ -441,7 +459,130 @@ export function genMutatedMap(seed, { adversarial = false } = {}) {
         encodeName(LUMP_ORDER[i]).copy(pwad, q); q += 8;
     }
 
-    return { pwad, mutations, numSectors };
+    return pwad;
+}
+
+// ── genGeometryMap ────────────────────────────────────────────────────────────
+// One impossible value per map, kind chosen by seed.  Every kind but
+// reject-short and segs-glass names something past the array it selects (or a
+// side, list or size the loader cannot use), so the only safe outcome is a
+// refusal at load.
+export const GEOMETRY_KINDS = [
+    'segs-vertex', 'segs-linedef', 'segs-side', 'segs-missing-side', 'segs-glass',
+    'ssectors-firstseg', 'ssectors-numsegs', 'ssectors-none',
+    'nodes-child', 'nodes-subsector',
+    'blockmap-dims', 'blockmap-offset', 'blockmap-line', 'blockmap-unterminated',
+    'linedefs-vertex', 'linedefs-no-front',
+    'reject-short',
+];
+
+// Returns { pwad, mutations, expect: 'refuse' | 'load', kind }.
+export function genGeometryMap(seed) {
+    const m = readE1M1();
+    const rng = mulberry32((seed ^ 0x9e0) >>> 0);
+    const pick = n => Math.floor(rng() * n);
+    const kind = GEOMETRY_KINDS[seed % GEOMETRY_KINDS.length];
+    const n = {
+        verts: m.VERTEXES.length / 4, lines: m.LINEDEFS.length / LINEDEF_SIZE,
+        segs: m.SEGS.length / 12, ss: m.SSECTORS.length / 4, nodes: m.NODES.length / 28,
+    };
+    // one past the end, far past it, or negative, as the short would read
+    const bad = count => [count, count + pick(32768 - count), -1, -32768 + pick(1000)][pick(4)];
+    const lineSide = (ld, side) => m.LINEDEFS.readInt16LE(ld * LINEDEF_SIZE + 10 + 2 * side);
+    // a seg on side 0 of a one-sided linedef
+    const oneSidedSeg = () => {
+        for (let tries = 0; ; tries++) {
+            const k = pick(n.segs);
+            const ld = m.SEGS.readInt16LE(12 * k + 6);
+            if (m.SEGS.readInt16LE(12 * k + 8) === 0 && lineSide(ld, 1) === -1) return [k, ld];
+            if (tries > 10000) throw new Error('no one-sided seg in E1M1');
+        }
+    };
+    let what;
+    switch (kind) {
+    case 'segs-vertex': {
+        const k = pick(n.segs), v = bad(n.verts), f = pick(2);
+        m.SEGS.writeInt16LE(v, 12 * k + 2 * f); what = `seg ${k} v${f + 1} = ${v}`; break;
+    }
+    case 'segs-linedef': {
+        const k = pick(n.segs), v = bad(n.lines);
+        m.SEGS.writeInt16LE(v, 12 * k + 6); what = `seg ${k} linedef = ${v}`; break;
+    }
+    case 'segs-side': {
+        const k = pick(n.segs), v = [2, 2 + pick(32000), -1][pick(3)];
+        m.SEGS.writeInt16LE(v, 12 * k + 8); what = `seg ${k} side = ${v}`; break;
+    }
+    case 'segs-missing-side': {
+        const [k, ld] = oneSidedSeg();
+        m.SEGS.writeInt16LE(1, 12 * k + 8); what = `seg ${k} on the absent back side of linedef ${ld}`; break;
+    }
+    case 'segs-glass': {
+        const [k, ld] = oneSidedSeg();
+        const o = ld * LINEDEF_SIZE + 4;
+        m.LINEDEFS.writeInt16LE(m.LINEDEFS.readInt16LE(o) | 4, o);
+        what = `linedef ${ld} (seg ${k}) two-sided with no back side`; break;
+    }
+    case 'ssectors-firstseg': {
+        const k = pick(n.ss), v = bad(n.segs);
+        m.SSECTORS.writeInt16LE(v, 4 * k + 2); what = `subsector ${k} firstseg = ${v}`; break;
+    }
+    case 'ssectors-numsegs': {
+        const k = pick(n.ss), first = m.SSECTORS.readInt16LE(4 * k + 2);
+        const v = [n.segs - first + 1, n.segs - first + 1 + pick(30000 - n.segs), -1 - pick(1000)][pick(3)];
+        m.SSECTORS.writeInt16LE(v, 4 * k); what = `subsector ${k} numsegs = ${v} from ${first}`; break;
+    }
+    case 'ssectors-none':
+        m.SSECTORS = Buffer.alloc(0); what = 'SSECTORS empty'; break;
+    case 'nodes-child': {
+        const k = pick(n.nodes), j = pick(2), v = n.nodes + pick(0x8000 - n.nodes);
+        m.NODES.writeUInt16LE(v, 28 * k + 24 + 2 * j); what = `node ${k} child ${j} = node ${v}`; break;
+    }
+    case 'nodes-subsector': {
+        const k = pick(n.nodes), j = pick(2), v = n.ss + pick(0x8000 - n.ss);
+        m.NODES.writeUInt16LE(0x8000 | v, 28 * k + 24 + 2 * j); what = `node ${k} child ${j} = subsector ${v}`; break;
+    }
+    case 'blockmap-dims': {
+        const w = m.BLOCKMAP.readInt16LE(4), h = m.BLOCKMAP.readInt16LE(6);
+        const [f, v] = [[2, 0], [2, -w], [2, 32767], [3, h + 1 + pick(32000)]][pick(4)];
+        m.BLOCKMAP.writeInt16LE(v, 2 * f); what = `blockmap ${f === 2 ? 'width' : 'height'} = ${v} (was ${w}x${h})`; break;
+    }
+    case 'blockmap-offset': {
+        const w = m.BLOCKMAP.readInt16LE(4), h = m.BLOCKMAP.readInt16LE(6);
+        const b = pick(w * h), v = bad(m.BLOCKMAP.length / 2);
+        m.BLOCKMAP.writeInt16LE(v, 8 + 2 * b); what = `block ${b} offset = ${v}`; break;
+    }
+    case 'blockmap-line': {
+        const w = m.BLOCKMAP.readInt16LE(4), h = m.BLOCKMAP.readInt16LE(6);
+        for (let tries = 0; ; tries++) {
+            const b = pick(w * h), at = m.BLOCKMAP.readInt16LE(8 + 2 * b);
+            if (m.BLOCKMAP.readInt16LE(2 * at) === -1) { if (tries > 10000) throw new Error('no blockmap list'); continue; }
+            const v = [n.lines, n.lines + pick(32768 - n.lines), -2 - pick(1000)][pick(3)];
+            m.BLOCKMAP.writeInt16LE(v, 2 * at); what = `block ${b} lists line ${v}`; break;
+        }
+        break;
+    }
+    case 'blockmap-unterminated': {
+        const last = m.BLOCKMAP.length - 2;
+        if (m.BLOCKMAP.readInt16LE(last) !== -1) throw new Error('E1M1 BLOCKMAP does not end in -1');
+        m.BLOCKMAP.writeInt16LE(0, last); what = 'the last blockmap list runs off the lump'; break;
+    }
+    case 'linedefs-vertex': {
+        const k = pick(n.lines), v = bad(n.verts), f = pick(2);
+        m.LINEDEFS.writeInt16LE(v, k * LINEDEF_SIZE + 2 * f); what = `linedef ${k} v${f + 1} = ${v}`; break;
+    }
+    case 'linedefs-no-front': {
+        const k = pick(n.lines);
+        m.LINEDEFS.writeInt16LE(-1, k * LINEDEF_SIZE + 10); what = `linedef ${k} has no front side`; break;
+    }
+    case 'reject-short': {
+        const len = pick(m.REJECT.length);
+        what = `REJECT cut to ${len} of ${m.REJECT.length} bytes`;
+        m.REJECT = m.REJECT.subarray(0, len); break;
+    }
+    }
+    const mutatedLumps = { E1M1: Buffer.alloc(0), ...m };
+    return { pwad: assemblePwad(mutatedLumps), mutations: [`${kind}: ${what}`],
+             expect: kind === 'reject-short' || kind === 'segs-glass' ? 'load' : 'refuse', kind };
 }
 
 // ── CLI entry point ───────────────────────────────────────────────────────────
