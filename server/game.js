@@ -253,22 +253,29 @@ export function createGame(log = console.log, servedWads = () => []) {
             historyFull: false,         // cap reached: catch-up can no longer be served
             spectators: new Set(),      // read-only observers; never in session.players
         };
+        // The countdown belongs to the session that started it.  One that ends
+        // and is restarted inside a second would otherwise run two chains on
+        // the new session: two launches, and two sweeps of which endSession
+        // can clear only one.
+        const me = session;
         let n = 3;
         const tick = () => {
-            if (!session) return;
-            if (n > 0) { cast({ t: 'countdown', n: n-- }); setTimeout(tick, 1000); return; }
+            if (session !== me) return;
+            if (n > 0) { cast({ t: 'countdown', n: n-- }); me.timer = setTimeout(tick, 1000); return; }
             const names = [0, 1, 2, 3].map(s => lobby.has(s) ? displayName(s) : null);
-            session.names = names;
+            me.names = names;
             cast({ t: 'launch', params, numplayers: MAXPLAYERS, slots, names });
             log(`game: launching ${slots.length}p (slots ${slots.join(',')}) ${params.wad} E${params.episode}M${params.map} skill ${params.skill} ${params.mode}`);
-            session.launched = Date.now();
-            session.timer = setInterval(sealSweep, 50);
+            me.launched = Date.now();
+            me.timer = setInterval(sealSweep, 50);
         };
         tick();
     }
 
     function endSession(reason) {
         if (!session) return;
+        // the pending countdown tick or the seal sweep: the two share one
+        // timer list, so clearInterval cancels either
         clearInterval(session.timer);
         for (const p of session.players) p.ws?.close();
         for (const sw of session.spectators) try { sw.close(); } catch { /* gone */ }
