@@ -40,6 +40,7 @@ fails when a leg named here does not exist.
 | A freestanding core with no OS, and an N64 correctness leg | `freestanding-sim`, `ro-wad`, `arm-cross`, `be-cross`, `n64-demos` |
 | The engine's derived figures reproduce, the artifacts fit their ceilings, and the platform contract matches the exports | `archaeology`, `size-budget`, `web-contract` |
 | Play → quit → play accumulates nothing | `browser-teardown` |
+| A lost WebGL context: the game runs on, draws again once it is restored, and a boot onto a lost one comes up | `browser-resilience` |
 | CI on Node 20/24/26 | `.github/workflows/ci.yml` (the quick tier) |
 
 ## Core tenets (in priority order)

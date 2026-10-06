@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Browser resilience tests: 5 failure-path subtests.
+// Browser resilience tests: one check per failure path.
 // usage: node tools/browser-resilience-test.mjs [url]
 //
 // State-machine edge coverage (docs/state-machine.md):
@@ -8,6 +8,7 @@ import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
 import { startServer } from './lib/server.mjs';
 import { check, summary } from './lib/report.mjs';
+import { pngStats } from './png-stats.mjs';
 
 const url = process.argv[2] ?? (await startServer()).url;
 const chrome = await launchChrome();
@@ -548,7 +549,105 @@ await runTest('10-oversized-stored-config', async () => {
     } finally { tab.close(); }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 11-12. A LOST WEBGL CONTEXT.
+//     A GPU reset, a driver update or the browser reclaiming memory takes the
+//     canvas's context away.  The game must run on through it, draw again
+//     once the context is restored, and a boot onto a context that is still
+//     lost must not throw.  WEBGL_lose_context does both halves on demand.
+//     A lost canvas goes on SHOWING its last frame, so "drawn" alone cannot
+//     tell a restored renderer from a dead one: while the context is lost the
+//     engine's menu is opened (Escape), and after the restore the canvas must
+//     be drawn AND differ from that stale frame.
+// ═══════════════════════════════════════════════════════════════════════════
+const canvasShot = async tab => {
+    const r = await tab.ev(`(() => { const b = document.getElementById('screen').getBoundingClientRect();
+        return { x: b.x, y: b.y, width: b.width, height: b.height }; })()`);
+    if (!r || r.width < 10 || r.height < 10) throw new Error(`the canvas has no area to capture (${JSON.stringify(r)})`);
+    const { result } = await tab.cdp('Page.captureScreenshot', { format: 'png', clip: { ...r, scale: 1 } });
+    return { data: result.data, ...pngStats(Buffer.from(result.data, 'base64')) };
+};
+const gametic = tab => tab.ev(`window.webdoom?.doom?._web_gametic?.() ?? -1`);
+// kept on the page, because the context can only hand out the extension while
+// it is alive, and the restore needs the same object that lost it
+const loseContext = tab => tab.ev(`(() => {
+    const ext = document.getElementById('screen').getContext('webgl2')?.getExtension('WEBGL_lose_context');
+    if (!ext) return false;
+    window.__lc = ext; ext.loseContext(); return true; })()`);
+const contextLost = tab => tab.ev(`document.getElementById('screen').getContext('webgl2')?.isContextLost() ?? null`);
+const DRAWN = 5;    // percent of the canvas not its dominant colour
+
+// Restore, then require a frame that is drawn and is not the stale one.
+async function restoredAndDrawn(tab, stale) {
+    await tab.ev(`window.__lc.restoreContext()`);
+    await sleep(1000);
+    const after = await canvasShot(tab);
+    console.log(`  after the restore: ${after.variedPct}% of the canvas drawn, ${after.colours} colours, `
+              + `${after.data === stale.data ? 'IDENTICAL to' : 'differs from'} the frame shown while lost; `
+              + `context lost: ${await contextLost(tab)}`);
+    assert(after.variedPct >= DRAWN, `the canvas is undrawn after the restore (${after.variedPct}%)`);
+    assert(after.data !== stale.data, 'the canvas still shows the frame from before the loss: nothing drew after the restore');
+}
+
+await runTest('11-webgl-context-lost-mid-game', async () => {
+    const tab = await chrome.tab(url);
+    try {
+        if (!await tab.waitForMenu()) throw new Error('menu did not appear');
+        if (!await tab.bootSP(60)) throw new Error('game did not boot');
+        await sleep(1500);
+        const before = await canvasShot(tab);
+        console.log(`  before the loss: ${before.variedPct}% of the canvas drawn, ${before.colours} colours`);
+        assert(before.variedPct >= DRAWN, `CONTROL: a running game reads as drawn (${before.variedPct}% < ${DRAWN}%)`);
+
+        if (!await loseContext(tab)) throw new Error('WEBGL_lose_context is unavailable: nothing to test with');
+        await sleep(300);
+        assert(await contextLost(tab) === true, 'loseContext() did not lose the context');
+        const stale = await canvasShot(tab);
+        const t0 = await gametic(tab);
+        await tab.esc();                    // the engine's menu, drawn only once the context is back
+        await sleep(1000);
+        const t1 = await gametic(tab);
+        const stillStale = await canvasShot(tab);
+        console.log(`  while lost: gametic ${t0} -> ${t1}; the canvas `
+                  + `${stillStale.data === stale.data ? 'kept' : 'changed from'} its last frame across Escape`);
+        assert(t1 > t0 + 10, `the game stopped while the context was lost (gametic ${t0} -> ${t1})`);
+        assert(stillStale.data === stale.data, 'CONTROL: the canvas changed while its context was lost');
+
+        await restoredAndDrawn(tab, stale);
+        const t2 = await gametic(tab);
+        assert(t2 > t1, `the game stopped after the restore (gametic ${t1} -> ${t2})`);
+        assert(tab.errors.length === 0, `exceptions: ${tab.errors.join('; ')}`);
+    } finally { tab.close(); }
+});
+
+await runTest('12-boot-onto-a-lost-webgl-context', async () => {
+    const tab = await chrome.tab(url);
+    try {
+        if (!await tab.waitForMenu()) throw new Error('menu did not appear');
+        if (!await tab.bootSP(60)) throw new Error('game did not boot');
+        await sleep(500);
+        if (!await loseContext(tab)) throw new Error('WEBGL_lose_context is unavailable: nothing to test with');
+        await sleep(300);
+        assert(await contextLost(tab) === true, 'loseContext() did not lose the context');
+        await tab.ev(`window.webdoom?.doom?.onQuit?.()`);
+        if (!await tab.waitForMenu()) throw new Error('the launcher did not come back after the quit');
+
+        // the context is still lost: this boot must come up and run, not throw
+        const booted = await tab.bootSP(60).catch(e => { throw new Error(`the second boot failed: ${e.message}`); });
+        assert(booted, 'the second boot never started a game');
+        assert(await contextLost(tab) === true, 'CONTROL: the second boot ran on a context that was not lost');
+        const t0 = await gametic(tab);
+        await tab.esc();
+        await sleep(1000);
+        const t1 = await gametic(tab);
+        console.log(`  booted onto a lost context: gametic ${t0} -> ${t1} in 1 s`);
+        assert(t1 > t0 + 10, `the second boot is not running (gametic ${t0} -> ${t1})`);
+        await restoredAndDrawn(tab, await canvasShot(tab));
+        assert(tab.errors.length === 0, `exceptions: ${tab.errors.join('; ')}`);
+    } finally { tab.close(); }
+});
+
 // ── Results ───────────────────────────────────────────────────────────────────
 console.log('\n── resilience results ──────────────────────────────────────');
-summary('every resilience path graceful');
+summary('every resilience path graceful', { min: 12 });
 process.exit();
