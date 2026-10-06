@@ -23,6 +23,7 @@ Each of these was a real defect with a reproducer before it was a gate.
 | surface | gate |
 |---------|------|
 | Malformed / hostile WebSocket frames into the server | `net-fuzz` |
+| Taking another player's seat, or a drop-in nobody reserved | `net-fuzz` |
 | A hostile SERVER against the lobby client | `hostile-lobby` |
 | A hostile server's frames into the engine | `hostile-server` |
 | Adversarial HTTP paths, and a hostile data directory | `http-fuzz` |
@@ -40,6 +41,9 @@ Saying so plainly is part of the contract.
 - **There is no authentication.** Anyone who can reach the port can join
   a game, spectate one, or upload a demo. That is the design: it is a
   LAN party, and the server advertises its own address at startup.
+  A seat, once given, is bound to the lobby socket it was given to: the
+  server sends only that socket a token, and the game channel binds the
+  seat only with it.
 - **There is no transport encryption.** Plain HTTP on a LAN is the
   primary environment (`spec.md` §"Deployment reality: insecure origins")
   and the client degrades loudly rather than silently there.

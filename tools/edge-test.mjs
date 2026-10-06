@@ -16,8 +16,8 @@ async function startSession(base, wad = 'doom.wad') {
     await onceMsg(lob, m => m.t === 'welcome');
     lob.send(JSON.stringify({ t: 'params', params: { wad, episode: 1, map: 1, skill: 3, mode: 'coop' } }));
     lob.send(JSON.stringify({ t: 'start' }));
-    await onceMsg(lob, m => m.t === 'launch');
-    const g = attachBuf(new WebSocket(base + '/ws/game?slot=0'));
+    const launch = await onceMsg(lob, m => m.t === 'launch');
+    const g = attachBuf(new WebSocket(base + `/ws/game?slot=0&token=${launch.token}`));
     g.binaryType = 'nodebuffer';
     await open(g);
     let tic = 0, stopped = false;
@@ -31,15 +31,25 @@ async function startSession(base, wad = 'doom.wad') {
     return { lob, g, stop() { stopped = true; try { g.close(); } catch { /* gone */ } try { lob.close(); } catch { /* gone */ } } };
 }
 
-// A relay socket for a joined slot that keeps sending cmds.
-async function playSlot(base, slot) {
-    const g = attachBuf(new WebSocket(base + '/ws/game?slot=' + slot));
+// A relay socket for a joined slot that keeps sending cmds, with the seat
+// token its join was answered with.  `served` says the server bound it (its
+// history burst arrived): a refused socket would leave the reservation
+// holding the slot, and every scenario built on it would pass without a
+// player in it.
+async function playSlot(base, { slot, token }) {
+    const g = attachBuf(new WebSocket(base + `/ws/game?slot=${slot}&token=${token}`));
     g.binaryType = 'nodebuffer';
+    const first = new Promise(res => {
+        g.once('message', () => res(true));
+        g.once('close', () => res(false));
+        setTimeout(() => res(false), 3000).unref();
+    });
     await open(g);
+    const served = await first;
     let tic = 0, alive = true;
     const loop = () => { if (!alive) return; const b = Buffer.alloc(12); b.writeUInt32LE(tic++, 0); if (g.readyState === 1) g.send(b); setTimeout(loop, 28); };
     loop();
-    return { g, close() { alive = false; g.close(); } };
+    return { g, served, close() { alive = false; g.close(); } };
 }
 
 // connect a lobby client during a live game: the server sends 'inprogress'
@@ -55,7 +65,7 @@ async function probeJoin(base, { requestJoin = true, slot, name } = {}) {
     if (!requestJoin) return { w, offered: 'inprogress', summary: ip };
     w.send(JSON.stringify({ t: 'join', ...(Number.isInteger(slot) ? { slot } : {}), ...(name ? { name } : {}) }));
     const m = await onceMsg(w, m => m.t === 'launch' || m.t === 'full');
-    return { w, offered: m.t, join: !!m.join, slot: mySlot, reason: m.reason };
+    return { w, offered: m.t, join: !!m.join, slot: mySlot, token: m.token, reason: m.reason };
 }
 
 // ── scenario 1: fifth player rejected ────────────────────────────────────
@@ -66,11 +76,13 @@ async function fifthPlayer() {
     const fillers = [];
     for (let i = 1; i <= 3; i++) {
         const p = await probeJoin(s.ws);
-        fillers.push({ p, play: await playSlot(s.ws, p.slot) });
+        fillers.push({ p, play: await playSlot(s.ws, p) });
     }
     await sleep(600);   // let them promote
     const fifth = await probeJoin(s.ws);
-    check(`5th player rejected — got '${fifth.offered}' (${fifth.reason ?? ''})`, fifth.offered === 'full');
+    const bound = fillers.filter(f => f.play.served).length;
+    check(`5th player rejected — got '${fifth.offered}' (${fifth.reason ?? ''}), ${bound}/3 fillers bound their slots`,
+          fifth.offered === 'full' && bound === 3);
     host.stop(); fillers.forEach(f => { f.play.close(); f.p.w.close(); }); fifth.w.close(); s.stop();
 }
 
@@ -113,14 +125,15 @@ async function joinAndDrop() {
     const s = await startServer();
     const host = await startSession(s.ws);
     const p1 = await probeJoin(s.ws);
-    const play1 = await playSlot(s.ws, p1.slot);
+    const play1 = await playSlot(s.ws, p1);
     await sleep(800);
     const [, j] = await Promise.all([
         (async () => { play1.close(); p1.w.close(); })(),
         probeJoin(s.ws),
     ]);
     await sleep(500);
-    check(`join + drop simultaneously — new joiner got '${j.offered}' slot ${j.slot}`, j.offered === 'launch');
+    check(`join + drop simultaneously — new joiner got '${j.offered}' slot ${j.slot} (the dropper was bound: ${play1.served})`,
+          j.offered === 'launch' && play1.served);
     const after = await probeJoin(s.ws).catch(() => ({ offered: 'ERROR' }));
     check(`server responsive after join+drop — follow-up probe='${after.offered}'`,
           after.offered === 'launch' || after.offered === 'full');

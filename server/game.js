@@ -7,6 +7,7 @@
 // WebSocket (TCP) makes delivery ordered+reliable — no resend protocol exists
 // or is needed. A player silent past the grace window gets their last cmd
 // duplicated (bounded stall for others); past the drop window they're out.
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { envInt } from './env.js';
 
@@ -48,6 +49,17 @@ const prim = v => typeof v === 'string' || typeof v === 'number';
 const str = v => prim(v) ? String(v) : '';
 const num = v => prim(v) ? +v : NaN;
 const cleanName = n => str(n).replace(/[^A-Za-z0-9 _-]/g, '').trim().slice(0, 10);
+
+// A seat token binds a slot to the lobby socket it was given to: a launched
+// seat's token goes only to that seat's lobby socket, a drop-in's only to the
+// observer that reserved it, and /ws/game binds a slot only with the slot's
+// current token.  The slot number alone is public (the roster lists it).
+const newToken = () => randomBytes(16).toString('hex');
+const tokenMatches = (given, want) => {
+    if (typeof given !== 'string' || typeof want !== 'string') return false;
+    const a = Buffer.from(given), b = Buffer.from(want);
+    return a.length === b.length && timingSafeEqual(a, b);
+};
 
 const defaultParams = () => ({
     wad: 'doom.wad', episode: 1, map: 1, skill: 3, mode: 'coop',
@@ -152,6 +164,7 @@ export function createGame(log = console.log, servedWads = () => []) {
         let slot = -1;          // lobby seat
         let reserved = -1;      // drop-in reservation
         let reservedIn = null;  // ...and the session it was made in
+        let reservedToken = null;   // ...and the token that says it is still ours
 
         if (session) {
             reply(inProgress());
@@ -185,13 +198,15 @@ export function createGame(log = console.log, servedWads = () => []) {
                 if (!p) { reply({ t: 'full', reason: 'game full' }); return; }
                 reserved = p.slot;
                 reservedIn = session;
+                reservedToken = p.token = newToken();
                 p.joining = true;
                 p.reservedAt = Date.now();
                 const nm = cleanName(m.name);
                 if (nm) { session.names = session.names ?? [null, null, null, null]; session.names[p.slot] = nm; }
                 reply({ t: 'welcome', slot: p.slot, color: COLORS[p.slot] });
                 reply({ t: 'launch', params: session.params, numplayers: MAXPLAYERS,
-                        slots: session.slots, names: session.names, join: true, frontier: session.tic });
+                        slots: session.slots, names: session.names, join: true, frontier: session.tic,
+                        token: reservedToken });
                 log(`lobby: ${COLORS[p.slot]} dropping in (frontier ${session.tic})`);
                 return;
             }
@@ -244,8 +259,14 @@ export function createGame(log = console.log, servedWads = () => []) {
                 log(`lobby: ${COLORS[slot]} left`);
                 return;
             }
+            // Release the reservation only while it is still this socket's: a
+            // timed-out one may since have been given to another observer.
             const p = reserved >= 0 && session === reservedIn && session.players[reserved];
-            if (p && !p.ingame && !p.ws) { p.joining = false; p.reservedAt = 0; }
+            if (p && p.token === reservedToken && !p.ingame && !p.ws) {
+                p.joining = false;
+                p.reservedAt = 0;
+                p.token = null;
+            }
         });
     }
 
@@ -259,6 +280,7 @@ export function createGame(log = console.log, servedWads = () => []) {
             numplayers: MAXPLAYERS,
             players: [0, 1, 2, 3].map(slot => ({
                 slot, ws: null,
+                token: null,            // the seat token /ws/game must present (newToken)
                 cmds: new Map(),        // tic → Buffer(8)
                 last: Buffer.alloc(CMD_SIZE),
                 lastSeen: Date.now(),
@@ -287,7 +309,12 @@ export function createGame(log = console.log, servedWads = () => []) {
             if (n > 0) { cast({ t: 'countdown', n: n-- }); me.timer = setTimeout(tick, 1000); return; }
             const names = [0, 1, 2, 3].map(s => lobby.has(s) ? displayName(s) : null);
             me.names = names;
-            cast({ t: 'launch', params, numplayers: MAXPLAYERS, slots, names });
+            // each seat's launch frame carries that seat's token and no other
+            for (const [s, member] of lobby) {
+                me.players[s].token = newToken();
+                sendTo(member.ws, JSON.stringify({ t: 'launch', params, numplayers: MAXPLAYERS, slots, names,
+                                                  token: me.players[s].token }), log, 'lobby');
+            }
             log(`game: launching ${slots.length}p (slots ${slots.join(',')}) ${params.wad} E${params.episode}M${params.map} skill ${params.skill} ${params.mode}`);
             me.launched = Date.now();
             me.timer = setInterval(sealSweep, 50);
@@ -346,20 +373,22 @@ export function createGame(log = console.log, servedWads = () => []) {
 
     function relayConnect(ws, url) {
         safeWs(ws, log, 'game');
-        // slot must be an integer 0–3 naming an unoccupied seat of a live session
-        let slot;
+        // slot must be an integer 0–3 naming an unoccupied seat of a live
+        // session, and token must be that seat's current token
+        let slot, token;
         try {
             // `+null` is 0 and Number.isInteger(0) is true, so a connection
-            // with NO ?slot at all silently bound slot 0.  Not an escalation --
-            // an attacker can just pass slot=0 -- but it turns a client bug
-            // into a silently wrong game rather than a refusal.
-            const raw = new URL(url, 'http://x').searchParams.get('slot');
+            // with NO ?slot at all would bind slot 0: a client bug becomes a
+            // silently wrong game rather than a refusal.
+            const q = new URL(url, 'http://x').searchParams;
+            const raw = q.get('slot');
             if (raw === null) { refuse(ws, log); return; }
             slot = +raw;
+            token = q.get('token');
         } catch { refuse(ws, log); return; }
         if (!Number.isInteger(slot) || slot < 0 || slot >= MAXPLAYERS) { refuse(ws, log); return; }
         const p = session?.players.find(p => p.slot === slot);
-        if (!p || p.ws) { refuse(ws, log); return; }
+        if (!p || p.ws || !tokenMatches(token, p.token)) { refuse(ws, log); return; }
         // A socket speaks for its slot only while it holds it.  A timed-out
         // joiner, or any socket of a session that has ended, can stay in
         // CLOSING for up to ws's 30 s close timeout -- long enough for a new
@@ -391,7 +420,10 @@ export function createGame(log = console.log, servedWads = () => []) {
             }
             p.joining = true;
             p.reservedAt = p.reservedAt || Date.now();
-            if (!burstHistory(ws, `game: ${COLORS[slot]}`)) { unbind(); p.joining = false; p.reservedAt = 0; return; }
+            if (!burstHistory(ws, `game: ${COLORS[slot]}`)) {
+                unbind(); p.joining = false; p.reservedAt = 0; p.token = null;
+                return;
+            }
             log(`game: ${COLORS[slot]} catching up (${session.historyLen} tics)`);
         }
 
@@ -424,6 +456,7 @@ export function createGame(log = console.log, servedWads = () => []) {
         ws.on('close', () => {
             if (!mine()) return;
             p.ws = null;
+            p.token = null;         // a player who leaves comes back through the lobby
             p.ingame = false;
             p.joining = false;
             p.joinAt = 0;
@@ -449,13 +482,17 @@ export function createGame(log = console.log, servedWads = () => []) {
     function sealSweep() {
         if (!session) return;
         const now = Date.now();
-        // a reservation that never went live must not hold the slot
+        // A reservation that never went live must not hold the slot: the slot
+        // is offered again.  Its token still binds until a new `join` takes
+        // the slot and replaces it, so a client whose boot outlasts the
+        // timeout still gets in when nobody else wanted the seat; a joiner
+        // that bound and stalled is closed, and its token goes with it.
         for (const p of session.players)
             if (p.joining && !p.ingame && now - (p.reservedAt || now) > JOIN_TIMEOUT_MS) {
                 p.joining = false;
                 p.reservedAt = 0;
                 p.joinAt = 0;       // a drop-in this reservation scheduled goes with it
-                if (p.ws) { p.ws.close(); p.ws = null; }
+                if (p.ws) { p.ws.close(); p.ws = null; p.token = null; }
                 log(`game: ${COLORS[p.slot]} join timed out — slot freed`);
             }
         // a client that never connected cannot block the launch forever

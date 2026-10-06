@@ -47,7 +47,7 @@ console.log(`launched 2p ${mode} (slots ${lm[0].slots}): ${JSON.stringify(lm[0].
 vets.forEach((c, i) => {
     c.slot = c.lobby.slot;
     c.relay = attachRelay(c.doom, base, {
-        slot: c.slot, numplayers: lm[i].numplayers, slots: lm[i].slots, names: lm[i].names, jitterMs: 2,
+        slot: c.slot, token: lm[i].token, numplayers: lm[i].numplayers, slots: lm[i].slots, names: lm[i].names, jitterMs: 2,
     });
     c.doom.callMain(launchArgs(lm[i].params, false));
     c.relay.go();
@@ -68,7 +68,7 @@ async function joinInProgress() {
     if (!m.join) fail('joiner did not receive a join launch');
     c.slot = c.lobby.slot;
     c.relay = attachRelay(c.doom, base, {
-        slot: c.slot, numplayers: m.numplayers, slots: m.slots, names: m.names, jitterMs: 2,
+        slot: c.slot, token: m.token, numplayers: m.numplayers, slots: m.slots, names: m.names, jitterMs: 2,
         join: true, frontier: m.frontier,
     });
     c.doom.callMain(launchArgs(m.params, false));

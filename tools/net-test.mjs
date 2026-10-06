@@ -55,7 +55,7 @@ if (launchMsgs[0].slots.length !== N) fail(`expected ${N} players`);
 // --- boot engines into the session -------------------------------------------
 clients.forEach((c, i) => {
     c.relay = attachRelay(c.doom, base, {
-        slot: c.lobby.slot, numplayers: launchMsgs[i].numplayers,
+        slot: c.lobby.slot, token: launchMsgs[i].token, numplayers: launchMsgs[i].numplayers,
         slots: launchMsgs[i].slots, names: launchMsgs[i].names, jitterMs: 2,
     });
     c.doom.callMain(launchArgs(launchMsgs[i].params, false));

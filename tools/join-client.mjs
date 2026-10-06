@@ -64,7 +64,7 @@ const frontier = launchMsg.frontier ?? 0;
 doom.callMain(launchArgs(launchMsg.params, false));
 
 const relay = attachRelay(doom, serverBase, {
-    slot, numplayers: launchMsg.numplayers,
+    slot, token: launchMsg.token, numplayers: launchMsg.numplayers,
     slots: launchMsg.slots, names: launchMsg.names, jitterMs: 2,
 });
 

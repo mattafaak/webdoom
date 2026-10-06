@@ -50,7 +50,7 @@ console.log(`launched 2p coop (slots ${lm[0].slots}): ${JSON.stringify(lm[0].par
 vets.forEach((c, i) => {
     c.slot = c.lobby.slot;
     c.relay = attachRelay(c.doom, base, {
-        slot: c.slot, numplayers: lm[i].numplayers, slots: lm[i].slots, names: lm[i].names, jitterMs: 2,
+        slot: c.slot, token: lm[i].token, numplayers: lm[i].numplayers, slots: lm[i].slots, names: lm[i].names, jitterMs: 2,
     });
     c.doom.callMain(launchArgs(lm[i].params, false));
     c.relay.go();

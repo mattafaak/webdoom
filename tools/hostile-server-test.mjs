@@ -187,6 +187,32 @@ for (const [label, np, slots] of [
     }
 }
 
+// The seat token from a launch frame goes into the relay URL.  Whatever it
+// holds, it must arrive there as the one `token` value -- never as another
+// query parameter -- and a value that is not a string must not throw.
+{
+    let url = null;
+    class UrlWS extends StubWS { constructor(u) { super(u); url = u; } }
+    const relayUrl = token => {
+        url = null;
+        let threw = null;
+        try { attachRelay(doom, 'ws://127.0.0.1:1', { slot: 2, token, numplayers: 4, slots: [0, 1, 2, 3] }, UrlWS); }
+        catch (e) { threw = e; }
+        const q = url ? new URL(url).searchParams : null;
+        return { threw, slots: q?.getAll('slot').join(',') ?? '', token: q?.get('token') ?? null,
+                 said: threw ? `threw: ${String(threw.message ?? threw).slice(0, 60)}` : `url ${String(url).slice(0, 80)}` };
+    };
+    const legit = relayUrl('0123456789abcdef0123456789abcdef');
+    ok('launch token: a legitimate token reaches the relay URL intact',
+       !legit.threw && legit.slots === '2' && legit.token === '0123456789abcdef0123456789abcdef', legit.said);
+    const inj = relayUrl('x&slot=0#frag');
+    ok('launch token: a token cannot add or replace a query parameter',
+       !inj.threw && inj.slots === '2' && inj.token === 'x&slot=0#frag', inj.said);
+    const obj = relayUrl({ toString: 1 });
+    ok('launch token: a token that is not a string is sent empty, without throwing',
+       !obj.threw && obj.slots === '2' && obj.token === '', obj.said);
+}
+
 // Anti-vacuity: a guard that refuses everything would pass every case above.
 {
     let threw = null;
@@ -207,7 +233,7 @@ const goodWrites = wrote(beforeGood, full());
 ok('a valid bundle still lands in the tic ring', goodWrites.length > 0 && Math.min(...goodWrites) >= FLOOR,
    goodWrites.length ? `wrote ${goodWrites.length} bytes at or above slot 0` : 'wrote nothing');
 
-const EXPECTED = 32;   // 5 tic + 5 roster + 2 console + 14 hostile-launch + 4 names + 1 anti-vacuity + 1 liveness
+const EXPECTED = 35;   // 5 tic + 5 roster + 2 console + 14 hostile-launch + 4 names + 3 token + 1 anti-vacuity + 1 liveness
 console.log(`\n  ${passes} passed, ${failures} failed`);
 if (failures) { console.log(`FAIL hostile-server-test: ${failures} case(s) let a hostile value through`); process.exit(1); }
 if (passes < EXPECTED) {

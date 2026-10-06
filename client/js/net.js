@@ -283,9 +283,12 @@ function attachCommon(doom, url, { numplayers, slots, names }, WS, consoleSlotOf
 // Call before doom.callMain(): configures the engine for the session and
 // installs the send/receive hooks. rttMs sizes the input delay. slots =
 // occupied lobby slots (sparse: color choice = slot choice); the bundle
-// is always numplayers wide with phantoms marked not-ingame.
-export function attachRelay(doom, baseUrl, { slot, numplayers, slots = null, names = null, jitterMs = 5 }, WS = WebSocket) {
-    const { ws, lose, lostReason, control, quit } = attachCommon(doom, `${baseUrl}/ws/game?slot=${slot}`,
+// is always numplayers wide with phantoms marked not-ingame.  token is the
+// seat token from this client's own `launch` frame; the server binds the
+// slot only with it.  A non-string is sent as empty, which it refuses.
+export function attachRelay(doom, baseUrl, { slot, token = '', numplayers, slots = null, names = null, jitterMs = 5 }, WS = WebSocket) {
+    const tok = encodeURIComponent(typeof token === 'string' ? token : '');
+    const { ws, lose, lostReason, control, quit } = attachCommon(doom, `${baseUrl}/ws/game?slot=${slot}&token=${tok}`,
                                 { numplayers, slots, names }, WS, () => slot);
     // Jitter buffer depth (tics behind the sealed frontier, one tic =
     // 28.6ms). Size it to network JITTER, never to mean RTT: in lockstep

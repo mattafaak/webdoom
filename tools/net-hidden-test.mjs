@@ -41,7 +41,7 @@ async function session(hideMs) {
     clients[0].lobby.start();
     const msgs = await Promise.all(launches);
     clients.forEach((c, i) => {
-        c.relay = attachRelay(c.doom, srv.ws, { slot: c.lobby.slot, numplayers: msgs[i].numplayers,
+        c.relay = attachRelay(c.doom, srv.ws, { slot: c.lobby.slot, token: msgs[i].token, numplayers: msgs[i].numplayers,
                                                slots: msgs[i].slots, names: msgs[i].names, jitterMs: 2 });
         c.relay.onLost = reason => { c.lost ??= reason; };
         c.doom.callMain(launchArgs(msgs[i].params, false));

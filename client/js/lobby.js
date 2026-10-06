@@ -421,8 +421,8 @@ function enterMultiplayer() {
             enterGame({
                 game: m.params.wad,
                 args,
-                net: { slot: lobby.slot, numplayers: m.numplayers, jitterMs, names: m.names, slots: m.slots,
-                       join: !!m.join, frontier: m.frontier },
+                net: { slot: lobby.slot, token: m.token, numplayers: m.numplayers, jitterMs, names: m.names,
+                       slots: m.slots, join: !!m.join, frontier: m.frontier },
                 after: () => { countdown.dismiss(); lobby.close(); },
             });
         })

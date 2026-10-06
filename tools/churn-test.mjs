@@ -39,7 +39,7 @@ await sleep(200);
 vets[0].lobby.start();
 const lm = await Promise.all(launches);
 vets.forEach((c, i) => {
-    c.relay = attachRelay(c.doom, base, { slot: c.lobby.slot, numplayers: lm[i].numplayers, slots: lm[i].slots, names: lm[i].names, jitterMs: 2 });
+    c.relay = attachRelay(c.doom, base, { slot: c.lobby.slot, token: lm[i].token, numplayers: lm[i].numplayers, slots: lm[i].slots, names: lm[i].names, jitterMs: 2 });
     c.doom.callMain(launchArgs(lm[i].params, false));
     c.relay.go();
     c.active = true;
@@ -58,7 +58,7 @@ async function joinCatchup(tag) {
     });
     if (!m.join) fail(`${tag}: no join launch`);
     c.slot = c.lobby.slot;
-    c.relay = attachRelay(c.doom, base, { slot: c.slot, numplayers: m.numplayers, slots: m.slots, names: m.names, jitterMs: 2, join: true, frontier: m.frontier });
+    c.relay = attachRelay(c.doom, base, { slot: c.slot, token: m.token, numplayers: m.numplayers, slots: m.slots, names: m.names, jitterMs: 2, join: true, frontier: m.frontier });
     c.doom.callMain(launchArgs(m.params, false));
     c.doom._web_input_event(0, 0xac, 0, 0);
     await c.relay.catchUp(m.frontier, () => {});
