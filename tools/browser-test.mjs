@@ -12,11 +12,11 @@ import { join } from 'node:path';
 import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
 import { startServer } from './lib/server.mjs';
+import { check, summary, fatal } from './lib/report.mjs';
 
 const url = process.argv[2] ?? (await startServer()).url;
 const outdir = process.argv[3] ?? '/tmp';
 const chrome = await launchChrome();
-const cleanup = code => { chrome.kill(); process.exit(code); };
 const tab = await chrome.tab(url);
 const { cdp, ev: evaluate, errors: consoleErrors } = tab;
 
@@ -25,49 +25,13 @@ const { cdp, ev: evaluate, errors: consoleErrors } = tab;
 // local server, but the installation (c.addAll of ~14 shell files) is async.
 // If we let the boot loop start before the SW is controlling, the WAD fetch
 // goes directly to the server and is NOT intercepted/cached by the SW.
-for (let i = 0; i < 30; i++) {
-    const controlled = await evaluate(`!!navigator.serviceWorker.controller`);
-    if (controlled) break;
-    if (i === 29) {
-        console.error('FAIL: service worker did not take control within 15s');
-        cleanup(1);
-    }
-    await sleep(500);
-}
+if (!await tab.waitForSW(15)) fatal('service worker did not take control within 15s');
 
-// landing page → click PLAY → wait for the engine to run
-// (canvas unhidden + status empty)
-let booted = false;
-let clicked = false;
-for (let i = 0; i < 60; i++) {
-    await sleep(500);
-    const s = await evaluate(`document.getElementById('status')?.textContent`);
-    if (s?.startsWith('engine error') || s?.startsWith('Error') || s?.startsWith('cannot')) {
-        console.error(`FAIL: ${s}`); cleanup(1);
-    }
-    if (!clicked) {
-        // drill: SINGLE PLAYER → THE ULTIMATE DOOM
-        clicked = await evaluate(`(() => {
-            const sp = document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]');
-            if (!sp) return false;
-            sp.click();
-            const g = document.querySelector('#dmenu .row[data-label*="ULTIMATE"]');
-            if (!g) return false;
-            g.click();
-            return true;
-        })()`);
-        continue;
-    }
-    const running = await evaluate(
-        `document.getElementById('status')?.textContent === '' &&
-         !document.getElementById('screen').hidden`);
-    if (running) { booted = true; break; }
-}
-if (!booted) {
-    console.error('FAIL: boot timeout');
+// landing page → SINGLE PLAYER → THE ULTIMATE DOOM → the engine running
+if (!await tab.bootSP(30).catch(e => fatal(e.message))) {
     console.error('  status:', await evaluate(`document.getElementById('status')?.textContent`));
     console.error('  errors:', consoleErrors.slice(0, 5));
-    cleanup(1);
+    fatal('boot timeout');
 }
 
 const shot = async name => {
@@ -107,11 +71,11 @@ const wadsCached = await evaluate(
 console.log(`service worker WAD cache entries: ${wadsCached}`);
 
 if (consoleErrors.length) console.log('console errors:', consoleErrors.slice(0, 5));
-if (png1 === png2) { console.error('FAIL: Escape did not open the menu — input dead'); cleanup(1); }
-if (png2 === png3) { console.error('FAIL: game did not start from menu'); cleanup(1); }
-if (png3 === png4) { console.error('FAIL: player did not move'); cleanup(1); }
-if (!audioArmed) { console.error('FAIL: audio never armed after key input'); cleanup(1); }
-if (!wadsCached) { console.error('FAIL: service worker cached no WADs'); cleanup(1); }
-if (consoleErrors.some(e => /worklet|audio/i.test(e))) { console.error('FAIL: audio errors'); cleanup(1); }
-console.log(`PASS — title/menu/e1m1/moved screenshots in ${outdir}`);
-cleanup(0);
+check('Escape opened the menu (title and menu screenshots differ)', png1 !== png2, 'input dead');
+check('the game started from the menu (menu and E1M1 screenshots differ)', png2 !== png3);
+check('the player moved (E1M1 screenshots before and after W differ)', png3 !== png4);
+check('audio armed after key input', !!audioArmed);
+check('the service worker cached a WAD', !!wadsCached);
+check('no audio errors in the console', !consoleErrors.some(e => /worklet|audio/i.test(e)));
+summary(`title/menu/e1m1/moved screenshots in ${outdir}`);
+process.exit();
