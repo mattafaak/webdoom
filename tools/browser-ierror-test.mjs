@@ -33,64 +33,20 @@
 import { launchChrome } from './lib/cdp.mjs';
 import { sleep } from './lib/util.mjs';
 import { startServer } from './lib/server.mjs';
+import { check, summary, fatal } from './lib/report.mjs';
 
 const url = process.argv[2] ?? (await startServer()).url;
 const chrome = await launchChrome();
-const cleanup = code => { chrome.kill(); process.exit(code); };
 const tab = await chrome.tab(url);
-const { cdp, ev, errors } = tab;
+const { ev, errors } = tab;
 
-// ── Wait for service worker ────────────────────────────────────────────────────
-for (let i = 0; i < 30; i++) {
-    if (await ev(`!!navigator.serviceWorker.controller`)) break;
-    if (i === 29) { console.error('FAIL: service worker did not take control within 15s'); cleanup(1); }
-    await sleep(500);
-}
-
-// ── Wait for lobby menu ────────────────────────────────────────────────────────
-let menuReady = false;
-for (let i = 0; i < 40; i++) {
-    menuReady = await ev(`!!document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]')`);
-    if (menuReady) break;
-    const s = await ev(`document.getElementById('status')?.textContent`);
-    if (s?.startsWith('cannot')) { console.error(`FAIL: lobby error: ${s}`); cleanup(1); }
-    await sleep(500);
-}
-if (!menuReady) { console.error('FAIL: lobby menu did not appear within 20s'); cleanup(1); }
-
-// ── Boot the game (click SINGLE PLAYER → first available game) ────────────────
-let clicked = false;
-let booted = false;
-for (let i = 0; i < 120; i++) {
-    await sleep(500);
-    const s = await ev(`document.getElementById('status')?.textContent`);
-    // Abort if the engine errors before we trigger our test
-    if (s?.startsWith('engine error') || s?.startsWith('Error')) {
-        console.error(`FAIL: unexpected engine error before test trigger: ${s}`);
-        cleanup(1);
-    }
-    if (!clicked) {
-        clicked = await ev(`(() => {
-            const sp = document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]');
-            if (!sp) return false;
-            sp.click();
-            const g = document.querySelector('#dmenu .row[data-label*="ULTIMATE"]')
-                   || document.querySelector('#dmenu .row[data-label*="DOOM"]');
-            if (!g) return false;
-            g.click();
-            return true;
-        })()`);
-        continue;
-    }
-    const running = await ev(
-        `!document.getElementById('screen').hidden &&
-         document.getElementById('status')?.textContent === ''`);
-    if (running) { booted = true; break; }
-}
-if (!booted) {
-    console.error('FAIL: game did not boot within 60s');
+if (!await tab.waitForSW(15)) fatal('service worker did not take control within 15s');
+if (!await tab.waitForMenu(20).catch(e => fatal(`lobby error: ${e.message}`))) fatal('lobby menu did not appear within 20s');
+// Boot the game (click SINGLE PLAYER → first available game); an engine error
+// before the trigger below is a failure of the boot, not of the recovery.
+if (!await tab.bootSP(60).catch(e => fatal(`unexpected engine error before test trigger: ${e.message}`))) {
     console.error('  status:', await ev(`document.getElementById('status')?.textContent`));
-    cleanup(1);
+    fatal('game did not boot within 60s');
 }
 
 // ── Trigger onDoomError — simulates I_Error from engine ───────────────────────
@@ -99,10 +55,7 @@ if (!booted) {
 // the same code path that EM_ASM invokes in i_system.c I_Error().
 const TEST_MSG = 'no player 1 start in E1M1';
 const handlerExists = await ev(`typeof window.webdoom?.doom?.onDoomError === 'function'`);
-if (!handlerExists) {
-    console.error('FAIL: window.webdoom.doom.onDoomError is not a function — fix not applied or module did not export it');
-    cleanup(1);
-}
+if (!handlerExists) fatal('window.webdoom.doom.onDoomError is not a function — fix not applied or module did not export it');
 
 await ev(`window.webdoom.doom.onDoomError(${JSON.stringify(TEST_MSG)})`);
 await sleep(300);
@@ -115,48 +68,21 @@ const statusText     = await ev(`document.getElementById('status')?.textContent`
 const menuRows       = await ev(`document.querySelectorAll('#dmenu .row').length`);
 const canPlayAgain   = await ev(`!!document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]')`);
 
-let failed = false;
-
-if (!landingVisible) {
-    console.error('FAIL: landing page not restored after I_Error — user stuck on blank canvas');
-    failed = true;
-}
-if (!menuRows) {
-    console.error('FAIL: #landing is visible but the menu inside it is EMPTY (0 rows) — '
-                + 'the container was restored, not the launcher; only a reload recovers');
-    failed = true;
-} else if (!canPlayAgain) {
-    console.error(`FAIL: menu rendered ${menuRows} row(s) after I_Error but SINGLE PLAYER is not among them — `
+check('landing page restored after I_Error', landingVisible, 'user stuck on blank canvas');
+check(`launcher menu re-rendered: ${menuRows} rows, SINGLE PLAYER reachable`, menuRows && canPlayAgain,
+      !menuRows ? '#landing is visible but the menu inside it is EMPTY (0 rows) — '
+                + 'the container was restored, not the launcher; only a reload recovers'
+                : `menu rendered ${menuRows} row(s) after I_Error but SINGLE PLAYER is not among them — `
                 + 'the player cannot start another game');
-    failed = true;
-} else {
-    console.log(`  ok  launcher menu re-rendered: ${menuRows} rows, SINGLE PLAYER reachable`);
-}
-if (!canvasHidden) {
-    console.error('FAIL: game canvas still visible after I_Error');
-    failed = true;
-}
-if (!statusText?.includes('engine error')) {
-    console.error(`FAIL: user-visible error message not shown in #status (got: ${JSON.stringify(statusText)})`);
-    failed = true;
-}
-if (!statusText?.includes(TEST_MSG)) {
-    console.error(`FAIL: error message does not contain expected text "${TEST_MSG}" (got: ${JSON.stringify(statusText)})`);
-    failed = true;
-}
+check('game canvas hidden after I_Error', canvasHidden);
+check('user-visible error message shown in #status', statusText?.includes('engine error'), `got: ${JSON.stringify(statusText)}`);
+check(`error message contains "${TEST_MSG}"`, statusText?.includes(TEST_MSG), `got: ${JSON.stringify(statusText)}`);
 
 // Unexpected uncaught exceptions (not the abort from I_Error)
 const unexpectedErrors = errors.filter(e =>
     !/(abort|RuntimeError|unreachable|onDoomError)/i.test(e));
-if (unexpectedErrors.length > 0) {
-    console.error(`FAIL: unexpected JS exceptions: ${unexpectedErrors.join('; ')}`);
-    failed = true;
-}
+check('no unexpected JS exceptions', unexpectedErrors.length === 0, unexpectedErrors.join('; '));
 
-if (failed) {
-    cleanup(1);
-}
-
-console.log(`PASS — I_Error recovery: 5 assertions — landing restored, launcher menu re-rendered `
-          + `(${menuRows} rows), SINGLE PLAYER reachable, canvas hidden, error message shown`);
-cleanup(0);
+summary(`I_Error recovery — landing restored, launcher menu re-rendered (${menuRows} rows), `
+      + 'SINGLE PLAYER reachable, canvas hidden, error message shown');
+process.exit();
