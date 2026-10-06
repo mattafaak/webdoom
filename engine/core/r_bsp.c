@@ -107,7 +107,10 @@ typedef	struct
 
 // newend is one past the last valid seg
 cliprange_t*	newend;
-cliprange_t	solidsegs[MAXSEGS];
+// webdoom: one slot past the cap -- the crunch in R_ClipSolidWallSegment
+// copies the entry at newend, one past the last valid one, so a full list
+// reads solidsegs[MAXSEGS]; the copy lands after the sentinel, unread
+cliprange_t	solidsegs[MAXSEGS+1];
 
 
 

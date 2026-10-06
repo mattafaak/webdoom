@@ -40,6 +40,11 @@
 //                    allocated, its sprite clips are not.  R_RenderMaskedSegRange
 //                    then clipped against a NULL array (UBSan: load of a null
 //                    pointer in R_DrawMaskedColumn).
+//   solidsegs-full   75 thin pillars in a row, each its own solid range on
+//                    screen, fill the 64-entry solid clip list; the far wall
+//                    then merges them all, and the crunch copies the entry at
+//                    newend -- solidsegs[64], one past the array (ASan:
+//                    global-buffer-overflow in R_ClipSolidWallSegment).
 //
 // usage: node tools/fuzz/crafted-maps.mjs [--build-dir DIR]
 // Copyright (C) 2026, GPL-2.0-or-later.
@@ -125,6 +130,19 @@ function maskedOpenings() {
     return { lumps, tics: idle(10) };
 }
 
+// ── more solid ranges on screen than clip-list entries ───────────────────────
+function solidsegsFull() {
+    const lumps = map([ROOM], ({ wall }) => {
+        // 8-unit pillars every 20 units, 736 units away: ~2 px each, ~2 px apart
+        for (let k = 0; k < 75; k++) {
+            const x = -740 + 20 * k, y = 800;
+            wall(x, y, x + 8, y, 0); wall(x + 8, y, x + 8, y + 8, 0); wall(x + 8, y + 8, x, y + 8, 0); wall(x, y + 8, x, y, 0);
+        }
+        wall(-1024, 0, -1024, 2048, 0); wall(-1024, 2048, 1024, 2048, 0); wall(1024, 2048, 1024, 0, 0); wall(1024, 0, -1024, 0, 0);
+    }, [{ x: 0, y: 64, angle: 90, type: 1 }]);
+    return { lumps, tics: idle(10) };
+}
+
 const lmp = c => pwad([['MAP01', Buffer.alloc(0)], ...c.lumps, ['DEMO', demoLump({ tics: c.tics, ...c.demo })]]);
 
 // Play a case natively under ASan/UBSan; returns { ierror } (the I_Error
@@ -202,6 +220,7 @@ async function renders(name, c) {
 }
 const RENDERED = [
     ['masked-openings', maskedOpenings],
+    ['solidsegs-full', solidsegsFull],
 ];
 for (const [name, build] of RENDERED) await renders(name, build());
 
