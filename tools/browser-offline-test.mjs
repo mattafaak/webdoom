@@ -53,14 +53,12 @@ import { join } from 'node:path';
 import { launchChrome } from './lib/cdp.mjs';
 import { startServer } from './lib/server.mjs';
 import { sleep } from './lib/util.mjs';
+import { check, summary, fatal } from './lib/report.mjs';
 
 let srv = await startServer();
 const url = srv.url;
 // a fresh profile per run (launchChrome), so the SW cache is always cold on entry
 const chrome = await launchChrome({ gpu: 'none' });
-const cleanup = code => { srv?.stop(); chrome.kill(); process.exit(code); };
-process.on('SIGINT',  () => cleanup(1));
-process.on('SIGTERM', () => cleanup(1));
 const openTab = tabUrl => chrome.tab(tabUrl);
 
 // Wait for navigator.serviceWorker.controller to be non-null.
@@ -72,9 +70,8 @@ async function waitForSWController(tab, label = 'tab', timeoutSecs = 40) {
         if (controlled) return;
         await sleep(500);
     }
-    console.error(`FAIL: service worker did not claim ${label} within ${timeoutSecs}s`);
     console.error('  (precache addAll may have failed or SW registration was blocked)');
-    cleanup(1);
+    fatal(`service worker did not claim ${label} within ${timeoutSecs}s`);
 }
 
 // Wait for the landing lobby menu (SINGLE PLAYER row) to appear.
@@ -86,11 +83,10 @@ async function waitForSWController(tab, label = 'tab', timeoutSecs = 40) {
 async function waitForMenu(tab, label = 'tab', timeoutSecs = 30) {
     let ok;
     try { ok = await tab.waitForMenu(timeoutSecs); }
-    catch (e) { console.error(`FAIL: ${label}: ${e.message}`); cleanup(1); }
+    catch (e) { fatal(`${label}: ${e.message}`); }
     if (ok) return;
     const s = await tab.ev(`document.getElementById('status')?.textContent`);
-    console.error(`FAIL: ${label}: lobby menu did not appear within ${timeoutSecs}s (status: "${s}")`);
-    cleanup(1);
+    fatal(`${label}: lobby menu did not appear within ${timeoutSecs}s (status: "${s}")`);
 }
 
 // Click SP → game and wait for engine running (canvas visible, status empty).
@@ -99,10 +95,8 @@ async function bootIntoSP(tab, label = 'tab', timeoutSecs = 90) {
     for (let i = 0; i < timeoutSecs * 2; i++) {
         await sleep(500);
         const s = await tab.ev(`document.getElementById('status')?.textContent`);
-        if (s?.startsWith('Error') || s?.startsWith('cannot') || s?.startsWith('engine error')) {
-            console.error(`FAIL: ${label}: engine error during SP boot: "${s}"`);
-            cleanup(1);
-        }
+        if (s?.startsWith('Error') || s?.startsWith('cannot') || s?.startsWith('engine error'))
+            fatal(`${label}: engine error during SP boot: "${s}"`);
         if (!clicked) {
             clicked = await tab.ev(`(() => {
                 const sp = document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]');
@@ -123,8 +117,7 @@ async function bootIntoSP(tab, label = 'tab', timeoutSecs = 90) {
         if (running) return;
     }
     const s = await tab.ev(`document.getElementById('status')?.textContent`);
-    console.error(`FAIL: ${label}: engine did not boot within ${timeoutSecs}s (status: "${s}")`);
-    cleanup(1);
+    fatal(`${label}: engine did not boot within ${timeoutSecs}s (status: "${s}")`);
 }
 
 // ── Phase 1: online load — prime SW caches ────────────────────────────────────
@@ -137,10 +130,8 @@ await waitForSWController(tab1, 'tab1 (online)');
 const shellEntries = await tab1.ev(
     `caches.keys().then(ks => { const n = ks.find(k => k.startsWith('webdoom-shell-')); return n ? caches.open(n).then(c => c.keys()).then(k => k.length) : 0; })`,
 );
-if (!shellEntries || shellEntries === 0) {
-    console.error('FAIL: SHELL cache empty after SW controller was set — addAll likely failed');
-    cleanup(1);
-}
+check('the SHELL cache is filled once the service worker controls the page', shellEntries > 0,
+      'SHELL cache empty after SW controller was set — addAll likely failed');
 console.log(`  SW controller active; SHELL cache has ${shellEntries} entries (addAll complete)`);
 
 // Prime /api/wads and /api/ui-assets: on a fresh profile the initial page
@@ -165,10 +156,8 @@ const wadsEntries = await tab1.ev(
     `caches.open('webdoom-wads-v1').then(c => c.keys()).then(k => k.length)`,
 );
 console.log(`  SP booted online; wads cache has ${wadsEntries} WAD entries`);
-if (!wadsEntries || wadsEntries === 0) {
-    console.error('FAIL: wads cache empty after online SP boot — WAD was not cached by SW');
-    cleanup(1);
-}
+check('the wads cache holds the WAD after the online boot', wadsEntries > 0,
+      'wads cache empty after online SP boot — WAD was not cached by SW');
 tab1.close();
 
 // ── Phase 2: kill server (simulate offline) ───────────────────────────────────
@@ -224,14 +213,8 @@ const palV2 = await tab2.ev(
 );
 const statusAfter = await tab2.ev(`document.getElementById('status')?.textContent`);
 const canvasAfter = await tab2.ev(`!document.getElementById('screen').hidden`);
-if (statusAfter !== '') {
-    console.error(`FAIL: engine error appeared 1s after offline boot: "${statusAfter}"`);
-    cleanup(1);
-}
-if (!canvasAfter) {
-    console.error('FAIL: canvas hidden 1s after offline boot — renderer stopped');
-    cleanup(1);
-}
+check('no engine error 1 s after the offline boot', statusAfter === '', `status: "${statusAfter}"`);
+check('the canvas is still showing 1 s after the offline boot', canvasAfter, 'renderer stopped');
 if (palV1 !== null && palV2 !== null && palV2 > palV1) {
     console.log(`  palette_version ${palV1} → ${palV2} (+${palV2 - palV1} in 1s) — engine ticking`);
 } else {
@@ -244,11 +227,8 @@ if (palV1 !== null && palV2 !== null && palV2 > palV1) {
 const fatalErrors = tab2.errors.filter(e =>
     !/service.?worker|sw.*cache|cache.*miss/i.test(e),
 );
-if (fatalErrors.length > 0) {
-    console.error(`FAIL: uncaught exceptions during offline SP: ${fatalErrors.join('; ')}`);
-    cleanup(1);
-}
+check('no uncaught exceptions during offline SP', fatalErrors.length === 0, fatalErrors.join('; '));
 
 tab2.close();
-console.log('PASS — offline SP boot from SW cache proven');
-cleanup(0);
+summary('offline SP boot from SW cache proven');
+process.exit();
