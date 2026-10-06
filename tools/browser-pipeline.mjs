@@ -318,7 +318,7 @@ const result = {
             note: 'AudioWorklet process() wall time measured inside the audio thread and posted to main thread via port. n=0 means the worklet posted nothing: the harness arms the AudioContext with a trusted key event, but headless Chrome may not schedule the worklet. --headed reads it.' },
         // (f) the OPL synth on the main thread
         opl: { ...oplStats, frames: oplFrames, sampleRate: perf.sampleRate ?? 0, ms_per_second_of_audio: oplPerSecond,
-            note: 'audio.js pump(): _web_music_render() wall time per call on the main thread (~10 Hz, up to 16,384 frames a call). n=0 means the AudioContext never armed. Not regression-checked (round 10 measurement).' },
+            note: 'audio.js pump(): _web_music_render() wall time per call on the main thread (~10 Hz, up to 16,384 frames a call). n=0 means the AudioContext never armed. Recorded for reference; not regression-checked.' },
         // (e) input latency
         input_latency: { ...inputLatStats,
             note: 'Measurement: keydown event.timeStamp → renderer.draw() returns (GPU upload submitted, not compositing). Exact tic-consumption attribution omitted (no engine changes); this is event→next-rAF-draw latency.' },
@@ -338,7 +338,7 @@ const result = {
             width:        canvasWidth,
             height:       canvasHeight,
             rendererKind: rendererKind,
-            note: 'task 18.3: DOM canvas dimensions and renderer kind at end of run. Not a timing stage; not regression-checked. Always 320×200 — widescreen was removed 2026-09-12.',
+            note: 'DOM canvas dimensions and renderer kind at end of run. Not a timing stage; not regression-checked. Always 320×200: the only size the renderer draws.',
         },
     },
 };

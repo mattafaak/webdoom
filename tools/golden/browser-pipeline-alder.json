@@ -28,7 +28,7 @@
         "p90": 0,
         "p99": 0
       },
-      "note": "WebGL2: 256×1 RGB texSubImage2D when paletteDirty. n=2 means palette changed only at startup; stays constant during E1M1. Sub-0.1 ms — negligible. Confirms 12.2a aggregate verdict."
+      "note": "WebGL2: 256×1 RGB texSubImage2D when paletteDirty. n=2 means palette changed only at startup; stays constant during E1M1. Sub-0.1 ms — negligible."
     },
     "upload": {
       "run1": {
@@ -47,7 +47,7 @@
         "p90": 0.1,
         "p99": 0.2
       },
-      "note": "WebGL2: 320×200 R8 texSubImage2D + drawArrays. p99 = 0.2 ms, max = 0.3 ms. Negligible at 35 Hz budget (28.6 ms/frame). Confirms 12.2a aggregate verdict."
+      "note": "WebGL2: 320×200 R8 texSubImage2D + drawArrays. p99 = 0.2 ms, max = 0.3 ms. Negligible at 35 Hz budget (28.6 ms/frame)."
     },
     "raf_interval": {
       "run1": {
@@ -129,7 +129,7 @@
       "width": 320,
       "height": 200,
       "rendererKind": "webgl2",
-      "note": "task 18.3: DOM canvas dimensions and renderer kind. Not a timing stage; no run1/run2; browser-pipeline-compare.mjs SKIPS this stage. 320×200 = wideMode off (default). 854×200 when wide enabled."
+      "note": "DOM canvas dimensions and renderer kind. Not a timing stage; no run1/run2; not among browser-pipeline-compare.mjs's checks. 320×200 is the only size the renderer draws."
     }
   }
 }

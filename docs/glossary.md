@@ -72,7 +72,7 @@ Several schemes reuse the same letters, which is why this section exists.
 | `Q1`–`Q10` | [playsim.md](playsim.md) §15 | a vanilla quirk, with its demo evidence |
 | `T01`–`T34` | [state-machine.md](state-machine.md) | a transition in the lobby state machine; `browser-lobby` names the ones it drives |
 | `C`, `K`, `NC`, `P`, `F`, `W`, `L` | [optimization-ledger.md](optimization-ledger.md) | an optimisation candidate; its row's verdict says whether it landed or was killed |
-| `ws-NNN` | retired: `git show 2a6a2de:docs/web-scrutiny.md` | a client-side review finding, with its disposition; the open ones are in [Plans.md](../Plans.md) |
+| `ws-NNN` | retired: `git show 2a6a2de:docs/web-scrutiny.md` | a client-side review finding, with its disposition; the open findings, without their ids, are in [Plans.md](../Plans.md) |
 | `N.M`, round numbers | [Plans.md](../Plans.md), `git log` | a task, or a working pass over the repository. History; the reference documents do not cite them |
 
 **Watch the `F`.** `F1`–`F8` in the divergence atlas are behavioural forks;

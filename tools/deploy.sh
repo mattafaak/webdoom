@@ -116,7 +116,8 @@ probe () {   # probe <name> <curl args...>
 }
 probe "page answers"          curl -fsS --max-time 5 "$BASE/"
 probe "/api/status answers"   curl -fsS --max-time 5 "$BASE/api/status"
-# the two round-10 features whose absence was the symptom
+# box art and brotli: a server older than the client files it serves answers
+# the page but lacks both, which is how that drift shows
 THUMB="$(curl -fsS --max-time 5 -o /dev/null -w '%{size_download}' "$BASE/api/thumb/doom.wad" 2>/dev/null || echo 0)"
 if [ "$THUMB" = "5568" ]; then say "ok   /api/thumb/doom.wad is 5,568 bytes"; else say "FAIL /api/thumb/doom.wad returned $THUMB bytes (want 5568)"; fails=$((fails+1)); fi
 ENC="$(curl -fsS --max-time 5 -H 'Accept-Encoding: br' -o /dev/null -D - "$BASE/" 2>/dev/null | grep -i '^content-encoding:' | tr -d '\r' | awk '{print $2}')"
