@@ -1,14 +1,9 @@
 #!/usr/bin/env node
-// The in-heap file registry's bound, and the constant that states it twice.
-//
-// web_register_file() used to return void and no-op silently at MAXWEBFILES,
-// which W_WebFile could not see: every later lookup of that name missed,
-// malloc'd the file again, failed to register it again, and leaked.  It returns
-// 1/0 now, W_WebFile frees and returns NULL on a refusal, and web.h says so.
-//
-// MAXWEBFILES is also written twice -- engine/web/files.c and client/js/lobby.js
-// -- and the client caps its manifest with its copy.  A mirror that is asserted
-// is a mirror; one that is not is two constants that happen to agree today.
+// The in-heap file registry's bound.  web_register_file() returns 1/0, and
+// W_WebFile frees and returns NULL on a refusal, so a lookup that cannot
+// register does not re-read and leak the file on every retry.  The registry
+// holds one session's stack and small files; it is not the WAD library, which
+// has no engine limit (browser-wadimport [5]).
 //
 // usage: node tools/web-registry-test.mjs [build-dir]
 import { readFileSync } from 'node:fs';
@@ -23,15 +18,9 @@ const check = (name, ok, detail) => {
     console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${name} — ${detail}`);
 };
 
-// ── the mirrored constant ────────────────────────────────────────────────────
 const cSrc = readFileSync(join(root, 'engine/web/files.c'), 'utf8');
-const jsSrc = readFileSync(join(root, 'client/js/lobby.js'), 'utf8');
 const cMax = Number((/#define\s+MAXWEBFILES\s+(\d+)/.exec(cSrc) ?? [])[1]);
-const jsMax = Number((/const\s+MAXWEBFILES\s*=\s*(\d+)/.exec(jsSrc) ?? [])[1]);
-check('MAXWEBFILES is readable on both sides of the wire',
-    Number.isInteger(cMax) && Number.isInteger(jsMax),
-    `files.c=${cMax} lobby.js=${jsMax}`);
-check('the two copies of MAXWEBFILES agree', cMax === jsMax, `${cMax} vs ${jsMax}`);
+check('MAXWEBFILES is readable in files.c', Number.isInteger(cMax) && cMax > 0, `files.c=${cMax}`);
 
 // ── the registry itself ──────────────────────────────────────────────────────
 const createDoom = (await import(join(root, buildDir, 'doom.js'))).default;
@@ -59,9 +48,9 @@ const again = [reg('one-too-many.lmp', one), reg('one-too-many.lmp', one)];
 check('the refusal is stable across retries',
     again.every(r => r === 0), `retries returned ${again.join(', ')}`);
 
-if (results.length < 5) { console.log('FAIL — the suite did not complete'); process.exit(1); }
+if (results.length < 4) { console.log('FAIL — the suite did not complete'); process.exit(1); }
 const bad = results.filter(r => !r.ok);
 console.log(bad.length
     ? `FAIL — web-registry: ${bad.length} of ${results.length} assertions failed`
-    : `PASS — web-registry: ${results.length} assertions, registry capacity ${cMax} enforced and mirrored`);
+    : `PASS — web-registry: ${results.length} assertions, registry capacity ${cMax} enforced`);
 process.exit(bad.length ? 1 : 0);

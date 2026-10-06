@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 // Constants that exist twice, once on each side of the wire.
 //
-// COLORS, CMD_SIZE, MAXPLAYERS, FRAGMENT_MAX and MAXWEBFILES are each written
-// in two files, and two of them say so in a comment ("mirror of server value").
-// Nothing compared them.  A mirror that is asserted is a mirror; one that is
-// not is two constants that happen to agree today — and the consequences are
-// not cosmetic: CMD_SIZE sizes the sealed bundle both sides parse, MAXPLAYERS
-// indexes the tic ring, FRAGMENT_MAX decides which demo-share path a link
-// takes, MAXWEBFILES is the cap the client enforces on the engine's behalf.
+// COLORS, CMD_SIZE, MAXPLAYERS and FRAGMENT_MAX are each written in two files.
+// A mirror that is asserted is a mirror; one that is not is two constants that
+// happen to agree today -- and the consequences are not cosmetic: CMD_SIZE
+// sizes the sealed bundle both sides parse, MAXPLAYERS indexes the tic ring,
+// FRAGMENT_MAX decides which demo-share path a link takes.
 //
 // Sharing a module was the other option and was not taken: server/ is plain
 // Node, client/js/ is browser ES modules loaded over HTTP, and a shared file
@@ -35,9 +33,6 @@ const MIRRORS = [
     ['FRAGMENT_MAX',
      ['server/demo-store.js',  /FRAGMENT_MAX\s*=\s*([\d_]+)/],
      ['client/js/demo.js',     /FRAGMENT_MAX\s*=\s*([\d_]+)/]],
-    ['MAXWEBFILES',
-     ['engine/web/files.c',    /#define\s+MAXWEBFILES\s+(\d+)/],
-     ['client/js/lobby.js',    /const\s+MAXWEBFILES\s*=\s*(\d+)/]],
 ];
 
 const norm = v => String(v).replace(/[\s_]/g, '');
@@ -96,5 +91,5 @@ if (checked === 0) {
 }
 console.log(bad
     ? `FAIL wire-constants: ${bad} of ${MIRRORS.length + 1} mirrors disagree or could not be read`
-    : `PASS wire-constants: ${checked} of ${MIRRORS.length + 1} cross-wire mirrors agree (5 constants, plus the WAD title tables, which are imported rather than copied)`);
+    : `PASS wire-constants: ${checked} of ${MIRRORS.length + 1} cross-wire mirrors agree (4 constants, plus the WAD title tables, which are imported rather than copied)`);
 process.exit(bad ? 1 : 0);

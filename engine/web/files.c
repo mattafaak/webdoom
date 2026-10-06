@@ -41,6 +41,9 @@ EM_JS (void, js_file_copy_n, (const char* name, unsigned char* dest, int maxlen)
     var b = Module["fileMap"].get(UTF8ToString(name));
     if (b) HEAPU8.set(b.length <= maxlen ? b : b.subarray(0, maxlen), dest);
 });
+EM_JS (void, js_registry_full, (const char* name, int max), {
+    console.warn("webdoom: file registry full (" + max + ") -- refusing \"" + UTF8ToString(name) + "\"");
+});
 EM_JS (void, js_file_write, (const char* name, unsigned char* data, int len), {
     if (!Module["fileMap"]) Module["fileMap"] = new Map();
     var n = UTF8ToString(name);
@@ -65,8 +68,7 @@ EMSCRIPTEN_KEEPALIVE int web_register_file (const char* name, byte* data,
 {
     if (numwebfiles >= MAXWEBFILES)
     {
-        printf ("webdoom: file registry full (%d) — refusing \"%s\"\n",
-                MAXWEBFILES, web_basename (name));
+        js_registry_full (web_basename (name), MAXWEBFILES);
         return 0;
     }
     snprintf (webfiles[numwebfiles].name, sizeof webfiles[0].name, "%s",

@@ -36,7 +36,8 @@ let ipSlot = -1;               // chosen drop-in color/slot
 let ipName = '';               // chosen drop-in name (optional)
 let booted = false;
 
-const MAXWEBFILES = 40;     // the engine's file registry cap; mirrored in engine/web/files.c
+// A game is named by its file everywhere: menu entries, stacks, save
+// namespaces, demo links.  So the manifest holds one entry per file name.
 const entry = file => manifest.find(w => w.file === file);
 const isCommercial = e => e?.maps?.[0]?.startsWith('MAP');
 
@@ -203,10 +204,6 @@ function controlsScreen() {
 // Reads file.arrayBuffer(), identifies the WAD, stores in local library,
 // and adds the entry to the in-memory manifest.
 async function handleWadImport(file) {
-    if (manifest.length >= MAXWEBFILES) {
-        status(`WAD library full (max ${MAXWEBFILES} files)`);
-        return;
-    }
     try {
         status('Reading WAD…');
         const bytes = new Uint8Array(await file.arrayBuffer());
@@ -217,6 +214,14 @@ async function handleWadImport(file) {
             status(`Already imported: ${entry.title}`);
             return;
         }
+        // A different WAD under a name already in the library would never be
+        // chosen (entry() finds the first).  A PWAD can be renamed; an IWAD's
+        // name is how the engine tells which game it is.
+        const same = manifest.find(m => m.file === entry.file);
+        if (same)
+            throw new WadError(`${same.local ? 'a different' : 'this server already offers'} ${entry.file}` +
+                               `${same.local ? ' is already imported' : ''}` +
+                               `${entry.kind === 'PWAD' ? '; rename the file to import it' : ''}`);
 
         await libraryAdd(entry, bytes);
         manifest.push(entry);
@@ -660,14 +665,16 @@ function lobbyScreen() {
         loading.show('READING THE WAD LIBRARY…');
         manifest = (await (await fetch('/api/wads')).json()).wads;
 
-        // merge the local library in, capped at the engine's registry size;
-        // overflow is skipped loudly, never silently dropped
+        // merge the local library in.  A session registers only its own stack
+        // with the engine, so the library's size has no engine limit.  An
+        // import whose name the server has since started serving is skipped
+        // loudly: one name, one game.
         const serverShas = new Set(manifest.map(e => e.sha256));
         const localEntries = await libraryList().catch(() => []);
         for (const e of localEntries) {
             if (serverShas.has(e.sha256)) continue;
-            if (manifest.length >= MAXWEBFILES) {
-                console.warn(`WAD library: skipping "${e.name}" — manifest at engine limit (${MAXWEBFILES})`);
+            if (entry(e.file)) {
+                console.warn(`WAD library: skipping the imported "${e.file}": the server now offers a different ${e.file}`);
                 continue;
             }
             manifest.push(e);

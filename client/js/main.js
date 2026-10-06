@@ -220,11 +220,14 @@ export async function bootDoom({ wads, saves = null, args = [], net = null, onQu
 
     // no filesystem: WADs live once in the heap, small files in a JS Map
     doom['fileMap'] = persisted;
-    wads.forEach((w, i) => {
+    for (const [i, w] of wads.entries()) {
         const name = i === 0 ? (ENGINE_NAME[w.file] ?? w.file) : w.file;
-        doom.ccall('web_register_file', null,
-            ['string', 'number', 'number'], [name, blocks[i].ptr, blocks[i].len]);
-    });
+        if (!doom.ccall('web_register_file', 'number',
+                        ['string', 'number', 'number'], [name, blocks[i].ptr, blocks[i].len])) {
+            restoreOnFailure(canvas);
+            throw new Error(`cannot load ${w.file}: the engine's file registry is full`);
+        }
+    }
 
     const pwads = wads.slice(1).flatMap(w => ['-file', w.file]);
     const baseWsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;

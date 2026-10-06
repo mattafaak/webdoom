@@ -457,7 +457,7 @@ leg net-fuzz        -    "malformed/hostile WebSocket clients"      -- node tool
 leg web-contract    -    "web.h matches the exports it declares"      -- node tools/web-contract-check.mjs
 # The registry's bound, and MAXWEBFILES, which is written on both sides of the
 # wire (files.c and lobby.js) and was asserted by nothing.
-leg web-registry    build "file-registry cap + the MAXWEBFILES mirror"  -- node tools/web-registry-test.mjs
+leg web-registry    build "the file registry refuses past its cap"       -- node tools/web-registry-test.mjs
 # COLORS, CMD_SIZE, MAXPLAYERS, FRAGMENT_MAX and MAXWEBFILES each exist twice,
 # once on each side of the wire, and two of them say "mirror of" in a comment.
 # Nothing compared them until round 6.

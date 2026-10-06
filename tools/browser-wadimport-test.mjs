@@ -357,6 +357,74 @@ if (afterReload !== 'found') {
 }
 console.log('  ok  testmod entry still present after page reload (IDB survived)');
 
+// ── [5] The library is not the engine's file registry ────────────────────────
+// (a) A WAD named like one the server offers is refused, not shadowed.  Every
+//     menu entry, stack, save namespace and demo link names a game by its file
+//     name, so a second sigil.wad in the library is one nobody can choose.
+// (b) A session registers its own stack and a few small files, never the
+//     library, so the registry's 40 entries are no cap on how many WADs can be
+//     imported -- the library had been capped at 40 entries, served ones
+//     included.
+console.log('[5] Library: a served name, and more WADs than the engine registry holds...');
+const lib = await tab.ev(`(async () => {
+    const pwad = lump => {
+        const b = new Uint8Array(28), dv = new DataView(b.buffer);
+        b.set([0x50, 0x57, 0x41, 0x44]);
+        dv.setInt32(4, 1, true); dv.setInt32(8, 12, true);
+        for (let i = 0; i < lump.length; i++) b[20 + i] = lump.charCodeAt(i);
+        return b;
+    };
+    const status = () => document.getElementById('status')?.textContent ?? '';
+    const imp = async (name, lump) => { await window.__wd.handleWadImport(new File([pwad(lump)], name)); return status(); };
+    const libraryFiles = () => new Promise((res, rej) => {
+        const r = indexedDB.open('webdoom-local-library', 1);
+        r.onerror = () => rej(r.error);
+        r.onsuccess = () => {
+            const g = r.result.transaction('manifest').objectStore('manifest').getAll();
+            g.onsuccess = () => { r.result.close(); res(g.result.map(e => e.file)); };
+            g.onerror = () => rej(g.error);
+        };
+    });
+    const served = (await (await fetch('/api/wads')).json()).wads;
+    const victim = served.find(w => w.kind === 'PWAD' && !w.patch && !w.group);
+    if (!victim) return { fatal: 'the server offers no PWAD to collide with' };
+    const clash = await imp(victim.file, 'CLASH');
+    const clashStored = (await libraryFiles()).filter(f => f === victim.file).length;
+
+    const before = served.length + (await libraryFiles()).length;
+    const want = Math.max(0, 41 - before) + 2;          // past the old cap of 40
+    const results = [];
+    for (let i = 0; i < want; i++) results.push(await imp('libfill' + i + '.wad', 'FILL' + i));
+    return { victim: victim.file, clash, clashStored, before, want,
+             imported: results.filter(r => r.startsWith('Imported:')).length,
+             refused: results.filter(r => !r.startsWith('Imported:')).slice(0, 2),
+             last: 'libfill' + (want - 1) };
+})()`);
+if (!lib || lib.fatal) { console.error(`FAIL: ${lib?.fatal ?? 'library case returned nothing'}`); cleanup(1); }
+const libFails = [];
+if (!(lib.clash.startsWith('Rejected:') && lib.clash.includes('already offers')))
+    libFails.push(`(a) importing a second ${lib.victim}: status "${lib.clash}", want a refusal naming the served WAD`);
+if (lib.clashStored !== 0)
+    libFails.push(`(a) ${lib.clashStored} library entr${lib.clashStored === 1 ? 'y' : 'ies'} named ${lib.victim} stored beside the served one`);
+if (lib.imported !== lib.want)
+    libFails.push(`(b) ${lib.imported} of ${lib.want} imports past ${lib.before} entries succeeded; refused: ${JSON.stringify(lib.refused)}`);
+// and the merge at startup keeps them all
+await tab.cdp('Page.reload');
+await sleep(2000);
+await waitForMenu(tab, 'reload-tab-2', 60);
+const lastListed = await tab.ev(`
+    (() => {
+        document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]')?.click();
+        const rows = [...document.querySelectorAll('#dmenu .row')];
+        return rows.some(r => r.dataset.label?.toLowerCase() === ${JSON.stringify(lib.last)});
+    })()
+`);
+if (!lastListed) libFails.push(`(b) after a reload, ${lib.last} is not in CHOOSE GAME`);
+for (const f of libFails) console.error(`  FAIL ${f}`);
+if (libFails.length) cleanup(1);
+console.log(`  ok  (a) a second ${lib.victim} is refused: "${lib.clash}"`);
+console.log(`  ok  (b) ${lib.want} imports past ${lib.before} entries (the old cap was 40), all listed after a reload`);
+
 // Final uncaught-exception sweep
 const finalErrors = tab.errors.filter(e =>
     !e.includes('storage.persist') && !e.includes('IndexedDB'),
@@ -367,5 +435,5 @@ if (finalErrors.length > 0) {
 }
 
 tab.close();
-console.log('PASS — malformed corpus clean, import→entry→boot→reload all verified');
+console.log('PASS — malformed corpus clean, import→entry→boot→reload all verified, a served name refused, the library past 40');
 cleanup(0);
