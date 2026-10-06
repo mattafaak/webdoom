@@ -557,6 +557,11 @@ void R_ProjectSprite (mobj_t* thing)
 	lump = sprframe->lump[0];
 	flip = (boolean)sprframe->flip[0];
     }
+
+    // webdoom: no patch for this rotation (R_InitSprites only warns about
+    // missing ones); -1 would index spriteoffset[] and the lump directory
+    if (lump < 0)
+	return;
     
     // calculate edges of the shape
     tx -= spriteoffset[lump];
@@ -696,6 +701,9 @@ void R_DrawPSprite (pspdef_t* psp)
 
     lump = sprframe->lump[0];
     flip = (boolean)sprframe->flip[0];
+    // webdoom: a frame with no patch at all, as in R_ProjectSprite
+    if (lump < 0)
+	return;
     
     // calculate edges of the shape
     tx = R_LerpFixed (psp->oldsx, psp->sx) - 160*FRACUNIT;

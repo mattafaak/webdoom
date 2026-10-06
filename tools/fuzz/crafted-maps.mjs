@@ -45,6 +45,18 @@
 //                    then merges them all, and the crunch copies the entry at
 //                    newend -- solidsegs[64], one past the array (ASan:
 //                    global-buffer-overflow in R_ClipSolidWallSegment).
+//   sprite-no-rotation  a PWAD whose only sprite is TROOA1 (S_START TROOA1
+//                    S_END replaces the IWAD's sprite list), and an imp seen
+//                    from behind: rotation 5 of frame A has no patch, lump -1.
+//                    R_ProjectSprite indexed spriteoffset[-1] and drew lump
+//                    S_START (wasm: memory access out of bounds).  The frame
+//                    must also equal the control's, an imp out of view: a
+//                    rotation with no patch draws nothing.
+//   weapon-no-frame  PISGA0 and PISGC0 but no frame B, and the pistol fires
+//                    through S_PISTOL2 (frame B): the same -1 in
+//                    R_DrawPSprite.  A regression guard only -- the old engine
+//                    computed an off-screen x from the garbage and drew
+//                    nothing, in both engines.
 //
 // usage: node tools/fuzz/crafted-maps.mjs [--build-dir DIR]
 // Copyright (C) 2026, GPL-2.0-or-later.
@@ -143,7 +155,32 @@ function solidsegsFull() {
     return { lumps, tics: idle(10) };
 }
 
-const lmp = c => pwad([['MAP01', Buffer.alloc(0)], ...c.lumps, ['DEMO', demoLump({ tics: c.tics, ...c.demo })]]);
+// ── sprites without the patch a view needs ───────────────────────────────────
+function iwadLump(name) {
+    const d = loadWad('doom2.wad');
+    for (let i = 0, n = d.readInt32LE(4), o = d.readInt32LE(8); i < n; i++) {
+        const e = o + 16 * i;
+        if (d.toString('latin1', e + 8, e + 16).replace(/\0.*$/, '') === name)
+            return Buffer.from(d.subarray(d.readInt32LE(e), d.readInt32LE(e) + d.readInt32LE(e + 4)));
+    }
+    throw new Error(`${name} not in doom2.wad`);
+}
+const sprites = names => [['S_START', Buffer.alloc(0)], ...names.map(n => [n, iwadLump(n)]), ['S_END', Buffer.alloc(0)]];
+// the imp at (512, impY) facing impAngle; the player at (512, 128) faces north
+function impRoom(impY, impAngle, extra, tics = idle(10)) {
+    const lumps = map([ROOM], ({ wall }) => {
+        wall(0, 0, 0, 1024, 0); wall(0, 1024, 1024, 1024, 0); wall(1024, 1024, 1024, 0, 0); wall(1024, 0, 0, 0, 0);
+    }, [{ x: 512, y: impY, angle: impAngle, type: 3001 }, { x: 512, y: 128, angle: 90, type: 1 }]);
+    return { lumps, tics, extra };
+}
+// facing away from the player, who is behind it: neither sees the other
+const spriteNoRotation = () => impRoom(400, 90, sprites(['TROOA1']));
+const spriteControl = () => impRoom(40, 270, sprites(['TROOA1']));
+const weaponNoFrame = () => impRoom(400, 90, sprites(['PISGA0', 'PISGC0']),
+    [...idle(15), ...Array.from({ length: 12 }, () => [{ buttons: 1 }]), ...idle(5)]);
+
+const lmp = c => pwad([...(c.extra ?? []), ['MAP01', Buffer.alloc(0)], ...c.lumps,
+                       ['DEMO', demoLump({ tics: c.tics, ...c.demo })]]);
 
 // Play a case natively under ASan/UBSan; returns { ierror } (the I_Error
 // text), { sanitizer } (the report's first line), { crash } or { ran: true }.
@@ -221,8 +258,19 @@ async function renders(name, c) {
 const RENDERED = [
     ['masked-openings', maskedOpenings],
     ['solidsegs-full', solidsegsFull],
+    ['weapon-no-frame', weaponNoFrame],
 ];
 for (const [name, build] of RENDERED) await renders(name, build());
+
+{
+    const w = await play(spriteNoRotation(), { draw: true });
+    const control = await play(spriteControl(), { draw: true });
+    check('sprite-no-rotation: wasm draws it, and the frame equals the control with the imp out of view',
+          w.frame && control.frame && w.frame.equals(control.frame),
+          w.error ?? control.error ?? 'the frames differ');
+    const n = playNative(spriteNoRotation(), { draw: true });
+    check('sprite-no-rotation: nat-doom draws the demo with no sanitizer report', n.ran, n.sanitizer ?? n.crash ?? n.ierror);
+}
 
 const REFUSED = [
     ['brain-no-targets', brainNoTargets, 'A_BrainSpit'],
@@ -230,4 +278,4 @@ const REFUSED = [
 ];
 for (const [name, build, expected] of REFUSED) await refuses(name, build(), expected);
 
-summary(`crafted maps reach their limits through the real loader and a demo (${2 + RENDERED.length + REFUSED.length} cases)`);
+summary(`crafted maps reach their limits through the real loader and a demo (${3 + RENDERED.length + REFUSED.length} cases)`);
