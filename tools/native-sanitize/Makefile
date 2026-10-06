@@ -10,7 +10,7 @@
 # Prerequisites: clang, Python 3 (for compare.py), WADs in ../../wads/lib/.
 
 CC      := gcc
-# task 3.1: build in 32-bit mode (-m32) so pointer width matches WASM's 32-bit
+# build in 32-bit mode (-m32) so pointer width matches WASM's 32-bit
 # model.  This eliminates 64-bit pointer-vs-int truncation warnings/errors that
 # are not present in the WASM target and avoids the need for intptr_t patches in
 # w_wad.h (int==intptr_t in 32-bit).  ASan 32-bit runtime is in /usr/lib32/

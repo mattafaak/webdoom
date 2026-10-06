@@ -3,7 +3,7 @@
 // In this build web_perf_now() reads fs_perf_instr_fd (set by i_main.c when
 // WD_CYCLES=1) so stage brackets accumulate instruction deltas instead of µs.
 // When fs_perf_instr_fd < 0 (no perf fd), web_perf_now() returns 0.0.
-// Identical surface to native-sanitize/perf.h (FINDING-6: five-header surface).
+// Identical surface to native-sanitize/perf.h (the five-header surface).
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #ifndef __WEB_PERF_H__
 #define __WEB_PERF_H__

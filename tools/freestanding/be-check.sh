@@ -11,7 +11,7 @@
 # arm-check.sh with the target overridden to 32-bit ARM.
 #
 # TARGET-GENERIC despite the name.  The script was written for the big-endian
-# PPC rung (13.3a) and the "be-" prefix is historical; the target, the qemu
+# PPC rung and the "be-" prefix is historical; the target, the qemu
 # binary, the output binary and the label are all env-overridable, and
 # tools/freestanding/arm-check.sh drives it for 32-bit ARM:
 #

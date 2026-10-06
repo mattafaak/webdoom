@@ -25,13 +25,13 @@
 #include "doomstat.h"
 #include "d_player.h"
 #include "m_argv.h"
-#include "r_defs.h" // sector_t (18.4: sector hash extension)
+#include "r_defs.h" // sector_t (sector hash extension)
 #include "nat_platform.h"
 #include "web.h" // D_DoomFrame declaration
 
 // External sim state.
 extern int prndindex;
-// 18.4: sector/thinker hash extension
+// sector/thinker hash extension
 extern int numsectors;
 extern sector_t* sectors;
 extern thinker_t thinkercap; // p_tick.c linked-list sentinel
@@ -55,13 +55,13 @@ static int nat_state_hash (void)
             h = (h ^ (unsigned) players[i].mo->angle) * 0x01000193u;
             h = (h ^ (unsigned) players[i].health) * 0x01000193u;
         }
-    // 18.4: sector floor/ceiling heights — catches moving floors/ceilings.
+    // sector floor/ceiling heights — catches moving floors/ceilings.
     for (i = 0; i < numsectors; i++)
     {
         h = (h ^ (unsigned) sectors[i].floorheight) * 0x01000193u;
         h = (h ^ (unsigned) sectors[i].ceilingheight) * 0x01000193u;
     }
-    // 18.4: thinker count — catches spawn/despawn of active thinkers.
+    // thinker count — catches spawn/despawn of active thinkers.
     {
         thinker_t* th;
         unsigned cnt = 0;

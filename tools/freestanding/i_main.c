@@ -13,7 +13,7 @@
 //   ./fs-doom <wad_path> -timedemo <demo> [-sim <out.json>] [-cycles
 //   <out.json>]
 //
-// Instruction counting (13.1a cycle floor):
+// Instruction counting (cycle floor):
 //   Set WD_CYCLES=1 in the environment and pass -cycles <out.json>.
 //   The shim opens perf_event_open(PERF_COUNT_HW_INSTRUCTIONS, exclude_kernel)
 //   at boot, reads per-tic deltas at the tic boundary (same point as per-tic
@@ -46,12 +46,12 @@
 #include "fs_platform.h"
 #include "web.h"
 
-/* Vanilla globals: defined in m_menu.c; used for WD_DETAIL opt-in (14.2b). */
+/* Vanilla globals: defined in m_menu.c; used for WD_DETAIL opt-in. */
 extern int detailLevel;
 extern int screenblocks;
 
 extern int prndindex;        /* m_random.c — hashed per tic (fs_state_hash) */
-extern thinker_t thinkercap; /* p_tick.c — thinker list sentinel (18.4) */
+extern thinker_t thinkercap; /* p_tick.c — thinker list sentinel */
 #include "perf.h" /* fs_perf_instr_fd, web_perf_*_us — for attribution */
 // ── Sim hash: identical algorithm to web_state_hash() and nat_state_hash() ───
 // Every field in exactly the same order — required for bit-identical
@@ -70,13 +70,13 @@ static int fs_state_hash (void)
             h = (h ^ (unsigned) players[i].mo->angle) * 0x01000193u;
             h = (h ^ (unsigned) players[i].health) * 0x01000193u;
         }
-    // 18.4: sector floor/ceiling heights — catches moving floors/ceilings.
+    // sector floor/ceiling heights — catches moving floors/ceilings.
     for (i = 0; i < numsectors; i++)
     {
         h = (h ^ (unsigned) sectors[i].floorheight) * 0x01000193u;
         h = (h ^ (unsigned) sectors[i].ceilingheight) * 0x01000193u;
     }
-    // 18.4: thinker count — catches spawn/despawn of active thinkers.
+    // thinker count — catches spawn/despawn of active thinkers.
     {
         thinker_t* th;
         unsigned cnt = 0;
@@ -215,12 +215,12 @@ static void emit_cycles_json (const char* path, int tics, long long* arr, int n)
     fclose (f);
 }
 
-// ── WD_RO_WAD=1: read-only WAD blob (13.2c XIP feasibility proof) ────────────
+// ── WD_RO_WAD=1: read-only WAD blob (XIP feasibility proof) ────────────
 // When WD_RO_WAD=1, the WAD blob is loaded into an anonymous mmap region and
 // mprotect(PROT_READ)'d after load.  Any write into the blob triggers SIGSEGV,
 // which our handler catches, prints "WAD-BLOB WRITE" + faulting address, and
 // exits nonzero — so a violation is a named diagnosis, not a mystery crash.
-// This also doubles as a write trap for 13.4 wild-write triage.
+// This also doubles as a write trap for wild-write triage.
 //
 // Engine/core: ZERO diff.  Shim-only change.
 
@@ -334,8 +334,8 @@ static int sim_trace[MAX_TRACE];
 static int trace_len;
 
 // ── Per-tic instruction counter buffers (WD_CYCLES=1 only) ───────────────────
-// tic_instr: whole-tic instruction deltas (13.1a whole-program floor).
-// tic_*_instr: per-stage deltas (13.1b attribution).  Populated by reading
+// tic_instr: whole-tic instruction deltas (whole-program floor).
+// tic_*_instr: per-stage deltas (attribution).  Populated by reading
 //   the stage accumulators (web_perf_*_us) at each tic boundary; these
 //   accumulate instruction deltas when web_perf_now() reads fs_perf_instr_fd.
 // tic_instr_len is the common length for all arrays (incremented once per tic).
@@ -355,7 +355,7 @@ static double snap_planes = 0;
 static double snap_masked = 0;
 static double snap_frame = 0;
 
-// ── Per-subsystem instruction attribution output (13.1b)
+// ── Per-subsystem instruction attribution output
 // ────────────────────── Writes per-stage instruction stats
 // (sim/frame/bsp/planes/masked/other + whole) to -attrib <path>.  Requires
 // WD_CYCLES=1 (otherwise all stages are zero). "other" = whole-program −
@@ -504,8 +504,8 @@ int main (int argc, char** argv)
     const char* wad_path = NULL;
     const char* sim_out = NULL;
     const char* cycles_out = NULL;
-    const char* attrib_out = NULL;    /* 13.1b: per-stage attribution output */
-    const char* zonestats_out = NULL; /* 13.2b: zone HWM + purge stats output */
+    const char* attrib_out = NULL;    /* per-stage attribution output */
+    const char* zonestats_out = NULL; /* zone HWM + purge stats output */
     static const char* fwd[64];
     int fwd_argc = 0;
     int i;
@@ -608,7 +608,7 @@ int main (int argc, char** argv)
     // Open instruction counter before init if WD_CYCLES=1 (shim-only, 13.1a/b).
     // The counter is not started yet (disabled=1); we enable it after
     // D_DoomMain so that init instructions are excluded from the per-tic floor
-    // measurement. 13.1b: after opening, share the fd with perf.c via
+    // measurement. After opening, share the fd with perf.c via
     // fs_perf_instr_fd so that web_perf_now() can read it inside stage brackets
     // (d_main/r_main).
     if (getenv ("WD_CYCLES") && getenv ("WD_CYCLES")[0] == '1')
@@ -629,7 +629,7 @@ int main (int argc, char** argv)
     D_DoomMain (); // init + loads WAD via fs_register_wad/W_WebFile; no disk
                    // I/O
 
-    // WD_DETAIL=1: opt-in low-detail mode for bare-metal/freestanding (14.2b).
+    // WD_DETAIL=1: opt-in low-detail mode for bare-metal/freestanding.
     // Routes through the vanilla R_SetViewSize mechanism so
     // R_ExecuteSetViewSize rebuilds view tables with detailshift=1 on the first
     // D_DoomFrame. Do NOT poke detailshift directly (view tables must be
@@ -671,7 +671,7 @@ int main (int argc, char** argv)
                 long long now = wd_perf_read (wd_cycles_fd);
                 int n = tic_instr_len;
                 tic_instr[n] = now - wd_last_count;
-                // 13.1b: stage deltas from accumulator snapshots.
+                // stage deltas from accumulator snapshots.
                 // web_perf_*_us accumulate instruction deltas (not µs) when
                 // web_perf_now() reads fs_perf_instr_fd (same fd as
                 // wd_cycles_fd).
@@ -731,7 +731,7 @@ done:
             }
         }
 
-        // Emit per-subsystem attribution if -attrib was given (13.1b).
+        // Emit per-subsystem attribution if -attrib was given.
         // MUST be called before emit_cycles_json: both sort tic_instr in-place,
         // and emit_attrib_json needs the original per-tic order to compute
         // per-tic "other = whole - sum(stages)" before any sort.
@@ -744,7 +744,7 @@ done:
         if (cycles_out)
             emit_cycles_json (cycles_out, tics, tic_instr, tic_instr_len);
 
-        // task 13.2b: emit zone HWM + purge-pressure stats if -zonestats given.
+        // emit zone HWM + purge-pressure stats if -zonestats given.
         // Available only when built with -DWEB_PERF_ZONE_STATS.
 #ifdef WEB_PERF_ZONE_STATS
         if (zonestats_out)

@@ -2,7 +2,7 @@
 // Provides the same public surface (D_DoomFrame, W_WebFile, Web_File*,
 // mus_*) without any emscripten dependency, so engine/core files that
 // #include "web.h" compile cleanly in the freestanding build.
-// Identical surface to native-sanitize/web.h (FINDING-6: five-header surface).
+// Identical surface to native-sanitize/web.h (the five-header surface).
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #ifndef __WEB_H__
 #define __WEB_H__

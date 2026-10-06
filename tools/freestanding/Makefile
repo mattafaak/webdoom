@@ -104,22 +104,22 @@ imports: $(OUT)
 clean:
 	rm -rf obj $(OUT) $(OUT_DIR)
 
-# ro-wad-check: 13.2c read-only-WAD proof (XIP feasibility).
+# ro-wad-check: read-only-WAD proof (XIP feasibility).
 # Runs all 13 demos with WD_RO_WAD=1: WAD blob mprotect(PROT_READ) after load.
 # Any engine write into the blob → SIGSEGV → FAIL with faulting address.
-# DoD: 13/13 pass → WAD blob is read-only → XIP-viable.
+# 13/13 pass → WAD blob is read-only → XIP-viable.
 ro-wad-check: $(OUT)
 	@bash ro-wad-check.sh
 
-# check-stack-1m: 14.2g — prove 1 MiB process stack is sufficient for all 13 demos.
+# check-stack-1m: prove 1 MiB process stack is sufficient for all 13 demos.
 # Enforces ulimit -s 1024 (1 MiB) in the SAME shell as run-check.sh so every child
 # process (fs-doom + python3 comparator) inherits the limit.
 # Measured peak (demo3): fs-doom alone ≈14 KiB; python3 comparator ≈128 KiB.
 # 1 MiB provides ≥8× margin over the Python floor, ≥70× over the engine peak.
-# DoD gate: all 13 demos must pass; any SIGSEGV (exit 139) = stack overflow = FAIL.
+# Gate: all 13 demos must pass; any SIGSEGV (exit 139) = stack overflow = FAIL.
 STACK_LIMIT_KB ?= 1024
 check-stack-1m: $(OUT)
-	@echo "14.2g stack gate: ulimit -s $(STACK_LIMIT_KB) KiB active"
+	@echo "stack gate: ulimit -s $(STACK_LIMIT_KB) KiB active"
 	@bash -c 'ulimit -s $(STACK_LIMIT_KB) && echo "ulimit -s active = $$(ulimit -s) KiB" && bash run-check.sh $(WAD_DIR) $(OUT_DIR)'
 
 .PHONY: all check check-all imports clean ro-wad-check check-stack-1m

@@ -59,7 +59,7 @@ void I_ReadScreen(byte* scr)
 // Algorithm identical to fnv1aRender() in tools/demo-test.mjs and
 // native-sanitize/i_video.c — ensures apples-to-apples golden comparison.
 //
-// 14.2a column-major: screens[0] stores pixel(x,y) at [x*SCREENHEIGHT+y].
+// column-major: screens[0] stores pixel(x,y) at [x*SCREENHEIGHT+y].
 // Walk in VISUAL row-major order (y outer, x inner) so the hash sequence
 // matches the goldens that were computed from row-major storage.
 int fs_palette_version_get(void)

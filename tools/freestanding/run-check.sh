@@ -2,7 +2,7 @@
 # tools/freestanding/run-check.sh — run fs-doom over all 13 golden demos and
 # ASSERT its per-tic state hashes are bit-identical to the committed goldens.
 #
-# This is the crown-jewel proof for rung 1 (task 11.1a): the freestanding core
+# This is the crown-jewel proof for rung 1: the freestanding core
 # — memory region + byte-out + preloaded WAD blob, no OS file I/O below the
 # shim — reproduces vanilla DOOM's simulation exactly. It is a GATE, not a
 # dump: a single divergent tic exits non-zero and names the demo + tic.

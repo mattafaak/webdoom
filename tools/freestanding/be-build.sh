@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tools/freestanding/be-build.sh — cross-build fs-doom for a big-endian target.
 #
-# Ladder choice (task 13.3a):
+# Ladder choice:
 #   (1) m68k-linux-musl — skipped: zig 0.16 LLVM backend for m68k is
 #       EXPERIMENTAL; no qemu-m68k-static confirmed on this host.
 #   (2) powerpc-linux-musleabi — SELECTED: BE, 32-bit, integer unaligned

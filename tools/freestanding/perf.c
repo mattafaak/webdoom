@@ -1,4 +1,4 @@
-// tools/freestanding/perf.c — instruction-count perf shim (13.1b).
+// tools/freestanding/perf.c — instruction-count perf shim.
 // When fs_perf_instr_fd >= 0, web_perf_now() reads the perf_event_open fd
 // and returns the cumulative user-space instruction count.  Stage brackets in
 // d_main.c / r_main.c then accumulate instruction deltas into web_perf_*_us

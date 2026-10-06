@@ -16,7 +16,7 @@ extern volatile int fs_timedemo_gametics;
 extern jmp_buf      fs_demo_jmp;
 
 // ── Zone arena size ──────────────────────────────────────────────────────────
-// task 13.2b: FS_ZONE_SIZE is defined here so both i_system.c (which allocates
+// FS_ZONE_SIZE is defined here so both i_system.c (which allocates
 // the arena) and i_main.c (which reports it in -zonestats output) see the same
 // value.  Override at compile time with -DFS_ZONE_SIZE_OVERRIDE=(N) to sweep
 // different zone sizes without editing source.
