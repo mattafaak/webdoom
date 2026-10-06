@@ -1,7 +1,7 @@
 // webdoom service worker: WADs are content-hashed (?v=sha8) → cache-first
 // forever; everything else network-first with cache fallback, so repeat
 // loads are instant and single player works offline once a WAD is cached.
-const SHELL = 'webdoom-shell-v17'; // v17: build/synth.wasm joins the shell (the worklet synth)
+const SHELL = 'webdoom-shell-v18'; // bump whenever a shell file changes
 const WADS = 'webdoom-wads-v1';
 
 // The app shell, one entry per file.  tools/check-sw-precache.mjs parses THIS
@@ -47,45 +47,32 @@ self.addEventListener('fetch', e => {
     if (url.pathname.startsWith('/ws/')) return;
 
     if (url.pathname.startsWith('/wads/')) {
-        // hash in ?v makes the full URL immutable; read body into ArrayBuffer
-        // first, then cache a synthetic Response — direct c.put(networkResponse)
-        // fails in headless Chrome without sandbox (NetworkError), but a
-        // Response constructed from an ArrayBuffer always succeeds.
+        // The ?v hash makes the full URL immutable: cache-first, forever.  On a
+        // miss the network response goes to the page as it arrives, so the
+        // loading bar moves; the cache gets a copy built from an ArrayBuffer
+        // in the background (putting the network response itself fails in
+        // headless Chrome without a sandbox), and a cache write that fails --
+        // quota, most likely -- never fails the download.
         e.respondWith(caches.open(WADS).then(async c => {
             const hit = await c.match(e.request.url);
             if (hit) return hit;
             const res = await fetch(e.request);
-            if (res.ok) {
-                const buf = await res.arrayBuffer();
-                const init = { status: res.status, statusText: res.statusText, headers: res.headers };
-                // A WAD is content-hashed, so a new ?v for the same path means
-                // the file was REPLACED and the old entry can never be asked
-                // for again.  Nothing pruned them: `activate` only deletes
-                // `webdoom-shell-` keys, so webdoom-wads-v1 grew without bound
-                // at 12-18 MB a copy.  That matters because of the line below.
+            if (!res.ok) return res;
+            const copy = res.clone();
+            e.waitUntil((async () => {
                 try {
+                    const buf = await copy.arrayBuffer();
+                    // a new ?v for the same path means the file was replaced,
+                    // and the old entry can never be asked for again
                     for (const k of await c.keys()) {
                         const ku = new URL(k.url);
-                        if (ku.pathname === url.pathname && ku.search !== url.search)
-                            await c.delete(k);
+                        if (ku.pathname === url.pathname && ku.search !== url.search) await c.delete(k);
                     }
-                } catch { /* best-effort: never fail a download over housekeeping */ }
-                // THE CACHE WRITE MUST NOT BE ABLE TO FAIL THE DOWNLOAD.
-                // Unguarded, a rejected c.put -- QuotaExceededError being the
-                // realistic one, and the pruning above exists because this
-                // cache was the thing filling up -- rejected the whole async
-                // function, so respondWith got a rejected promise and the
-                // page's fetch became a NETWORK ERROR.  main.js then threw
-                // `wad fetch failed` and the game would not start, on every
-                // retry, even though all 15 MB had arrived intact.  The shell
-                // branch below has carried this guard, with a comment saying
-                // why, while the branch far likelier to hit quota had none.
-                try { await c.put(e.request.url, new Response(buf.slice(0), init)); }
-                catch (err) {
+                    await c.put(e.request.url, new Response(buf, { status: res.status, statusText: res.statusText, headers: res.headers }));
+                } catch (err) {
                     console.warn(`webdoom sw: could not cache ${e.request.url}: ${err?.message ?? err}`);
                 }
-                return new Response(buf, init);
-            }
+            })());
             return res;
         }));
         return;
