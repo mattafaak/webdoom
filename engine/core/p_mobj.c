@@ -673,6 +673,13 @@ void P_SpawnPlayer (mapthing_t* mthing)
 
     int			i;
 
+    // webdoom: G_DeathMatchSpawnPlayer falls back to playerstarts[], which
+    // is zeroed for a player the map has no start for, and type-1 indexes
+    // playeringame[] and players[].  Chocolate Doom returns here, leaving
+    // the player with no mobj for P_PlayerThink to dereference.
+    if (mthing->type < 1 || mthing->type > MAXPLAYERS)
+	I_Error ("P_SpawnPlayer: no player start (type %i)", mthing->type);
+
     // not playing?
     if (!playeringame[mthing->type-1])
 	return;					

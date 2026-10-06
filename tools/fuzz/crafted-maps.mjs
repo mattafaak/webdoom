@@ -24,6 +24,12 @@
 //                    (87).  A_BrainSpit took `% numbraintargets` of 0: a
 //                    divide-by-zero trap in wasm, SIGFPE natively.  It must
 //                    end in A_BrainSpit's I_Error, as in Chocolate Doom.
+//   dm-no-start      a two-player deathmatch demo on a map whose four
+//                    deathmatch starts share one spot and that has no start
+//                    for player 2.  Player 2's 20 tries all collide with
+//                    player 1, and the fallback spawned him at the zeroed
+//                    playerstarts[1] -- type 0, so playeringame[-1] and
+//                    players[-1].  It must end in P_SpawnPlayer's I_Error.
 //
 // usage: node tools/fuzz/crafted-maps.mjs [--build-dir DIR]
 // Copyright (C) 2026, GPL-2.0-or-later.
@@ -88,6 +94,14 @@ function brainNoTargets() {
     }, [{ x: 512, y: 900, angle: 270, type: 89 }, { x: 512, y: 128, angle: 90, type: 1 }]);
     // it looks every 10 tics, then waits 181 in S_BRAINEYESEE before spitting
     return { lumps, tics: idle(260) };
+}
+
+// ── a deathmatch spawn with nowhere to go ────────────────────────────────────
+function dmNoStart() {
+    const lumps = map([ROOM], ({ wall }) => {
+        wall(0, 0, 0, 1024, 0); wall(0, 1024, 1024, 1024, 0); wall(1024, 1024, 1024, 0, 0); wall(1024, 0, 0, 0, 0);
+    }, [...Array.from({ length: 4 }, () => ({ x: 256, y: 256, type: 11 })), { x: 768, y: 768, angle: 90, type: 1 }]);
+    return { lumps, tics: Array.from({ length: 35 }, () => [{}, {}]), demo: { deathmatch: 1, players: 2 } };
 }
 
 const lmp = c => pwad([['MAP01', Buffer.alloc(0)], ...c.lumps, ['DEMO', demoLump({ tics: c.tics, ...c.demo })]]);
@@ -157,6 +171,7 @@ async function refuses(name, c, expected) {
 }
 const REFUSED = [
     ['brain-no-targets', brainNoTargets, 'A_BrainSpit'],
+    ['dm-no-start', dmNoStart, 'P_SpawnPlayer'],
 ];
 for (const [name, build, expected] of REFUSED) await refuses(name, build(), expected);
 
