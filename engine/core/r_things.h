@@ -28,7 +28,9 @@
 #pragma interface
 #endif
 
-#define MAXVISSPRITES  	1024	// webdoom: was 128
+#ifndef MAXVISSPRITES
+#define MAXVISSPRITES  	1024	// webdoom: was 128 (a lean port may set it back)
+#endif
 
 extern vissprite_t	vissprites[MAXVISSPRITES];
 extern vissprite_t*	vissprite_p;
