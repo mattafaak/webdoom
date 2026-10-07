@@ -56,6 +56,11 @@ CFLAGS=(
     "-I$CORE_DIR"
     "-I$SCRIPT_DIR"
     "-I$SCRIPT_DIR/../floor"
+    # <emscripten.h> for mus_opl.c: an empty EMSCRIPTEN_KEEPALIVE
+    "-I$SCRIPT_DIR/stub"
+    # the synth's clock is a double that must round as IEEE double does, as
+    # synth.wasm's does: no fused multiply-add (Makefile, SYNTH_FP)
+    -ffp-contract=off
 )
 
 # engine/core sources: same exclusions as native Makefile.
@@ -86,6 +91,12 @@ PLAT_SRC=(
     "$SCRIPT_DIR/files.c"
     "$SCRIPT_DIR/perf.c"
     "$SCRIPT_DIR/../floor/floor_log.c"
+    # the audio (fs_audio.c): the mixer, and the web build's OPL synth with its
+    # sources unchanged (fs_mus.c includes engine/web/mus_opl.c)
+    "$SCRIPT_DIR/fs_audio.c"
+    "$SCRIPT_DIR/sfx_mix.c"
+    "$SCRIPT_DIR/fs_mus.c"
+    "$REPO_ROOT/engine/web/opl3.c"
 )
 
 echo "be-build.sh: target=$BE_TARGET out=$OUT"

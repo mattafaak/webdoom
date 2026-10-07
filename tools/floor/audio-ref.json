@@ -1,0 +1,15 @@
+{
+ "doom-demo1": "samples=2428981 underruns=0 music_events=468 sfx_starts=306 synthhash=5929046b mixhash=1864b395 frames=1710",
+ "doom-demo2": "samples=3333812 underruns=0 music_events=2716 sfx_starts=237 synthhash=54de97cd mixhash=1f7da140 frames=2347",
+ "doom-demo3": "samples=5487225 underruns=0 music_events=1712 sfx_starts=286 synthhash=9f167cc7 mixhash=67c6cb9b frames=3863",
+ "doom-demo4": "samples=1161933 underruns=0 music_events=894 sfx_starts=153 synthhash=639b5526 mixhash=9c791c82 frames=818",
+ "doom2-demo1": "samples=1711650 underruns=0 music_events=977 sfx_starts=170 synthhash=0fe93b6e mixhash=d73eb04c frames=1205",
+ "doom2-demo2": "samples=2842334 underruns=0 music_events=1874 sfx_starts=387 synthhash=2062bfe5 mixhash=a4c38d87 frames=2001",
+ "doom2-demo3": "samples=6350863 underruns=0 music_events=2297 sfx_starts=1020 synthhash=9cc40846 mixhash=3ee54615 frames=4471",
+ "plutonia-demo1": "samples=10515644 underruns=0 music_events=12482 sfx_starts=1325 synthhash=5e041d8a mixhash=a54563f8 frames=7403",
+ "plutonia-demo2": "samples=4947452 underruns=0 music_events=1422 sfx_starts=867 synthhash=29ca9946 mixhash=197c2df2 frames=3483",
+ "plutonia-demo3": "samples=8042628 underruns=0 music_events=10013 sfx_starts=1455 synthhash=8cb18530 mixhash=17bcf668 frames=5662",
+ "tnt-demo1": "samples=6436091 underruns=0 music_events=7492 sfx_starts=623 synthhash=32a657f9 mixhash=d55610ab frames=4531",
+ "tnt-demo2": "samples=5188929 underruns=0 music_events=6560 sfx_starts=694 synthhash=beab88e5 mixhash=8db9d3d0 frames=3653",
+ "tnt-demo3": "samples=4876429 underruns=0 music_events=4027 sfx_starts=417 synthhash=fd924ab9 mixhash=8909434e frames=3433"
+}

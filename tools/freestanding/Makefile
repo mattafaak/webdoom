@@ -61,7 +61,18 @@ CORE_EXCLUDE := $(CORE_DIR)/i_main.c \
 CORE_SRC := $(filter-out $(CORE_EXCLUDE),$(wildcard $(CORE_DIR)/*.c))
 
 # Freestanding platform files (this directory).
-PLAT_SRC := i_main.c i_system.c i_video.c i_sound.c d_net.c files.c perf.c
+PLAT_SRC := i_main.c i_system.c i_video.c i_sound.c d_net.c files.c perf.c \
+            fs_audio.c sfx_mix.c
+# The audio (fs_audio.c): the web build's OPL synth, its sources unchanged
+# (fs_mus.c includes engine/web/mus_opl.c; opl3.c is found through vpath), and
+# the mixer.  The synth's clock is a double and must round as IEEE double does,
+# as synth.wasm's does: SYNTH_FP, and stub/ for <emscripten.h> (synth-bench.c).
+WEB_DIR     := ../../engine/web
+SYNTH_INC   := -Istub -I$(WEB_DIR)
+SYNTH_FP    := -msse2 -mfpmath=sse -ffp-contract=off
+AUDIO_SRC   := fs_mus.c opl3.c
+PLAT_SRC    += $(AUDIO_SRC)
+vpath %.c . $(WEB_DIR)
 # `make FLOOR_WRAP=` builds without the hooks (floor-x86 must then refuse)
 ifneq ($(FLOOR_WRAP),)
 PLAT_SRC += floor_wrap.c
@@ -86,6 +97,11 @@ $(OBJDIR)/plat/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
+# the synth and the code that converts its output: IEEE double, see above
+AUDIO_OBJ := $(patsubst %.c,$(OBJDIR)/plat/%.o,$(AUDIO_SRC) fs_audio.c)
+$(AUDIO_OBJ): CFLAGS += $(SYNTH_FP) $(SYNTH_INC)
+$(AUDIO_OBJ): Makefile
+
 $(OBJDIR)/floor/%.o: ../floor/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
@@ -101,15 +117,11 @@ $(OBJDIR)/floor/%.o: ../floor/%.c
 # that evidence.  stub/ supplies an empty EMSCRIPTEN_KEEPALIVE; --wrap taps the
 # register stream; -no-pie keeps the profile's sampled addresses the binary's
 # own.  See synth-bench.c.
-WEB_DIR     := ../../engine/web
 SYNTH_SRC   := fs_mus.c $(WEB_DIR)/opl3.c $(WEB_DIR)/synth_main.c synth-bench.c
-SYNTH_INC   := -Istub -I$(WEB_DIR)
-SYNTH_FP    := -msse2 -mfpmath=sse -ffp-contract=off
 SYNTH_LD    := -m32 -no-pie -Wl,--wrap=OPL3_WriteRegBuffered -lm
 SYNTH_OBJ_1 := $(addprefix obj/synth-O1/,$(notdir $(SYNTH_SRC:.c=.o)))
 SYNTH_OBJ_2 := $(addprefix obj/synth-O2/,$(notdir $(SYNTH_SRC:.c=.o)))
 SYNTH_OBJ_X := $(addprefix obj/synth-x87/,$(notdir $(SYNTH_SRC:.c=.o)))
-vpath %.c . $(WEB_DIR)
 
 synth-bench: synth-bench-O1 synth-bench-O2 synth-bench-x87
 

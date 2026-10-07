@@ -100,7 +100,10 @@ for entry in "${DEMOS[@]}"; do
 
     printf "running %-16s ... " "$out_prefix"
     ret=0
-    "$QEMU" "$BE_BIN" "$wad_path" -timedemo "$demo" \
+    # audio off for the sim goldens: under qemu the music synth costs ~9x the
+    # game (doom-demo4: 0.6 s without, 5.2 s with), and the audio is checked
+    # once, below, against the x86 reference
+    WD_AUDIO=0 "$QEMU" "$BE_BIN" "$wad_path" -timedemo "$demo" \
         -sim "$ABS_OUT_DIR/${out_prefix}.json" >/dev/null 2>&1 || ret=$?
 
     if [[ $ret -ne 0 ]]; then
@@ -154,4 +157,27 @@ if [[ $PASSES -ne $EXPECTED_DEMOS ]]; then
     echo "      WADs missing or demos skipped. A partial run is not a pass."
     exit 1
 fi
-echo "PASS: all $PASSES $CROSS_LABEL demos bit-identical vs the golden traces"
+# The audio, on this target: one demo with music and sound effects, whose
+# AUDIO line (tools/freestanding/fs_audio.c) must be the x86 reference's to the
+# hash -- the synth's samples (synthhash) and the mixer's (mixhash).  On the
+# big-endian target this is the check that GENMIDI is read right (fs_mus.c).
+AUDIO_DEMO=doom-demo4
+AUDIO_REF="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' \
+             "$SCRIPT_DIR/../floor/audio-ref.json" "$AUDIO_DEMO")"
+wad_dir="$TMPROOT/$AUDIO_DEMO-audio"
+mkdir -p "$wad_dir"
+ln -sf "$ABS_WAD_DIR/doom.wad" "$wad_dir/doomu.wad"
+printf "running %-16s ... " "$AUDIO_DEMO+audio"
+ret=0
+WD_FLOOR_NAME="$AUDIO_DEMO" "$QEMU" "$BE_BIN" "$wad_dir/doomu.wad" -timedemo demo4 \
+    -floor "$ABS_OUT_DIR/$AUDIO_DEMO.audio.log" >/dev/null 2>&1 || ret=$?
+AUDIO_GOT="$(sed -n 's/^AUDIO //p' "$ABS_OUT_DIR/$AUDIO_DEMO.audio.log" 2>/dev/null || true)"
+if [[ $ret -ne 0 || "$AUDIO_GOT" != "$AUDIO_REF" ]]; then
+    echo "FAIL (exit $ret)"
+    echo "  got:       ${AUDIO_GOT:-(no AUDIO line)}"
+    echo "  reference: $AUDIO_REF (tools/floor/audio-ref.json)"
+    echo "FAIL: $CROSS_LABEL audio differs from the x86 reference ($PASSES of $EXPECTED_DEMOS sim demos matched)"
+    exit 1
+fi
+echo "OK AUDIO == x86 reference"
+echo "PASS: all $PASSES $CROSS_LABEL demos bit-identical vs the golden traces; $AUDIO_DEMO's audio == the x86 reference (synthhash, mixhash)"

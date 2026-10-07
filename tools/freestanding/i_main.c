@@ -68,6 +68,7 @@ extern short openings[], *lastopening;
 #ifdef FS_FIXED_COUNT /* fixed_count.h, force-included by the counting build */
 unsigned long long fs_fixedmul_n, fs_fixeddiv_n, fs_fixeddiv_clamped_n;
 #endif
+void fs_audio_floor (floor_audio_t* a); /* fs_audio.c: the AUDIO line */
 
 // ── Floor gate log (-floor <path>, WD_FLOOR_MODE=A|B) ────────────────────────
 // Set by floor_wrap.c's --wrap hooks (native build only), read and cleared at
@@ -590,7 +591,7 @@ static int emit_floor_log (const char* path, char mode, const char* name,
                    have_time ? (unsigned long long) tic_elapsed[i] : 0,
                    tic_flags[i], tic_mbytes[i], mode == 'A',
                    (unsigned) sim_trace[i], tic_render[i]);
-    memset (&a, 0, sizeof (a)); /* no audio in this build yet */
+    fs_audio_floor (&a); /* all zero with WD_AUDIO=0 */
     floor_audio (&a);
     floor_demo_end (name, final_sim, final_render);
     fclose (floor_file);
