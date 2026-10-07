@@ -34,9 +34,13 @@ CFLAGS  := -m32 -O1 -g \
             -Wno-pointer-sign \
             -I../../engine/core \
             -I. \
+            -I../floor \
             $(EXTRA_CFLAGS)
 
-LDFLAGS := -m32 -lm
+# The floor gate's tic flags (floor_wrap.c): a level load, intermission or
+# finale starting, and the bytes a lump copy takes out of the WAD blob.
+FLOOR_WRAP := -Wl,--wrap=P_SetupLevel,--wrap=WI_Start,--wrap=F_StartFinale,--wrap=memcpy
+LDFLAGS := -m32 -lm $(FLOOR_WRAP)
 
 CORE_DIR := ../../engine/core
 OUT      := fs-doom
@@ -53,10 +57,15 @@ CORE_SRC := $(filter-out $(CORE_EXCLUDE),$(wildcard $(CORE_DIR)/*.c))
 
 # Freestanding platform files (this directory).
 PLAT_SRC := i_main.c i_system.c i_video.c i_sound.c d_net.c files.c perf.c
+# `make FLOOR_WRAP=` builds without the hooks (floor-x86 must then refuse)
+ifneq ($(FLOOR_WRAP),)
+PLAT_SRC += floor_wrap.c
+endif
 
 SRC := $(CORE_SRC) $(PLAT_SRC)
 OBJ := $(patsubst $(CORE_DIR)/%.c,obj/core/%.o,$(filter $(CORE_DIR)/%,$(SRC))) \
-       $(patsubst %.c,obj/plat/%.o,$(PLAT_SRC))
+       $(patsubst %.c,obj/plat/%.o,$(PLAT_SRC)) \
+       obj/floor/floor_log.o
 
 all: $(OUT)
 
@@ -69,6 +78,10 @@ obj/core/%.o: $(CORE_DIR)/%.c
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 obj/plat/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+obj/floor/%.o: ../floor/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 

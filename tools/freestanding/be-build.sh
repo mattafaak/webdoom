@@ -55,6 +55,7 @@ CFLAGS=(
     -Wno-implicit-int
     "-I$CORE_DIR"
     "-I$SCRIPT_DIR"
+    "-I$SCRIPT_DIR/../floor"
 )
 
 # engine/core sources: same exclusions as native Makefile.
@@ -84,6 +85,7 @@ PLAT_SRC=(
     "$SCRIPT_DIR/d_net.c"
     "$SCRIPT_DIR/files.c"
     "$SCRIPT_DIR/perf.c"
+    "$SCRIPT_DIR/../floor/floor_log.c"
 )
 
 echo "be-build.sh: target=$BE_TARGET out=$OUT"

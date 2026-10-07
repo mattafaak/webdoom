@@ -53,6 +53,17 @@ extern int screenblocks;
 extern int prndindex;        /* m_random.c — hashed per tic (fs_state_hash) */
 extern thinker_t thinkercap; /* p_tick.c — thinker list sentinel */
 #include "perf.h" /* fs_perf_instr_fd, web_perf_*_us — for attribution */
+#include "floor_log.h"
+
+unsigned fs_render_hash (void); /* i_video.c: the render goldens' hash */
+
+// ── Floor gate log (-floor <path>, WD_FLOOR_MODE=A|B) ────────────────────────
+// Set by floor_wrap.c's --wrap hooks (native build only), read and cleared at
+// each tic boundary.  fs_floor_blob is the WAD blob a lump copy is counted from.
+volatile unsigned fs_floor_load;
+volatile unsigned fs_floor_mbytes;
+const unsigned char* fs_floor_blob;
+size_t fs_floor_blob_len;
 // ── Sim hash: identical algorithm to web_state_hash() and nat_state_hash() ───
 // Every field in exactly the same order — required for bit-identical
 // comparison.
@@ -346,7 +357,15 @@ static long long tic_planes_instr[MAX_TRACE]; /* R_DrawPlanes per tic */
 static long long tic_masked_instr[MAX_TRACE]; /* R_DrawMasked per tic */
 static long long tic_frame_instr[MAX_TRACE];  /* frame setup per tic */
 static int tic_instr_len = 0;
+// The floor log's per-tic record, one entry per tic boundary (floor_n).
+static unsigned char tic_flags[MAX_TRACE];
+static unsigned tic_mbytes[MAX_TRACE];
+static int tic_gametic[MAX_TRACE];
+static unsigned tic_render[MAX_TRACE]; /* mode A only */
+static long long tic_elapsed[MAX_TRACE];
+static int floor_n = 0;
 static int wd_cycles_fd = -1;       /* perf fd; -1 = not measuring */
+static int wd_cycles_fd_was_open = 0;
 static long long wd_last_count = 0; /* cumulative count at last tic boundary */
 // Stage accumulator snapshots at the previous tic boundary (for delta).
 static double snap_sim = 0;
@@ -498,6 +517,65 @@ static void emit_zonestats_json (const char* path, int tics, int zone_bytes)
 }
 #endif
 
+// ── floor log emission (after the demo: never inside a timed tic) ────────────
+static FILE* floor_file;
+static void floor_file_putc (int c)
+{
+    fputc (c, floor_file);
+}
+
+// "doom-demo3" from "path/to/doom.wad" and "demo3"
+static void floor_demo_name (char* out, int cap, const char* wad, const char* demo)
+{
+    const char* b = path_basename (wad);
+    int n = 0;
+    while (*b && *b != '.' && n < cap - 1)
+        out[n++] = *b++;
+    if (n < cap - 1)
+        out[n++] = '-';
+    while (demo && *demo && n < cap - 1)
+        out[n++] = *demo++;
+    out[n] = 0;
+}
+
+static int emit_floor_log (const char* path, char mode, const char* name,
+                           int have_time, unsigned final_sim, unsigned final_render)
+{
+    floor_header_t h;
+    floor_audio_t a;
+    int i;
+    floor_file = fopen (path, "w");
+    if (!floor_file)
+    {
+        fprintf (stderr, "fs-doom: cannot write floor log: %s\n", path);
+        return 0;
+    }
+    floor_log_init (floor_file_putc);
+    memset (&h, 0, sizeof (h));
+    h.target = "x86-fs-doom";
+    h.source = "host";
+    h.unit = have_time ? "instructions" : "none";
+    h.unit_hz = 0; /* instructions are demand, not time */
+    h.build = getenv ("WD_BUILD") ? getenv ("WD_BUILD") : "unknown";
+    h.view = screenblocks;
+    h.detail = detailLevel;
+    h.zone = (unsigned) FS_ZONE_SIZE;
+    h.precache = 0;
+    h.mode = mode;
+    floor_header (&h);
+    floor_demo_begin (name, (unsigned) floor_n);
+    for (i = 0; i < floor_n; i++)
+        floor_tic ((unsigned) i, (unsigned) tic_gametic[i],
+                   have_time ? (unsigned long long) tic_elapsed[i] : 0,
+                   tic_flags[i], tic_mbytes[i], mode == 'A',
+                   (unsigned) sim_trace[i], tic_render[i]);
+    memset (&a, 0, sizeof (a)); /* no audio in this build yet */
+    floor_audio (&a);
+    floor_demo_end (name, final_sim, final_render);
+    fclose (floor_file);
+    return 1;
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────
 int main (int argc, char** argv)
 {
@@ -506,6 +584,9 @@ int main (int argc, char** argv)
     const char* cycles_out = NULL;
     const char* attrib_out = NULL;    /* per-stage attribution output */
     const char* zonestats_out = NULL; /* zone HWM + purge stats output */
+    const char* floor_out = NULL;     /* floor gate log */
+    const char* timedemo = NULL;      /* the demo lump, for the log's name */
+    char floor_mode = 'A';
     static const char* fwd[64];
     int fwd_argc = 0;
     int i;
@@ -542,6 +623,13 @@ int main (int argc, char** argv)
             zonestats_out = argv[++i];
             continue;
         }
+        if (strcmp (argv[i], "-floor") == 0 && i + 1 < argc)
+        {
+            floor_out = argv[++i];
+            continue;
+        }
+        if (strcmp (argv[i], "-timedemo") == 0 && i + 1 < argc)
+            timedemo = argv[i + 1]; /* still forwarded below */
         // First bare positional (non-flag) argument is the WAD path.
         if (argv[i][0] != '-' && wad_path == NULL)
         {
@@ -571,6 +659,10 @@ int main (int argc, char** argv)
     }
     // Hand the blob to files.c — no more file I/O below this point.
     fs_register_wad (path_basename (wad_path), wad_data, wad_len);
+    fs_floor_blob = wad_data;
+    fs_floor_blob_len = (size_t) wad_len;
+    if (getenv ("WD_FLOOR_MODE"))
+        floor_mode = getenv ("WD_FLOOR_MODE")[0] == 'B' ? 'B' : 'A';
 
     // WD_RO_WAD=1: install SIGSEGV handler then mprotect the blob PROT_READ.
     // Must happen AFTER fs_register_wad (files.c has copied the pointer) and
@@ -661,14 +753,33 @@ int main (int argc, char** argv)
 
         if (gametic != last_tic)
         {
-            if (trace_len < MAX_TRACE)
+            // The tic's count is read first, so the harness's own work below
+            // (hashing, bookkeeping) is charged to no tic: wd_last_count is
+            // re-read once it is done.
+            long long now = wd_cycles_fd >= 0 ? wd_perf_read (wd_cycles_fd) : 0;
+            unsigned flags = fs_floor_load ? FLOOR_TIC_LOAD : 0;
+            unsigned mbytes = fs_floor_mbytes;
+            fs_floor_load = 0;
+            fs_floor_mbytes = 0;
+
+            // Mode B (floor timing) hashes nothing per tic; the final state
+            // hash on the END line stands in for the trace.
+            if (trace_len < MAX_TRACE && !(floor_out && floor_mode == 'B'))
                 sim_trace[trace_len++] = fs_state_hash ();
+            if (floor_out && floor_n < MAX_TRACE)
+            {
+                tic_flags[floor_n] = (unsigned char) flags;
+                tic_mbytes[floor_n] = mbytes;
+                tic_gametic[floor_n] = gametic;
+                tic_elapsed[floor_n] = wd_cycles_fd >= 0 ? now - wd_last_count : 0;
+                tic_render[floor_n] = floor_mode == 'A' ? fs_render_hash () : 0;
+                floor_n++;
+            }
 
             // Record per-tic instruction deltas at the tic boundary (13.1a/b).
             // All arrays share the same tic_instr_len index.
             if (wd_cycles_fd >= 0 && tic_instr_len < MAX_TRACE)
             {
-                long long now = wd_perf_read (wd_cycles_fd);
                 int n = tic_instr_len;
                 tic_instr[n] = now - wd_last_count;
                 // stage deltas from accumulator snapshots.
@@ -691,6 +802,8 @@ int main (int argc, char** argv)
                 snap_frame = web_perf_frame_us;
                 tic_instr_len = n + 1;
             }
+            if (wd_cycles_fd >= 0)
+                wd_last_count = wd_perf_read (wd_cycles_fd);
 
             last_tic = gametic;
         }
@@ -698,6 +811,7 @@ int main (int argc, char** argv)
 
 done:
     fs_timedemo_active = 0;
+    wd_cycles_fd_was_open = wd_cycles_fd >= 0;
     // Stop and close the instruction counter before emitting output.
     if (wd_cycles_fd >= 0)
     {
@@ -707,6 +821,26 @@ done:
     }
     {
         int tics = fs_timedemo_gametics;
+
+        // The floor log first: emit_attrib_json and emit_cycles_json sort the
+        // instruction arrays in place.  The END line's final hashes are taken
+        // here, on the state the demo ended in, the same point in both modes.
+        if (floor_out)
+        {
+            char name[64];
+            // WD_FLOOR_NAME names the demo when the WAD is presented under
+            // another name (doom.wad as doomu.wad for demo4's retail mode)
+            if (getenv ("WD_FLOOR_NAME"))
+            {
+                strncpy (name, getenv ("WD_FLOOR_NAME"), sizeof (name) - 1);
+                name[sizeof (name) - 1] = 0;
+            }
+            else
+                floor_demo_name (name, (int) sizeof (name), wad_path, timedemo);
+            if (!emit_floor_log (floor_out, floor_mode, name, wd_cycles_fd_was_open,
+                                 (unsigned) fs_state_hash (), fs_render_hash ()))
+                return 1;
+        }
 
         // (b) BYTE-OUT: stream JSON via fs_putc (write(1,...)).
         // Redirect stdout to a .json file for compare.py compatibility.

@@ -36,3 +36,6 @@ tools/n64/n64_trace_work/
 # One was committed by accident in 6a5a930 and read by nothing.
 __pycache__/
 *.pyc
+
+# floor gate logs (tools/floor/run-x86.sh)
+tools/floor/out-x86/

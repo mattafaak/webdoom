@@ -463,6 +463,10 @@ leg service-file    systemd  "webdoom.service is a ready unit" -- bash tools/ser
 # must refuse to be run from any other; driven through --check only, against a
 # stub systemctl.
 leg deploy-check    -        "deploy.sh --check: right tree, package files, everyone connected" -- node tools/deploy-check-test.mjs
+# The floor gate (tools/floor): the verdict a bare-metal target is graded by.
+# Its red-proofs run on synthetic logs built from the goldens, so a bare clone
+# can run them.
+leg floor-gate-self -        "floor gate passes a good run, fails each way a log can lie" -- node tools/floor/floor-gate-test.mjs
 
 if [ "$TIER" = "quick" ]; then
     QUICK_ONLY=1
@@ -517,6 +521,9 @@ leg freestanding-sim fs,wad    "fs-doom 13/13 == vanilla (rung 1 proof)"     -- 
 # its own out dir: under --jobs it runs beside freestanding-sim, and the two
 # must not write per-demo JSON into one directory
 leg ro-wad          fs,wad     "WAD blob stays read-only over 13 demos (XIP)" -- bash tools/freestanding/ro-wad-check.sh wads/lib tools/freestanding/out-ro
+# The demand every bare-metal target is measured against: fs-doom through the
+# floor gate, correctness (sim + render hashes) and x86 instructions per tic.
+leg floor-x86       fs,wad     "floor gate on the host: 13 demos correct, worst graded tic" -- bash tools/floor/run-x86.sh
 # The ARM reference.  wasm is architecture-independent, so only a native build
 # tests ARM codegen, ABI and alignment; emulated cycles are not hardware
 # cycles, so this gates correctness, not timing.  zig cross-builds the
