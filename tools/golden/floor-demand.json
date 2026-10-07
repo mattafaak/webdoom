@@ -1,0 +1,3553 @@
+{
+ "schema": "floor-demand.v1",
+ "unit": "x86 instructions (gcc -m32, user space)",
+ "host": "alder i9-12900K, P-core",
+ "configs": {
+  "o1-v10": {
+   "worst": {
+    "demo": "plutonia-demo1",
+    "tic": 5043,
+    "whole": 3433091
+   },
+   "demos": {
+    "doom-demo1": {
+     "tics": 1710,
+     "graded": 1709,
+     "mean": 1263788,
+     "p50": 1269982,
+     "p99": 1677505,
+     "worst": {
+      "tic": 1206,
+      "whole": 1900822,
+      "sim": 322754,
+      "frame": 2558,
+      "bsp": 439559,
+      "planes": 800144,
+      "masked": 294497,
+      "other": 41310,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 75609,
+       "p99": 209053,
+       "max": 387343
+      },
+      "frame": {
+       "mean": 2558,
+       "p99": 2568,
+       "max": 2569
+      },
+      "bsp": {
+       "mean": 473562,
+       "p99": 716954,
+       "max": 945221
+      },
+      "planes": {
+       "mean": 513832,
+       "p99": 852380,
+       "max": 867387
+      },
+      "masked": {
+       "mean": 164337,
+       "p99": 384686,
+       "max": 471686
+      },
+      "other": {
+       "mean": 33890,
+       "p99": 44452,
+       "max": 48999
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 11894485,
+       "mbytes": 5146835
+      }
+     ],
+     "miss_tics": 7,
+     "miss_bytes_max": 8192,
+     "peaks": {
+      "visplanes": 33,
+      "drawsegs": 59,
+      "vissprites": 75,
+      "openings": 1912
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom-demo2": {
+     "tics": 2347,
+     "graded": 2346,
+     "mean": 1145981,
+     "p50": 1126224,
+     "p99": 1831776,
+     "worst": {
+      "tic": 2217,
+      "whole": 2117981,
+      "sim": 50968,
+      "frame": 2548,
+      "bsp": 505367,
+      "planes": 500227,
+      "masked": 1037945,
+      "other": 20926,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 58884,
+       "p99": 137611,
+       "max": 192146
+      },
+      "frame": {
+       "mean": 2559,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 476397,
+       "p99": 647901,
+       "max": 729889
+      },
+      "planes": {
+       "mean": 437727,
+       "p99": 811909,
+       "max": 852324
+      },
+      "masked": {
+       "mean": 142535,
+       "p99": 633238,
+       "max": 1037945
+      },
+      "other": {
+       "mean": 27880,
+       "p99": 40534,
+       "max": 46078
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 27290890,
+       "mbytes": 5262407
+      }
+     ],
+     "miss_tics": 11,
+     "miss_bytes_max": 12288,
+     "peaks": {
+      "visplanes": 39,
+      "drawsegs": 46,
+      "vissprites": 63,
+      "openings": 906
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom-demo3": {
+     "tics": 3863,
+     "graded": 3862,
+     "mean": 1110168,
+     "p50": 1117810,
+     "p99": 1596911,
+     "worst": {
+      "tic": 3568,
+      "whole": 2167248,
+      "sim": 55682,
+      "frame": 2548,
+      "bsp": 432097,
+      "planes": 437215,
+      "masked": 1218074,
+      "other": 21632,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 48642,
+       "p99": 91477,
+       "max": 281294
+      },
+      "frame": {
+       "mean": 2610,
+       "p99": 2769,
+       "max": 2769
+      },
+      "bsp": {
+       "mean": 486035,
+       "p99": 698371,
+       "max": 794196
+      },
+      "planes": {
+       "mean": 385776,
+       "p99": 631906,
+       "max": 649555
+      },
+      "masked": {
+       "mean": 158392,
+       "p99": 662573,
+       "max": 1218074
+      },
+      "other": {
+       "mean": 28713,
+       "p99": 43323,
+       "max": 47128
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 31570310,
+       "mbytes": 5218117
+      }
+     ],
+     "miss_tics": 12,
+     "miss_bytes_max": 8192,
+     "peaks": {
+      "visplanes": 28,
+      "drawsegs": 62,
+      "vissprites": 51,
+      "openings": 1400
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom-demo4": {
+     "tics": 818,
+     "graded": 817,
+     "mean": 1613885,
+     "p50": 1379539,
+     "p99": 2585364,
+     "worst": {
+      "tic": 86,
+      "whole": 2753098,
+      "sim": 66451,
+      "frame": 2558,
+      "bsp": 1309583,
+      "planes": 798103,
+      "masked": 532565,
+      "other": 43838,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 72989,
+       "p99": 232586,
+       "max": 322806
+      },
+      "frame": {
+       "mean": 2555,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 844768,
+       "p99": 1383429,
+       "max": 1412446
+      },
+      "planes": {
+       "mean": 405469,
+       "p99": 759797,
+       "max": 813511
+      },
+      "masked": {
+       "mean": 256530,
+       "p99": 789472,
+       "max": 847828
+      },
+      "other": {
+       "mean": 31574,
+       "p99": 43909,
+       "max": 48724
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 27860752,
+       "mbytes": 5169989
+      }
+     ],
+     "miss_tics": 7,
+     "miss_bytes_max": 16384,
+     "peaks": {
+      "visplanes": 74,
+      "drawsegs": 205,
+      "vissprites": 90,
+      "openings": 2455
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom2-demo1": {
+     "tics": 1205,
+     "graded": 1204,
+     "mean": 1359184,
+     "p50": 1435931,
+     "p99": 1741795,
+     "worst": {
+      "tic": 1001,
+      "whole": 2002324,
+      "sim": 155200,
+      "frame": 2548,
+      "bsp": 666483,
+      "planes": 421777,
+      "masked": 702937,
+      "other": 53379,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 95219,
+       "p99": 226572,
+       "max": 355861
+      },
+      "frame": {
+       "mean": 2555,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 633489,
+       "p99": 780130,
+       "max": 854750
+      },
+      "planes": {
+       "mean": 429544,
+       "p99": 678690,
+       "max": 729281
+      },
+      "masked": {
+       "mean": 151400,
+       "p99": 334325,
+       "max": 702937
+      },
+      "other": {
+       "mean": 46977,
+       "p99": 58908,
+       "max": 70455
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 31835039,
+       "mbytes": 8207970
+      }
+     ],
+     "miss_tics": 10,
+     "miss_bytes_max": 17544,
+     "peaks": {
+      "visplanes": 50,
+      "drawsegs": 104,
+      "vissprites": 68,
+      "openings": 1636
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom2-demo2": {
+     "tics": 2001,
+     "graded": 2000,
+     "mean": 1273628,
+     "p50": 1263154,
+     "p99": 1857388,
+     "worst": {
+      "tic": 1659,
+      "whole": 2473559,
+      "sim": 805563,
+      "frame": 2558,
+      "bsp": 592556,
+      "planes": 368034,
+      "masked": 661306,
+      "other": 43542,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 85909,
+       "p99": 221658,
+       "max": 805563
+      },
+      "frame": {
+       "mean": 2559,
+       "p99": 2568,
+       "max": 2569
+      },
+      "bsp": {
+       "mean": 543655,
+       "p99": 784635,
+       "max": 848512
+      },
+      "planes": {
+       "mean": 420653,
+       "p99": 731407,
+       "max": 751511
+      },
+      "masked": {
+       "mean": 170755,
+       "p99": 725042,
+       "max": 1081971
+      },
+      "other": {
+       "mean": 50096,
+       "p99": 64408,
+       "max": 78177
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 15424559,
+       "mbytes": 8212077
+      }
+     ],
+     "miss_tics": 2,
+     "miss_bytes_max": 16968,
+     "peaks": {
+      "visplanes": 24,
+      "drawsegs": 58,
+      "vissprites": 46,
+      "openings": 1373
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom2-demo3": {
+     "tics": 4471,
+     "graded": 4470,
+     "mean": 1393014,
+     "p50": 1375797,
+     "p99": 2206044,
+     "worst": {
+      "tic": 1241,
+      "whole": 2765538,
+      "sim": 91064,
+      "frame": 2568,
+      "bsp": 815585,
+      "planes": 652065,
+      "masked": 1150646,
+      "other": 53610,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 84639,
+       "p99": 190963,
+       "max": 730358
+      },
+      "frame": {
+       "mean": 2558,
+       "p99": 2568,
+       "max": 2569
+      },
+      "bsp": {
+       "mean": 591729,
+       "p99": 869256,
+       "max": 921157
+      },
+      "planes": {
+       "mean": 381784,
+       "p99": 683354,
+       "max": 750702
+      },
+      "masked": {
+       "mean": 280583,
+       "p99": 847849,
+       "max": 1152550
+      },
+      "other": {
+       "mean": 51721,
+       "p99": 63147,
+       "max": 77063
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 23890669,
+       "mbytes": 8223233
+      }
+     ],
+     "miss_tics": 16,
+     "miss_bytes_max": 17544,
+     "peaks": {
+      "visplanes": 44,
+      "drawsegs": 115,
+      "vissprites": 72,
+      "openings": 1984
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "tnt-demo1": {
+     "tics": 4531,
+     "graded": 4530,
+     "mean": 1206064,
+     "p50": 1171316,
+     "p99": 1854821,
+     "worst": {
+      "tic": 4181,
+      "whole": 2365701,
+      "sim": 23687,
+      "frame": 2558,
+      "bsp": 586909,
+      "planes": 932826,
+      "masked": 755766,
+      "other": 63955,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 23116,
+       "p99": 101873,
+       "max": 197290
+      },
+      "frame": {
+       "mean": 2557,
+       "p99": 2568,
+       "max": 2569
+      },
+      "bsp": {
+       "mean": 602556,
+       "p99": 1021995,
+       "max": 1240142
+      },
+      "planes": {
+       "mean": 394882,
+       "p99": 850416,
+       "max": 977611
+      },
+      "masked": {
+       "mean": 133957,
+       "p99": 495197,
+       "max": 949228
+      },
+      "other": {
+       "mean": 48998,
+       "p99": 61610,
+       "max": 78867
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 11302435,
+       "mbytes": 10009938
+      }
+     ],
+     "miss_tics": 23,
+     "miss_bytes_max": 34520,
+     "peaks": {
+      "visplanes": 45,
+      "drawsegs": 95,
+      "vissprites": 22,
+      "openings": 1783
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "tnt-demo2": {
+     "tics": 3653,
+     "graded": 3652,
+     "mean": 1434358,
+     "p50": 1457314,
+     "p99": 2074958,
+     "worst": {
+      "tic": 3484,
+      "whole": 2899622,
+      "sim": 183453,
+      "frame": 2548,
+      "bsp": 578275,
+      "planes": 516662,
+      "masked": 1579159,
+      "other": 39525,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 88200,
+       "p99": 324833,
+       "max": 447379
+      },
+      "frame": {
+       "mean": 2559,
+       "p99": 2568,
+       "max": 2569
+      },
+      "bsp": {
+       "mean": 535985,
+       "p99": 846313,
+       "max": 1076562
+      },
+      "planes": {
+       "mean": 569378,
+       "p99": 881219,
+       "max": 973877
+      },
+      "masked": {
+       "mean": 193555,
+       "p99": 657740,
+       "max": 1579159
+      },
+      "other": {
+       "mean": 44681,
+       "p99": 60636,
+       "max": 75554
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 18939556,
+       "mbytes": 10110801
+      }
+     ],
+     "miss_tics": 14,
+     "miss_bytes_max": 85272,
+     "peaks": {
+      "visplanes": 68,
+      "drawsegs": 112,
+      "vissprites": 48,
+      "openings": 1220
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "tnt-demo3": {
+     "tics": 3433,
+     "graded": 3432,
+     "mean": 1451444,
+     "p50": 1439158,
+     "p99": 2374175,
+     "worst": {
+      "tic": 2823,
+      "whole": 2629140,
+      "sim": 203689,
+      "frame": 2558,
+      "bsp": 932907,
+      "planes": 820898,
+      "masked": 615113,
+      "other": 53975,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 86076,
+       "p99": 234920,
+       "max": 318196
+      },
+      "frame": {
+       "mean": 2556,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 613170,
+       "p99": 969624,
+       "max": 1025428
+      },
+      "planes": {
+       "mean": 560209,
+       "p99": 961126,
+       "max": 1058405
+      },
+      "masked": {
+       "mean": 140056,
+       "p99": 522914,
+       "max": 674581
+      },
+      "other": {
+       "mean": 49376,
+       "p99": 60572,
+       "max": 73848
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 21235051,
+       "mbytes": 10104539
+      }
+     ],
+     "miss_tics": 21,
+     "miss_bytes_max": 30424,
+     "peaks": {
+      "visplanes": 85,
+      "drawsegs": 108,
+      "vissprites": 33,
+      "openings": 2527
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "plutonia-demo1": {
+     "tics": 7403,
+     "graded": 7402,
+     "mean": 1542511,
+     "p50": 1508320,
+     "p99": 2365150,
+     "worst": {
+      "tic": 5043,
+      "whole": 3433091,
+      "sim": 791430,
+      "frame": 2548,
+      "bsp": 998885,
+      "planes": 829208,
+      "masked": 752471,
+      "other": 58549,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 80867,
+       "p99": 274344,
+       "max": 872430
+      },
+      "frame": {
+       "mean": 2558,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 684512,
+       "p99": 1078528,
+       "max": 1359980
+      },
+      "planes": {
+       "mean": 519766,
+       "p99": 880348,
+       "max": 995457
+      },
+      "masked": {
+       "mean": 204336,
+       "p99": 672685,
+       "max": 1419351
+      },
+      "other": {
+       "mean": 50472,
+       "p99": 62514,
+       "max": 83217
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 42580789,
+       "mbytes": 9504406
+      }
+     ],
+     "miss_tics": 35,
+     "miss_bytes_max": 35104,
+     "peaks": {
+      "visplanes": 118,
+      "drawsegs": 180,
+      "vissprites": 123,
+      "openings": 2432
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "plutonia-demo2": {
+     "tics": 3483,
+     "graded": 3482,
+     "mean": 1516299,
+     "p50": 1574218,
+     "p99": 2090727,
+     "worst": {
+      "tic": 931,
+      "whole": 2746979,
+      "sim": 242869,
+      "frame": 2558,
+      "bsp": 579100,
+      "planes": 673097,
+      "masked": 1196536,
+      "other": 52819,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 90984,
+       "p99": 200606,
+       "max": 334312
+      },
+      "frame": {
+       "mean": 2557,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 567931,
+       "p99": 851208,
+       "max": 901005
+      },
+      "planes": {
+       "mean": 580319,
+       "p99": 837606,
+       "max": 902990
+      },
+      "masked": {
+       "mean": 224225,
+       "p99": 635275,
+       "max": 1233872
+      },
+      "other": {
+       "mean": 50283,
+       "p99": 61901,
+       "max": 79946
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 16573899,
+       "mbytes": 9460651
+      }
+     ],
+     "miss_tics": 27,
+     "miss_bytes_max": 21640,
+     "peaks": {
+      "visplanes": 81,
+      "drawsegs": 161,
+      "vissprites": 66,
+      "openings": 1954
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "plutonia-demo3": {
+     "tics": 5662,
+     "graded": 5661,
+     "mean": 1334697,
+     "p50": 1307143,
+     "p99": 2073646,
+     "worst": {
+      "tic": 736,
+      "whole": 3026792,
+      "sim": 658632,
+      "frame": 2568,
+      "bsp": 759181,
+      "planes": 505765,
+      "masked": 1043076,
+      "other": 57570,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 124059,
+       "p99": 281548,
+       "max": 906859
+      },
+      "frame": {
+       "mean": 2559,
+       "p99": 2568,
+       "max": 2569
+      },
+      "bsp": {
+       "mean": 611253,
+       "p99": 888818,
+       "max": 1126394
+      },
+      "planes": {
+       "mean": 360596,
+       "p99": 802816,
+       "max": 904516
+      },
+      "masked": {
+       "mean": 185264,
+       "p99": 660009,
+       "max": 1296897
+      },
+      "other": {
+       "mean": 50965,
+       "p99": 62614,
+       "max": 81196
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 37812364,
+       "mbytes": 9526464
+      }
+     ],
+     "miss_tics": 18,
+     "miss_bytes_max": 21064,
+     "peaks": {
+      "visplanes": 64,
+      "drawsegs": 157,
+      "vissprites": 74,
+      "openings": 2463
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    }
+   }
+  },
+  "o2-v10": {
+   "worst": {
+    "demo": "plutonia-demo1",
+    "tic": 5043,
+    "whole": 3104685
+   },
+   "demos": {
+    "doom-demo1": {
+     "tics": 1710,
+     "graded": 1709,
+     "mean": 1254494,
+     "p50": 1258638,
+     "p99": 1673376,
+     "worst": {
+      "tic": 1206,
+      "whole": 1813258,
+      "sim": 244611,
+      "frame": 1456,
+      "bsp": 402731,
+      "planes": 851871,
+      "masked": 274131,
+      "other": 38458,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 73822,
+       "p99": 174911,
+       "max": 293099
+      },
+      "frame": {
+       "mean": 1456,
+       "p99": 1466,
+       "max": 1466
+      },
+      "bsp": {
+       "mean": 444856,
+       "p99": 684052,
+       "max": 872070
+      },
+      "planes": {
+       "mean": 545803,
+       "p99": 907953,
+       "max": 920792
+      },
+      "masked": {
+       "mean": 155814,
+       "p99": 368669,
+       "max": 451355
+      },
+      "other": {
+       "mean": 32743,
+       "p99": 43081,
+       "max": 47882
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 11621984,
+       "mbytes": 5146835
+      }
+     ],
+     "miss_tics": 7,
+     "miss_bytes_max": 8192,
+     "peaks": {
+      "visplanes": 33,
+      "drawsegs": 59,
+      "vissprites": 75,
+      "openings": 1912
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom-demo2": {
+     "tics": 2347,
+     "graded": 2346,
+     "mean": 1126838,
+     "p50": 1113217,
+     "p99": 1805034,
+     "worst": {
+      "tic": 2217,
+      "whole": 2078826,
+      "sim": 45873,
+      "frame": 1446,
+      "bsp": 466013,
+      "planes": 530376,
+      "masked": 1014903,
+      "other": 20215,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 57098,
+       "p99": 137958,
+       "max": 172402
+      },
+      "frame": {
+       "mean": 1457,
+       "p99": 1466,
+       "max": 1466
+      },
+      "bsp": {
+       "mean": 445447,
+       "p99": 606560,
+       "max": 687164
+      },
+      "planes": {
+       "mean": 460619,
+       "p99": 841734,
+       "max": 889754
+      },
+      "masked": {
+       "mean": 135273,
+       "p99": 611021,
+       "max": 1014903
+      },
+      "other": {
+       "mean": 26943,
+       "p99": 38932,
+       "max": 43718
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 26637243,
+       "mbytes": 5262407
+      }
+     ],
+     "miss_tics": 11,
+     "miss_bytes_max": 12288,
+     "peaks": {
+      "visplanes": 39,
+      "drawsegs": 46,
+      "vissprites": 63,
+      "openings": 906
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom-demo3": {
+     "tics": 3863,
+     "graded": 3862,
+     "mean": 1092448,
+     "p50": 1099856,
+     "p99": 1581329,
+     "worst": {
+      "tic": 3568,
+      "whole": 2137538,
+      "sim": 52041,
+      "frame": 1446,
+      "bsp": 403083,
+      "planes": 461719,
+      "masked": 1198349,
+      "other": 20900,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 48090,
+       "p99": 93255,
+       "max": 208097
+      },
+      "frame": {
+       "mean": 1467,
+       "p99": 1505,
+       "max": 1505
+      },
+      "bsp": {
+       "mean": 457052,
+       "p99": 657096,
+       "max": 741161
+      },
+      "planes": {
+       "mean": 405728,
+       "p99": 653889,
+       "max": 674348
+      },
+      "masked": {
+       "mean": 152347,
+       "p99": 647190,
+       "max": 1198349
+      },
+      "other": {
+       "mean": 27764,
+       "p99": 41876,
+       "max": 45643
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 30954505,
+       "mbytes": 5218117
+      }
+     ],
+     "miss_tics": 12,
+     "miss_bytes_max": 8192,
+     "peaks": {
+      "visplanes": 28,
+      "drawsegs": 62,
+      "vissprites": 51,
+      "openings": 1400
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom-demo4": {
+     "tics": 818,
+     "graded": 817,
+     "mean": 1548431,
+     "p50": 1335829,
+     "p99": 2445373,
+     "worst": {
+      "tic": 86,
+      "whole": 2599614,
+      "sim": 60910,
+      "frame": 1456,
+      "bsp": 1202074,
+      "planes": 837261,
+      "masked": 455534,
+      "other": 42379,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 68128,
+       "p99": 179814,
+       "max": 248279
+      },
+      "frame": {
+       "mean": 1453,
+       "p99": 1466,
+       "max": 1466
+      },
+      "bsp": {
+       "mean": 786607,
+       "p99": 1278058,
+       "max": 1303739
+      },
+      "planes": {
+       "mean": 428454,
+       "p99": 807051,
+       "max": 851491
+      },
+      "masked": {
+       "mean": 233306,
+       "p99": 741424,
+       "max": 814801
+      },
+      "other": {
+       "mean": 30483,
+       "p99": 42421,
+       "max": 47203
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 27532693,
+       "mbytes": 5169989
+      }
+     ],
+     "miss_tics": 7,
+     "miss_bytes_max": 16384,
+     "peaks": {
+      "visplanes": 74,
+      "drawsegs": 205,
+      "vissprites": 90,
+      "openings": 2455
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom2-demo1": {
+     "tics": 1205,
+     "graded": 1204,
+     "mean": 1313576,
+     "p50": 1381251,
+     "p99": 1666653,
+     "worst": {
+      "tic": 1001,
+      "whole": 1933700,
+      "sim": 144213,
+      "frame": 1446,
+      "bsp": 623028,
+      "planes": 432011,
+      "masked": 682398,
+      "other": 50604,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 90021,
+       "p99": 208770,
+       "max": 291371
+      },
+      "frame": {
+       "mean": 1453,
+       "p99": 1466,
+       "max": 1466
+      },
+      "bsp": {
+       "mean": 592709,
+       "p99": 725207,
+       "max": 799956
+      },
+      "planes": {
+       "mean": 444395,
+       "p99": 714204,
+       "max": 754288
+      },
+      "masked": {
+       "mean": 139045,
+       "p99": 316110,
+       "max": 682398
+      },
+      "other": {
+       "mean": 45953,
+       "p99": 56357,
+       "max": 70829
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 31525881,
+       "mbytes": 8207970
+      }
+     ],
+     "miss_tics": 10,
+     "miss_bytes_max": 17544,
+     "peaks": {
+      "visplanes": 50,
+      "drawsegs": 104,
+      "vissprites": 68,
+      "openings": 1636
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom2-demo2": {
+     "tics": 2001,
+     "graded": 2000,
+     "mean": 1251525,
+     "p50": 1249791,
+     "p99": 1818828,
+     "worst": {
+      "tic": 822,
+      "whole": 2286664,
+      "sim": 216539,
+      "frame": 1456,
+      "bsp": 387346,
+      "planes": 593153,
+      "masked": 1045940,
+      "other": 42230,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 84461,
+       "p99": 221369,
+       "max": 601585
+      },
+      "frame": {
+       "mean": 1457,
+       "p99": 1466,
+       "max": 1466
+      },
+      "bsp": {
+       "mean": 511601,
+       "p99": 733539,
+       "max": 795681
+      },
+      "planes": {
+       "mean": 443329,
+       "p99": 777611,
+       "max": 799328
+      },
+      "masked": {
+       "mean": 161681,
+       "p99": 703624,
+       "max": 1045940
+      },
+      "other": {
+       "mean": 48996,
+       "p99": 62985,
+       "max": 74485
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 15095352,
+       "mbytes": 8212077
+      }
+     ],
+     "miss_tics": 2,
+     "miss_bytes_max": 16968,
+     "peaks": {
+      "visplanes": 24,
+      "drawsegs": 58,
+      "vissprites": 46,
+      "openings": 1373
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom2-demo3": {
+     "tics": 4471,
+     "graded": 4470,
+     "mean": 1353595,
+     "p50": 1340548,
+     "p99": 2110704,
+     "worst": {
+      "tic": 1241,
+      "whole": 2661513,
+      "sim": 87492,
+      "frame": 1466,
+      "bsp": 747521,
+      "planes": 685466,
+      "masked": 1087156,
+      "other": 52412,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 80062,
+       "p99": 181304,
+       "max": 565476
+      },
+      "frame": {
+       "mean": 1456,
+       "p99": 1466,
+       "max": 1466
+      },
+      "bsp": {
+       "mean": 554763,
+       "p99": 812146,
+       "max": 854568
+      },
+      "planes": {
+       "mean": 401073,
+       "p99": 708217,
+       "max": 784061
+      },
+      "masked": {
+       "mean": 265700,
+       "p99": 820760,
+       "max": 1091694
+      },
+      "other": {
+       "mean": 50541,
+       "p99": 61646,
+       "max": 76616
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 23609146,
+       "mbytes": 8223233
+      }
+     ],
+     "miss_tics": 16,
+     "miss_bytes_max": 17544,
+     "peaks": {
+      "visplanes": 44,
+      "drawsegs": 115,
+      "vissprites": 72,
+      "openings": 1984
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "tnt-demo1": {
+     "tics": 4531,
+     "graded": 4530,
+     "mean": 1179716,
+     "p50": 1143771,
+     "p99": 1807289,
+     "worst": {
+      "tic": 4181,
+      "whole": 2310795,
+      "sim": 21183,
+      "frame": 1456,
+      "bsp": 544410,
+      "planes": 950954,
+      "masked": 731726,
+      "other": 61066,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 20677,
+       "p99": 84212,
+       "max": 148744
+      },
+      "frame": {
+       "mean": 1455,
+       "p99": 1466,
+       "max": 1466
+      },
+      "bsp": {
+       "mean": 568208,
+       "p99": 998905,
+       "max": 1194317
+      },
+      "planes": {
+       "mean": 413695,
+       "p99": 881908,
+       "max": 999524
+      },
+      "masked": {
+       "mean": 127702,
+       "p99": 479454,
+       "max": 934808
+      },
+      "other": {
+       "mean": 47980,
+       "p99": 59830,
+       "max": 77106
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 11134099,
+       "mbytes": 10009938
+      }
+     ],
+     "miss_tics": 23,
+     "miss_bytes_max": 34520,
+     "peaks": {
+      "visplanes": 45,
+      "drawsegs": 95,
+      "vissprites": 22,
+      "openings": 1783
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "tnt-demo2": {
+     "tics": 3653,
+     "graded": 3652,
+     "mean": 1412835,
+     "p50": 1439175,
+     "p99": 2030315,
+     "worst": {
+      "tic": 3484,
+      "whole": 2860943,
+      "sim": 180169,
+      "frame": 1446,
+      "bsp": 538314,
+      "planes": 548660,
+      "masked": 1555096,
+      "other": 37258,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 85805,
+       "p99": 328538,
+       "max": 449212
+      },
+      "frame": {
+       "mean": 1457,
+       "p99": 1466,
+       "max": 1466
+      },
+      "bsp": {
+       "mean": 502216,
+       "p99": 788100,
+       "max": 1007122
+      },
+      "planes": {
+       "mean": 596412,
+       "p99": 917256,
+       "max": 1016729
+      },
+      "masked": {
+       "mean": 183158,
+       "p99": 630014,
+       "max": 1555096
+      },
+      "other": {
+       "mean": 43787,
+       "p99": 59209,
+       "max": 78376
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 18148449,
+       "mbytes": 10110801
+      }
+     ],
+     "miss_tics": 14,
+     "miss_bytes_max": 85272,
+     "peaks": {
+      "visplanes": 68,
+      "drawsegs": 112,
+      "vissprites": 48,
+      "openings": 1220
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "tnt-demo3": {
+     "tics": 3433,
+     "graded": 3432,
+     "mean": 1423244,
+     "p50": 1415911,
+     "p99": 2293129,
+     "worst": {
+      "tic": 2823,
+      "whole": 2540182,
+      "sim": 204028,
+      "frame": 1456,
+      "bsp": 865211,
+      "planes": 836927,
+      "masked": 579784,
+      "other": 52776,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 83216,
+       "p99": 225260,
+       "max": 298934
+      },
+      "frame": {
+       "mean": 1454,
+       "p99": 1466,
+       "max": 1466
+      },
+      "bsp": {
+       "mean": 573516,
+       "p99": 903369,
+       "max": 952490
+      },
+      "planes": {
+       "mean": 584899,
+       "p99": 985986,
+       "max": 1077209
+      },
+      "masked": {
+       "mean": 131851,
+       "p99": 488808,
+       "max": 648724
+      },
+      "other": {
+       "mean": 48308,
+       "p99": 59130,
+       "max": 78303
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 20542409,
+       "mbytes": 10104539
+      }
+     ],
+     "miss_tics": 21,
+     "miss_bytes_max": 30424,
+     "peaks": {
+      "visplanes": 85,
+      "drawsegs": 108,
+      "vissprites": 33,
+      "openings": 2527
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "plutonia-demo1": {
+     "tics": 7403,
+     "graded": 7402,
+     "mean": 1496075,
+     "p50": 1469576,
+     "p99": 2271211,
+     "worst": {
+      "tic": 5043,
+      "whole": 3104685,
+      "sim": 561549,
+      "frame": 1446,
+      "bsp": 915454,
+      "planes": 884921,
+      "masked": 685724,
+      "other": 55591,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 75048,
+       "p99": 247197,
+       "max": 619545
+      },
+      "frame": {
+       "mean": 1456,
+       "p99": 1466,
+       "max": 1467
+      },
+      "bsp": {
+       "mean": 638100,
+       "p99": 996936,
+       "max": 1298570
+      },
+      "planes": {
+       "mean": 543057,
+       "p99": 929133,
+       "max": 1050603
+      },
+      "masked": {
+       "mean": 189052,
+       "p99": 634833,
+       "max": 1379466
+      },
+      "other": {
+       "mean": 49363,
+       "p99": 61020,
+       "max": 78564
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 42195567,
+       "mbytes": 9504406
+      }
+     ],
+     "miss_tics": 35,
+     "miss_bytes_max": 35104,
+     "peaks": {
+      "visplanes": 118,
+      "drawsegs": 180,
+      "vissprites": 123,
+      "openings": 2432
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "plutonia-demo2": {
+     "tics": 3483,
+     "graded": 3482,
+     "mean": 1473037,
+     "p50": 1526361,
+     "p99": 2017594,
+     "worst": {
+      "tic": 931,
+      "whole": 2656072,
+      "sim": 213256,
+      "frame": 1456,
+      "bsp": 539598,
+      "planes": 694397,
+      "masked": 1155778,
+      "other": 51587,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 83067,
+       "p99": 181120,
+       "max": 281368
+      },
+      "frame": {
+       "mean": 1455,
+       "p99": 1466,
+       "max": 1466
+      },
+      "bsp": {
+       "mean": 530482,
+       "p99": 788497,
+       "max": 834098
+      },
+      "planes": {
+       "mean": 598072,
+       "p99": 855027,
+       "max": 924171
+      },
+      "masked": {
+       "mean": 210801,
+       "p99": 606618,
+       "max": 1193219
+      },
+      "other": {
+       "mean": 49161,
+       "p99": 60436,
+       "max": 77645
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 16242115,
+       "mbytes": 9460651
+      }
+     ],
+     "miss_tics": 27,
+     "miss_bytes_max": 21640,
+     "peaks": {
+      "visplanes": 81,
+      "drawsegs": 161,
+      "vissprites": 66,
+      "openings": 1954
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "plutonia-demo3": {
+     "tics": 5662,
+     "graded": 5661,
+     "mean": 1283254,
+     "p50": 1258761,
+     "p99": 1999357,
+     "worst": {
+      "tic": 736,
+      "whole": 2794396,
+      "sim": 500629,
+      "frame": 1466,
+      "bsp": 708464,
+      "planes": 532188,
+      "masked": 995440,
+      "other": 56209,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 109513,
+       "p99": 253381,
+       "max": 662576
+      },
+      "frame": {
+       "mean": 1457,
+       "p99": 1466,
+       "max": 1466
+      },
+      "bsp": {
+       "mean": 573325,
+       "p99": 829293,
+       "max": 1046928
+      },
+      "planes": {
+       "mean": 374828,
+       "p99": 817458,
+       "max": 915802
+      },
+      "masked": {
+       "mean": 174289,
+       "p99": 628728,
+       "max": 1238513
+      },
+      "other": {
+       "mean": 49841,
+       "p99": 61081,
+       "max": 79163
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 37322787,
+       "mbytes": 9526464
+      }
+     ],
+     "miss_tics": 18,
+     "miss_bytes_max": 21064,
+     "peaks": {
+      "visplanes": 64,
+      "drawsegs": 157,
+      "vissprites": 74,
+      "openings": 2463
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    }
+   }
+  },
+  "o1-v11": {
+   "worst": {
+    "demo": "plutonia-demo1",
+    "tic": 5043,
+    "whole": 3678553
+   },
+   "demos": {
+    "doom-demo1": {
+     "tics": 1710,
+     "graded": 1709,
+     "mean": 1420437,
+     "p50": 1425514,
+     "p99": 1864319,
+     "worst": {
+      "tic": 1206,
+      "whole": 2073740,
+      "sim": 322754,
+      "frame": 2558,
+      "bsp": 439558,
+      "planes": 980016,
+      "masked": 310515,
+      "other": 18339,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 75609,
+       "p99": 209053,
+       "max": 387344
+      },
+      "frame": {
+       "mean": 2558,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 493614,
+       "p99": 786451,
+       "max": 1006665
+      },
+      "planes": {
+       "mean": 655169,
+       "p99": 1032251,
+       "max": 1047259
+      },
+      "masked": {
+       "mean": 182388,
+       "p99": 420669,
+       "max": 509943
+      },
+      "other": {
+       "mean": 11099,
+       "p99": 20988,
+       "max": 22524
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 11960731,
+       "mbytes": 5146835
+      }
+     ],
+     "miss_tics": 7,
+     "miss_bytes_max": 8192,
+     "peaks": {
+      "visplanes": 33,
+      "drawsegs": 59,
+      "vissprites": 75,
+      "openings": 1912
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom-demo2": {
+     "tics": 2347,
+     "graded": 2346,
+     "mean": 1304567,
+     "p50": 1286195,
+     "p99": 2077617,
+     "worst": {
+      "tic": 2217,
+      "whole": 2379481,
+      "sim": 50968,
+      "frame": 2548,
+      "bsp": 544461,
+      "planes": 600824,
+      "masked": 1177413,
+      "other": 3267,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 58884,
+       "p99": 137611,
+       "max": 192147
+      },
+      "frame": {
+       "mean": 2559,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 503852,
+       "p99": 718779,
+       "max": 772800
+      },
+      "planes": {
+       "mean": 569557,
+       "p99": 1018964,
+       "max": 1078760
+      },
+      "masked": {
+       "mean": 162128,
+       "p99": 685082,
+       "max": 1177413
+      },
+      "other": {
+       "mean": 7587,
+       "p99": 20911,
+       "max": 20981
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 27345887,
+       "mbytes": 5262407
+      }
+     ],
+     "miss_tics": 11,
+     "miss_bytes_max": 12288,
+     "peaks": {
+      "visplanes": 39,
+      "drawsegs": 46,
+      "vissprites": 63,
+      "openings": 906
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom-demo3": {
+     "tics": 3863,
+     "graded": 3862,
+     "mean": 1254672,
+     "p50": 1258051,
+     "p99": 1811097,
+     "worst": {
+      "tic": 3568,
+      "whole": 2483012,
+      "sim": 55682,
+      "frame": 2548,
+      "bsp": 455739,
+      "planes": 569939,
+      "masked": 1395839,
+      "other": 3265,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 48642,
+       "p99": 91477,
+       "max": 281294
+      },
+      "frame": {
+       "mean": 2610,
+       "p99": 2769,
+       "max": 2769
+      },
+      "bsp": {
+       "mean": 518616,
+       "p99": 779118,
+       "max": 878677
+      },
+      "planes": {
+       "mean": 498148,
+       "p99": 769135,
+       "max": 808066
+      },
+      "masked": {
+       "mean": 179337,
+       "p99": 737543,
+       "max": 1395839
+      },
+      "other": {
+       "mean": 7319,
+       "p99": 20917,
+       "max": 22594
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 31616546,
+       "mbytes": 5218117
+      }
+     ],
+     "miss_tics": 12,
+     "miss_bytes_max": 8192,
+     "peaks": {
+      "visplanes": 28,
+      "drawsegs": 62,
+      "vissprites": 51,
+      "openings": 1400
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom-demo4": {
+     "tics": 818,
+     "graded": 817,
+     "mean": 1763121,
+     "p50": 1544793,
+     "p99": 2751152,
+     "worst": {
+      "tic": 86,
+      "whole": 2942204,
+      "sim": 66451,
+      "frame": 2558,
+      "bsp": 1310107,
+      "planes": 993997,
+      "masked": 548174,
+      "other": 20917,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 72989,
+       "p99": 232586,
+       "max": 322806
+      },
+      "frame": {
+       "mean": 2555,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 886226,
+       "p99": 1455434,
+       "max": 1502663
+      },
+      "planes": {
+       "mean": 517522,
+       "p99": 954528,
+       "max": 1010055
+      },
+      "masked": {
+       "mean": 274116,
+       "p99": 843875,
+       "max": 933492
+      },
+      "other": {
+       "mean": 9712,
+       "p99": 20988,
+       "max": 22594
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 27941182,
+       "mbytes": 5169989
+      }
+     ],
+     "miss_tics": 7,
+     "miss_bytes_max": 16384,
+     "peaks": {
+      "visplanes": 74,
+      "drawsegs": 205,
+      "vissprites": 90,
+      "openings": 2455
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom2-demo1": {
+     "tics": 1205,
+     "graded": 1204,
+     "mean": 1501288,
+     "p50": 1577325,
+     "p99": 1893604,
+     "worst": {
+      "tic": 1001,
+      "whole": 2181921,
+      "sim": 155200,
+      "frame": 2548,
+      "bsp": 683116,
+      "planes": 537331,
+      "masked": 769747,
+      "other": 33979,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 95219,
+       "p99": 226572,
+       "max": 355861
+      },
+      "frame": {
+       "mean": 2555,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 655490,
+       "p99": 805503,
+       "max": 930612
+      },
+      "planes": {
+       "mean": 555593,
+       "p99": 849441,
+       "max": 916108
+      },
+      "masked": {
+       "mean": 166216,
+       "p99": 355711,
+       "max": 769747
+      },
+      "other": {
+       "mean": 26215,
+       "p99": 35246,
+       "max": 50327
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 31853606,
+       "mbytes": 8207970
+      }
+     ],
+     "miss_tics": 10,
+     "miss_bytes_max": 17544,
+     "peaks": {
+      "visplanes": 50,
+      "drawsegs": 104,
+      "vissprites": 68,
+      "openings": 1636
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom2-demo2": {
+     "tics": 2001,
+     "graded": 2000,
+     "mean": 1429253,
+     "p50": 1424729,
+     "p99": 2071271,
+     "worst": {
+      "tic": 822,
+      "whole": 2688912,
+      "sim": 255185,
+      "frame": 2558,
+      "bsp": 444705,
+      "planes": 717017,
+      "masked": 1248444,
+      "other": 21003,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 85909,
+       "p99": 221658,
+       "max": 805563
+      },
+      "frame": {
+       "mean": 2559,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 572944,
+       "p99": 831585,
+       "max": 894879
+      },
+      "planes": {
+       "mean": 547526,
+       "p99": 911279,
+       "max": 931383
+      },
+      "masked": {
+       "mean": 192869,
+       "p99": 796172,
+       "max": 1248444
+      },
+      "other": {
+       "mean": 27445,
+       "p99": 38655,
+       "max": 56596
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 15450999,
+       "mbytes": 8212077
+      }
+     ],
+     "miss_tics": 2,
+     "miss_bytes_max": 16968,
+     "peaks": {
+      "visplanes": 24,
+      "drawsegs": 58,
+      "vissprites": 46,
+      "openings": 1373
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "doom2-demo3": {
+     "tics": 4471,
+     "graded": 4470,
+     "mean": 1553507,
+     "p50": 1532892,
+     "p99": 2414225,
+     "worst": {
+      "tic": 1241,
+      "whole": 3013367,
+      "sim": 91064,
+      "frame": 2568,
+      "bsp": 822502,
+      "planes": 826985,
+      "masked": 1238018,
+      "other": 32230,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 84639,
+       "p99": 190963,
+       "max": 730358
+      },
+      "frame": {
+       "mean": 2558,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 628362,
+       "p99": 920625,
+       "max": 972940
+      },
+      "planes": {
+       "mean": 494274,
+       "p99": 845800,
+       "max": 953968
+      },
+      "masked": {
+       "mean": 313871,
+       "p99": 948987,
+       "max": 1272345
+      },
+      "other": {
+       "mean": 29804,
+       "p99": 38719,
+       "max": 56603
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 23954169,
+       "mbytes": 8223233
+      }
+     ],
+     "miss_tics": 16,
+     "miss_bytes_max": 17544,
+     "peaks": {
+      "visplanes": 44,
+      "drawsegs": 115,
+      "vissprites": 72,
+      "openings": 1984
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "tnt-demo1": {
+     "tics": 4531,
+     "graded": 4530,
+     "mean": 1370533,
+     "p50": 1328252,
+     "p99": 2117498,
+     "worst": {
+      "tic": 4182,
+      "whole": 2704267,
+      "sim": 27367,
+      "frame": 2558,
+      "bsp": 598888,
+      "planes": 1212289,
+      "masked": 811200,
+      "other": 51965,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 23116,
+       "p99": 101873,
+       "max": 197290
+      },
+      "frame": {
+       "mean": 2557,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 638989,
+       "p99": 1121822,
+       "max": 1383501
+      },
+      "planes": {
+       "mean": 521333,
+       "p99": 1102637,
+       "max": 1240952
+      },
+      "masked": {
+       "mean": 156944,
+       "p99": 559497,
+       "max": 1077144
+      },
+      "other": {
+       "mean": 27593,
+       "p99": 36373,
+       "max": 55138
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 11402556,
+       "mbytes": 10009938
+      }
+     ],
+     "miss_tics": 23,
+     "miss_bytes_max": 34520,
+     "peaks": {
+      "visplanes": 47,
+      "drawsegs": 95,
+      "vissprites": 22,
+      "openings": 1783
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "tnt-demo2": {
+     "tics": 3653,
+     "graded": 3652,
+     "mean": 1616464,
+     "p50": 1645705,
+     "p99": 2295279,
+     "worst": {
+      "tic": 3484,
+      "whole": 3265862,
+      "sim": 183453,
+      "frame": 2548,
+      "bsp": 613309,
+      "planes": 628534,
+      "masked": 1814280,
+      "other": 23738,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 88200,
+       "p99": 324833,
+       "max": 447380
+      },
+      "frame": {
+       "mean": 2559,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 558325,
+       "p99": 892639,
+       "max": 1161043
+      },
+      "planes": {
+       "mean": 722301,
+       "p99": 1102078,
+       "max": 1181515
+      },
+      "masked": {
+       "mean": 219788,
+       "p99": 725415,
+       "max": 1814280
+      },
+      "other": {
+       "mean": 25292,
+       "p99": 39714,
+       "max": 58859
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 18958111,
+       "mbytes": 10110801
+      }
+     ],
+     "miss_tics": 14,
+     "miss_bytes_max": 85272,
+     "peaks": {
+      "visplanes": 68,
+      "drawsegs": 112,
+      "vissprites": 48,
+      "openings": 1220
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "tnt-demo3": {
+     "tics": 3433,
+     "graded": 3432,
+     "mean": 1622911,
+     "p50": 1618103,
+     "p99": 2581692,
+     "worst": {
+      "tic": 2823,
+      "whole": 2845098,
+      "sim": 203689,
+      "frame": 2558,
+      "bsp": 938248,
+      "planes": 988703,
+      "masked": 678537,
+      "other": 33363,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 86076,
+       "p99": 234920,
+       "max": 318196
+      },
+      "frame": {
+       "mean": 2556,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 639035,
+       "p99": 1002902,
+       "max": 1098886
+      },
+      "planes": {
+       "mean": 707923,
+       "p99": 1162916,
+       "max": 1271741
+      },
+      "masked": {
+       "mean": 158389,
+       "p99": 570270,
+       "max": 701674
+      },
+      "other": {
+       "mean": 28932,
+       "p99": 39712,
+       "max": 52510
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 21328217,
+       "mbytes": 10104539
+      }
+     ],
+     "miss_tics": 21,
+     "miss_bytes_max": 30424,
+     "peaks": {
+      "visplanes": 86,
+      "drawsegs": 108,
+      "vissprites": 33,
+      "openings": 2527
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "plutonia-demo1": {
+     "tics": 7403,
+     "graded": 7402,
+     "mean": 1702987,
+     "p50": 1671864,
+     "p99": 2592985,
+     "worst": {
+      "tic": 5043,
+      "whole": 3678553,
+      "sim": 791430,
+      "frame": 2548,
+      "bsp": 998884,
+      "planes": 1009086,
+      "masked": 839192,
+      "other": 37413,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 80867,
+       "p99": 274344,
+       "max": 872430
+      },
+      "frame": {
+       "mean": 2558,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 710170,
+       "p99": 1120122,
+       "max": 1503340
+      },
+      "planes": {
+       "mean": 656780,
+       "p99": 1058604,
+       "max": 1177247
+      },
+      "masked": {
+       "mean": 224282,
+       "p99": 729149,
+       "max": 1562707
+      },
+      "other": {
+       "mean": 28329,
+       "p99": 39080,
+       "max": 57144
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 42631617,
+       "mbytes": 9504406
+      }
+     ],
+     "miss_tics": 35,
+     "miss_bytes_max": 35104,
+     "peaks": {
+      "visplanes": 118,
+      "drawsegs": 180,
+      "vissprites": 123,
+      "openings": 2432
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "plutonia-demo2": {
+     "tics": 3483,
+     "graded": 3482,
+     "mean": 1663535,
+     "p50": 1718013,
+     "p99": 2260785,
+     "worst": {
+      "tic": 931,
+      "whole": 3006555,
+      "sim": 242872,
+      "frame": 2558,
+      "bsp": 579212,
+      "planes": 818068,
+      "masked": 1332207,
+      "other": 31638,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 90984,
+       "p99": 200606,
+       "max": 334312
+      },
+      "frame": {
+       "mean": 2557,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 585254,
+       "p99": 880960,
+       "max": 947091
+      },
+      "planes": {
+       "mean": 710665,
+       "p99": 996576,
+       "max": 1082162
+      },
+      "masked": {
+       "mean": 245313,
+       "p99": 690861,
+       "max": 1363625
+      },
+      "other": {
+       "mean": 28762,
+       "p99": 39502,
+       "max": 57526
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 16614189,
+       "mbytes": 9460651
+      }
+     ],
+     "miss_tics": 27,
+     "miss_bytes_max": 21640,
+     "peaks": {
+      "visplanes": 82,
+      "drawsegs": 161,
+      "vissprites": 66,
+      "openings": 1954
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    },
+    "plutonia-demo3": {
+     "tics": 5662,
+     "graded": 5661,
+     "mean": 1479257,
+     "p50": 1454465,
+     "p99": 2275507,
+     "worst": {
+      "tic": 736,
+      "whole": 3195132,
+      "sim": 658632,
+      "frame": 2568,
+      "bsp": 795965,
+      "planes": 614281,
+      "masked": 1088255,
+      "other": 35431,
+      "mbytes": 0
+     },
+     "stage": {
+      "sim": {
+       "mean": 124059,
+       "p99": 281548,
+       "max": 906859
+      },
+      "frame": {
+       "mean": 2559,
+       "p99": 2568,
+       "max": 2568
+      },
+      "bsp": {
+       "mean": 651961,
+       "p99": 950122,
+       "max": 1182353
+      },
+      "planes": {
+       "mean": 465262,
+       "p99": 962062,
+       "max": 1073939
+      },
+      "masked": {
+       "mean": 206127,
+       "p99": 743909,
+       "max": 1336931
+      },
+      "other": {
+       "mean": 29289,
+       "p99": 39081,
+       "max": 57145
+      }
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 37871739,
+       "mbytes": 9526464
+      }
+     ],
+     "miss_tics": 18,
+     "miss_bytes_max": 21064,
+     "peaks": {
+      "visplanes": 64,
+      "drawsegs": 157,
+      "vissprites": 74,
+      "openings": 2463
+     },
+     "fixed": {
+      "fixedmul_mean": 0,
+      "fixedmul_max": 0,
+      "fixeddiv_mean": 0,
+      "fixeddiv_max": 0,
+      "fixeddiv_clamped_max": 0,
+      "at_worst": {
+       "fixedmul": 0,
+       "fixeddiv": 0
+      }
+     }
+    }
+   }
+  },
+  "fixed": {
+   "worst": {
+    "demo": "plutonia-demo1",
+    "tic": 5043,
+    "whole": 3479208
+   },
+   "demos": {
+    "doom-demo1": {
+     "tics": 1710,
+     "graded": 1709,
+     "mean": 1271700,
+     "worst": {
+      "tic": 1206,
+      "whole": 1922749,
+      "sim": 334306,
+      "frame": 2584,
+      "bsp": 444652,
+      "planes": 804986,
+      "masked": 294907,
+      "other": 41314,
+      "mbytes": 0
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 11943993,
+       "mbytes": 5146835
+      }
+     ],
+     "miss_tics": 7,
+     "miss_bytes_max": 8192,
+     "peaks": {
+      "visplanes": 33,
+      "drawsegs": 59,
+      "vissprites": 75,
+      "openings": 1912
+     },
+     "fixed": {
+      "fixedmul_mean": 1946,
+      "fixedmul_max": 7150,
+      "fixeddiv_mean": 157,
+      "fixeddiv_max": 614,
+      "fixeddiv_clamped_max": 7,
+      "at_worst": {
+       "fixedmul": 6404,
+       "fixeddiv": 468
+      }
+     }
+    },
+    "doom-demo2": {
+     "tics": 2347,
+     "graded": 2346,
+     "mean": 1156126,
+     "worst": {
+      "tic": 2217,
+      "whole": 2129261,
+      "sim": 52378,
+      "frame": 2574,
+      "bsp": 510413,
+      "planes": 504521,
+      "masked": 1038447,
+      "other": 20928,
+      "mbytes": 0
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 27347979,
+       "mbytes": 5262407
+      }
+     ],
+     "miss_tics": 11,
+     "miss_bytes_max": 12288,
+     "peaks": {
+      "visplanes": 39,
+      "drawsegs": 46,
+      "vissprites": 63,
+      "openings": 906
+     },
+     "fixed": {
+      "fixedmul_mean": 2233,
+      "fixedmul_max": 5074,
+      "fixeddiv_mean": 138,
+      "fixeddiv_max": 311,
+      "fixeddiv_clamped_max": 1,
+      "at_worst": {
+       "fixedmul": 2514,
+       "fixeddiv": 227
+      }
+     }
+    },
+    "doom-demo3": {
+     "tics": 3863,
+     "graded": 3862,
+     "mean": 1116698,
+     "worst": {
+      "tic": 3568,
+      "whole": 2176495,
+      "sim": 56724,
+      "frame": 2574,
+      "bsp": 435768,
+      "planes": 441358,
+      "masked": 1218437,
+      "other": 21634,
+      "mbytes": 0
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 31631601,
+       "mbytes": 5218117
+      }
+     ],
+     "miss_tics": 12,
+     "miss_bytes_max": 8192,
+     "peaks": {
+      "visplanes": 28,
+      "drawsegs": 62,
+      "vissprites": 51,
+      "openings": 1400
+     },
+     "fixed": {
+      "fixedmul_mean": 1707,
+      "fixedmul_max": 5323,
+      "fixeddiv_mean": 109,
+      "fixeddiv_max": 349,
+      "fixeddiv_clamped_max": 1,
+      "at_worst": {
+       "fixedmul": 2046,
+       "fixeddiv": 150
+      }
+     }
+    },
+    "doom-demo4": {
+     "tics": 818,
+     "graded": 817,
+     "mean": 1628847,
+     "worst": {
+      "tic": 86,
+      "whole": 2788957,
+      "sim": 68098,
+      "frame": 2584,
+      "bsp": 1328366,
+      "planes": 812463,
+      "masked": 533606,
+      "other": 43840,
+      "mbytes": 0
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 27964081,
+       "mbytes": 5169989
+      }
+     ],
+     "miss_tics": 7,
+     "miss_bytes_max": 16384,
+     "peaks": {
+      "visplanes": 74,
+      "drawsegs": 205,
+      "vissprites": 90,
+      "openings": 2455
+     },
+     "fixed": {
+      "fixedmul_mean": 3592,
+      "fixedmul_max": 9010,
+      "fixeddiv_mean": 396,
+      "fixeddiv_max": 1071,
+      "fixeddiv_clamped_max": 1,
+      "at_worst": {
+       "fixedmul": 7961,
+       "fixeddiv": 1003
+      }
+     }
+    },
+    "doom2-demo1": {
+     "tics": 1205,
+     "graded": 1204,
+     "mean": 1372539,
+     "worst": {
+      "tic": 1001,
+      "whole": 2017515,
+      "sim": 158334,
+      "frame": 2574,
+      "bsp": 672152,
+      "planes": 427641,
+      "masked": 703429,
+      "other": 53385,
+      "mbytes": 0
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 31943832,
+       "mbytes": 8207970
+      }
+     ],
+     "miss_tics": 10,
+     "miss_bytes_max": 17544,
+     "peaks": {
+      "visplanes": 50,
+      "drawsegs": 104,
+      "vissprites": 68,
+      "openings": 1636
+     },
+     "fixed": {
+      "fixedmul_mean": 2823,
+      "fixedmul_max": 6493,
+      "fixeddiv_mean": 311,
+      "fixeddiv_max": 816,
+      "fixeddiv_clamped_max": 4,
+      "at_worst": {
+       "fixedmul": 3221,
+       "fixeddiv": 343
+      }
+     }
+    },
+    "doom2-demo2": {
+     "tics": 2001,
+     "graded": 2000,
+     "mean": 1281925,
+     "worst": {
+      "tic": 1659,
+      "whole": 2515910,
+      "sim": 837137,
+      "frame": 2584,
+      "bsp": 596350,
+      "planes": 374516,
+      "masked": 661777,
+      "other": 43546,
+      "mbytes": 0
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 15492129,
+       "mbytes": 8212077
+      }
+     ],
+     "miss_tics": 2,
+     "miss_bytes_max": 16968,
+     "peaks": {
+      "visplanes": 24,
+      "drawsegs": 58,
+      "vissprites": 46,
+      "openings": 1373
+     },
+     "fixed": {
+      "fixedmul_mean": 2086,
+      "fixedmul_max": 12434,
+      "fixeddiv_mean": 162,
+      "fixeddiv_max": 936,
+      "fixeddiv_clamped_max": 2,
+      "at_worst": {
+       "fixedmul": 12434,
+       "fixeddiv": 773
+      }
+     }
+    },
+    "doom2-demo3": {
+     "tics": 4471,
+     "graded": 4470,
+     "mean": 1403054,
+     "worst": {
+      "tic": 1241,
+      "whole": 2789689,
+      "sim": 92511,
+      "frame": 2594,
+      "bsp": 827469,
+      "planes": 660408,
+      "masked": 1153095,
+      "other": 53612,
+      "mbytes": 0
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 23998373,
+       "mbytes": 8223233
+      }
+     ],
+     "miss_tics": 16,
+     "miss_bytes_max": 17544,
+     "peaks": {
+      "visplanes": 44,
+      "drawsegs": 115,
+      "vissprites": 72,
+      "openings": 1984
+     },
+     "fixed": {
+      "fixedmul_mean": 2442,
+      "fixedmul_max": 12916,
+      "fixeddiv_mean": 184,
+      "fixeddiv_max": 999,
+      "fixeddiv_clamped_max": 2,
+      "at_worst": {
+       "fixedmul": 5436,
+       "fixeddiv": 627
+      }
+     }
+    },
+    "tnt-demo1": {
+     "tics": 4531,
+     "graded": 4530,
+     "mean": 1215109,
+     "worst": {
+      "tic": 4181,
+      "whole": 2402364,
+      "sim": 24215,
+      "frame": 2584,
+      "bsp": 592266,
+      "planes": 963272,
+      "masked": 756066,
+      "other": 63961,
+      "mbytes": 0
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 11362700,
+       "mbytes": 10009938
+      }
+     ],
+     "miss_tics": 23,
+     "miss_bytes_max": 34520,
+     "peaks": {
+      "visplanes": 45,
+      "drawsegs": 95,
+      "vissprites": 22,
+      "openings": 1783
+     },
+     "fixed": {
+      "fixedmul_mean": 2370,
+      "fixedmul_max": 9154,
+      "fixeddiv_mean": 134,
+      "fixeddiv_max": 475,
+      "fixeddiv_clamped_max": 2,
+      "at_worst": {
+       "fixedmul": 7191,
+       "fixeddiv": 333
+      }
+     }
+    },
+    "tnt-demo2": {
+     "tics": 3653,
+     "graded": 3652,
+     "mean": 1449063,
+     "worst": {
+      "tic": 3484,
+      "whole": 2911307,
+      "sim": 186812,
+      "frame": 2574,
+      "bsp": 580770,
+      "planes": 522292,
+      "masked": 1579330,
+      "other": 39529,
+      "mbytes": 0
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 18975092,
+       "mbytes": 10110801
+      }
+     ],
+     "miss_tics": 14,
+     "miss_bytes_max": 85272,
+     "peaks": {
+      "visplanes": 68,
+      "drawsegs": 112,
+      "vissprites": 48,
+      "openings": 1220
+     },
+     "fixed": {
+      "fixedmul_mean": 3104,
+      "fixedmul_max": 7763,
+      "fixeddiv_mean": 244,
+      "fixeddiv_max": 792,
+      "fixeddiv_clamped_max": 3,
+      "at_worst": {
+       "fixedmul": 2850,
+       "fixeddiv": 281
+      }
+     }
+    },
+    "tnt-demo3": {
+     "tics": 3433,
+     "graded": 3432,
+     "mean": 1465892,
+     "worst": {
+      "tic": 2823,
+      "whole": 2657562,
+      "sim": 205261,
+      "frame": 2584,
+      "bsp": 939909,
+      "planes": 837890,
+      "masked": 617941,
+      "other": 53977,
+      "mbytes": 0
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 21285699,
+       "mbytes": 10104539
+      }
+     ],
+     "miss_tics": 21,
+     "miss_bytes_max": 30424,
+     "peaks": {
+      "visplanes": 85,
+      "drawsegs": 108,
+      "vissprites": 33,
+      "openings": 2527
+     },
+     "fixed": {
+      "fixedmul_mean": 3466,
+      "fixedmul_max": 8330,
+      "fixeddiv_mean": 201,
+      "fixeddiv_max": 717,
+      "fixeddiv_clamped_max": 4,
+      "at_worst": {
+       "fixedmul": 6757,
+       "fixeddiv": 499
+      }
+     }
+    },
+    "plutonia-demo1": {
+     "tics": 7403,
+     "graded": 7402,
+     "mean": 1557444,
+     "worst": {
+      "tic": 5043,
+      "whole": 3479208,
+      "sim": 816287,
+      "frame": 2574,
+      "bsp": 1012842,
+      "planes": 835572,
+      "masked": 753376,
+      "other": 58557,
+      "mbytes": 0
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 42639136,
+       "mbytes": 9504406
+      }
+     ],
+     "miss_tics": 35,
+     "miss_bytes_max": 35104,
+     "peaks": {
+      "visplanes": 118,
+      "drawsegs": 180,
+      "vissprites": 123,
+      "openings": 2432
+     },
+     "fixed": {
+      "fixedmul_mean": 3485,
+      "fixedmul_max": 18280,
+      "fixeddiv_mean": 334,
+      "fixeddiv_max": 1519,
+      "fixeddiv_clamped_max": 1,
+      "at_worst": {
+       "fixedmul": 15886,
+       "fixeddiv": 1519
+      }
+     }
+    },
+    "plutonia-demo2": {
+     "tics": 3483,
+     "graded": 3482,
+     "mean": 1530891,
+     "worst": {
+      "tic": 931,
+      "whole": 2770672,
+      "sim": 250317,
+      "frame": 2584,
+      "bsp": 584609,
+      "planes": 681821,
+      "masked": 1198518,
+      "other": 52823,
+      "mbytes": 0
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 16643459,
+       "mbytes": 9460651
+      }
+     ],
+     "miss_tics": 27,
+     "miss_bytes_max": 21640,
+     "peaks": {
+      "visplanes": 81,
+      "drawsegs": 161,
+      "vissprites": 66,
+      "openings": 1954
+     },
+     "fixed": {
+      "fixedmul_mean": 3124,
+      "fixedmul_max": 7449,
+      "fixeddiv_mean": 260,
+      "fixeddiv_max": 734,
+      "fixeddiv_clamped_max": 4,
+      "at_worst": {
+       "fixedmul": 4698,
+       "fixeddiv": 397
+      }
+     }
+    },
+    "plutonia-demo3": {
+     "tics": 5662,
+     "graded": 5661,
+     "mean": 1347788,
+     "worst": {
+      "tic": 736,
+      "whole": 3076338,
+      "sim": 692619,
+      "frame": 2594,
+      "bsp": 765552,
+      "planes": 514407,
+      "masked": 1043590,
+      "other": 57576,
+      "mbytes": 0
+     },
+     "load_tics": [
+      {
+       "tic": 0,
+       "whole": 37879884,
+       "mbytes": 9526464
+      }
+     ],
+     "miss_tics": 18,
+     "miss_bytes_max": 21064,
+     "peaks": {
+      "visplanes": 64,
+      "drawsegs": 157,
+      "vissprites": 74,
+      "openings": 2463
+     },
+     "fixed": {
+      "fixedmul_mean": 2556,
+      "fixedmul_max": 15461,
+      "fixeddiv_mean": 203,
+      "fixeddiv_max": 1078,
+      "fixeddiv_clamped_max": 2,
+      "at_worst": {
+       "fixedmul": 10640,
+       "fixeddiv": 966
+      }
+     }
+    }
+   }
+  }
+ }
+}

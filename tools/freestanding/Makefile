@@ -20,7 +20,12 @@ CC      := gcc
 # Usage: make EXTRA_CFLAGS="-DWEB_PERF_DRAWSEG_STATS"  (drawseg peak)
 #        make EXTRA_CFLAGS="-DWEB_PERF_OPENINGS_STATS" (openings peak)
 EXTRA_CFLAGS ?=
-CFLAGS  := -m32 -O1 -g \
+# OPT, OBJDIR and OUT make side builds that never share objects with fs-doom:
+#   make OPT=-O2 OBJDIR=obj-o2 OUT=fs-doom-o2
+#   make OBJDIR=obj-fixed OUT=fs-doom-fixed EXTRA_CFLAGS="-include fixed_count.h"
+OPT     ?= -O1
+OBJDIR  ?= obj
+CFLAGS  := -m32 $(OPT) -g \
             -std=gnu89 -DNORMALUNIX \
             -Dalloca=__builtin_alloca \
             -fno-strict-aliasing \
@@ -43,7 +48,7 @@ FLOOR_WRAP := -Wl,--wrap=P_SetupLevel,--wrap=WI_Start,--wrap=F_StartFinale,--wra
 LDFLAGS := -m32 -lm $(FLOOR_WRAP)
 
 CORE_DIR := ../../engine/core
-OUT      := fs-doom
+OUT      ?= fs-doom
 
 # engine/core sources: same excludes as native-sanitize (we provide our own).
 CORE_EXCLUDE := $(CORE_DIR)/i_main.c \
@@ -63,9 +68,9 @@ PLAT_SRC += floor_wrap.c
 endif
 
 SRC := $(CORE_SRC) $(PLAT_SRC)
-OBJ := $(patsubst $(CORE_DIR)/%.c,obj/core/%.o,$(filter $(CORE_DIR)/%,$(SRC))) \
-       $(patsubst %.c,obj/plat/%.o,$(PLAT_SRC)) \
-       obj/floor/floor_log.o
+OBJ := $(patsubst $(CORE_DIR)/%.c,$(OBJDIR)/core/%.o,$(filter $(CORE_DIR)/%,$(SRC))) \
+       $(patsubst %.c,$(OBJDIR)/plat/%.o,$(PLAT_SRC)) \
+       $(OBJDIR)/floor/floor_log.o
 
 all: $(OUT)
 
@@ -73,15 +78,15 @@ $(OUT): $(OBJ)
 	$(CC) $(LDFLAGS) $^ -o $@
 	@echo "built $@"
 
-obj/core/%.o: $(CORE_DIR)/%.c
+$(OBJDIR)/core/%.o: $(CORE_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-obj/plat/%.o: %.c
+$(OBJDIR)/plat/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-obj/floor/%.o: ../floor/%.c
+$(OBJDIR)/floor/%.o: ../floor/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
@@ -115,7 +120,7 @@ imports: $(OUT)
 	@bash gen-imports.sh
 
 clean:
-	rm -rf obj $(OUT) $(OUT_DIR)
+	rm -rf obj obj-* fs-doom fs-doom-o2 fs-doom-fixed $(OUT_DIR)
 
 # ro-wad-check: read-only-WAD proof (XIP feasibility).
 # Runs all 13 demos with WD_RO_WAD=1: WAD blob mprotect(PROT_READ) after load.

@@ -7,3 +7,6 @@ out-be/
 out-ro/
 out-arm/
 fs-doom-be
+obj-*/
+fs-doom-o2
+fs-doom-fixed

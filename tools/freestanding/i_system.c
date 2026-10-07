@@ -46,9 +46,16 @@ void fs_putc(int c)
 // Override at compile time with -DFS_ZONE_SIZE_OVERRIDE=(N) for zone sweeps.
 static byte fs_arena[FS_ZONE_SIZE];
 
+// WD_ZONE_KB=<n> hands the engine only the first n KiB of the arena, so one
+// binary can bisect the smallest zone that still completes a demo correctly.
+int fs_zone_bytes = FS_ZONE_SIZE;
+
 byte* I_ZoneBase(int* size)
 {
-    *size = FS_ZONE_SIZE;
+    const char* kb = getenv("WD_ZONE_KB");
+    if (kb && atoi(kb) > 0 && (long)atoi(kb) * 1024 < (long)FS_ZONE_SIZE)
+        fs_zone_bytes = atoi(kb) * 1024;
+    *size = fs_zone_bytes;
     return fs_arena;
 }
 

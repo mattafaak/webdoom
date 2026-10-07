@@ -524,6 +524,12 @@ leg ro-wad          fs,wad     "WAD blob stays read-only over 13 demos (XIP)" --
 # The demand every bare-metal target is measured against: fs-doom through the
 # floor gate, correctness (sim + render hashes) and x86 instructions per tic.
 leg floor-x86       fs,wad     "floor gate on the host: 13 demos correct, worst graded tic" -- bash tools/floor/run-x86.sh
+# The demand vector (tools/golden/floor-demand.json): each demo's worst graded
+# tic must stay the same tic, within 1%.  And the smallest zone that renders
+# all 13 demos correctly, 1200 KiB (bisected by zone-min.mjs), must still be the
+# boundary: 1200 passes, 1196 fails.
+leg floor-demand    fs,wad     "demand vector: same worst tic per demo, within 1%" -- node tools/floor/demand.mjs --check
+leg zone-min        fs,wad     "smallest zone with rendering is still 1200 KiB"     -- node tools/floor/zone-min.mjs --check 1200
 # The ARM reference.  wasm is architecture-independent, so only a native build
 # tests ARM codegen, ABI and alignment; emulated cycles are not hardware
 # cycles, so this gates correctness, not timing.  zig cross-builds the

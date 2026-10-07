@@ -56,6 +56,18 @@ extern thinker_t thinkercap; /* p_tick.c — thinker list sentinel */
 #include "floor_log.h"
 
 unsigned fs_render_hash (void); /* i_video.c: the render goldens' hash */
+extern int fs_zone_bytes;       /* i_system.c: the zone actually handed out */
+
+// Renderer limit counters: globals the frame resets and grows, read after it.
+#include "r_defs.h"
+extern visplane_t visplanes[], *lastvisplane;
+extern drawseg_t drawsegs[], *ds_p;
+extern vissprite_t vissprites[], *vissprite_p;
+extern short openings[], *lastopening;
+
+#ifdef FS_FIXED_COUNT /* fixed_count.h, force-included by the counting build */
+unsigned long long fs_fixedmul_n, fs_fixeddiv_n, fs_fixeddiv_clamped_n;
+#endif
 
 // ── Floor gate log (-floor <path>, WD_FLOOR_MODE=A|B) ────────────────────────
 // Set by floor_wrap.c's --wrap hooks (native build only), read and cleared at
@@ -364,6 +376,15 @@ static int tic_gametic[MAX_TRACE];
 static unsigned tic_render[MAX_TRACE]; /* mode A only */
 static long long tic_elapsed[MAX_TRACE];
 static int floor_n = 0;
+// -tictrace: the per-tic record the demand vector is built from
+typedef struct
+{
+    unsigned short visplanes, drawsegs, vissprites;
+    unsigned openings;
+    unsigned fixedmul, fixeddiv, fixeddiv_clamped;
+} tic_peaks_t;
+static tic_peaks_t tic_peaks[MAX_TRACE];
+static int fs_view_blocks, fs_view_detail; /* the view in force for the run */
 static int wd_cycles_fd = -1;       /* perf fd; -1 = not measuring */
 static int wd_cycles_fd_was_open = 0;
 static long long wd_last_count = 0; /* cumulative count at last tic boundary */
@@ -557,9 +578,9 @@ static int emit_floor_log (const char* path, char mode, const char* name,
     h.unit = have_time ? "instructions" : "none";
     h.unit_hz = 0; /* instructions are demand, not time */
     h.build = getenv ("WD_BUILD") ? getenv ("WD_BUILD") : "unknown";
-    h.view = screenblocks;
-    h.detail = detailLevel;
-    h.zone = (unsigned) FS_ZONE_SIZE;
+    h.view = fs_view_blocks;
+    h.detail = fs_view_detail;
+    h.zone = (unsigned) fs_zone_bytes;
     h.precache = 0;
     h.mode = mode;
     floor_header (&h);
@@ -576,6 +597,42 @@ static int emit_floor_log (const char* path, char mode, const char* name,
     return 1;
 }
 
+// -tictrace <path>: one tab-separated row per tic, unsorted (written before the
+// -cycles/-attrib emitters sort the instruction arrays in place).  The
+// instruction columns are 0 unless WD_CYCLES=1; the fixed-point columns are 0
+// unless this is the fixed_count.h build.
+static void emit_tictrace (const char* path)
+{
+    FILE* f = fopen (path, "w");
+    int i;
+    if (!f)
+    {
+        fprintf (stderr, "fs-doom: cannot write tictrace: %s\n", path);
+        return;
+    }
+    fprintf (f, "i\tgametic\twhole\tsim\tframe\tbsp\tplanes\tmasked\tother\tload\tmbytes"
+                "\tvisplanes\tdrawsegs\tvissprites\topenings\tfixedmul\tfixeddiv\tfixeddiv_clamped\n");
+    for (i = 0; i < floor_n; i++)
+    {
+        int c = i < tic_instr_len;
+        long long whole = c ? tic_instr[i] : 0;
+        long long st[5];
+        st[0] = c ? tic_sim_instr[i] : 0;
+        st[1] = c ? tic_frame_instr[i] : 0;
+        st[2] = c ? tic_bsp_instr[i] : 0;
+        st[3] = c ? tic_planes_instr[i] : 0;
+        st[4] = c ? tic_masked_instr[i] : 0;
+        fprintf (f, "%d\t%d\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%d\t%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n",
+                 i, tic_gametic[i], whole, st[0], st[1], st[2], st[3], st[4],
+                 whole - st[0] - st[1] - st[2] - st[3] - st[4],
+                 (tic_flags[i] & FLOOR_TIC_LOAD) ? 1 : 0, tic_mbytes[i],
+                 tic_peaks[i].visplanes, tic_peaks[i].drawsegs, tic_peaks[i].vissprites,
+                 tic_peaks[i].openings, tic_peaks[i].fixedmul, tic_peaks[i].fixeddiv,
+                 tic_peaks[i].fixeddiv_clamped);
+    }
+    fclose (f);
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────
 int main (int argc, char** argv)
 {
@@ -585,6 +642,7 @@ int main (int argc, char** argv)
     const char* attrib_out = NULL;    /* per-stage attribution output */
     const char* zonestats_out = NULL; /* zone HWM + purge stats output */
     const char* floor_out = NULL;     /* floor gate log */
+    const char* tictrace_out = NULL;  /* per-tic demand rows */
     const char* timedemo = NULL;      /* the demo lump, for the log's name */
     char floor_mode = 'A';
     static const char* fwd[64];
@@ -626,6 +684,11 @@ int main (int argc, char** argv)
         if (strcmp (argv[i], "-floor") == 0 && i + 1 < argc)
         {
             floor_out = argv[++i];
+            continue;
+        }
+        if (strcmp (argv[i], "-tictrace") == 0 && i + 1 < argc)
+        {
+            tictrace_out = argv[++i];
             continue;
         }
         if (strcmp (argv[i], "-timedemo") == 0 && i + 1 < argc)
@@ -726,11 +789,19 @@ int main (int argc, char** argv)
     // R_ExecuteSetViewSize rebuilds view tables with detailshift=1 on the first
     // D_DoomFrame. Do NOT poke detailshift directly (view tables must be
     // rebuilt vanilla's way).
+    // WD_VIEW=<3..11> picks the view size the same way (11 = the full
+    // 320x200 view with no status bar; the goldens are screenblocks 10).
+    fs_view_blocks = screenblocks;
+    fs_view_detail = detailLevel;
+    if (getenv ("WD_VIEW") && atoi (getenv ("WD_VIEW")) >= 3 && atoi (getenv ("WD_VIEW")) <= 11)
+        fs_view_blocks = atoi (getenv ("WD_VIEW"));
     if (getenv ("WD_DETAIL") && getenv ("WD_DETAIL")[0] == '1')
+        fs_view_detail = 1;
+    if (fs_view_blocks != screenblocks || fs_view_detail != detailLevel)
     {
-        R_SetViewSize (screenblocks, 1);
-        fprintf (stderr, "fs-doom: WD_DETAIL=1: low-detail mode enabled"
-                         " (R_DrawColumnLow/R_DrawSpanLow)\n");
+        R_SetViewSize (fs_view_blocks, fs_view_detail);
+        fprintf (stderr, "fs-doom: view %d, %s detail\n", fs_view_blocks,
+                 fs_view_detail ? "low" : "high");
     }
 
     // Disable smooth render interpolation (non-deterministic wall-clock drift).
@@ -766,8 +837,24 @@ int main (int argc, char** argv)
             // hash on the END line stands in for the trace.
             if (trace_len < MAX_TRACE && !(floor_out && floor_mode == 'B'))
                 sim_trace[trace_len++] = fs_state_hash ();
-            if (floor_out && floor_n < MAX_TRACE)
+            if ((floor_out || tictrace_out) && floor_n < MAX_TRACE)
             {
+                tic_peaks_t* pk = &tic_peaks[floor_n];
+                pk->visplanes = (unsigned short) (lastvisplane ? lastvisplane - visplanes : 0);
+                pk->drawsegs = (unsigned short) (ds_p ? ds_p - drawsegs : 0);
+                pk->vissprites = (unsigned short) (vissprite_p ? vissprite_p - vissprites : 0);
+                pk->openings = (unsigned) (lastopening ? lastopening - openings : 0);
+#ifdef FS_FIXED_COUNT
+                {
+                    static unsigned long long m0, d0, c0;
+                    pk->fixedmul = (unsigned) (fs_fixedmul_n - m0);
+                    pk->fixeddiv = (unsigned) (fs_fixeddiv_n - d0);
+                    pk->fixeddiv_clamped = (unsigned) (fs_fixeddiv_clamped_n - c0);
+                    m0 = fs_fixedmul_n;
+                    d0 = fs_fixeddiv_n;
+                    c0 = fs_fixeddiv_clamped_n;
+                }
+#endif
                 tic_flags[floor_n] = (unsigned char) flags;
                 tic_mbytes[floor_n] = mbytes;
                 tic_gametic[floor_n] = gametic;
@@ -821,6 +908,9 @@ done:
     }
     {
         int tics = fs_timedemo_gametics;
+
+        if (tictrace_out)
+            emit_tictrace (tictrace_out);
 
         // The floor log first: emit_attrib_json and emit_cycles_json sort the
         // instruction arrays in place.  The END line's final hashes are taken
