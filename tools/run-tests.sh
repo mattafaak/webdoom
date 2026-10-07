@@ -140,7 +140,7 @@ declare -A NEED=(
     [emsdk]='have_emsdk|emsdk not found (run: tools/setup-emsdk.sh)'
     [baseline]='have_baseline|no browser-pipeline baseline for host HOST'
     [shared]='have_shared|shared browser server on 8668 not started'
-    [slow]='have_notslow|--no-slow given: this leg is ~8 min of the suite'
+    [slow]='have_notslow|--no-slow given: a slow leg (n64-demos ~8 min; ram-floor-armv6m and -armv8m ~34 min each, measured at --jobs 3)'
     [perf]='have_perf|perf tier not requested (run: tools/run-tests.sh --perf; ~30 s measured, needs wbox and tank up)'
     # not a prerequisite: under --jobs the leg runs with the pool drained
     [alone]='true|'
@@ -644,6 +644,21 @@ leg zone-min-play-zc     fszc,wad,heavy "play-inclusive zone minimum, zero copy:
 leg zone-min-play-lean   gcc,wad,heavy "play-inclusive zone minimum, lean: 1368 KiB, 1364 fails" -- node tools/floor/zone-min.mjs --build lean --play --check 1368
 leg zone-min-play-leanzc gcc,wad,heavy "play-inclusive zone minimum, lean zero copy: 920 KiB, 916 fails" -- node tools/floor/zone-min.mjs --build leanzc --play --check 920
 leg zone-min-play-full   gcc,wad,heavy "play-inclusive zone minimum, the full diet: 604 KiB, 600 fails" -- node tools/floor/zone-min.mjs --build full --play --check 604
+# The RAM floor (tools/floor/ram-floor.mjs): per build and ISA, the engine's
+# and port's .data and .bss by source file (the harness's arrays and the zone
+# arena left out, every static classified or the leg stops), the play-inclusive
+# zone minimum (re-verified: the play set runs at it on every ISA), and the
+# stack and heap peaks over the play set; plus what sits in flash and which
+# RAM statics the play set never changed.  Each floor is held to
+# tools/golden/floor-ram.json: a rise past its tolerance fails, and a red-proof
+# (256 more vissprites) must read as one.  On Cortex-M the zero-copy builds
+# (zc, leanzc, full) play the set with the OPL synth on, which qemu pays for;
+# the copying builds, whose WAD window cannot serve sound read in place, are
+# statics only; a lean build is one ELF per IWAD (each IWAD's const texture
+# tables: the four do not fit the boards' CODE).
+leg ram-floor            gcc,wad,heavy "RAM floor on x86, 5 builds: statics + play-inclusive zone + stack + heap, vs the golden" -- node tools/floor/ram-floor.mjs --isa x86
+leg ram-floor-armv6m     qemucm,wad,slow,heavy "RAM floor on ARMv6-M (Cortex-M0+ code), 5 builds, vs the golden" -- node tools/floor/ram-floor.mjs --isa armv6m
+leg ram-floor-armv8m     qemucm,wad,slow,heavy "RAM floor on ARMv8-M (Cortex-M33 code), 5 builds, vs the golden" -- node tools/floor/ram-floor.mjs --isa armv8m
 # The ARM reference.  wasm is architecture-independent, so only a native build
 # tests ARM codegen, ABI and alignment; emulated cycles are not hardware
 # cycles, so this gates correctness, not timing.  zig cross-builds the
