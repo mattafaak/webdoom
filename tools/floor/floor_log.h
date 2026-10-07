@@ -10,7 +10,8 @@
 //           build=.. view=10 detail=0 zone=B precache=0 mode=A|B
 //   DEMO doom-demo1 tics=N
 //   T <i> <gametic> <elapsed> <flags> [<simhash> <renderhash>]
-//   AUDIO samples=N underruns=N music_events=N sfx_starts=N synthhash=H mixhash=H frames=N
+//   AUDIO samples=N underruns=N music_events=N sfx_starts=N
+//         synthhash=H mixhash=H frames=N
 //   END doom-demo1 final=<simhash>:<renderhash>
 // clang-format on
 //
