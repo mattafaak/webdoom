@@ -4,22 +4,18 @@ What is known and not done, with what each item would take or what blocks it.
 `spec.md` outranks this file. Finished work lives in `git log`; the reasons
 behind the current state live in `spec.md` and `docs/`.
 
-## Server
-
-- The cache of compressed representations (`reps` in serve.js, 64 entries,
-  oldest evicted on insert) can thrash when more than 64 distinct bodies are
-  requested in rotation, recompressing each one.
-
 ## Measurement
 
-- The perf gate's baseline (`tools/golden/bench-baseline.json`) was recorded at
-  f402d5c on a larger wasm. alder's run on the current tree is inside the 20%
-  band; wbox and tank have not been re-benched.
-- `browser-pipeline` has a baseline only for alder. A second host would gate
-  that host against its own past, which needs the repository, a build and the
-  WADs there.
-- The visplane, spechit and intercepts peaks were measured with instrumented
-  builds (`-DWEB_PERF_*_STATS`); no leg re-measures them.
+- **tank has not been re-benched** against the perf gate's baseline
+  (`tools/golden/bench-baseline.json`, recorded at f402d5c on a larger wasm).
+  It is a travel laptop and was offline (last seen 5 days before 2026-10-06).
+  alder and wbox were re-measured on 2026-10-06 at 4fedc76
+  (`fleet-bench.sh --check`), inside the 20% band on all three demos (wbox
+  −1.6%, −2.7%, −4.8%). Run `bash tools/fleet-bench.sh --check` when tank is
+  back.
+- **`browser-pipeline` gates alder only, by policy.** A second host would be
+  gated against its own past, which needs the repository, a build and the WADs
+  there.
 
 ## Retro targets
 

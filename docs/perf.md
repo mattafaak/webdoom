@@ -29,9 +29,10 @@ uses a small fraction of that on every host:
 
 Source: [`tools/golden/bench-baseline.json`](../tools/golden/bench-baseline.json), the reference the perf gate compares
 against — doom.wad attract demos, best of 3, recorded at f402d5c on 2026-07-22
-(a 355,350-byte wasm, before the hybrid build in §2). A fresh alder run on the
-current tree (7f5c682, 2026-10-05, machine shared with other jobs) reads
-0.0607 / 0.0544 / 0.0474 ms, inside the gate's 20% band.
+(a 355,350-byte wasm, before the hybrid build in §2). `fleet-bench.sh --check`
+on 4fedc76 (2026-10-06, alder shared with a test suite) reads alder 0.058 /
+0.049 / 0.047 ms and wbox 0.559 / 0.485 / 0.462 ms, all inside the gate's 20%
+band; tank was offline.
 
 On wbox the stages split bsp+segs 51%, planes 33%, masked sprites 14%, frame
 setup 2% (means over the three demos). The rank order is the same on every host.
@@ -177,7 +178,7 @@ comparisons as a failure, not a pass.
 
 Sim throughput in the baseline (tics per second, `-nodraw`, average of
 demo1–3, f402d5c, 2026-07-22): alder 199,067; tank 98,942; wbox 19,994. The
-alder run on 7f5c682 read 195,166.
+4fedc76 run read alder 199,634 and wbox 19,337.
 
 ---
 
