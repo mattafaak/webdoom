@@ -14,7 +14,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="${1:-$ROOT/tools/floor/out-x86}"
-FS="$ROOT/tools/freestanding/fs-doom"
+FS="${FS_DOOM:-$ROOT/tools/freestanding/fs-doom}"   # FS_DOOM: a side build
 WADS="$ROOT/wads/lib"
 [ -x "$FS" ] || { echo "FAIL floor-x86: $FS not built (make -C tools/freestanding)"; exit 1; }
 BUILD="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
