@@ -6,7 +6,9 @@
 #   bash tools/pico/link-check.sh [BUILD_DIR]
 #
 # Configures one pico-sdk build tree per chip and optimisation level under
-# BUILD_DIR (default ${TMPDIR:-/tmp}/webdoom-pico-link), links every variant
+# BUILD_DIR (default tools/pico/build, this checkout's own: a tree another
+# checkout configured is refused by cmake, so a shared default broke the
+# leg in a second worktree), links every variant
 # (tools/pico/CMakeLists.txt) and reads each one's map and ELF
 # (tools/pico/mapsum.py):
 #   RP2350, Pimoroni Pico Plus 2 (16 MiB flash, 8 MiB PSRAM on the QMI's CS1):
@@ -46,7 +48,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-BUILD="${1:-${TMPDIR:-/tmp}/webdoom-pico-link}"
+BUILD="${1:-$HERE/build}"
 ZONE_KB="${ZONE_KB:-604}"
 HEAP_KB="${HEAP_KB:-295}"
 STACK_KB="${STACK_KB:-6}"
@@ -103,6 +105,13 @@ for chip in $CHIPS; do
     for opt in $OPTS; do
         tree="$BUILD/$chip$opt"
         logs="$tree/logs"
+        # a tree configured from another source directory (another checkout,
+        # a moved one) is one cmake will not reuse: start it again
+        if [ -f "$tree/CMakeCache.txt" ] &&
+            ! grep -qxF "CMAKE_HOME_DIRECTORY:INTERNAL=$HERE" "$tree/CMakeCache.txt"; then
+            echo "  $tree was configured from another source directory: removed"
+            rm -rf "$tree"
+        fi
         mkdir -p "$logs"
         if ! cmake -G Ninja -S "$HERE" -B "$tree" \
             -DPICO_PLATFORM="$chip" -DPICO_BOARD="$board" \
