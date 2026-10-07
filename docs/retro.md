@@ -11,7 +11,7 @@ platform contract a no-OS port implements is [bare-metal.md](bare-metal.md).
 | target | status | basis |
 |---|---|---|
 | Freestanding core (x86-32, ARM32, PowerPC) | **runs**, 13/13 demos tic-exact | legs `freestanding-sim`, `ro-wad`, `arm-cross`, `be-cross` |
-| N64 (VR4300, emulated) | **simulation runs**, 13/13 demos, 44,580 tics bit-identical | leg `n64-demos`; no display, input or sound yet |
+| N64 (VR4300, emulated) | **runs, rendering every tic**, 13/13 demos, 44,580 tics bit-identical in simulation and framebuffer; 4.21× over the 35 Hz budget in ares | legs `n64-demos`, `n64-floor`; no display, input or sound yet |
 | RP2040 | **parked** | SRAM: 1,082,104 B needed vs 270,336 B, 4.00× over |
 | 386-class | **no harness** | about 3× short of 35 Hz; nothing here measures this code on one |
 | Sega 32X | **open** | simulation fits one SH-2; render 1.5–3.4× over both |
@@ -73,19 +73,25 @@ bit-identical to the wasm goldens. Measured on alder at `7f5c682`, 2026-10-05:
 `-nodraw` is there for symmetry, not speed: the goldens are recorded with
 `callMain(['-timedemo', demo, '-nodraw'])`, and a differential only means
 something if both sides run the same command line. A side effect is that the
-software renderer never runs on the N64.
+software renderer never runs in that leg.
+
+The floor builds (`N64_FLOOR=A|B`, below) drop `-nodraw`: the renderer runs
+every tic, and every tic's framebuffer hash matches the render goldens on all
+13 demos too (leg `n64-floor`).
 
 Not done:
 
-- **Display.** `i_video_n64.c` is a headless stub that copies each frame into a
-  64,000-byte shadow buffer. No RDP path exists.
+- **Display.** `i_video_n64.c` is headless. The `n64-demos` build copies each
+  frame into a 64,000-byte shadow buffer; the floor builds have none (a display
+  would expand `screens[0]` into the VI framebuffer, a cost not yet measured).
+  No RDP path exists.
 - **Input.** No controller support (libdragon `joypad.h` is the route).
 - **Sound.** `i_sound_n64.c` is all stubs.
 - **Real hardware.** A SummerCart64 and an Analogue 3D are owned (per
   [spec.md](../spec.md)); the emulator leg is the gate, and hardware runs would
   be evidence, not the gate.
-- **Speed.** No frame or tic timing exists for the N64. Section 4 has the
-  estimate.
+- **Speed.** Measured in ares only (the next section): 4.21× over the 35 Hz
+  budget on the worst graded tic. Hardware timing is Phase 3.
 
 ### The `n64-demos` leg
 
@@ -139,6 +145,53 @@ The trace leaves the console as text. `n64_dump_trace()` prints it between
 ares GDB stub only for a backtrace after a crash: it halts the CPU on attach and
 nothing resumes it.
 
+### The floor runs: render mode, COUNT per tic, and the `n64-floor` leg
+
+[tools/floor/run-n64.sh](../tools/floor/run-n64.sh) builds each demo with
+`N64_FLOOR=A` (render and hash every tic) and `N64_FLOOR=B` (render and record
+COP0 COUNT per tic, hashing nothing), runs every ROM under ares, extracts the
+FLOOR log each prints after its demo, and grades the logs with
+[floor-gate.mjs](../tools/floor/floor-gate.mjs). The unit is COUNT, half the
+CPU clock (46,875,000 a second), so the 35 Hz budget is 1,339,285 counts a
+tic. ares is deterministic in emulated time: the two mode B runs agree to the
+count, and running it unthrottled (`Audio/Blocking=false`) changes no count.
+
+```sh
+source ~/toolchains/env.sh
+bash tools/floor/run-n64.sh --correctness   # the n64-floor leg: CORRECT or FAIL
+bash tools/floor/run-n64.sh                 # A + B + B, the gate, floor-stats
+```
+
+Measured on alder, 2026-10-07, at `cc67a30`, ares e1b0d47 (recompiler),
+stock 4 MB:
+
+- Correctness: CORRECT on all 13 demos (44,580 tics), sim and render.
+- The gate FAILs on audio alone (no N64 audio yet: 78 lines, 3 per run).
+- Worst graded tic 5,633,118 counts = 120.2 ms, plutonia-demo1 tic 5043
+  (also the host's worst tic): **4.21×** the budget. Mean 2,323,029 (1.73×);
+  95.5% of graded tics are over. Code layout alone moves these: a few
+  instructions added to `I_Error` moved the worst tic by 0.14%.
+- `n64-floor` takes 76 s on alder (13 ROMs at a time); `n64-demos` 6 m 15 s.
+- Against the host tic for tic, 3.41 N64 cycles per x86 instruction over all
+  graded tics (2.97–3.72 per demo): section 4's *F*, measured in an emulator.
+- ares's own profiler (`--xprof`, at `1ef6fa5`, ForceInterpreter, all 13
+  demos; the profile build reads 8–10% more COUNT than plain mode B): CPI 3.73,
+  and 63.6% of all cycles are cache fills and writebacks at ares's charges
+  (40 cycles a D-cache line, 48 an I-cache line). `R_DrawSpan` alone is 30%
+  of all cycles: 83 cycles a pixel, with 0.92 D-cache misses and 0.70
+  writebacks a pixel, because the framebuffer is column-major and a span walks
+  across it. Wall columns cost 25 cycles a pixel.
+- Under ForceInterpreter (full I-cache emulation, at `1ef6fa5`) graded tics
+  read 2.9% lower (median; 1st–99th percentile −7.2% to +1.9%); the worst
+  tic 5,405,025 against 5,625,078.
+- Lump copies use PI DMA (`cart_read_n64.c`): 9.2 counts a byte against the
+  word path's 41.0. With the word path (`fb67fb2`) the worst graded tic is a
+  cache-miss tic, tnt-demo2 tic 113 (106,902 B), at 6,483,742 counts; with
+  DMA (`67ea0ea`) that tic takes 3,114,892.
+- With the Expansion Pak and a 6 MB zone (`67ea0ea`; a data point, not
+  graded), the tics that copy from the WAD fall from 2,663 to 259 and the
+  worst tic is 5,528,612 counts (4.13×): the zone is not what limits it.
+
 ### Building by hand
 
 ```sh
@@ -156,6 +209,12 @@ through uncached KSEG1 at `0xB0000000 + offset`; its length is measured when
 the ROM is built and compiled in, because the shim has no filesystem to ask.
 
 ### Memory
+
+In the floor builds (render mode) the shadow framebuffer and the hash trace are
+gone: statics are 3,358,304 B before the floor log's own per-tic arrays
+(172,316 B in mode A, 270,660 B in mode B), measured 2026-10-07. The core's
+`info[2500][10]` (100,000 B, `w_wad.c`) costs nothing here: it has its own
+`.bss.info` section and `--gc-sections` drops it with the unused `W_Profile`.
 
 Footprint build (`N64_WAD=`, default zone) with 256 visplanes, measured on
 alder 2026-10-06 with `mips64-elf-size` and `mips64-elf-nm`:
@@ -250,7 +309,7 @@ estimates in that spirit; treat their low ends as optimistic.
 
 | target | clock | budget (cycles/tic) | F (est.) | demand (cycles/tic) | demand ÷ budget | writable RAM |
 |---|---|---|---|---|---|---|
-| N64 VR4300 | 93.75 MHz | 2,678,571 | 1.2–2 | 1.56 M–2.94 M | **0.58–1.10×** | 4 MB, fits |
+| N64 VR4300 | 93.75 MHz | 2,678,571 | 1.2–2; **3.41 measured in ares** | 1.56 M–2.94 M; worst tic 11.27 M measured | **0.58–1.10×**; **4.21× measured** (emulated) | 4 MB, fits |
 | ESP32-S3 | 240 MHz/core | 6,857,143 | 1.5–2.5 | 1.95 M–3.68 M | **0.28–0.54×** | 512 KB SRAM; PSRAM required |
 | RP2040 | 270 MHz/core | 7,714,286 | 3–5 | 3.90 M–7.36 M | **0.51–0.95×** | 264 KB; **4.00× short** (measured) |
 | Sega 32X | 2 × 23 MHz | 657,143 per SH-2 | 1.5–3 | 1.95 M–4.41 M | **3.0–6.7×** one SH-2, 1.5–3.4× both | 256 KB; 6.6× short |
@@ -263,12 +322,16 @@ Each range pairs the lightest IWAD (doom.wad) with the low *F* and the
 heaviest (plutonia.wad) with the high *F*. RAM shortfalls are against the
 1.65 MiB floor in section 3.
 
-**N64.** The simulation is proven tic-exact. Its cost, 77–125 K instructions
-per tic, is 3–9% of the VR4300's budget at the estimated *F*. The full game is
-0.58–1.10× of the budget on the CPU alone: marginal, and unmeasured. The high
-end of *F* is the 8 KB data cache missing into RDRAM. The RDP rasterizes
-textured primitives in hardware, which could take most of the render off the
-CPU; it is the open work. Prior art: jnmartin84's 64doom runs linuxdoom on the
+**N64.** The simulation and the renderer are proven tic-exact (`n64-demos`,
+`n64-floor`). The estimate above said the full game was 0.58–1.10× of the
+budget on the CPU alone; measured in ares it is 4.21× on the worst graded tic
+and 1.73× on the mean, because *F* came out at 3.41, not 1.2–2 (section 2's
+floor runs). The 8 KB data cache is most of it: 63.6% of all cycles are line
+fills and writebacks at ares's charges, and `R_DrawSpan` over a column-major
+framebuffer misses about once a pixel. Emulated cycles are not hardware
+cycles; the SummerCart64 runs decide. The RDP rasterizes textured primitives
+in hardware, which could take most of the render off the CPU; it is the open
+work. Prior art: jnmartin84's 64doom runs linuxdoom on the
 N64, playable, with demo compatibility not verified.
 
 **RP2040 (parked).** A Cortex-M0+ link of the core (arm-none-eabi-gcc 16.1,
