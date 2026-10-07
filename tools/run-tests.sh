@@ -623,6 +623,27 @@ leg zone-min-armv6m-zc qemucm,wad,heavy "Cortex-M0+, lumps read in place: smalle
 # quotient off by one) must fail both, naming its input and its demo and tic.
 leg armv6m-fast     qemucm,wad,heavy "Cortex-M0+, the port's drawers, FixedMul, FixedDiv: 13 demos correct, instructions per tic; 4 wrong variants caught" -- bash tools/cortexm/fast-check.sh armv6m
 leg armv8m-fast     qemucm,wad,heavy "Cortex-M33, the port's drawers: 13 demos correct, instructions per tic; 2 wrong variants caught" -- bash tools/cortexm/fast-check.sh armv8m
+# The play-inclusive zone minimum.  The 13 demos never change level and their
+# wipes are cut short, so their minimum is not a game's.  zone-min.mjs --play
+# adds the play set (tools/floor/play-set.mjs): each demo with a level exit
+# injected (the melt run to its end, the intermission, the next level loaded
+# into the zone the first one left, played by the rest of the demo), and a
+# scripted demo on every map of the four IWADs (132: running, turning, firing,
+# switching weapons, pressing use, reloading after a death; then, on 129 of
+# them, the game saved and loaded back, which holds the save in the zone while
+# the level loads around it), every frame of every run identical (render and
+# sim hash) to the same scenario at 8 MiB.  Whether a run fits is not
+# monotone in the zone's size (the default build passes at 1,604 and 1,728
+# KiB and fails at 1,724 and 1,760), so each N is a scan's answer
+# (zone-min.mjs --play --scan: every 4 KiB step from N to N + 92 KiB or more
+# passes: to 1,856, 1,456, 1,496, 1,052 and 736) and the leg holds both
+# sides: N passes and N - 4 fails.  full is the full memory diet (LEAN=1
+# ZERO_COPY=1 LEAN_LEVELS=1), floor-lean's build.
+leg zone-min-play        fs,wad,heavy  "play-inclusive zone minimum, default build: 1764 KiB, 1760 fails" -- node tools/floor/zone-min.mjs --play --check 1764
+leg zone-min-play-zc     fszc,wad,heavy "play-inclusive zone minimum, zero copy: 1324 KiB, 1320 fails" -- node tools/floor/zone-min.mjs --build zc --play --check 1324
+leg zone-min-play-lean   gcc,wad,heavy "play-inclusive zone minimum, lean: 1368 KiB, 1364 fails" -- node tools/floor/zone-min.mjs --build lean --play --check 1368
+leg zone-min-play-leanzc gcc,wad,heavy "play-inclusive zone minimum, lean zero copy: 920 KiB, 916 fails" -- node tools/floor/zone-min.mjs --build leanzc --play --check 920
+leg zone-min-play-full   gcc,wad,heavy "play-inclusive zone minimum, the full diet: 604 KiB, 600 fails" -- node tools/floor/zone-min.mjs --build full --play --check 604
 # The ARM reference.  wasm is architecture-independent, so only a native build
 # tests ARM codegen, ABI and alignment; emulated cycles are not hardware
 # cycles, so this gates correctness, not timing.  zig cross-builds the
