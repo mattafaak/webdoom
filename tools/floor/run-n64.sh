@@ -229,6 +229,8 @@ if [ "$REGRADE" = 0 ]; then
             t=0
             while [ "$t" -lt 3600 ]; do
                 grep -q "^$want" "$log" 2>/dev/null && break
+                # I_Error prints N64_FATAL and aborts: nothing more will come
+                grep -q "^N64_FATAL" "$log" 2>/dev/null && break
                 kill -0 "$pid" 2>/dev/null || break
                 # booted? a ROM prints its first line within a second or two
                 if [ "$t" -ge 60 ] && ! grep -q "^N64 webdoom boot" "$log" 2>/dev/null; then break; fi
@@ -281,6 +283,10 @@ if [ "$REGRADE" = 0 ]; then
                 if [ "$mode" = B ]; then dst="$OUT/$tag.B$k.log"; else dst="$OUT/$tag.$mode.log"; fi
                 if ! grep -q "^N64 webdoom boot" "$log"; then
                     echo "FAIL floor-n64: $tag.$mode$k: ares never booted the ROM, twice (see $log)"
+                    xfail=$((xfail + 1)); continue
+                fi
+                if grep -q "^N64_FATAL" "$log"; then
+                    echo "FAIL floor-n64: $tag.$mode$k: the ROM died: $(grep -a -m1 "^N64_FATAL" "$log" | cut -c11- | tr -c "[:print:]\\n" "?")"
                     xfail=$((xfail + 1)); continue
                 fi
                 # the WAD identity compiled into the ROM, before any hash

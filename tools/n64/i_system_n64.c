@@ -184,6 +184,11 @@ void I_Error(char* error, ...)
     p = buf;
     while (*p) n64_putc((unsigned char)*p++);
     n64_putc('\n');
+    // And once more behind a marker a harness can wait for: abort() below
+    // prints nothing, and a ROM that died looks, from outside, exactly like a
+    // long demo still running (tools/floor/run-n64.sh waited out its whole
+    // timeout on one).
+    debugf("N64_FATAL %s\n", buf);
 
     // Bare-metal: abort() → CPU exception handler → ares crash/halt.
     abort();
