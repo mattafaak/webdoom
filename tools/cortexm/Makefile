@@ -17,10 +17,15 @@
 #   ZONE_KB=N          the zone arena, KiB: 4096 by default, 2048 with ZC=1,
 #                      which leaves the rest of the ZONE SSRAM to .wadtail
 #                      (the part of a WAD longer than 16 MiB)
+#   FIXED=1            the port's FixedMul and FixedDiv (cm_fixed.h, through
+#                      m_fixed.h's WEB_FIXED_PORT; on ARMv6-M MULS pieces and
+#                      fixed_v6m.S's divide instead of libgcc's 64-bit helpers)
 #
-# Products, under build/<isa><opt>[-count][-zc]/ (run-floor.sh passes B):
+# Products, under build/<isa><opt>[-count][-zc][-fx]/ (run-floor.sh passes B):
 #   cm-doom.elf  cm-doom.map  helpers.txt (the libgcc helpers the objects call)
 #   cm-selftest.elf (the instrument's red-proof, selftest.c)
+#   cm-fasttest.elf (with FIXED: the port's FixedMul and FixedDiv against
+#   m_fixed.h's on boundary and random inputs, fasttest.c)
 #
 # Toolchain: the system arm-none-eabi-gcc with full newlib (not nano: nano is
 # built for size, and its memcpy/memset would not be what a port ships).
@@ -67,6 +72,20 @@ endif
 ifeq ($(filter 0 1,$(ZC)),)
 $(error ZC must be 0 or 1, not '$(ZC)')
 endif
+FIXED   ?= 0
+ifeq ($(filter 0 1,$(FIXED)),)
+$(error FIXED must be 0 or 1, not '$(FIXED)')
+endif
+PORT_OBJ :=
+ifeq ($(FIXED),1)
+PORT_CFLAGS := '-DWEB_FIXED_PORT="cm_fixed.h"'
+ifeq ($(ISA),armv6m)
+PORT_OBJ += fixed_v6m.o
+endif
+else
+PORT_CFLAGS :=
+endif
+PORT_SUF := $(if $(filter 1,$(FIXED)),-fx,)
 ifeq ($(ZC),1)
 LDS    := $(LDS:.ld=-zc.ld)
 ZC_FLAGS := -DWEB_LUMPS_IN_PLACE -DCM_ZERO_COPY
@@ -80,7 +99,7 @@ WAD_READ := -DFS_WAD_READ=cm_wad_read
 ZC_LD  :=
 endif
 
-SUFFIX := $(if $(filter 1,$(COUNT)),-count,)$(if $(filter 1,$(ZC)),-zc,)
+SUFFIX := $(if $(filter 1,$(COUNT)),-count,)$(if $(filter 1,$(ZC)),-zc,)$(PORT_SUF)
 B      := build/$(ISA)$(OPT)$(SUFFIX)
 CORE   := ../../engine/core
 FS     := ../freestanding
@@ -101,7 +120,7 @@ CFLAGS := $(CPU) $(OPT) -g -std=gnu89 -DNORMALUNIX -Dalloca=__builtin_alloca \
           -Wall -Wno-unused-variable -Wno-unused-but-set-variable \
           -Wno-dangling-else -Wno-parentheses -Wno-missing-braces \
           -Wno-unused-value -Wno-pointer-sign -Wno-implicit-function-declaration \
-          -DFS_AUDIO_DEFAULT=0 \
+          -DFS_AUDIO_DEFAULT=0 $(PORT_CFLAGS) \
           -I$(CORE) -I$(FS) -I../floor -I. $(EXTRA_CFLAGS)
 
 # The audio (tools/freestanding/fs_audio.c): built, and off unless WD_AUDIO
@@ -122,7 +141,8 @@ OBJ := $(B)/crt0.o \
        $(patsubst $(CORE)/%.c,$(B)/core/%.o,$(CORE_SRC)) \
        $(patsubst %.c,$(B)/fs/%.o,$(FS_SRC)) \
        $(B)/floor/floor_log.o $(B)/web/opl3.o \
-       $(patsubst %.c,$(B)/cm/%.o,$(CM_SRC))
+       $(patsubst %.c,$(B)/cm/%.o,$(CM_SRC)) \
+       $(addprefix $(B)/cm/,$(PORT_OBJ))
 ST_OBJ := $(B)/crt0.o $(addprefix $(B)/cm/,board.o fault.o semihost.o syscalls.o selftest.o) \
           $(B)/loops.o
 
@@ -130,12 +150,15 @@ FLOOR_WRAP := -Wl,--wrap=P_SetupLevel,--wrap=WI_Start,--wrap=F_StartFinale,--wra
 LDFLAGS := $(CPU) -nostartfiles -T $(LDS) -Wl,--gc-sections -Wl,--no-enum-size-warning $(ZC_LD)
 LIBS    := -Wl,--start-group -lc -lm -lgcc -Wl,--end-group
 
-all: $(B)/cm-doom.elf $(B)/cm-selftest.elf
+FT_OBJ := $(B)/crt0.o $(addprefix $(B)/cm/,board.o fault.o semihost.o syscalls.o fasttest.o fasttest_ref.o) \
+          $(addprefix $(B)/cm/,$(PORT_OBJ))
+
+all: $(B)/cm-doom.elf $(B)/cm-selftest.elf $(if $(PORT_CFLAGS),$(B)/cm-fasttest.elf,)
 
 # Every object depends on the flags it was compiled with: make tracks files,
 # not command lines, so without this a changed -D or OPT leaves stale objects
 # that link cleanly and measure the old build.
-FLAGS_NOW := $(CC) $(CPU) $(CFLAGS) $(LDS) $(ZC_LD)
+FLAGS_NOW := $(CC) $(CPU) $(CFLAGS) $(LDS) $(ZC_LD) $(PORT_OBJ)
 $(B)/flags.txt: FORCE
 	@mkdir -p $(B)
 	@echo '$(subst ','\'',$(FLAGS_NOW))' | cmp -s - $@ || echo '$(subst ','\'',$(FLAGS_NOW))' > $@
@@ -170,6 +193,16 @@ $(B)/cm-doom.elf: $(OBJ) $(LDS) sections.ld $(B)/helpers.txt $(B)/flags.txt
 $(B)/cm-selftest.elf: $(ST_OBJ) $(LDS) sections.ld $(B)/flags.txt
 	@$(CC) $(LDFLAGS) -Wl,-Map=$(B)/cm-selftest.map $(ST_OBJ) $(LIBS) -o $@
 
+$(B)/cm-fasttest.elf: $(FT_OBJ) $(LDS) sections.ld $(B)/flags.txt
+	@$(CC) $(LDFLAGS) -Wl,-Map=$(B)/cm-fasttest.map $(FT_OBJ) $(LIBS) -o $@
+# fasttest_ref.c compiles m_fixed.h's own FixedMul and FixedDiv: the reference
+$(B)/cm/fasttest_ref.o: fasttest_ref.c $(B)/flags.txt
+	@mkdir -p $(dir $@)
+	@$(CC) $(filter-out $(PORT_CFLAGS),$(CFLAGS)) -MMD -MP -c $< -o $@
+$(B)/cm/%.o: %.S $(B)/flags.txt
+	@mkdir -p $(dir $@)
+	@$(CC) $(CPU) $(EXTRA_CFLAGS) -c $< -o $@
+
 $(B)/crt0.o: crt0.S $(B)/flags.txt
 	@mkdir -p $(dir $@)
 	@$(CC) $(CPU) -c $< -o $@
@@ -194,7 +227,7 @@ $(B)/cm/%.o: %.c $(B)/flags.txt
 	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
--include $(OBJ:.o=.d) $(B)/cm/selftest.d
+-include $(OBJ:.o=.d) $(B)/cm/selftest.d $(B)/cm/fasttest.d $(B)/cm/fasttest_ref.d
 
 clean:
 	rm -rf build

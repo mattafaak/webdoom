@@ -3,7 +3,8 @@
 // guest instruction of every tic, by function family and engine stage.
 //
 // usage: node tools/cortexm/attrib.mjs armv6m|armv8m [--zero-copy] [--variant NAME]
-//            [--jobs N] [--no-run] [--json FILE] [--demos a,b] [--red-proof]
+//            [--fixed] [--jobs N] [--no-run] [--json FILE] [--demos a,b]
+//            [--red-proof]
 //
 // It runs the 13 demos (mode B, the timing run) of a build run-floor.sh has
 // already built and run, under qemu with tools/cortexm/qemu_attrib.c loaded:
@@ -266,17 +267,18 @@ async function main() {
     const args = process.argv.slice(2);
     const isa = args[0];
     if (!['armv6m', 'armv8m'].includes(isa)) { console.log('FAIL attrib: first argument must be armv6m or armv8m'); process.exit(2); }
-    const known = new Set(['--zero-copy', '--variant', '--jobs', '--no-run', '--json', '--demos', '--red-proof']);
+    const known = new Set(['--zero-copy', '--variant', '--jobs', '--no-run', '--json', '--demos', '--red-proof', '--fixed']);
     for (const a of args.slice(1)) if (a.startsWith('--') && !known.has(a)) { console.log(`FAIL attrib: unknown flag ${a}`); process.exit(2); }
     const opt = k => (args.includes(k) ? args[args.indexOf(k) + 1] : null);
     const zc = args.includes('--zero-copy'), variant = opt('--variant');
     const jobs = +(opt('--jobs') ?? 24);
     const demos = opt('--demos') ? opt('--demos').split(',') : DEMOS;
-    const suf = `${zc ? '-zc' : ''}${variant ? `-${variant}` : ''}`;
+    const psuf = args.includes('--fixed') ? '-fx' : ''; // run-floor.sh's port suffix
+    const suf = `${zc ? '-zc' : ''}${psuf}${variant ? `-${variant}` : ''}`;
     const red = args.includes('--red-proof');
     const build = join(CM, `build/${isa}-O1${suf}`), ref = join(CM, `out/${isa}-O1${suf}`), out = join(CM, `out/${isa}-O1${suf}-attrib${red ? '-red' : ''}`);
     for (const p of [join(build, 'cm-doom.elf'), join(build, 'cm-doom.map'), ref])
-        if (!existsSync(p)) { console.log(`FAIL attrib: ${p} absent (run: bash tools/cortexm/run-floor.sh ${isa}${zc ? ' --zero-copy' : ''}${variant ? ` --variant ${variant} ...` : ''})`); process.exit(1); }
+        if (!existsSync(p)) { console.log(`FAIL attrib: ${p} absent (run: bash tools/cortexm/run-floor.sh ${isa}${zc ? ' --zero-copy' : ''}${psuf ? ' --fixed' : ''}${variant ? ` --variant ${variant} ...` : ''})`); process.exit(1); }
 
     // the plugin, built for the host
     const so = join(CM, 'build/host/qemu_attrib.so'), src = join(CM, 'qemu_attrib.c');

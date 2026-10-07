@@ -49,7 +49,16 @@ typedef int fixed_t;
 //               It is by construction the value the 1993 DOS exe produced,
 //               and one i64 idiv instead of convert/f64-divide/convert.
 //               The overflow clamp is canon behaviour and stays.
+//
+// A port whose CPU has no 32x32->64 multiply or no 64-bit divide may supply
+// its own FixedMul and FixedDiv, equal to these for every input: it names
+// their header in WEB_FIXED_PORT (tools/cortexm/cm_fixed.h does, for the
+// Cortex-M0+).  Nothing else defines it, so every other build compiles the
+// two below, unchanged.
 
+#ifdef WEB_FIXED_PORT
+#include WEB_FIXED_PORT
+#else
 static inline fixed_t FixedMul (fixed_t a, fixed_t b)
 {
     return (fixed_t) (((long long) a * (long long) b) >> FRACBITS);
@@ -61,6 +70,7 @@ static inline fixed_t FixedDiv (fixed_t a, fixed_t b)
 	return (a ^ b) < 0 ? MININT : MAXINT;
     return (fixed_t) (((long long) a << FRACBITS) / b);
 }
+#endif
 
 
 
