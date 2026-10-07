@@ -92,14 +92,23 @@ echo "floor-x86: $jobs_run runs of fs-doom ($BUILD), pinned to ${#CPUS[@]} CPU(s
 # The tic flags come from floor_wrap.c's --wrap hooks.  Every attract demo opens
 # with a level load, so a demo with no L tic, or a run that counted no bytes
 # out of the WAD, means the hooks were not linked: the demand would then
-# silently include the 4-42 M-instruction load tics.
+# silently include the 4-42 M-instruction load tics.  A build can copy nothing
+# in any tic (lumps read in place, composites const: TEXTURES_CONST and
+# COMPOSITES_CONST); then the init's copies, which i_main.c prints before it
+# clears them, must show the hook firing in every run.
 node -e '
 const fs = require("fs"), dir = process.argv[1];
 const logs = fs.readdirSync(dir).filter(f => f.endsWith(".A.log"));
 const noLoad = logs.filter(f => !/^T \d+ \d+ \d+ \S*L/m.test(fs.readFileSync(dir + "/" + f, "utf8")));
 const anyMiss = logs.some(f => /^T .* (\S*,)?M:\d+/m.test(fs.readFileSync(dir + "/" + f, "utf8")));
 if (noLoad.length) { console.log(`FAIL floor-x86: ${noLoad.length} of ${logs.length} demos have no load tic: the --wrap hooks did not fire (${noLoad[0]})`); process.exit(1); }
-if (!anyMiss) { console.log("FAIL floor-x86: no tic copied a byte out of the WAD: the memcpy hook did not fire"); process.exit(1); }
+if (!anyMiss) {
+    const errs = fs.readdirSync(dir).filter(f => f.endsWith(".err"));
+    const init = errs.map(f => +(/^fs-doom: init copied (\d+) B out of the WAD$/m.exec(fs.readFileSync(dir + "/" + f, "utf8")) ?? [0, 0])[1]);
+    const none = errs.filter((f, i) => !(init[i] > 0));
+    if (!errs.length || none.length) { console.log(`FAIL floor-x86: no tic copied a byte out of the WAD, and ${none.length || "every"} run(s) copied none at init either: the memcpy hook did not fire (${none[0] ?? "no .err files"})`); process.exit(1); }
+    console.log(`floor-x86: no tic copied a byte out of the WAD; the memcpy hook fired at init in all ${errs.length} runs (${Math.min(...init).toLocaleString("en-US")}-${Math.max(...init).toLocaleString("en-US")} B)`);
+}
 ' "$OUT" || exit 1
 # The audio: every demo heard music and sound effects, both runs heard the
 # same, and the samples are the references'.

@@ -972,7 +972,10 @@ int main (int argc, char** argv)
     last_tic = -1;
     // D_DoomMain's own WAD reads (R_InitTextures alone reads every patch) are
     // init, not tic 0: left in, they made tic 0 claim 5,017,670 B of doom.wad
-    // that no tic copied
+    // that no tic copied.  They are still the evidence that the memcpy hook is
+    // linked when no tic copies a byte (a build that reads every lump in place
+    // and keeps its composites const): tools/floor/run-x86.sh reads this line.
+    fprintf (stderr, "fs-doom: init copied %u B out of the WAD\n", fs_floor_mbytes);
     fs_floor_load = 0;
     fs_floor_mbytes = 0;
 
