@@ -576,7 +576,7 @@ The engine never writes into the WAD buffer. Every access goes through
 `W_CacheLumpNum`, which copies into the zone, so the blob can sit in
 execute-in-place flash or mask ROM with no RAM cost. The BLOCKMAP byte swap in
 `P_LoadBlockMap` (p_setup.c) works on the zone copy too, so this holds on
-big-endian targets.
+big-endian targets. With (e) below the copies go too.
 
 Proof: `tools/freestanding/ro-wad-check.sh` (leg `ro-wad`; also
 `make ro-wad-check` in `tools/freestanding/`) builds `fs-doom` with
@@ -585,6 +585,45 @@ Proof: `tools/freestanding/ro-wad-check.sh` (leg `ro-wad`; also
 `WAD-BLOB WRITE`. All 13 demos run bit-identical with no write. The N64 port
 relies on the same property: it reads the 12.4 MB IWAD in place out of
 cartridge space.
+
+#### (e) Zero-copy: lumps read in place (`WEB_LUMPS_IN_PLACE`)
+
+A port whose WAD is mapped, readable and never moves (flash on a
+microcontroller, a blob loaded once) defines `WEB_LUMPS_IN_PLACE` and
+implements `W_WebFileInPlace` (w_wad.h). For every file it says yes to,
+`W_CacheLumpNum` returns a pointer straight into the WAD, whatever the tag; the
+lump never enters `lumpcache[]` and costs the zone nothing. It is off in the
+browser build, whose `doom.wasm` is byte-identical with or without this code.
+
+- **Z_* calls.** `Z_Free` and `Z_ChangeTag` leave a pointer into an in-place
+  file alone (`Z_InPlace`, z_zone.c), so the callers that free or retag a lump
+  stay as vanilla wrote them. A pointer inside the zone is always taken for a
+  block, so a WAD whose lumps lie on both sides of the zone cannot claim one.
+- **Writes.** The two vanilla writes into a cached lump are gone in this mode:
+  `P_LoadThings` converts each THINGS record into a copy rather than over
+  itself, and `P_LoadBlockMap` uses the BLOCKMAP in place only where the swap
+  is the identity and the lump sits at an even address (the playsim reads it
+  as shorts in its hottest loops); otherwise it gets a zone copy. The `ro-wad-zc`
+  leg runs the 13 demos with the blob `PROT_READ` and every lump read in place.
+- **Alignment.** A lump can start at any offset (§5.2), so every multi-byte
+  read of one is byte-safe: the on-disk structs are `LUMP_PACKED` (doomtype.h)
+  and raw `int` reads go through `LUMP_LONG` (m_swap.h).
+- **Still copied**: COLORMAP (into 256-byte-aligned zone memory: the renderer
+  reads it for every pixel, so it belongs in fast RAM), a REJECT shorter than
+  the map needs (padded, p_setup.c), a BLOCKMAP that cannot be used as it
+  lies, and GENMIDI (into the synth's own bank). Composite textures are still
+  built in the zone from their patches: they are the renderer's data, not
+  lumps.
+
+Measured over the 13 demos (`zero-copy`, `armv6m-zc`, `armv8m-zc` legs):
+`fs-doom-zc` copies exactly one lump, COLORMAP, at startup; the smallest zone
+that runs all 13 correctly with rendering and audio falls from 1,216 KiB to
+924 KiB. What the zone still holds at that minimum is the texture tables built
+at startup (`R_InitTextures`: about 340 KB for tnt.wad), the level's own data
+(`PU_LEVEL`) and composites. tools/cortexm's zero-copy build puts the WAD in
+its board's 16 MiB PSRAM; plutonia.wad and tnt.wad are longer than that, and
+their last 0.65 MB and 1.42 MB come from a second region. A board with 16 MiB
+of flash would hold doom.wad and doom2.wad and neither of those.
 
 ### 2.4 Palette and framebuffer summary
 
@@ -595,8 +634,8 @@ cartridge space.
 | `screens[2..3]`, wipe frames and save workspace | 64,000 B each | `I_AllocLow` block |
 | `screens[4]`, status bar background | 64,000 B | zone (`PU_STATIC`) |
 | `webpalette`, gamma-corrected RGB | 768 B | static BSS |
-| PLAYPAL lump (14 palettes) | 10,752 B | zone (`PU_CACHE`) |
-| COLORMAP lump | 8,704 B | zone (`PU_STATIC`) |
+| PLAYPAL lump (14 palettes) | 10,752 B | zone (`PU_CACHE`); the WAD itself with `WEB_LUMPS_IN_PLACE` (§2.3e) |
+| COLORMAP lump | 8,704 B | zone (`PU_STATIC`), in either mode |
 
 `screens[0]` holds palette indices. It is the only buffer written on every
 frame, which is why placing it in internal SRAM (§1.5) is the main fix for
@@ -818,19 +857,33 @@ On strict-alignment targets (Cortex-M0/M3, MIPS) a multi-byte load from an
 address that is not a multiple of its size traps. qemu-user delivers SIGBUS
 for MIPS, so the 13-demo corpus on MIPS exercises every site below.
 
-One rule decides most cases. Lumps read through `W_CacheLumpNum` land in zone
-blocks, which are 4-byte aligned (§1.3), so a field at a 4-aligned offset
-from a lump's start is safe. Risk comes from arbitrary offsets inside a lump,
-from the raw WAD buffer, and from buffers the core casts.
+One rule decided most cases until lumps could be read in place. Lumps read
+through `W_CacheLumpNum` land in zone blocks, which are 4-byte aligned
+(§1.3), so a field at a 4-aligned offset from a lump's start is safe. Risk
+comes from arbitrary offsets inside a lump, from the raw WAD buffer, and from
+buffers the core casts. With `WEB_LUMPS_IN_PLACE` (§2.3e) a lump is wherever
+the WAD put it. The four IWADs place every lump at a multiple of 4, but
+PWADs, Chex Quest and HACX do not: in sigil.wad 101 of 137 lumps start
+unaligned, in chex.wad 1,674 of 2,170.
 
 | Site | Access | Status |
 |------|--------|--------|
 | `R_InitTextures` (r_data.c): `maptexture_t` at an offset read from the TEXTURE1/2 directory | `int16`/`int32` fields at an arbitrary offset | **faulted on ARM and MIPS; fixed**: read with `read_le16`/`read_le32` (m_swap.h) and a byte-wise name copy |
 | `R_InitSpriteDefs` (r_things.c): sprite names compared as `*(int*)` | 4-byte load from string literals (alignment 1 in `.rodata`) | **faulted; fixed** with `read_le32` on both sides |
 | platform screen buffers cast to `short*` by the wipe | 2-byte loads | **faulted in fs-doom; fixed** with `__attribute__((aligned(4)))`; a port's own buffers need the same |
-| `patch_t.columnofs[]` at offset 8 (`R_GenerateLookup`, `R_GenerateComposite`, `R_DrawVisSprite`, `V_DrawPatch`, `V_DrawPatchFlipped`) | `int32` array | safe: the patch is a zone copy, so offset 8 is aligned. Hit for every visible column, so it is the site to watch if lump copies ever stop being aligned |
-| `P_LoadNodes` (p_setup.c): `mapnode_t` cast | `int16` fields | safe: zone copy |
-| `W_AddFile` (w_wad.c): `wadinfo_t` header and `filelump_t` directory | `int32` fields in the raw WAD buffer; the directory sits at an arbitrary `infotableofs` | depends on the WAD: aligned in the IWADs, unguaranteed for PWADs |
+| `patch_t.columnofs[]` at offset 8 (`R_GenerateLookup`, `R_GenerateComposite`, `R_DrawVisSprite`, `V_DrawPatch`, `V_DrawPatchFlipped`) | `int32` array | safe: a zone copy is aligned; read in place, `patch_t` is `LUMP_PACKED`, so the compiler reads it byte by byte where the CPU needs that |
+| `P_LoadNodes` and the other map loaders (p_setup.c): `mapnode_t`, `mapseg_t` and the rest cast | `int16` fields | safe: zone copy; read in place, the map structs are `LUMP_PACKED` |
+| `P_LoadThings` (p_setup.c): `mapthing_t` | `int16` fields | read in place, each record goes through `read_le16` into a copy (the game keeps `mapthing_t`s of its own, so the type stays aligned) |
+| `P_LoadBlockMap`: the BLOCKMAP read as shorts by the playsim | `int16` array | read in place only at an even address; else a zone copy |
+| `R_InitTextures`: the PNAMES count and the TEXTURE1/2 directory | `int32` | `LUMP_LONG` (`read_le32` in place, `LONG(*p)` otherwise) |
+| `W_AddFile` (w_wad.c): `wadinfo_t` header and `filelump_t` directory | `int32` fields in the raw WAD buffer; the directory sits at an arbitrary `infotableofs` | depends on the WAD: aligned in the IWADs, unguaranteed for PWADs; byte-safe in the in-place build (`LUMP_PACKED`) |
+
+The in-place build is held to this on the board that traps: the
+`armv6m-zc-misaligned` leg rewrites the four IWADs with every lump and the
+directory at an odd offset (tools/floor/misalign-wad.mjs) and replays the 13
+demos on Cortex-M0+ code with `CCR.UNALIGN_TRP` set. With `LUMP_PACKED`
+emptied, all 13 fault `UNALIGNED` (in `W_AddInPlace` on the directory for the
+WADs that fit PSRAM, in `R_GenerateLookup` on a patch for the others).
 
 `read_le16` and `read_le32` assemble the value from bytes. On little-endian
 hosts the compiler folds them back to a single load, so the simulation and
@@ -838,9 +891,10 @@ render goldens are unchanged on wasm.
 
 **Mitigation for the remaining sites on a strict-alignment target**:
 
-- **Option A**: on such targets, define `LONG()` and `SHORT()` in terms of
-  `read_le32`/`read_le16` taking the field's address, so every WAD-sourced
-  read is byte-safe.
+- **Option A**, what `WEB_LUMPS_IN_PLACE` does: make every WAD-sourced read
+  byte-safe. On ARMv8-M and x86 the packed reads compile to the same single
+  loads; on ARMv6-M they cost bytes and shifts, measured at +0.24% on the
+  worst graded tic (retro.md §5).
 - **Option B**: keep lump data aligned. `W_CacheLumpNum` already copies into
   4-byte-aligned zone blocks; copy the WAD directory into an aligned buffer
   before parsing it.

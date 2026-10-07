@@ -412,6 +412,9 @@ iteration per tic, as on a target at 35 Hz).
 | x86, with the exact OPL2 synth and 8-channel mixer | 10,485,508 instructions (18,265,778 before the synth's savings) | ~8.1 M | `floor-x86` |
 | ARMv6-M (Cortex-M0+ code, qemu mps2-an385), game | 4,922,520 instructions | ~1.80 M | `armv6m-qemu` |
 | ARMv8-M (Cortex-M33 code, qemu mps2-an505), game | 2,588,800 instructions | ~1.04 M | `armv8m-qemu` |
+| x86, lumps read in place (zero-copy), game only | 3,444,752 instructions | ~1.37 M | `demand.mjs --compare fs-doom-zc` |
+| ARMv6-M, lumps read in place | 4,934,200 instructions | ~1.80 M | `armv6m-zc` |
+| ARMv8-M, lumps read in place | 2,583,150 instructions | ~1.04 M | `armv8m-zc` |
 | N64 VR4300 in ares, game | 11.27 M cycles (5,633,118 COUNT) | 4.65 M | `n64-floor`, section 2 |
 
 - The exact synth (byte-identical to `tools/floor/synth-ref.json`, the L2
@@ -432,6 +435,49 @@ iteration per tic, as on a target at 35 Hz).
   ~0.8 MB (422 KB .bss + 55 KB .data + 320,000 B of screens); stack peaks are
   under 6 KB. So about 2 MB in all before the memory diet (Plans.md, Phase 4 of
   the floor plan), and it shrinks: vanilla's 128 visplanes pass all 13 demos.
+  Reading lumps in place takes the zone to **924 KiB** (below).
+
+### Zero-copy lumps
+
+On a microcontroller the WAD sits in memory-mapped flash, and the engine never
+writes it (`ro-wad`), so a lump can be used where it lies instead of copied
+into the zone. `WEB_LUMPS_IN_PLACE` does that ([bare-metal.md](bare-metal.md)
+§2.3e); it is off in the browser build, whose `doom.wasm` it leaves
+byte-identical. Measured on the 13 demos, all tic-exact in sim and render:
+
+| | copying (`fs-doom`, default Cortex-M builds) | in place (`fs-doom-zc`, `ZC=1`) | legs |
+|---|---|---|---|
+| smallest zone, x86 with audio | 1,216 KiB (1,212 fails) | **924 KiB** (920 fails) | `zone-min`, `zero-copy` |
+| smallest zone, Cortex-M under qemu, no audio | 1,200 KiB on ARMv6-M (1,196 fails) | **924 KiB** on ARMv6-M and ARMv8-M (920 fails) | `zone-min-armv6m-zc` |
+| lumps copied | every lump the game touches | COLORMAP, once, at startup | `ro-wad-zc` |
+| graded tics that copy from the WAD, x86, at each build's minimum zone | 9,797 tics, 214 MB, worst 250,701 B | 134 tics, 1.32 MB, worst 42,226 B, all composite-texture fills | |
+| worst graded tic, x86, game only, 8 MiB zone | 3,450,250 | 3,444,752 (−0.16%) | `demand.mjs --compare` |
+| worst graded tic, x86, game only, 1,216 KiB zone | 3,518,614 | 3,444,751 (−2.10%) | |
+| worst graded tic, ARMv6-M, both at a 2 MiB zone | 4,923,120 | 4,934,200 (+0.23%) | `armv6m-zc` |
+| worst graded tic, ARMv8-M, both at a 2 MiB zone | 2,589,400 | 2,583,150 (−0.24%) | `armv8m-zc` |
+
+- The ARMv6-M build pays for the byte-safe reads a lump at any offset needs
+  (`LUMP_PACKED` fields become byte loads and shifts on an M0+); ARMv8-M and
+  x86 read unaligned words natively. qemu's copying build pays nothing for
+  the copies themselves (semihosting moves the bytes, wad_semi.c), so on a real
+  board copying costs more than these counts say; on x86 it is in the count.
+- The zone that is left is the engine's own data: the texture tables
+  `R_InitTextures` builds (about 340 KB for tnt.wad), the level (`PU_LEVEL`)
+  and the composite textures.
+- RAM a Cortex-M port needs, from the ARMv6-M map file and the runs' stats
+  (harness buffers excluded): zone + engine `.data`/`.bss` (467,737 B) +
+  screens (320,000 B) + audio state (71,676 B) + heap peak + stack peak
+  (5,576 B) + newlib and platform (3,900 B). Copying: 2,232,213 B (its
+  1,200 KiB zone, heap peak 134,656 B); in place: **1,948,737 B** (1.86 MiB,
+  heap peak 133,672 B), 13% less. Still 3.7× the RP2350's 520 KB: PSRAM stays
+  necessary.
+- The WAD: tools/cortexm's zero-copy build loads it into the board's 16 MiB
+  PSRAM at boot, as flash would hold it. doom.wad and doom2.wad fit;
+  plutonia.wad and tnt.wad are 645,760 B and 1,422,076 B too long, and those
+  bytes come from the ZONE SSRAM above a 2 MiB arena. A board with 16 MiB of
+  flash would run neither without trimming the WAD.
+- Alignment is proven on the board that traps: `armv6m-zc-misaligned` replays
+  the 13 demos from WADs rewritten with every lump at an odd offset.
 
 ### Predicted verdicts
 
