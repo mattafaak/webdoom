@@ -10,7 +10,11 @@
 //                        no underruns;
 //   PREDICTED PASS/FAIL  source=emulator: the same arithmetic, which is not a
 //                        verdict (spec.md: timings come from real hardware);
-//   DEMAND               source=host: the worst graded tic in its own units.
+//   DEMAND               source=host, or unit_hz=0 from any source (a count of
+//                        work, e.g. instructions under qemu -icount, not a
+//                        time): the worst graded tic in its own units.  One
+//                        timing run suffices and audio is noted, not required:
+//                        both are conditions of a verdict, and this is none.
 // A tic is graded unless a level load, intermission or finale started in it
 // (flag L).  Any correctness failure is a FAIL whatever the source.
 //
@@ -135,7 +139,8 @@ export function grade(logs, { require = null, demos = DEMOS, goldenDir = join(ro
     }
 
     // timing: two runs of every demo, each ending where the correctness run ended
-    const timed = h0.source !== 'host';
+    // a time unit from a target is graded as timing; a demand log is not
+    const timed = h0.source !== 'host' && Number(h0.unit_hz) > 0;
     const needRuns = timed ? 2 : 1;
     let worst = null, loadWorst = null, gradedTics = 0;
     for (const [name, { A, B }] of by) {
@@ -161,7 +166,7 @@ export function grade(logs, { require = null, demos = DEMOS, goldenDir = join(ro
         }
     }
     if (!timed && logs.some(({ log }) => log.demos.some(d => +d.audio.music_events === 0)))
-        notes.push('note: audio was not exercised in these host logs');
+        notes.push(`note: audio was not exercised in these ${h0.source} logs`);
 
     const n = demos.length;
     const at = w => w ? `${w.name} tic ${w.i}${w.mbytes ? `, ${w.mbytes} B from the WAD` : ''}` : 'none';

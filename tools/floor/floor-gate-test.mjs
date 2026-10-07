@@ -89,6 +89,22 @@ mustFail('a low-detail run offered as uncrippled', run(base({ all: { detail: 1 }
     mustFail('an emulator log presented for a hardware verdict', run(base({ all: { source: 'emulator' } }), { require: 'hardware' }), 'source=emulator cannot PASS');
 }
 mustFail('one timing run, where two are needed', run(base().slice(0, 2)), '1 timing \\(mode B\\) run\\(s\\), 2 needed');
+{
+    // An emulator counting work (unit_hz=0: instructions under qemu -icount)
+    // is a DEMAND, like the host: one timing run, no audio required.  Its
+    // control first, then the same log made to lie each way.
+    const quiet = { music_events: 0, sfx_starts: 0, samples: 0 };
+    const demand = (o = {}) => [makeLog({ mode: 'A', source: 'emulator', unit_hz: 0, audio: quiet, ...o.a }),
+                                makeLog({ mode: 'B', source: 'emulator', unit_hz: 0, audio: quiet, ...o.b })];
+    const r = run(demand());
+    check('CONTROL: an emulator demand log (unit_hz=0, one timing run, no audio): DEMAND', r.ok && r.verdict === 'DEMAND', r.text.split('\n').at(-1));
+    mustFail('an emulator demand log with a sim hash corrupted at tic 7',
+             run(demand({ a: { row: (r, n) => (n === 'plutonia-demo1' && r.i === 7 ? { ...r, sim: '00c0ffee' } : r) } })),
+             'plutonia-demo1: sim hash differs from the golden at tic 7');
+    mustFail('an emulator demand log with no timing run', run(demand().slice(0, 1)), '0 timing \\(mode B\\) run\\(s\\), 1 needed');
+    mustFail('an emulator log in a time unit (unit_hz>0) with no music',
+             run(base({ all: { source: 'emulator' }, b: { audio: { music_events: 0 } } })), 'played no music');
+}
 mustFail('a tic that took 0 units (a counter that did not count)',
          run(base({ b: { row: (r, n) => (n === 'doom2-demo3' && r.i === 40 ? { ...r, elapsed: 0 } : r) } })), 'doom2-demo3 tic 40 took 0 count');
 {
