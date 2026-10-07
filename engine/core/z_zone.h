@@ -74,10 +74,12 @@ typedef struct memblock_s
 int     Z_InPlace (void *ptr);
 #define Z_ChangeTag(p,t) \
 { \
-      if (!Z_InPlace (p)) { \
-      if (( (memblock_t *)( (byte *)(p) - sizeof(memblock_t)))->id!=0x1d4a11) \
-	  I_Error("Z_CT at "__FILE__":%i",__LINE__); \
-	  Z_ChangeTag2(p,t); } \
+      if (!Z_InPlace (p)) \
+      { \
+	  if (( (memblock_t *)( (byte *)(p) - sizeof(memblock_t)))->id!=0x1d4a11) \
+	      I_Error("Z_CT at "__FILE__":%i",__LINE__); \
+	  Z_ChangeTag2(p,t); \
+      } \
 };
 #else
 #define Z_ChangeTag(p,t) \
