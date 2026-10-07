@@ -617,6 +617,7 @@ static void emit_tictrace (const char* path)
 // untouched.  One line per D_DoomFrame call, wipe frames included:
 //   F <frame> <gametic> <gamestate> <wipeactive> <render> <sim> <held>
 //     <scaledviewwidth> <viewheight> <detailshift> <writes> <write hash>
+//     <gameepisode> <gamemap>
 // <held> has bit n set while screens[n] is allocated (n = 1..4): a
 // LEAN_SCREENS build's evidence that it released what it borrowed.
 // Set from the environment:
@@ -631,6 +632,33 @@ static void emit_tictrace (const char* path)
 //                           up in the pixels, whoever freed it
 //   WD_FREE_AT=f:n          (LEAN_SCREENS) release screens[n] after frame f,
 //                           whoever holds it: the red-proofs' wrong lean path
+//   WD_SAVE_AT=t:n          save the game there into slot n, as the menu does
+//                           (doomsav<n>.dsg, kept by files.c; G_DoSaveGame,
+//                           since a demo's ticcmds cannot carry the request),
+//                           and record an S line:
+//     S <frame> <gametic> <slot> <bytes> <hash>
+//                           the FNV-1a hash of the part P_ArchiveWorld wrote
+//                           (sectors, lines, sides), which holds no pointer:
+//                           unlike the rest of a save it is the same bytes in
+//                           any build of the same game
+//   WD_LOAD_AT=t:n          load doomsav<n>.dsg there (G_LoadGame, done by
+//                           the next tic).  The demo stops (G_InitNew), so the
+//                           player stands still from then on: WD_END_AT ends
+//                           the run
+//   WD_END_AT=t             end the run there, as a demo's end would
+//   WD_SAVE_IN=path         a savegame file handed in as doomsav1.dsg before
+//                           D_DoomMain: another build's save, for WD_LOAD_AT=t:1
+//   WD_SAVE_OUT=path        doomsav0.dsg written out at the end
+//   WD_LEVELS_FAULT=k       (LEAN_LEVELS) the red-proofs' wrong lean paths:
+//                           glass  SEG_BACK has no null sector (r_state.h)
+//                                  from the second frame on: a two-sided line
+//                                  with no back side reads as one-sided
+//                           save   after the frame a load completed in, every
+//                                  side's texture offsets are 0, as a restore
+//                                  that dropped them would leave them
+//                           twosided  from the second frame on, no line is
+//                                  two-sided as loaded (line_t's twosided):
+//                                  every seg has no back sector
 static FILE* frames_file;
 static int   frames_n;
 static int   frames_poison;
@@ -638,8 +666,13 @@ static int   frames_poison;
 static struct { int tic, kind, blocks, detail, done; } frames_sched[FRAMES_MAX_SCHED];
 static int   frames_nsched;
 static int   frames_free_at = -1, frames_free_scrn;
+static int   frames_fault;  /* WD_LEVELS_FAULT: 0 none, 1 glass, 2 save, 3 twosided */
+static int   frames_loaded; /* the frame a scheduled load completes in, or -1 */
 extern int      fs_write_count; /* files.c: what Web_FileWrite was given */
 extern unsigned fs_write_hash;
+extern int  savegameslot;       /* g_game.c: the menu's save, done directly */
+extern char savedescription[32];
+void        G_DoSaveGame (void);
 
 static void frames_parse_sched (const char* env, int kind)
 {
@@ -647,8 +680,8 @@ static void frames_parse_sched (const char* env, int kind)
     while (p && *p && frames_nsched < FRAMES_MAX_SCHED)
     {
         int t = 0, b = 0, d = 0, n = 0;
-        if (kind != 1 ? sscanf (p, "%d%n", &t, &n) < 1
-                      : sscanf (p, "%d:%d%n", &t, &b, &n) < 2)
+        if (kind != 1 && kind != 3 && kind != 4 ? sscanf (p, "%d%n", &t, &n) < 1
+                                                : sscanf (p, "%d:%d%n", &t, &b, &n) < 2)
             break;
         p += n;
         if (kind == 1 && *p == ':' && sscanf (p, ":%d%n", &d, &n) == 1)
@@ -696,6 +729,68 @@ static void frames_poison_zone (void)
     }
 }
 
+// WD_SAVE_IN, WD_SAVE_OUT: a savegame file in and out of files.c's keeping,
+// above the shim line as the WAD's load is
+static int frames_save_in (const char* path)
+{
+    enum { MAX = 1 << 20 };
+    byte* buf = malloc (MAX); /* the heap, as the WAD's: not the zone, not .bss */
+    FILE* f = buf ? fopen (path, "rb") : NULL;
+    int   n = f ? (int) fread (buf, 1, MAX, f) : -1;
+    int   ok;
+    if (f)
+        fclose (f);
+    ok = n > 0 && n < MAX && fs_keep_file ("doomsav1.dsg", buf, n);
+    free (buf);
+    if (!ok)
+        fprintf (stderr, "fs-doom: WD_SAVE_IN: cannot read a savegame from %s\n", path);
+    return ok;
+}
+
+static int frames_save_out (const char* path)
+{
+    int         n;
+    const byte* d = fs_kept_file ("doomsav0.dsg", &n);
+    FILE*       f = d ? fopen (path, "wb") : NULL;
+    int         ok = f && fwrite (d, 1, (size_t) n, f) == (size_t) n;
+    if (f && fclose (f))
+        ok = 0;
+    if (!ok)
+        fprintf (stderr, "fs-doom: WD_SAVE_OUT: %s\n", d ? "cannot write it" : "the run saved nothing");
+    return ok;
+}
+
+// The S line: the world's part of the save just written to `slot`.  It
+// follows the 50-byte header and each player in the game (padded to 4 as
+// PADSAVEP pads, the buffer being malloc's), and is as long as P_ArchiveSize
+// counts it.
+static void frames_save_world (int slot)
+{
+    char        name[32];
+    int         len, i, j, n = 0, off = 24 + 16 + 3 + MAXPLAYERS + 3;
+    unsigned    h = 0x811c9dc5u;
+    const byte* d;
+
+    sprintf (name, "doomsav%d.dsg", slot);
+    d = fs_kept_file (name, &len);
+    for (i = 0; i < MAXPLAYERS; i++)
+        if (playeringame[i])
+            off = ((off + 3) & ~3) + (int) sizeof (player_t);
+    for (i = 0; i < numlines; i++)
+        for (n += 3, j = 0; j < 2; j++)
+            if (lines[i].sidenum[j] != -1)
+                n += 5;
+    n = (n + numsectors * 7) * (int) sizeof (short);
+    if (!d || off + n > len)
+    {
+        fprintf (stderr, "fs-doom: WD_SAVE_AT: %s is not a whole savegame\n", name);
+        exit (3);
+    }
+    for (i = 0; i < n; i++)
+        h = (h ^ d[off + i]) * 0x01000193u;
+    fprintf (frames_file, "S %d %d %d %d %u\n", frames_n, gametic, slot, n, h);
+}
+
 static void frames_run (void)
 {
     fprintf (frames_file, "FRAMES zone=%d wipes=%d poison=%d lean_screens=%d\n",
@@ -717,6 +812,25 @@ static void frames_run (void)
                     G_ExitLevel ();
                 else if (frames_sched[i].kind == 2)
                     G_ScreenShot ();
+                else if (frames_sched[i].kind == 3)
+                {
+                    savegameslot = frames_sched[i].blocks;
+                    strcpy (savedescription, "fs-doom");
+                    G_DoSaveGame ();
+                    frames_save_world (savegameslot);
+                }
+                else if (frames_sched[i].kind == 4)
+                {
+                    static char name[32];
+                    sprintf (name, "doomsav%d.dsg", frames_sched[i].blocks);
+                    G_LoadGame (name);
+                    frames_loaded = frames_n;
+                }
+                else if (frames_sched[i].kind == 5)
+                {
+                    fs_timedemo_gametics = gametic;
+                    longjmp (fs_demo_jmp, 1);
+                }
                 else
                     R_SetViewSize (frames_sched[i].blocks, frames_sched[i].detail);
             }
@@ -733,13 +847,23 @@ static void frames_run (void)
         for (i = 1; i <= 4; i++)
             if (screens[i])
                 held |= 1 << i;
-        fprintf (frames_file, "F %d %d %d %d %u %u %d %d %d %d %d %u\n", frames_n, gametic,
+        fprintf (frames_file, "F %d %d %d %d %u %u %d %d %d %d %d %u %d %d\n", frames_n, gametic,
                  (int) gamestate, wipeactive ? 1 : 0, fs_render_hash (),
                  (unsigned) fs_state_hash (), held, scaledviewwidth, viewheight,
-                 detailshift, fs_write_count, fs_write_hash);
+                 detailshift, fs_write_count, fs_write_hash, gameepisode, gamemap);
 #ifdef LEAN_SCREENS
         if (frames_n == frames_free_at)
             V_ReleaseScreen (frames_free_scrn);
+#endif
+#ifdef LEAN_LEVELS
+        if (frames_fault == 1)
+            p_nullsector = NULL;
+        if (frames_fault == 2 && frames_n == frames_loaded)
+            for (i = 0; i < numsides; i++)
+                sides[i].textureoffset16 = sides[i].rowoffset16 = 0;
+        if (frames_fault == 3)
+            for (i = 0; i < numlines; i++)
+                lines[i].twosided = 0;
 #endif
         if (frames_poison)
             frames_poison_zone ();
@@ -914,6 +1038,25 @@ int main (int argc, char** argv)
         frames_parse_sched ("WD_EXIT_AT", 0);
         frames_parse_sched ("WD_VIEW_AT", 1);
         frames_parse_sched ("WD_SHOT_AT", 2);
+        frames_parse_sched ("WD_SAVE_AT", 3);
+        frames_parse_sched ("WD_LOAD_AT", 4);
+        frames_parse_sched ("WD_END_AT", 5);
+        frames_loaded = -1;
+        if (getenv ("WD_SAVE_IN") && !frames_save_in (getenv ("WD_SAVE_IN")))
+            return 1;
+        if (getenv ("WD_LEVELS_FAULT"))
+            frames_fault = !strcmp (getenv ("WD_LEVELS_FAULT"), "glass") ? 1
+                           : !strcmp (getenv ("WD_LEVELS_FAULT"), "save") ? 2
+                           : !strcmp (getenv ("WD_LEVELS_FAULT"), "twosided") ? 3 : -1;
+#ifdef LEAN_LEVELS
+        if (frames_fault < 0)
+#else
+        if (frames_fault)
+#endif
+        {
+            fprintf (stderr, "fs-doom: WD_LEVELS_FAULT is glass, save or twosided, in a LEAN_LEVELS build\n");
+            return 1;
+        }
         if (getenv ("WD_FREE_AT"))
             sscanf (getenv ("WD_FREE_AT"), "%d:%d", &frames_free_at, &frames_free_scrn);
 #ifndef LEAN_SCREENS
@@ -1077,6 +1220,8 @@ done:
         fprintf (frames_file, "END frames=%d gametics=%d\n", frames_n, fs_timedemo_gametics);
         fclose (frames_file);
         frames_file = NULL;
+        if (getenv ("WD_SAVE_OUT") && !frames_save_out (getenv ("WD_SAVE_OUT")))
+            return 1;
     }
     wd_cycles_fd_was_open = wd_cycles_fd >= 0;
     // Stop and close the instruction counter before emitting output.

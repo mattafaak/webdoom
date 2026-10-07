@@ -37,6 +37,12 @@ void fs_putc(int c);
 // After this call, no open/read occurs inside the platform layer.
 void fs_register_wad(const char* name, byte* data, int len);
 
+// Savegames kept in memory (files.c): what Web_FileWrite was given for a .dsg
+// name, or what the harness handed in under a name; a read of that name is
+// served from it.  fs_keep_file returns 0 if it could not keep the file.
+int fs_keep_file(const char* name, const byte* data, int len);
+const byte* fs_kept_file(const char* name, int* len);
+
 // d_main.c (webdoom split-loop patch).
 void D_DoomFrame(void);
 

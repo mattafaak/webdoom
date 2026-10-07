@@ -568,6 +568,17 @@ leg textures-const  gcc,wad    "lean zero-copy build: 13 demos correct on const 
 # poisoned every frame, the lean side also at its 13-demo zone minimum; then
 # three wrong lean paths must each fail naming their frame.
 leg lean-screens    gcc,wad    "LEAN_SCREENS == vanilla screens, every frame: wipes, intermission, next level, narrowed view, status bar" -- node tools/floor/lean-screens-test.mjs
+# LEAN_LEVELS (engine/core/r_defs.h) keeps the level in less RAM, exactly:
+# VERTEXES, SEGS and NODES read where they lie in the WAD, lines and sides
+# narrowed.  The lean zero-copy build with it: the 13 demos through the floor
+# gate at its zone minimum, 744 KiB (740 fails; 920 without it), and in the
+# copying build; then frame by frame against the build without it on what the
+# goldens never reach: each IWAD's largest map under a demo's input, at 8 MiB
+# and at 816 KiB (812 fails MAP31, and so does the reference at 816), glass
+# windows (SEG_BACK's null sector), a save, a load and each build loading the
+# other's save, and a WAD with every lump at an odd offset.  Three wrong lean
+# paths must each fail where they are wrong.
+leg lean-levels     gcc,wad,heavy "LEAN_LEVELS == the lean build, every frame: 13 demos at its zone minimum, largest maps, glass, saves, odd offsets" -- node tools/floor/lean-levels-test.mjs
 # The floor's music reference off the web: the OPL synth compiled natively
 # (tools/freestanding/synth-bench, built by the leg) renders what synth.wasm
 # renders, byte for byte, on the 13 demos' songs, and its register streams and
