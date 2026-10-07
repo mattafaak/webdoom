@@ -18,9 +18,15 @@
 // A tic is graded unless a level load, intermission or finale started in it
 // (flag L).  Any correctness failure is a FAIL whatever the source.
 //
-// usage: node tools/floor/floor-gate.mjs [--require hardware] [--demos a,b]
-//                                        [--golden-dir DIR] LOG...
-// Exit 0 on PASS, PREDICTED and DEMAND; 1 on any FAIL; 2 on usage.
+// --correctness grades mode A alone and gives no floor verdict at all:
+//   CORRECT              every tic's sim and render hash matches on every demo;
+//                        timing and audio are not graded, so it can never read
+//                        PASS or PREDICTED.  It is what a leg that holds a port
+//                        to the goldens runs (n64-floor), not a floor result.
+//
+// usage: node tools/floor/floor-gate.mjs [--require hardware | --correctness]
+//                                        [--demos a,b] [--golden-dir DIR] LOG...
+// Exit 0 on PASS, PREDICTED, DEMAND and CORRECT; 1 on any FAIL; 2 on usage.
 // Copyright (C) 2026, GPL-2.0-or-later.
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -98,7 +104,7 @@ function golden(dir, name, kind) {
 }
 
 // Grade a set of parsed logs.  Returns { verdict, lines, ok }.
-export function grade(logs, { require = null, demos = DEMOS, goldenDir = join(root, 'tools/golden') } = {}) {
+export function grade(logs, { require = null, correctness = false, demos = DEMOS, goldenDir = join(root, 'tools/golden') } = {}) {
     const fails = [], notes = [];
     const fail = m => fails.push(`FAIL ${m}`);
     if (!logs.length) return { ok: false, verdict: 'FAIL', lines: ['FAIL no logs'] };
@@ -119,7 +125,8 @@ export function grade(logs, { require = null, demos = DEMOS, goldenDir = join(ro
             if (log.header.mode === 'A') {
                 if (slot.A) fail(`${label}: a second correctness run of ${d.name}`);
                 slot.A = { d, label };
-            } else slot.B.push({ d, label });
+            } else if (correctness) fail(`${label}: --correctness grades mode A logs only, and this is mode ${log.header.mode}`);
+            else slot.B.push({ d, label });
         }
 
     // correctness: every tic of every demo against the goldens
@@ -136,6 +143,13 @@ export function grade(logs, { require = null, demos = DEMOS, goldenDir = join(ro
         if (badSim >= 0) { fail(`${name}: sim hash differs from the golden at tic ${badSim} (${d.rows[badSim].sim} vs ${sim[badSim]})`); continue; }
         const badRen = d.rows.findIndex((r, i) => r.render !== ren[i]);
         if (badRen >= 0) fail(`${name}: render hash differs from the golden at tic ${badRen} (${d.rows[badRen].render} vs ${ren[badRen]}): a -nodraw run, another view or a render defect`);
+    }
+
+    const n = demos.length;
+    if (correctness) {
+        const tics = [...by.values()].reduce((t, { A }) => t + (A ? A.d.rows.length : 0), 0).toLocaleString('en-US');
+        if (fails.length) return { ok: false, verdict: 'FAIL', lines: [...fails, `FAIL floor correctness: ${h0.target} — ${fails.length} problem(s) over ${n} demos`] };
+        return { ok: true, verdict: 'CORRECT', lines: [`CORRECT floor: ${h0.target} — sim and render hashes match the goldens on all ${n} demos (${tics} tics); timing and audio not graded (--correctness)`] };
     }
 
     // timing: two runs of every demo, each ending where the correctness run ended
@@ -168,7 +182,6 @@ export function grade(logs, { require = null, demos = DEMOS, goldenDir = join(ro
     if (!timed && logs.some(({ log }) => log.demos.some(d => +d.audio.music_events === 0)))
         notes.push(`note: audio was not exercised in these ${h0.source} logs`);
 
-    const n = demos.length;
     const at = w => w ? `${w.name} tic ${w.i}${w.mbytes ? `, ${w.mbytes} B from the WAD` : ''}` : 'none';
     const fmt = v => v === null ? '-' : v.toLocaleString('en-US');
     const lines = [...fails, ...notes];
@@ -193,16 +206,18 @@ export function grade(logs, { require = null, demos = DEMOS, goldenDir = join(ro
 
 if (import.meta.url === `file://${process.argv[1]}`) {
     const args = process.argv.slice(2);
-    let require = null, demos = DEMOS, goldenDir;
+    let require = null, correctness = false, demos = DEMOS, goldenDir;
     const files = [];
     for (let i = 0; i < args.length; i++) {
         if (args[i] === '--require') require = args[++i];
+        else if (args[i] === '--correctness') correctness = true;
         else if (args[i] === '--demos') demos = args[++i].split(',');
         else if (args[i] === '--golden-dir') goldenDir = args[++i];
         else if (args[i].startsWith('--')) { console.error(`floor-gate: unknown flag ${args[i]}`); process.exit(2); }
         else files.push(args[i]);
     }
     if (require && require !== 'hardware') { console.error('floor-gate: --require takes "hardware"'); process.exit(2); }
+    if (require && correctness) { console.error('floor-gate: --correctness gives no floor verdict, so it cannot --require one'); process.exit(2); }
     const logs = [];
     let bad = 0;
     for (const f of files) {
@@ -210,7 +225,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         catch (e) { console.log(`FAIL ${e.message}`); bad++; }
     }
     if (bad) { console.log(`FAIL floor: ${bad} unreadable log(s)`); process.exit(1); }
-    const r = grade(logs, { require, demos, ...(goldenDir ? { goldenDir } : {}) });
+    const r = grade(logs, { require, correctness, demos, ...(goldenDir ? { goldenDir } : {}) });
     for (const l of r.lines) console.log(l);
     process.exit(r.ok ? 0 : 1);
 }

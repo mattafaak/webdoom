@@ -117,4 +117,26 @@ mustFail('a tic that took 0 units (a counter that did not count)',
     mustFail('logs from two builds in one verdict', run([a, b1, b2.replace('build=test', 'build=other')]), 'build=other differs');
 }
 
-summary('the floor gate passes a well-formed run and fails each way a log can lie, naming the cause', { min: 20 });
+// ── --correctness: mode A alone, never a floor verdict ───────────────────────
+{
+    const A = o => makeLog({ mode: 'A', source: 'emulator', ...o });
+    const ok = run([A()], { correctness: true });
+    check('CONTROL --correctness: a correct mode A run of all 13 demos reads CORRECT',
+          ok.ok && ok.verdict === 'CORRECT' && /on all 13 demos \(44,580 tics\)/.test(ok.text), ok.text);
+    check('--correctness never reads PASS or PREDICTED', !/PASS|PREDICTED/.test(ok.text), ok.text);
+    const full = run([A()]);
+    check('the same mode A log without --correctness still FAILs (no timing runs)',
+          !full.ok && /0 timing \(mode B\) run\(s\), 2 needed/.test(full.text), full.verdict);
+    mustFail('--correctness: a sim hash corrupted at tic 77',
+             run([A({ row: (r, n) => (n === 'plutonia-demo3' && r.i === 77 ? { ...r, sim: '0badf00d' } : r) })], { correctness: true }),
+             'plutonia-demo3: sim hash differs from the golden at tic 77');
+    const frozen = {};
+    mustFail('--correctness: a -nodraw run (render hash frozen)',
+             run([A({ row: (r, n) => ({ ...r, render: (frozen[n] ??= r.render) }) })], { correctness: true }),
+             'render hash differs from the golden at tic \\d+');
+    mustFail('--correctness: a missing demo', run([A({ demos: DEMOS.slice(0, -1) })], { correctness: true }), 'plutonia-demo3: no correctness');
+    mustFail('--correctness: a mode B log offered', run([A(), makeLog({ mode: 'B', source: 'emulator' })], { correctness: true }),
+             '--correctness grades mode A logs only');
+}
+
+summary('the floor gate passes a well-formed run and fails each way a log can lie, naming the cause', { min: 27 });
