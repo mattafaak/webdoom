@@ -54,15 +54,24 @@
 // 0x100000000 to 0x2000
 #define ANGLETOFINESHIFT	19		
 
+// A port that keeps the tables in flash builds with TABLES_CONST: they are
+// then const data generated at build time by tools/floor/gen-const-tables.c
+// (the same recipe and checksum as T_GenerateTables), and need no RAM.
+#ifdef TABLES_CONST
+#define TABLE_CONST const
+#else
+#define TABLE_CONST
+#endif
+
 // Effective size is 10240.
-extern  fixed_t		finesine[5*FINEANGLES/4];
+extern TABLE_CONST fixed_t	finesine[5*FINEANGLES/4];
 
 // Re-use data, is just PI/2 pahse shift.
-extern  fixed_t*	finecosine;
+extern TABLE_CONST fixed_t*	finecosine;
 
 
 // Effective size is 4096.
-extern fixed_t		finetangent[FINEANGLES/2];
+extern TABLE_CONST fixed_t	finetangent[FINEANGLES/2];
 
 // Binary Angle Measument, BAM.
 #define ANG45			0x20000000
@@ -81,7 +90,7 @@ typedef unsigned angle_t;
 // Effective size is 2049;
 // The +1 size is to handle the case when x==y
 //  without additional checking.
-extern angle_t		tantoangle[SLOPERANGE+1];
+extern TABLE_CONST angle_t	tantoangle[SLOPERANGE+1];
 
 // webdoom: fills the three tables above at boot, bit-identical to the
 // 1993 data (recipes + correction stream + checksum). tables.c

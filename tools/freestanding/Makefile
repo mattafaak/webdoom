@@ -42,6 +42,15 @@ CFLAGS  := -m32 $(OPT) -g \
             -I../floor \
             $(EXTRA_CFLAGS)
 
+# LEAN=1: the floor's lean memory build.  Vanilla's renderer limits (128
+# visplanes and vissprites; the 13 demos peak at 118 and 123), and the lookup
+# tables as const data generated at build time (TABLES_CONST: in flash on a
+# microcontroller, 65,540 B of RAM saved).
+#   make LEAN=1 OBJDIR=obj-lean OUT=fs-doom-lean
+ifeq ($(LEAN),1)
+CFLAGS += -DMAXVISPLANES=128 -DMAXVISSPRITES=128 -DTABLES_CONST -I$(OBJDIR)/gen
+endif
+
 # The floor gate's tic flags (floor_wrap.c): a level load, intermission or
 # finale starting, and the bytes a lump copy takes out of the WAD blob.
 FLOOR_WRAP := -Wl,--wrap=P_SetupLevel,--wrap=WI_Start,--wrap=F_StartFinale,--wrap=memcpy
@@ -101,6 +110,16 @@ $(OBJDIR)/plat/%.o: %.c
 AUDIO_OBJ := $(patsubst %.c,$(OBJDIR)/plat/%.o,$(AUDIO_SRC) fs_audio.c)
 $(AUDIO_OBJ): CFLAGS += $(SYNTH_FP) $(SYNTH_INC)
 $(AUDIO_OBJ): Makefile
+
+# the const tables (LEAN=1): the engine's own generator, run on the host,
+# checksum included; tables.o includes the result
+$(OBJDIR)/gen/tables_const.inc: ../floor/gen-const-tables.c $(CORE_DIR)/tables.c $(CORE_DIR)/tables_fix.h
+	@mkdir -p $(dir $@)
+	$(CC) -m32 -O1 -std=gnu89 -I$(CORE_DIR) ../floor/gen-const-tables.c $(CORE_DIR)/tables.c -lm -o $(OBJDIR)/gen/gen-const-tables
+	$(OBJDIR)/gen/gen-const-tables > $@.tmp && mv $@.tmp $@
+ifeq ($(LEAN),1)
+$(OBJDIR)/core/tables.o: $(OBJDIR)/gen/tables_const.inc
+endif
 
 $(OBJDIR)/floor/%.o: ../floor/%.c
 	@mkdir -p $(dir $@)

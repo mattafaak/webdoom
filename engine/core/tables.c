@@ -29,9 +29,13 @@
 #include "tables.h"
 #include "i_system.h"
 
+#ifdef TABLES_CONST
+#include "tables_const.inc"	// generated: the three tables as const data
+#else
 fixed_t		finesine[5*FINEANGLES/4];
 fixed_t		finetangent[FINEANGLES/2];
 angle_t		tantoangle[SLOPERANGE+1];
+#endif
 
 #include "tables_fix.h"
 
@@ -53,6 +57,7 @@ SlopeDiv
     return ans <= SLOPERANGE ? ans : SLOPERANGE;
 }
 
+#ifndef TABLES_CONST
 // packed 2-bit deltas: 0 = +0, 1 = +1, 2 = -1, 3 = escape (full value
 // from the escape list, for the tangent asymptote entries)
 static void T_ApplyFix (int* table, int count,
@@ -75,6 +80,8 @@ static void T_ApplyFix (int* table, int count,
     }
 }
 
+#endif
+
 static unsigned T_Checksum (void)
 {
     unsigned h = 0x811c9dc5u;
@@ -93,6 +100,10 @@ void T_GenerateTables (void)
 {
     int i;
 
+#ifdef TABLES_CONST
+    // already the 1993 data, generated at build time: only check it
+    (void) i;
+#else
     // sine: one and a quarter turns, truncated, (i+0.5) phase
     for (i = 0; i < 5*FINEANGLES/4; i++)
 	finesine[i] = (fixed_t)
@@ -114,6 +125,7 @@ void T_GenerateTables (void)
 		fix_finetangent, fix_finetangent_esc, FIX_FINETANGENT_NESC);
     T_ApplyFix ((int*) tantoangle, SLOPERANGE+1,
 		fix_tantoangle, fix_tantoangle_esc, FIX_TANTOANGLE_NESC);
+#endif
 
 #ifdef TABLES_CRC
     if (T_Checksum () != TABLES_CRC)
