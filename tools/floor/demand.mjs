@@ -2,12 +2,13 @@
 // The demand vector: what one tic of webdoom asks of a CPU, measured on the
 // host in x86 instructions (fs-doom, perf_event_open, pinned to a P-core).
 //
-// Four configurations, all 13 demos each, one row per tic (-tictrace):
+// Five configurations, all 13 demos each, one row per tic (-tictrace):
 //   o1-v10   -O1, screenblocks 10: the graded configuration
 //   o2-v10   -O2, screenblocks 10
 //   o1-v11   -O1, screenblocks 11 (the full 320x200 view; not graded)
 //   fixed    -O1 with fixed_count.h: FixedMul / FixedDiv calls per tic
 //            (its instruction counts include the counting, so not demand)
+//   o1-v10-audio  o1-v10 with music and sound effects running every tic
 // A tic is graded unless a level load, intermission or finale started in it.
 //
 //   node tools/floor/demand.mjs            measure, write tools/golden/floor-demand.json
@@ -38,11 +39,15 @@ const MATRIX = [
     ['plutonia.wad', 'plutonia.wad', 'demo1', 'plutonia-demo1'], ['plutonia.wad', 'plutonia.wad', 'demo2', 'plutonia-demo2'],
     ['plutonia.wad', 'plutonia.wad', 'demo3', 'plutonia-demo3'],
 ];
+// The game's demand is measured with audio off (WD_AUDIO=0); o1-v10-audio is
+// the same with the OPL2 synth and the 8-channel mixer running inside every
+// tic, which is what the floor gate grades.
 const CONFIGS = [
-    { id: 'o1-v10', bin: 'fs-doom', env: {} },
-    { id: 'o2-v10', bin: 'fs-doom-o2', env: {} },
-    { id: 'o1-v11', bin: 'fs-doom', env: { WD_VIEW: '11' } },
-    { id: 'fixed', bin: 'fs-doom-fixed', env: {} },
+    { id: 'o1-v10', bin: 'fs-doom', env: { WD_AUDIO: '0' } },
+    { id: 'o2-v10', bin: 'fs-doom-o2', env: { WD_AUDIO: '0' } },
+    { id: 'o1-v11', bin: 'fs-doom', env: { WD_AUDIO: '0', WD_VIEW: '11' } },
+    { id: 'fixed', bin: 'fs-doom-fixed', env: { WD_AUDIO: '0' } },
+    { id: 'o1-v10-audio', bin: 'fs-doom', env: {} },
 ];
 
 const args = process.argv.slice(2);
