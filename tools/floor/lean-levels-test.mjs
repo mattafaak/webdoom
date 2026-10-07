@@ -59,10 +59,15 @@ const LIB = join(root, 'wads/lib');
 const fail = msg => { console.log(`FAIL lean-levels: ${msg}`); process.exit(1); };
 
 // ── the builds: one OBJDIR each, so no object is shared between configurations
+// The const texture tables (TEXTURES_CONST, COMPOSITES_CONST) joined the lean
+// set after this leg's boundaries were measured; they move the zone minimum
+// on their own (textures-const).  This leg measures LEAN_LEVELS alone, so its
+// builds leave them off, each in object directories no other leg writes.
+const NO_TC = ['TEXTURES_CONST=0', 'COMPOSITES_CONST=0'];
 const BUILDS = {
-    ref: ['LEAN=1', 'ZERO_COPY=1', 'OBJDIR=obj-leanzc', 'OUT=fs-doom-leanzc'],
-    lv: ['LEAN=1', 'ZERO_COPY=1', 'LEAN_LEVELS=1', 'OBJDIR=obj-leanzc-lv', 'OUT=fs-doom-leanzc-lv'],
-    copy: ['LEAN=1', 'LEAN_LEVELS=1', 'OBJDIR=obj-lean-lv', 'OUT=fs-doom-lean-lv'],
+    ref: ['LEAN=1', ...NO_TC, 'ZERO_COPY=1', 'OBJDIR=obj-leanzc-lvref', 'OUT=fs-doom-leanzc-lvref'],
+    lv: ['LEAN=1', ...NO_TC, 'ZERO_COPY=1', 'LEAN_LEVELS=1', 'OBJDIR=obj-leanzc-lv', 'OUT=fs-doom-leanzc-lv'],
+    copy: ['LEAN=1', ...NO_TC, 'LEAN_LEVELS=1', 'OBJDIR=obj-lean-lv', 'OUT=fs-doom-lean-lv'],
 };
 const tmp = KEEP ?? mkdtempSync(join(tmpdir(), 'webdoom-leanlevels-'));
 mkdirSync(tmp, { recursive: true });

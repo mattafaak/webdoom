@@ -579,6 +579,10 @@ leg lean-screens    gcc,wad    "LEAN_SCREENS == vanilla screens, every frame: wi
 # other's save, and a WAD with every lump at an odd offset.  Three wrong lean
 # paths must each fail where they are wrong.
 leg lean-levels     gcc,wad,heavy "LEAN_LEVELS == the lean build, every frame: 13 demos at its zone minimum, largest maps, glass, saves, odd offsets" -- node tools/floor/lean-levels-test.mjs
+# The full memory diet: every RAM lever together (LEAN=1 ZERO_COPY=1
+# LEAN_LEVELS=1), all 13 demos correct through the floor gate at its smallest
+# zone, 352 KiB, and not at 348 (the default build needs 1216).
+leg floor-lean      fs,wad,heavy "full memory diet: 13 demos correct at 352 KiB of zone, not at 348" -- bash tools/floor/floor-lean.sh
 # The floor's music reference off the web: the OPL synth compiled natively
 # (tools/freestanding/synth-bench, built by the leg) renders what synth.wasm
 # renders, byte for byte, on the 13 demos' songs, and its register streams and
