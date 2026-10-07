@@ -528,6 +528,12 @@ leg freestanding-sim fs,wad    "fs-doom 13/13 == vanilla (rung 1 proof)"     -- 
 # its own out dir: under --jobs it runs beside freestanding-sim, and the two
 # must not write per-demo JSON into one directory
 leg ro-wad          fs,wad     "WAD blob stays read-only over 13 demos (XIP)" -- bash tools/freestanding/ro-wad-check.sh wads/lib tools/freestanding/out-ro
+# The same proof on fs-doom-zc, the zero-copy build (WEB_LUMPS_IN_PLACE,
+# engine/core/w_wad.h): every lump the engine is handed is the WAD itself, so a
+# write into any of them faults.  Its probe first writes into PLAYPAL as handed
+# out and must fault inside the blob (ro-wad's probe must not): the red-proof,
+# both ways, every run.
+leg ro-wad-zc       fszc,wad   "zero-copy build: no lump is ever written, 13 demos (a write into one faults)" -- bash tools/freestanding/ro-wad-check.sh --zero-copy wads/lib tools/freestanding/out-ro-zc
 # The demand every bare-metal target is measured against: fs-doom through the
 # floor gate, correctness (sim + render hashes) and x86 instructions per tic.
 leg floor-x86       fs,wad     "floor gate on the host: 13 demos correct, worst graded tic" -- bash tools/floor/run-x86.sh

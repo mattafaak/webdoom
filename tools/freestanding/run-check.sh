@@ -146,7 +146,7 @@ fi
 WHO=""
 [[ "$BIN" != fs-doom ]] && WHO=" ($BIN)"
 if [[ "${WD_RO_WAD:-0}" == "1" ]]; then
-    echo "PASS: $PASSES/$EXPECTED demos bit-identical with the WAD blob mprotect(PROT_READ)'d — no write to the blob (XIP-viable)$WHO"
+    echo "PASS: $PASSES/$EXPECTED demos bit-identical with the WAD blob mprotect(PROT_READ)'d — no write to the blob (XIP-viable)$WHO${RO_WAD_NOTE:-}"
 else
     echo "PASS: $PASSES/$EXPECTED demos bit-identical — the freestanding core matches vanilla$WHO"
 fi

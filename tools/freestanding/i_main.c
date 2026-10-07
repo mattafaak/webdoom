@@ -43,6 +43,8 @@
 #include "d_player.h"
 #include "m_argv.h"
 #include "r_main.h"
+#include "w_wad.h"  /* W_CacheLumpName: the lump-write probe */
+#include "z_zone.h" /* PU_CACHE */
 #include "fs_platform.h"
 #include "web.h"
 
@@ -770,6 +772,22 @@ int main (int argc, char** argv)
         R_SetViewSize (fs_view_blocks, fs_view_detail);
         fprintf (stderr, "fs-doom: view %d, %s detail\n", fs_view_blocks,
                  fs_view_detail ? "low" : "high");
+    }
+
+    // WD_LUMP_WRITE_PROBE=1 (ro-wad-check.sh): write one byte of the lump
+    // W_CacheLumpName hands the engine for PLAYPAL back over itself, then
+    // exit 3.  Under WD_RO_WAD=1 a build that reads lumps in place
+    // (fs-doom-zc) must fault here, inside the blob (exit 2, from the
+    // handler); a copying build writes its own zone copy and gets here.
+    if (getenv ("WD_LUMP_WRITE_PROBE") && getenv ("WD_LUMP_WRITE_PROBE")[0] == '1')
+    {
+        volatile byte* p = (volatile byte*) W_CacheLumpName ("PLAYPAL", PU_CACHE);
+        int in = (const byte*) p >= wad_data && (const byte*) p < wad_data + wad_len;
+        fprintf (stderr, "fs-doom: lump-write probe: PLAYPAL at %p, %s the WAD blob\n",
+                 (void*) p, in ? "inside" : "outside");
+        *p = *p;
+        fprintf (stderr, "fs-doom: lump-write probe: wrote PLAYPAL[0], no fault\n");
+        return 3;
     }
 
     // Disable smooth render interpolation (non-deterministic wall-clock drift).

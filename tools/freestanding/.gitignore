@@ -5,6 +5,7 @@ fs-doom-arm
 fs-doom-a64
 out-be/
 out-ro/
+out-ro-zc/
 out-arm/
 fs-doom-be
 obj-*/
