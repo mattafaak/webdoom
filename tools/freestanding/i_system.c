@@ -96,26 +96,47 @@ ticcmd_t* I_BaseTiccmd(void)
     return &emptycmd;
 }
 
-// A port with a free-running hardware counter defines FS_GET_TIME as the name
-// of `int FS_GET_TIME (void)`, the time in 35 Hz tics, and I_GetTime returns
-// it.  NetUpdate calls I_GetTime about five times a tic, so the clock_gettime
-// form below, with its 64-bit divides, would charge each tic the platform's
-// arithmetic rather than the engine's (tools/cortexm measured ~1,000 ARMv6-M
-// instructions a call).
+// I_GetTime, in 35 Hz tics, three ways:
+//
+// - A timedemo runs on a virtual clock, one tic per tic: I_GetTime is gametic.
+//   The sim never reads the clock (singletics), but NetUpdate does.  The
+//   renderer and D_Display call it mid-frame, and it does a ticcmd iteration for
+//   every tic of time that has passed.  On a real clock that work landed
+//   wherever the clock happened to tick: zero on an idle x86 host, up to 35
+//   iterations (19,139 instructions, measured) after the process was
+//   descheduled, and on tools/cortexm's emulated clock in 7% of tics.  So counts
+//   moved between identical runs, and the worst tic could miss work a target
+//   pays.  On the virtual clock it is one iteration per tic, as on a target
+//   that runs at 35 Hz, and every count repeats.  WD_REAL_CLOCK=1 (where the
+//   port has an environment) restores the clock below.
+// - A port with a free-running hardware counter defines FS_GET_TIME as the name
+//   of `int FS_GET_TIME (void)`, the time in 35 Hz tics.  NetUpdate calls
+//   I_GetTime about five times a tic, so the clock_gettime form, with its 64-bit
+//   divides, would charge each tic the platform's arithmetic rather than the
+//   engine's (tools/cortexm measured ~1,000 ARMv6-M instructions a call).
+// - Otherwise, clock_gettime.
+extern int gametic;
 #ifdef FS_GET_TIME
 int FS_GET_TIME (void);
-int I_GetTime(void)
-{
-    return FS_GET_TIME ();
-}
-#else
-int I_GetTime(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int)((ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL) * TICRATE / 1000);
-}
 #endif
+
+int I_GetTime(void)
+{
+    static int real = -1;
+    if (real < 0)
+        real = getenv("WD_REAL_CLOCK") && getenv("WD_REAL_CLOCK")[0] == '1';
+    if (fs_timedemo_active && !real)
+        return gametic;
+#ifdef FS_GET_TIME
+    return FS_GET_TIME ();
+#else
+    {
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        return (int)((ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL) * TICRATE / 1000);
+    }
+#endif
+}
 
 void I_Init(void)
 {
