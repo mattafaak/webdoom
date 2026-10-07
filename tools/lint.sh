@@ -10,7 +10,7 @@
 #   bash tools/lint.sh --fix    # fix mode — applies formatting in-place
 #
 # Scope:
-#   C:  engine/web/*.{c,h}  tools/archaeology/*.c
+#   C:  engine/web/*.{c,h}  tools/archaeology/*.c  tools/floor/*.{c,h}
 #   JS: client/js/*.js  client/sw.js  server/*.js
 #       tools/*.mjs  tools/fuzz/*.mjs  tools/archaeology/*.mjs
 #
@@ -73,6 +73,8 @@ else
             engine/web/*.c
             engine/web/*.h
             tools/archaeology/*.c
+            tools/floor/*.c
+            tools/floor/*.h
         )
 
         if [ "$FIX" = "1" ]; then
@@ -98,8 +100,9 @@ else
 
             # ── what clang-format does NOT cover, said out loud ──────────────
             #
-            # C_FILES is engine/web + tools/archaeology. Six other trees hold
-            # tracked C and were outside the gate with nothing saying so --
+            # C_FILES is engine/web, tools/archaeology and tools/floor. Six
+            # other trees hold tracked C and were outside the gate with nothing
+            # saying so --
             # scope that is narrow by accident reads exactly like scope that is
             # narrow by decision.
             #
@@ -120,7 +123,7 @@ else
             )
             UNDECLARED=()
             while IFS= read -r f; do
-                case "$f" in engine/web/*|tools/archaeology/*) continue ;; esac
+                case "$f" in engine/web/*|tools/archaeology/*|tools/floor/*) continue ;; esac
                 declared=0
                 for d in "${C_EXEMPT_DIRS[@]}"; do
                     case "$f" in "$d"/*) declared=1; break ;; esac

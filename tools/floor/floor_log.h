@@ -5,16 +5,18 @@
 // never inside a timed tic.  Output is plain text through a byte callback, so
 // it works over stdout, a UART, semihosting or a USB debug channel alike:
 //
+// clang-format off
 //   FLOOR 1 target=.. source=hardware|emulator|host unit=.. unit_hz=N
 //           build=.. view=10 detail=0 zone=B precache=0 mode=A|B
 //   DEMO doom-demo1 tics=N
 //   T <i> <gametic> <elapsed> <flags> [<simhash> <renderhash>]
 //   AUDIO samples=N underruns=N music_events=N sfx_starts=N synthhash=H mixhash=H frames=N
 //   END doom-demo1 final=<simhash>:<renderhash>
+// clang-format on
 //
 // <flags> is "-" or a comma list of: L (a level load, intermission or finale
 // started in this tic: not graded) and M:<bytes> (bytes copied out of the WAD
-// in this tic).  Hashes are 8 lower-case hex digits.  tools/floor/floor-gate.mjs
+// in this tic).  Hashes are 8 lower-case hex digits. tools/floor/floor-gate.mjs
 // reads it.  C89, no libc: the only output is the callback.
 // Copyright (C) 2026, GPL-2.0-or-later.
 #ifndef FLOOR_LOG_H
@@ -24,9 +26,9 @@
 
 typedef struct
 {
-    const char* target; /* e.g. "x86-fs-doom", "n64-ares", "rp2350" */
-    const char* source; /* "hardware", "emulator" or "host" */
-    const char* unit;   /* e.g. "instructions", "count", "cycles" */
+    const char* target;         /* e.g. "x86-fs-doom", "n64-ares", "rp2350" */
+    const char* source;         /* "hardware", "emulator" or "host" */
+    const char* unit;           /* e.g. "instructions", "count", "cycles" */
     unsigned long long unit_hz; /* units per second; 0 when not a time */
     const char* build;          /* git sha or build id */
     int view;                   /* screenblocks */
