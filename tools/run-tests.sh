@@ -547,6 +547,17 @@ leg zone-min        fs,wad     "smallest zone with rendering is still 1216 KiB" 
 # instead of copying them into the zone, and the smallest zone that still runs
 # all 13 demos correctly with rendering and audio is 924 KiB (920 fails).
 leg zero-copy       fszc,wad   "zero-copy build: 13 demos correct through the floor gate; zone minimum still 924 KiB" -- env FS_DOOM=tools/freestanding/fs-doom-zc node tools/floor/zone-min.mjs --check 924
+# The lean zero-copy build (LEAN=1 ZERO_COPY=1), whose lean set keeps the
+# texture tables and composites as const data made at build time by the
+# engine's own R_InitData and checked against the WAD at boot (TEXTURES_CONST,
+# COMPOSITES_CONST: engine/core/r_data.c).  The 13 demos through the floor
+# gate, every run on its own WAD's const tables; the smallest zone, 544 KiB
+# (540 fails; 920 without them); then wrong tables: one wrong value of each
+# kind the boot check compares (a definition, a column offset, a composite
+# byte, a sprite offset), each of which it must refuse; the column offset with
+# the check compiled out, which the gate must fail at a named tic; and a
+# composite with rows no patch writes, which the build must refuse.
+leg textures-const  gcc,wad    "lean zero-copy build: 13 demos correct on const texture tables + composites (26 runs); zone minimum 544 KiB; wrong tables caught at boot, by the gate and at build" -- node tools/floor/textures-const-test.mjs
 # The lean build's LEAN_SCREENS (engine/core/v_video.h) moves the back screen
 # and the wipe's two screens into the zone and shrinks the status bar's to its
 # 32 rows, on paths the goldens never reach: the demos' wipes are cut short and

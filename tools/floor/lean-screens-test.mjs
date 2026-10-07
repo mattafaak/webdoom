@@ -43,7 +43,11 @@ import { root } from '../lib/util.mjs';
 //   tnt-map12 below (exit, intermission, MAP13 to the demo's end): 1232 KiB,
 //     and 1228 fails; without LEAN_SCREENS: 1228, and 1224 fails.
 // So 1232 KiB: the 13 demos' minimum without LEAN_SCREENS, and with it the
-// minimum once a level changes.
+// minimum once a level changes.  All of it without the const texture tables
+// (TEXTURES_CONST, COMPOSITES_CONST: in the lean set since; on the lean
+// zero-copy build they take the 13 demos' minimum from 920 to 544 KiB), which
+// every build here leaves out: this tests the screens where they are
+// tightest, at the minimum it measured.
 const args = process.argv.slice(2);
 const LEAN_ZONE_MIN_KB = args.includes('--zone-kb') ? Number(args[args.indexOf('--zone-kb') + 1]) : 1232;
 const KEEP = args.includes('--keep') ? args[args.indexOf('--keep') + 1] : null;
@@ -52,10 +56,11 @@ const FS = join(root, 'tools/freestanding');
 const fail = msg => { console.log(`FAIL lean-screens: ${msg}`); process.exit(1); };
 
 // ── the builds: one OBJDIR each, so no object is shared between configurations
+const NO_TC = ['TEXTURES_CONST=0', 'COMPOSITES_CONST=0'];
 const BUILDS = {
-    lean: ['LEAN=1', 'OBJDIR=obj-lean', 'OUT=fs-doom-lean'],
-    ref: ['LEAN=1', 'LEAN_SCREENS=0', 'OBJDIR=obj-lean-ref', 'OUT=fs-doom-lean-ref'],
-    stride: ['LEAN=1', 'OBJDIR=obj-lean-rp-stride', 'OUT=fs-doom-lean-rp-stride', 'EXTRA_CFLAGS=-DV_SBARSTRIDE=31'],
+    lean: ['LEAN=1', ...NO_TC, 'OBJDIR=obj-lean', 'OUT=fs-doom-lean'],
+    ref: ['LEAN=1', ...NO_TC, 'LEAN_SCREENS=0', 'OBJDIR=obj-lean-ref', 'OUT=fs-doom-lean-ref'],
+    stride: ['LEAN=1', ...NO_TC, 'OBJDIR=obj-lean-rp-stride', 'OUT=fs-doom-lean-rp-stride', 'EXTRA_CFLAGS=-DV_SBARSTRIDE=31'],
 };
 const tmp = KEEP ?? mkdtempSync(join(tmpdir(), 'webdoom-leanscreens-'));
 mkdirSync(tmp, { recursive: true });

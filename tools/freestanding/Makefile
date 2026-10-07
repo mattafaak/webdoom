@@ -60,9 +60,15 @@ CFLAGS  := -m32 $(OPT) -g \
 # and the status bar's background is its 32 rows.  LEAN_SCREENS=0 drops it
 # from the lean set, for the lean-screens leg's reference build:
 #   make LEAN=1 LEAN_SCREENS=0 OBJDIR=obj-lean-ref OUT=fs-doom-lean-ref
+# and TEXTURES_CONST with COMPOSITES_CONST (below): the texture tables and
+# composites as const data, checked at boot.  The lean build then needs the
+# four IWADs in wads/lib to build; TEXTURES_CONST=0 COMPOSITES_CONST=0 drops
+# them from the lean set.
 ifeq ($(LEAN),1)
 CFLAGS += -DMAXVISPLANES=128 -DMAXVISSPRITES=128 -DTABLES_CONST -I$(OBJDIR)/gen
 LEAN_SCREENS ?= 1
+TEXTURES_CONST ?= 1
+COMPOSITES_CONST ?= 1
 endif
 ifeq ($(LEAN_SCREENS),1)
 CFLAGS += -DLEAN_SCREENS
@@ -342,7 +348,7 @@ imports: $(OUT)
 	@bash gen-imports.sh
 
 clean:
-	rm -rf obj obj-* fs-doom fs-doom-o2 fs-doom-fixed fs-doom-zc fs-doom-lean fs-doom-lean-ref fs-doom-lean-rp-stride $(OUT_DIR) synth-bench-O1 synth-bench-O2 synth-bench-x87 synth-exact
+	rm -rf obj obj-* fs-doom fs-doom-o2 fs-doom-fixed fs-doom-zc fs-doom-lean fs-doom-lean-ref fs-doom-lean-rp-stride fs-doom-leanzc fs-doom-leanzc-rp-* $(OUT_DIR) synth-bench-O1 synth-bench-O2 synth-bench-x87 synth-exact
 
 # ro-wad-check: read-only-WAD proof (XIP feasibility).
 # Runs all 13 demos with WD_RO_WAD=1: WAD blob mprotect(PROT_READ) after load.

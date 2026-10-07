@@ -23,3 +23,5 @@ out-rv32gc/
 fs-doom-lean
 fs-doom-lean-ref
 fs-doom-lean-rp-stride
+fs-doom-leanzc
+fs-doom-leanzc-rp-*
