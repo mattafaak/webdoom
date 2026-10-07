@@ -68,6 +68,32 @@ ifeq ($(LEAN_SCREENS),1)
 CFLAGS += -DLEAN_SCREENS
 endif
 
+# TEXTURES_CONST=1: the texture tables R_InitData builds in the zone (each
+# texture's definition, column lumps and offsets, width mask, height and
+# composite size; the sprites' widths and offsets) as const data, made at build
+# time from each of TEXTURES_WADS by the engine's own R_InitData (fs-texgen,
+# below) and checked against the WAD at boot (engine/core/r_data.c).
+# COMPOSITES_CONST=1 adds every multi-patch texture's composite.  A WAD that
+# matches no const copy gets vanilla's tables in the zone.
+#   make TEXTURES_CONST=1 [COMPOSITES_CONST=1] OBJDIR=... OUT=...
+# TEXGEN_CORRUPT=<item>,... builds wrong values on purpose, for the red-proofs
+# of tools/floor/textures-const-test.mjs (in an OBJDIR of its own): items as
+# tools/floor/gen-texture-tables.c lists them, e.g. ofs:doom2:SKY1:100.
+TEXTURES_CONST   ?= 0
+COMPOSITES_CONST ?= 0
+TEXTURES_WAD_DIR ?= ../../wads/lib
+TEXTURES_WADS    ?= doom.wad doom2.wad tnt.wad plutonia.wad
+TEXGEN_CORRUPT   ?=
+ifeq ($(COMPOSITES_CONST)$(TEXTURES_CONST),10)
+$(error COMPOSITES_CONST=1 needs TEXTURES_CONST=1)
+endif
+ifeq ($(TEXTURES_CONST),1)
+CFLAGS += -DTEXTURES_CONST -I$(OBJDIR)/gen
+endif
+ifeq ($(COMPOSITES_CONST),1)
+CFLAGS += -DCOMPOSITES_CONST
+endif
+
 # The floor gate's tic flags (floor_wrap.c): a level load, intermission or
 # finale starting, and the bytes a lump copy takes out of the WAD blob.
 FLOOR_WRAP := -Wl,--wrap=P_SetupLevel,--wrap=WI_Start,--wrap=F_StartFinale,--wrap=memcpy
@@ -162,11 +188,59 @@ ifeq ($(LEAN),1)
 $(OBJDIR)/core/tables.o: $(OBJDIR)/gen/tables_const.inc
 endif
 
+# the texture tables (TEXTURES_CONST): fs-texgen is this build's own objects,
+# r_data.c compiled -DTEXTURES_GEN instead, and tools/floor/gen-texture-tables.c,
+# which prints what R_InitData built.  Each WAD's tables are made twice, every
+# zone block filled first with 0x00 and then with 0xff, and must come out the
+# same: no table holds a byte the engine never wrote.
+TEXGEN_CFLAGS := $(filter-out -DTEXTURES_CONST -DCOMPOSITES_CONST -DTEXTURES_CONST_UNCHECKED,$(CFLAGS)) -DTEXTURES_GEN
+$(OBJDIR)/gen/r_data-gen.o: $(CORE_DIR)/r_data.c
+	@mkdir -p $(dir $@)
+	$(CC) $(TEXGEN_CFLAGS) -MMD -MP -c $< -o $@
+$(OBJDIR)/gen/gen-texture-tables.o: ../floor/gen-texture-tables.c
+	@mkdir -p $(dir $@)
+	$(CC) $(TEXGEN_CFLAGS) -MMD -MP -c $< -o $@
+$(OBJDIR)/gen/fs-texgen: $(filter-out $(OBJDIR)/core/r_data.o,$(OBJ)) $(OBJDIR)/gen/r_data-gen.o $(OBJDIR)/gen/gen-texture-tables.o
+	$(CC) $(LDFLAGS) $^ -Wl,--wrap=R_InitData,--wrap=Z_Malloc -o $@
+$(OBJDIR)/gen/textures_const.inc: $(OBJDIR)/gen/fs-texgen $(wildcard $(addprefix $(TEXTURES_WAD_DIR)/,$(TEXTURES_WADS))) Makefile
+	@rm -f $@.tmp
+	@set -e; ids=""; for w in $(TEXTURES_WADS); do \
+	    f="$(TEXTURES_WAD_DIR)/$$w"; id=$$(basename "$$w" .wad | tr -c 'A-Za-z0-9_\n' '_'); \
+	    [ -f "$$f" ] || { echo "TEXTURES_CONST: $$f is absent (tools/fetch-wads.sh), or build with TEXTURES_CONST=0" >&2; exit 1; }; \
+	    for p in 0 255; do \
+	        WD_TEXGEN_OUT="$@.$$id.$$p" WD_TEXGEN_ID="$$id" WD_TEXGEN_WAD="$$w" WD_TEXGEN_POISON=$$p \
+	        WD_TEXGEN_COMPOSITES=$(COMPOSITES_CONST) WD_TEXGEN_CORRUPT='$(TEXGEN_CORRUPT)' \
+	            $(OBJDIR)/gen/fs-texgen "$$f" > "$@.$$id.log" 2>&1 \
+	            || { tail -5 "$@.$$id.log" >&2; echo "TEXTURES_CONST: fs-texgen failed on $$f" >&2; exit 1; }; \
+	    done; \
+	    cmp -s "$@.$$id.0" "$@.$$id.255" || { echo "TEXTURES_CONST: $$w's tables hold bytes the engine never wrote (zone filled with 0x00 and with 0xff: cmp $@.$$id.0 $@.$$id.255)" >&2; exit 1; }; \
+	    cat "$@.$$id.0" >> $@.tmp; rm -f "$@.$$id.0" "$@.$$id.255" "$@.$$id.log"; ids="$$ids $$id"; \
+	    echo "textures_const.inc: $$w"; \
+	done; \
+	{ echo "static const texconst_t* const texconst_all[] = {"; \
+	  for id in $$ids; do echo "    &tc_$$id,"; done; echo "    0"; echo "};"; } >> $@.tmp
+	@mv $@.tmp $@
+ifeq ($(TEXTURES_CONST),1)
+$(OBJDIR)/core/r_data.o: $(OBJDIR)/gen/textures_const.inc
+endif
+# Objects depend on their sources, not their flags: an OBJDIR built before with
+# other TEXTURES_ knobs would keep an r_data.o (and tables) of the old setting.
+# The knobs are kept in a stamp that changes only when they do.
+TEXTURES_KNOBS := TEXTURES_CONST=$(TEXTURES_CONST) COMPOSITES_CONST=$(COMPOSITES_CONST) \
+                  TEXTURES_WADS=$(TEXTURES_WADS) TEXTURES_WAD_DIR=$(TEXTURES_WAD_DIR) \
+                  TEXGEN_CORRUPT=$(TEXGEN_CORRUPT) $(filter -DTEXTURES_CONST_UNCHECKED,$(CFLAGS))
+$(OBJDIR)/gen/textures.knobs: FORCE
+	@mkdir -p $(dir $@)
+	@echo '$(TEXTURES_KNOBS)' | cmp -s - $@ || echo '$(TEXTURES_KNOBS)' > $@
+$(OBJDIR)/core/r_data.o $(OBJDIR)/gen/textures_const.inc: $(OBJDIR)/gen/textures.knobs
+.PHONY: FORCE
+FORCE:
+
 $(OBJDIR)/floor/%.o: ../floor/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
--include $(OBJ:.o=.d)
+-include $(OBJ:.o=.d) $(OBJDIR)/gen/r_data-gen.d $(OBJDIR)/gen/gen-texture-tables.d
 
 # ── synth-bench: the OPL music synth alone, native, measured ─────────────────
 # engine/web/mus_opl.c (through fs_mus.c), opl3.c and synth_main.c, unchanged,

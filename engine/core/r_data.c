@@ -391,6 +391,14 @@ R_GetColumnComposite
 }
 
 
+#ifdef TEXTURES_CONST
+// webdoom: the texture tables as const data, checked at boot (below R_InitData)
+static void	R_ConstBegin (int nummappatches);
+static void	R_ConstTexture (int texnum);
+static int	R_ConstEnd (void);
+static void	R_ConstSprites (void);
+static int	tc_redo;
+#endif
 
 
 //
@@ -468,6 +476,9 @@ void R_InitTextures (void)
 	maxoff2 = 0;
     }
     numtextures = numtextures1 + numtextures2;
+#ifdef TEXTURES_CONST
+    R_ConstBegin (nummappatches);
+#endif
 	
     textures = Z_Malloc (numtextures*4, PU_STATIC, 0);
     texturecolumnlump = Z_Malloc (numtextures*4, PU_STATIC, 0);
@@ -568,12 +579,23 @@ void R_InitTextures (void)
 	textureheight[i] = texture->height<<FRACBITS;
 		
 	totalwidth += texture->width;
+#ifdef TEXTURES_CONST
+	R_ConstTexture (i);
+#endif
     }
 
     Z_Free (maptex1);
     if (maptex2)
 	Z_Free (maptex2);
     
+#ifdef TEXTURES_CONST
+    // the const tables, every texture's lookup already checked against them;
+    // or vanilla's, built here; or none yet (R_InitData runs this again)
+    j = R_ConstEnd ();
+    if (j < 0)
+	return;
+    if (j == 0)
+#endif
     // Precalculate whatever possible.	
     for (i=0 ; i<numtextures ; i++)
 	R_GenerateLookup (i);
@@ -635,6 +657,9 @@ void R_InitSpriteLumps (void)
 	spriteoffset[i] = SHORT(patch->leftoffset)<<FRACBITS;
 	spritetopoffset[i] = SHORT(patch->topoffset)<<FRACBITS;
     }
+#ifdef TEXTURES_CONST
+    R_ConstSprites ();
+#endif
 }
 
 
@@ -666,6 +691,10 @@ void R_InitColormaps (void)
 void R_InitData (void)
 {
     R_InitTextures ();
+#ifdef TEXTURES_CONST
+    if (tc_redo)
+	R_InitTextures ();	// the const tables failed midway: vanilla's
+#endif
     printf ("\nInitTextures");
     R_InitFlats ();
     printf ("\nInitFlats");
@@ -861,4 +890,378 @@ void R_PrecacheLevel (void)
 
 
 
+#if defined TEXTURES_CONST || defined TEXTURES_GEN
+//
+// webdoom: the texture tables as const data (TEXTURES_CONST, a compile-time
+// opt-in; COMPOSITES_CONST adds the composite textures).
+//
+// R_InitData builds in the zone tables that are a pure function of the WAD:
+// each texture's definition (texture_t), column lumps and offsets, width mask,
+// height and composite size, and the sprites' widths and offsets; and the
+// renderer builds a multi-patch texture's composite there when it is first
+// drawn.  For the four IWADs that is 180-365 KiB of zone at boot, and up to
+// 209 KiB of composites in one demo.  A port whose WAD sits in flash can keep
+// them in flash beside it:
+//   - at build time, fs-texgen (tools/freestanding/Makefile) boots the build's
+//     own engine on each IWAD, and when R_InitData returns,
+//     tools/floor/gen-texture-tables.c prints what it built, and every
+//     composite R_GenerateComposite builds, as C initializers
+//     (textures_const.inc).  It does so twice, every zone block filled first
+//     with 0x00 and then with 0xff, and the two must be the same: no table
+//     holds a byte the engine never wrote;
+//   - at boot, R_InitTextures and R_InitSpriteLumps still run vanilla's code,
+//     a texture at a time; each texture's lookup (and composite) is compared
+//     with the const copy and freed.  The const tables are used only if all
+//     of them are what this WAD gives.  Meanwhile the zone holds vanilla's
+//     per-texture arrays, one texture's tables and composite, and the sprite
+//     tables until they are compared: 41-54 KiB at most for the IWADs.
+// A WAD that differs from every const copy -- a PWAD's TEXTURE1, TEXTURE2,
+// PNAMES, patches or sprites, another IWAD -- gets vanilla's tables in the
+// zone, as without TEXTURES_CONST, and stderr says which texture differed.
+// What changes at run time stays in the zone: texturetranslation,
+// flattranslation, colormaps, and texturecomposite without COMPOSITES_CONST.
+// The const tables are never written (on the host, .rodata faults if they are).
+//
+#include <stddef.h>
 
+typedef struct
+{
+    const char*			wad;		// the WAD it was made from
+    int				numtextures;
+    int				nummappatches;
+    int				numspritelumps;
+    int				numcolumns;
+    int				numcomposites;
+    texture_t* const*		textures;
+    short* const*		columnlump;
+    unsigned short* const*	columnofs;
+    const int*			widthmask;
+    const fixed_t*		height;
+    const int*			compositesize;
+    byte* const*		composite;	// NULL: built in the zone
+    const fixed_t*		spritewidth;
+    const fixed_t*		spriteoffset;
+    const fixed_t*		spritetopoffset;
+} texconst_t;
+
+// A texture of n+1 patches, laid out as R_InitTextures allocates one: the
+// texture_t, then the patches past its first.
+#define TC_PATCHES(n)	struct { texture_t t; texpatch_t more[n]; }
+typedef char tc_layout_check[sizeof (texture_t)
+			     == offsetof (texture_t, patches) + sizeof (texpatch_t)
+			     && sizeof (TC_PATCHES (2))
+			     == sizeof (texture_t) + 2 * sizeof (texpatch_t) ? 1 : -1];
+#endif
+
+
+#ifdef TEXTURES_GEN
+// tools/floor/gen-texture-tables.c reads the private texture_t through these
+void R_TexGenTexture (int i, char* name, int* width, int* height,
+		      int* patchcount)
+{
+    texture_t*	t = textures[i];
+    memcpy (name, t->name, 8);
+    *width = t->width;
+    *height = t->height;
+    *patchcount = t->patchcount;
+}
+
+void R_TexGenPatch (int i, int j, int* originx, int* originy, int* patch)
+{
+    texpatch_t*	p = &textures[i]->patches[j];
+    *originx = p->originx;
+    *originy = p->originy;
+    *patch = p->patch;
+}
+#endif
+
+
+#ifdef TEXTURES_CONST
+#if defined COMPOSITES_CONST && !defined TEXTURES_CONST
+#error COMPOSITES_CONST needs TEXTURES_CONST
+#endif
+
+// texconst_all[]: one per WAD, NULL-terminated
+#include "textures_const.inc"
+
+#define TC_MAX		8
+
+static struct
+{
+    const texconst_t*	c;
+    int			composites;	// its composites matched too
+} tc_live[TC_MAX];
+static int		tc_nlive;	// the const copies still in the running
+static int		tc_freed;	// textures whose zone tables were freed
+static int		tc_off;		// the second run: vanilla's tables
+static const texconst_t* tc_used;
+// the last difference found, for stderr
+static const char*	tc_why;
+static const char*	tc_whywad;
+static int		tc_whytex;
+static char		tc_whyname[9];
+
+static void R_ConstNote (const texconst_t* c, int texnum, const char* why)
+{
+    tc_why = why;
+    tc_whywad = c->wad;
+    tc_whytex = texnum;
+    memcpy (tc_whyname, textures[texnum]->name, 8);
+    tc_whyname[8] = 0;
+}
+
+//
+// R_ConstBegin
+// The const copies whose counts match this WAD's.
+//
+static void R_ConstBegin (int nummappatches)
+{
+    int		i;
+
+    tc_nlive = tc_freed = tc_redo = 0;
+    tc_used = NULL;
+    tc_why = NULL;
+    if (tc_off)
+	return;
+    for (i=0 ; texconst_all[i] && tc_nlive < TC_MAX ; i++)
+	if (texconst_all[i]->numtextures == numtextures
+	    && texconst_all[i]->nummappatches == nummappatches)
+	{
+	    tc_live[tc_nlive].c = texconst_all[i];
+	    tc_live[tc_nlive].composites = texconst_all[i]->composite != NULL;
+	    tc_nlive++;
+	}
+}
+
+//
+// R_ConstDiffers
+// What of texture texnum, as vanilla just built it, differs from c's copy.
+//
+static const char* R_ConstDiffers (const texconst_t* c, int texnum)
+{
+#ifdef TEXTURES_CONST_UNCHECKED
+    // the red-proof's build (tools/floor/textures-const-test.mjs): the const
+    // copy is taken as it is
+    return NULL;
+#else
+    texture_t*		t = textures[texnum];
+    const texture_t*	k = c->textures[texnum];
+    int			j;
+
+    if (memcmp (t->name, k->name, 8) || t->width != k->width
+	|| t->height != k->height || t->patchcount != k->patchcount)
+	return "definition";
+    for (j=0 ; j<t->patchcount ; j++)
+	if (t->patches[j].originx != k->patches[j].originx
+	    || t->patches[j].originy != k->patches[j].originy
+	    || t->patches[j].patch != k->patches[j].patch)
+	    return "patches";
+    if (texturewidthmask[texnum] != c->widthmask[texnum]
+	|| textureheight[texnum] != c->height[texnum]
+	|| texturecompositesize[texnum] != c->compositesize[texnum])
+	return "size";
+    if (memcmp (texturecolumnlump[texnum], c->columnlump[texnum],
+		t->width * sizeof(short)))
+	return "column lumps";
+    if (memcmp (texturecolumnofs[texnum], c->columnofs[texnum],
+		t->width * sizeof(unsigned short)))
+	return "column offsets";
+    return NULL;
+#endif
+}
+
+//
+// R_ConstTexture
+// Texture texnum is defined: build its lookup (and its composite) as
+// vanilla does, keep the const copies that hold the same, and free it.
+//
+static void R_ConstTexture (int texnum)
+{
+    byte*	block = NULL;
+    const char*	why;
+    int		k;
+    int		n;
+
+    if (!tc_nlive)
+	return;
+    R_GenerateLookup (texnum);
+#ifdef COMPOSITES_CONST
+    if (texturecompositesize[texnum])
+    {
+	R_GenerateComposite (texnum);
+	block = texturecomposite[texnum];
+    }
+#endif
+    for (k=n=0 ; k<tc_nlive ; k++)
+    {
+	why = R_ConstDiffers (tc_live[k].c, texnum);
+	if (why)
+	{
+	    R_ConstNote (tc_live[k].c, texnum, why);
+	    continue;
+	}
+#ifndef TEXTURES_CONST_UNCHECKED
+	if (block && tc_live[k].composites
+	    && memcmp (block, tc_live[k].c->composite[texnum],
+		       texturecompositesize[texnum]))
+	{
+	    R_ConstNote (tc_live[k].c, texnum, "composite");
+	    tc_live[k].composites = 0;
+	}
+#endif
+	tc_live[n++] = tc_live[k];
+    }
+    tc_nlive = n;
+    if (block)
+	Z_Free (block);		// texturecomposite[texnum] is 0 again
+    if (!tc_nlive)
+    {
+	// vanilla's tables from here on; the ones freed must be built again
+	tc_redo = tc_freed > 0;
+	return;
+    }
+    Z_Free (textures[texnum]);
+    Z_Free (texturecolumnlump[texnum]);
+    Z_Free (texturecolumnofs[texnum]);
+    textures[texnum] = NULL;
+    tc_freed++;
+}
+
+//
+// R_ConstEnd
+// Every texture is defined.  1: the const tables are in; 0: vanilla's are
+// being built (R_InitTextures goes on); -1: some textures matched before one
+// did not, and were freed: everything is freed, R_InitData runs
+// R_InitTextures again, and that run builds vanilla's.
+//
+static int R_ConstEnd (void)
+{
+    int		i;
+    int		k;
+    int		comp;
+
+    if (tc_redo)
+    {
+	for (i=0 ; i<numtextures ; i++)
+	    if (textures[i])
+	    {
+		Z_Free (textures[i]);
+		Z_Free (texturecolumnlump[i]);
+		Z_Free (texturecolumnofs[i]);
+	    }
+	Z_Free (textures);
+	Z_Free (texturecolumnlump);
+	Z_Free (texturecolumnofs);
+	Z_Free (texturecomposite);
+	Z_Free (texturecompositesize);
+	Z_Free (texturewidthmask);
+	Z_Free (textureheight);
+	tc_off = 1;
+	fprintf (stderr, "R_InitTextures: the const tables from %s differ at "
+		 "texture %d (%s: %s): built in the zone\n",
+		 tc_whywad, tc_whytex, tc_whyname, tc_why);
+	return -1;
+    }
+    if (!tc_nlive)
+    {
+	if (tc_off)
+	    return 0;		// the second run, already reported
+	if (tc_why)
+	    fprintf (stderr, "R_InitTextures: the const tables from %s differ "
+		     "at texture %d (%s: %s): built in the zone\n",
+		     tc_whywad, tc_whytex, tc_whyname, tc_why);
+	else
+	    fprintf (stderr, "R_InitTextures: no const tables for this WAD "
+		     "(%d textures): built in the zone\n", numtextures);
+	return 0;
+    }
+
+    // the first that matched, one with its composites if there is one
+    for (k=0 ; k<tc_nlive-1 && !tc_live[k].composites ; k++)
+	;
+    tc_used = tc_live[k].c;
+    comp = tc_live[k].composites;
+    Z_Free (textures);
+    Z_Free (texturecolumnlump);
+    Z_Free (texturecolumnofs);
+    Z_Free (texturecomposite);
+    Z_Free (texturecompositesize);
+    Z_Free (texturewidthmask);
+    Z_Free (textureheight);
+    textures = (texture_t **) tc_used->textures;
+    texturecolumnlump = (short **) tc_used->columnlump;
+    texturecolumnofs = (unsigned short **) tc_used->columnofs;
+    texturecompositesize = (int *) tc_used->compositesize;
+    texturewidthmask = (int *) tc_used->widthmask;
+    textureheight = (fixed_t *) tc_used->height;
+    if (comp)
+	texturecomposite = (byte **) tc_used->composite;
+    else
+    {
+	texturecomposite = Z_Malloc (numtextures*4, PU_STATIC, 0);
+	memset (texturecomposite, 0, numtextures*4);
+    }
+    fprintf (stderr, "R_InitTextures: const tables from %s: %d textures, "
+	     "%d columns, %d composites %s, %s\n",
+	     tc_used->wad, numtextures, tc_used->numcolumns,
+	     tc_used->numcomposites, comp ? "const" : "built in the zone",
+#ifdef TEXTURES_CONST_UNCHECKED
+	     "UNCHECKED (TEXTURES_CONST_UNCHECKED)"
+#else
+	     "checked against this WAD"
+#endif
+	     );
+    if (tc_used->composite && !comp)
+	fprintf (stderr, "R_InitTextures: the const composites from %s differ "
+		 "at texture %d (%s): built in the zone\n",
+		 tc_whywad, tc_whytex, tc_whyname);
+    return 1;
+}
+
+//
+// R_ConstSprites
+// Vanilla's sprite tables are built: if a const copy holds the same, use it
+// and free them.
+//
+static void R_ConstSprites (void)
+{
+    const texconst_t*	c;
+    int			i;
+    int			n = numspritelumps * sizeof(fixed_t);
+
+    for (i=-1 ; ; i++)
+    {
+	c = i < 0 ? tc_used : texconst_all[i];
+	if (i >= 0 && !c)
+	{
+	    fprintf (stderr, "R_InitSpriteLumps: no const tables for this "
+		     "WAD's %d sprite lumps: built in the zone\n",
+		     numspritelumps);
+	    return;
+	}
+	if (!c || c->numspritelumps != numspritelumps)
+	    continue;
+#ifndef TEXTURES_CONST_UNCHECKED
+	if (memcmp (spritewidth, c->spritewidth, n)
+	    || memcmp (spriteoffset, c->spriteoffset, n)
+	    || memcmp (spritetopoffset, c->spritetopoffset, n))
+	    continue;
+#endif
+	break;
+    }
+    Z_Free (spritewidth);
+    Z_Free (spriteoffset);
+    Z_Free (spritetopoffset);
+    spritewidth = (fixed_t *) c->spritewidth;
+    spriteoffset = (fixed_t *) c->spriteoffset;
+    spritetopoffset = (fixed_t *) c->spritetopoffset;
+    fprintf (stderr, "R_InitSpriteLumps: const tables from %s: %d sprite "
+	     "lumps, %s\n", c->wad, numspritelumps,
+#ifdef TEXTURES_CONST_UNCHECKED
+	     "UNCHECKED (TEXTURES_CONST_UNCHECKED)"
+#else
+	     "checked against this WAD"
+#endif
+	     );
+}
+#endif
