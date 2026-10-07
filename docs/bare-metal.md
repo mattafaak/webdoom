@@ -860,6 +860,24 @@ ILP32 or has 32-bit pointers: wasm32, x86 `-m32`, ARM32, PowerPC32 and the
 N64's libdragon ABI. An LP64 build truncates every lump handle. A port to a
 64-bit-pointer target must widen `handle` first.
 
+The one 64-bit build tried, an aarch64 cross-build of the freestanding core
+(2026-09-11), booted and then segfaulted on all 13 demos. Reading the code
+since finds three places that keep a pointer in 32 bits. None is fixed,
+because no 64-bit target ships, and no fixed build has confirmed that these
+three are the whole list:
+
+- `lumpinfo_t.handle` (w_wad.h) is an `int` holding the lump's address
+  (`W_AddFile`, w_wad.c), so every lump read goes to a truncated address.
+- `R_InitColormaps` (r_data.c) aligns the colormap pointer through
+  `(int)colormaps`, which drops its high half.
+- `maptexture_t` (r_data.c) mirrors the on-disk TEXTURE1 record, but types
+  the obsolete 4-byte column-directory field as `void **`. Under LP64 that
+  field is 8 bytes and 8-aligned, so `patchcount` and `patches[]` are read
+  from the wrong offsets.
+
+A port would start with `intptr_t`/`uintptr_t` for the first two and a 32-bit
+integer field for the third, with the 13 demo hashes as its gate.
+
 **FixedDiv** (engine-archaeology.md §2 and §7). The shipped form, in
 m_fixed.h, is:
 

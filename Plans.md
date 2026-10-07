@@ -4,34 +4,6 @@ What is known and not done, with what each item would take or what blocks it.
 `spec.md` outranks this file. Finished work lives in `git log`; the reasons
 behind the current state live in `spec.md` and `docs/`.
 
-## Needs a decision
-
-- **Co-op on a map with no start for a player.** Chex Quest E1M3–E1M5 have
-  only player 1's start. A drop-in for another slot there now ends the session
-  with an `I_Error` (the guard in `P_SpawnPlayer`), where it used to write to
-  `players[-1]`. Chocolate Doom refuses such a game at level load. The
-  friendlier option is to spawn the player at another player's start, as
-  `G_DoReborn` already does when its own start is blocked.
-
-## Engine
-
-- `getSide()` (p_spec.c) can read `sides[-1]` for a glass-hack line (two-sided,
-  no back side) that carries a raise-to-texture special. Chocolate has the same
-  code.
-- A cyclic BSP (node children in range, but looping) hangs at load rather than
-  corrupting memory. It is not refused, because a refusal could catch odd real
-  maps.
-- A texture width of 0 or less is not checked; only the height is clamped.
-- `G_DoReborn` writes through `players[n].mo` for a drop-in whose `mo` is NULL.
-  In wasm that writes 0 over unused low memory and has no effect, but it is
-  undefined behaviour, and a native build would fault.
-- The 64-bit aarch64 cross-build of the freestanding core boots and then
-  segfaulted on all 13 demos when last tried (2026-09-11). Only 32-bit builds
-  have ever been made.
-- MAXVISPLANES is 128 against a measured peak of 118 over the 13 demos; a busy
-  community map can reach vanilla's `I_Error`. Raising it costs 664 B of BSS
-  per visplane.
-
 ## Client
 
 - WebGL context loss is not handled.
