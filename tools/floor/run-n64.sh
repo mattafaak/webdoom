@@ -21,7 +21,7 @@
 #
 # usage: bash tools/floor/run-n64.sh [--correctness] [--filter RE] [--jobs N]
 #            [--out DIR] [--work DIR] [--nodraw] [--golden-dir DIR]
-#            [--expansion-pak] [--interpreter]
+#            [--cart-dma 0|1] [--expansion-pak] [--interpreter]
 #            [--regrade]
 #            [--timing-once] [--zone-kb N]
 #   --filter RE      only demos whose <iwad>-<demo> matches (grep -E); the gate
@@ -29,12 +29,13 @@
 #   --nodraw         build the mode A ROMs with -nodraw (the red-proof: the
 #                    gate must refuse the frozen framebuffer at a named tic)
 #   --golden-dir DIR grade against these goldens (the corrupted-golden red-proof)
+#   --cart-dma 0     the word-by-word cartridge copy instead of PI DMA
 #   --expansion-pak  run with ares's 8 MB Expansion Pak (a data point only:
 #                    the graded configuration is the stock 4 MB console)
 #   --interpreter    ares Developer/ForceInterpreter (full I-cache emulation)
 #   --regrade        grade the logs already in OUT; build and run nothing
 #   --timing-once    mode B once per demo and floor-stats only (no mode A, no
-#                    gate): a timing comparison between two builds
+#                    gate): a timing comparison, e.g. --cart-dma 0 against 1
 #   --zone-kb N      the zone size (default 2560); above ~3,000 the ROM needs
 #                    --expansion-pak
 #
@@ -44,7 +45,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 N64="$ROOT/tools/n64"
 OUT="$ROOT/tools/floor/out-n64"
 WORK="$N64/n64_floor_work"
-CORRECTNESS=0; FILTER=""; JOBS=""; NODRAW=0; GOLDEN=""
+CORRECTNESS=0; FILTER=""; JOBS=""; NODRAW=0; GOLDEN=""; CART_DMA=1
 EXPAK=0; INTERP=0; REGRADE=0; ONCE=0; ZONE_KB=""
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -55,6 +56,7 @@ while [ $# -gt 0 ]; do
         --work)          WORK="$2"; shift 2 ;;
         --nodraw)        NODRAW=1; shift ;;
         --golden-dir)    GOLDEN="$2"; shift 2 ;;
+        --cart-dma)      CART_DMA="$2"; shift 2 ;;
         --expansion-pak) EXPAK=1; shift ;;
         --interpreter)   INTERP=1; shift ;;
         --regrade)       REGRADE=1; shift ;;
@@ -64,6 +66,7 @@ while [ $# -gt 0 ]; do
         *) echo "run-n64: unknown argument '$1' (see --help)" >&2; exit 2 ;;
     esac
 done
+case "$CART_DMA" in 0|1) ;; *) echo "run-n64: --cart-dma takes 0 or 1" >&2; exit 2 ;; esac
 # Absolute, because make runs in tools/n64 (-C): a relative OUT_ROM there
 # names a different file from the one ares is then handed.  Measured: with a
 # relative --work, every ROM landed under tools/n64/tools/n64/... and all 26
@@ -118,6 +121,7 @@ else MODES=(A B); RUNS=(1 2); fi
 
 BUILD="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 [ -n "$(git -C "$ROOT" status --porcelain -- engine tools/n64 tools/floor 2>/dev/null)" ] && BUILD="$BUILD+dirty"
+[ "$CART_DMA" = 0 ] && BUILD="$BUILD+wordcopy"
 [ "$NODRAW" = 1 ] && BUILD="$BUILD+nodraw"
 [ -n "$ZONE_KB" ] && BUILD="$BUILD+zone${ZONE_KB}k"
 ZONE_ARG=()
@@ -144,7 +148,7 @@ if [ "$REGRADE" = 0 ]; then
         [ "$mode" = A ] && [ "$NODRAW" = 1 ] && extra=(N64_FLOOR_NODRAW=1)
         make -C "$N64" CORE_OBJ_DIR="$WORK/core" OBJ_DIR="$WORK/obj/$tag.$mode" \
              N64_WAD="$ROOT/wads/lib/$wad" N64_WAD_NAME="$name" N64_TIMEDEMO="$demo" \
-             N64_FLOOR="$floor" N64_FLOOR_NAME="$tag" N64_BUILD="$BUILD" \
+             N64_FLOOR="$floor" N64_FLOOR_NAME="$tag" N64_BUILD="$BUILD" N64_CART_DMA="$CART_DMA" \
              "${extra[@]}" "${ZONE_ARG[@]}" OUT_ELF="$WORK/$tag.$mode.elf" OUT_ROM="$WORK/$tag.$mode.z64" \
              > "$WORK/$tag.$mode.build.log" 2>&1
     }

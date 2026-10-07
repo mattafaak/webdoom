@@ -119,6 +119,12 @@ ifdef N64_TIMEDEMO
 COMMON_FLAGS += -DN64_TIMEDEMO=\"$(N64_TIMEDEMO)\"
 endif
 
+# Cartridge copies (cart_read_n64.c): 1 = PI DMA for the bulk of every lump,
+# the word path for the edges; 0 = the word path for everything (the old way,
+# kept so the cost of a cache-miss tic can be measured both ways).
+N64_CART_DMA ?= 1
+COMMON_FLAGS += -DN64_CART_DMA=$(N64_CART_DMA)
+
 # ── Floor gate builds (tools/floor/run-n64.sh) ───────────────────────────────
 # N64_FLOOR=A   correctness: renders every tic (no -nodraw) and records each
 #               tic's sim and render hash;
