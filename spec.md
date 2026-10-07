@@ -207,10 +207,18 @@ context: browsers withhold `navigator.serviceWorker` and
 No hardware target is attempted before its row in
 [docs/retro.md](docs/retro.md) exists, with arithmetic.
 
+A target is graded by the floor gate ([tools/floor/floor-gate.mjs](tools/floor/floor-gate.mjs)):
+all 13 IWAD demos tic-exact in sim and render, music and sound effects
+running, and the worst graded tic within 1/35 s. Only a hardware log can
+PASS; an emulator log is a prediction.
+
 | target | status |
 |--------|--------|
-| N64 (VR4300) | **test bed.** `n64-demos` is the gate (13/13, emulated); hardware runs are evidence, not the gate. |
-| RP2040 | **parked.** 4.00× over on SRAM. |
+| N64 (VR4300) | **test bed; out on its CPU.** `n64-demos` and `n64-floor` gate correctness (13/13 in ares, rendering included). ares predicts the worst tic at 4.21× the budget; a hardware run on the Analogue 3D is optional (Plans.md). |
+| RP2350 (2× Cortex-M33) | **predicted floor with an OPL2 chip; untested.** One core 0.61–0.88× of the budget with the fast drawers; PSRAM needed. |
+| RP2040 (2× Cortex-M0+) | **predicted marginal; untested.** About 0.81–1.13× of core 0 split over two cores at 133 MHz; RAM short even after the memory diet. |
+| EFR32MG24 (Cortex-M33, 78 MHz) | **predicted fail.** 1.17–1.70× one core. |
+| Teensy 4.1 (Cortex-M7) | **predicted pass**, the upper bracket. |
 | 386-class | **no harness.** Nothing here measures this code on one. |
 | ESP32-S3 | **plausible, untested.** Needs PSRAM. |
 | Sega 32X | **open.** The simulation fits one SH-2; rendering does not. |
