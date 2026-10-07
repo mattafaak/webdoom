@@ -141,10 +141,17 @@ int fs_audio_on (void)
     return on;
 }
 
+// A port with no environment, or one where audio would swamp what is being
+// measured (qemu: the synth costs more than the game), builds with
+// -DFS_AUDIO_DEFAULT=0; WD_AUDIO still decides where it is set.
+#ifndef FS_AUDIO_DEFAULT
+#define FS_AUDIO_DEFAULT 1
+#endif
+
 void fs_audio_init (void)
 {
     const char* e = getenv ("WD_AUDIO");
-    on = !(e && e[0] == '0');
+    on = e ? e[0] != '0' : FS_AUDIO_DEFAULT;
     trace_path = on ? getenv ("WD_AUDIO_TRACE") : 0;
     if (!on)
         return;

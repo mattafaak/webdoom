@@ -70,17 +70,27 @@ CFLAGS := $(CPU) $(OPT) -g -std=gnu89 -DNORMALUNIX -Dalloca=__builtin_alloca \
           -Wall -Wno-unused-variable -Wno-unused-but-set-variable \
           -Wno-dangling-else -Wno-parentheses -Wno-missing-braces \
           -Wno-unused-value -Wno-pointer-sign -Wno-implicit-function-declaration \
+          -DFS_AUDIO_DEFAULT=0 \
           -I$(CORE) -I$(FS) -I../floor -I. $(EXTRA_CFLAGS)
+
+# The audio (tools/freestanding/fs_audio.c): built, and off unless WD_AUDIO
+# says otherwise (there is no environment here, so off).  Under qemu the OPL
+# synth costs more than the game, so the 13-demo legs run without it.  Its
+# sources need the web layer's headers and an empty <emscripten.h>, and no
+# fused multiply-add (the synth's reference is IEEE double, as in synth.wasm).
+WEB := ../../engine/web
+AUDIO_CFLAGS := -ffp-contract=off -I$(FS)/stub -I$(WEB)
 
 CORE_EXCLUDE := $(addprefix $(CORE)/,i_main.c i_net.c i_sound.c i_system.c i_video.c d_net.c)
 CORE_SRC := $(filter-out $(CORE_EXCLUDE),$(wildcard $(CORE)/*.c))
-FS_SRC   := i_system.c i_video.c i_sound.c d_net.c files.c perf.c floor_wrap.c
+FS_SRC   := i_system.c i_video.c i_sound.c d_net.c files.c perf.c floor_wrap.c \
+            fs_audio.c sfx_mix.c fs_mus.c
 CM_SRC   := board.c fault.c semihost.c syscalls.c wad_semi.c cm_main.c
 
 OBJ := $(B)/crt0.o \
        $(patsubst $(CORE)/%.c,$(B)/core/%.o,$(CORE_SRC)) \
        $(patsubst %.c,$(B)/fs/%.o,$(FS_SRC)) \
-       $(B)/floor/floor_log.o \
+       $(B)/floor/floor_log.o $(B)/web/opl3.o \
        $(patsubst %.c,$(B)/cm/%.o,$(CM_SRC))
 ST_OBJ := $(B)/crt0.o $(addprefix $(B)/cm/,board.o fault.o semihost.o syscalls.o selftest.o) \
           $(B)/loops.o
@@ -142,6 +152,11 @@ $(B)/fs/%.o: $(FS)/%.c $(B)/flags.txt
 	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 $(B)/floor/%.o: ../floor/%.c $(B)/flags.txt
+	@mkdir -p $(dir $@)
+	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+AUDIO_OBJ := $(addprefix $(B)/fs/,fs_audio.o fs_mus.o) $(B)/web/opl3.o
+$(AUDIO_OBJ): CFLAGS += $(AUDIO_CFLAGS)
+$(B)/web/%.o: $(WEB)/%.c $(B)/flags.txt
 	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 $(B)/cm/%.o: %.c $(B)/flags.txt
