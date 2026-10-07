@@ -659,6 +659,11 @@ leg zone-min-play-full   gcc,wad,heavy "play-inclusive zone minimum, the full di
 leg ram-floor            gcc,wad,heavy "RAM floor on x86, 5 builds: statics + play-inclusive zone + stack + heap, vs the golden" -- node tools/floor/ram-floor.mjs --isa x86
 leg ram-floor-armv6m     qemucm,wad,slow,heavy "RAM floor on ARMv6-M (Cortex-M0+ code), 5 builds, vs the golden" -- node tools/floor/ram-floor.mjs --isa armv6m
 leg ram-floor-armv8m     qemucm,wad,slow,heavy "RAM floor on ARMv8-M (Cortex-M33 code), 5 builds, vs the golden" -- node tools/floor/ram-floor.mjs --isa armv8m
+# A melt wipe's own cost in the lean build (tools/floor/wipe-probe.mjs): x86
+# instructions per melt step and per wipe, and the zone its two borrowed
+# screens take.  Wipes are not graded: the verdict is REPORT, and the leg
+# fails only if it measured nothing.
+leg wipe-probe           gcc,wad       "a melt wipe's instructions and zone, lean build (reported, not graded)" -- node tools/floor/wipe-probe.mjs
 # The ARM reference.  wasm is architecture-independent, so only a native build
 # tests ARM codegen, ABI and alignment; emulated cycles are not hardware
 # cycles, so this gates correctness, not timing.  zig cross-builds the
