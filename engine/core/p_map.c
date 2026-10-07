@@ -202,10 +202,10 @@ P_TeleportMove
 //
 boolean PIT_CheckLine (line_t* ld)
 {
-    if (tmbbox[BOXRIGHT] <= ld->bbox[BOXLEFT]
-	|| tmbbox[BOXLEFT] >= ld->bbox[BOXRIGHT]
-	|| tmbbox[BOXTOP] <= ld->bbox[BOXBOTTOM]
-	|| tmbbox[BOXBOTTOM] >= ld->bbox[BOXTOP] )
+    if (tmbbox[BOXRIGHT] <= LINE_BBOX(ld,BOXLEFT)
+	|| tmbbox[BOXLEFT] >= LINE_BBOX(ld,BOXRIGHT)
+	|| tmbbox[BOXTOP] <= LINE_BBOX(ld,BOXBOTTOM)
+	|| tmbbox[BOXBOTTOM] >= LINE_BBOX(ld,BOXTOP) )
 	return true;
 
     if (P_BoxOnLineSide (tmbbox, ld) != -1)
@@ -661,7 +661,7 @@ void P_HitSlideLine (line_t* ld)
 	
     side = P_PointOnLineSide (slidemo->x, slidemo->y, ld);
 	
-    lineangle = R_PointToAngle2 (0,0, ld->dx, ld->dy);
+    lineangle = R_PointToAngle2 (0,0, LINE_DX(ld), LINE_DY(ld));
 
     if (side == 1)
 	lineangle += ANG180;

@@ -99,7 +99,9 @@ void*	W_CacheLumpName (char* name, int tag);
 //   - the few lumps that need a copy of their own still get one: COLORMAP
 //     (256-byte aligned in the zone), a REJECT shorter than the map needs, a
 //     BLOCKMAP the playsim cannot read as it lies (p_setup.c), GENMIDI (copied
-//     into the synth's bank).
+//     into the synth's bank), and with LEAN_LEVELS (r_defs.h) a VERTEXES,
+//     SEGS or NODES lump at an odd address or on a big-endian host
+//     (P_LevelShorts, p_setup.c).
 // Off (the shipped wasm build), every macro below is empty or vanilla's code.
 //
 #ifdef WEB_LUMPS_IN_PLACE

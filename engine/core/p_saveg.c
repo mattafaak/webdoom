@@ -235,8 +235,8 @@ void P_ArchiveWorld (void)
 	    
 	    si = &sides[li->sidenum[j]];
 
-	    *put++ = si->textureoffset >> FRACBITS;
-	    *put++ = si->rowoffset >> FRACBITS;
+	    *put++ = SIDE_TEXOFS(si) >> FRACBITS;
+	    *put++ = SIDE_ROWOFS(si) >> FRACBITS;
 	    *put++ = si->toptexture;
 	    *put++ = si->bottomtexture;
 	    *put++ = si->midtexture;	
@@ -300,8 +300,13 @@ void P_UnArchiveWorld (void)
 	    if (li->sidenum[j] == -1)
 		continue;
 	    si = &sides[li->sidenum[j]];
+#ifdef LEAN_LEVELS
+	    si->textureoffset16 = *get++;	// the same, as r_defs.h keeps it
+	    si->rowoffset16 = *get++;
+#else
 	    si->textureoffset = *get++ << FRACBITS;
 	    si->rowoffset = *get++ << FRACBITS;
+#endif
 	    si->toptexture = *get++;
 	    si->bottomtexture = *get++;
 	    si->midtexture = *get++;

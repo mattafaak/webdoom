@@ -294,8 +294,8 @@ void R_AddLine (seg_t*	line)
     curline = line;
 
     // OPTIMIZE: quickly reject orthogonal back sides.
-    angle1 = R_PointToAngle (line->v1->x, line->v1->y);
-    angle2 = R_PointToAngle (line->v2->x, line->v2->y);
+    angle1 = R_PointToAngle (VX(SEG_V1(line)), VY(SEG_V1(line)));
+    angle2 = R_PointToAngle (VX(SEG_V2(line)), VY(SEG_V2(line)));
     
     // Clip to view edges.
     // OPTIMIZE: make constant out of 2*clipangle (FIELDOFVIEW).
@@ -343,7 +343,7 @@ void R_AddLine (seg_t*	line)
     if (x1 == x2)
 	return;				
 	
-    backsector = line->backsector;
+    backsector = SEG_BACK(line);
 
     // Single sided line?
     if (!backsector)
@@ -367,7 +367,7 @@ void R_AddLine (seg_t*	line)
     if (backsector->ceilingpic == frontsector->ceilingpic
 	&& backsector->floorpic == frontsector->floorpic
 	&& backsector->lightlevel == frontsector->lightlevel
-	&& curline->sidedef->midtexture == 0)
+	&& SEG_SIDEDEF(curline)->midtexture == 0)
     {
 	return;
     }
@@ -404,7 +404,7 @@ int	checkcoord[12][4] =
 };
 
 
-boolean R_CheckBBox (fixed_t*	bspcoord)
+boolean R_CheckBBox (nodecoord_t*	bspcoord)
 {
     int			boxx;
     int			boxy;
@@ -427,16 +427,16 @@ boolean R_CheckBBox (fixed_t*	bspcoord)
     
     // Find the corners of the box
     // that define the edges from current viewpoint.
-    if (viewx <= bspcoord[BOXLEFT])
+    if (viewx <= NODECOORD(bspcoord,BOXLEFT))
 	boxx = 0;
-    else if (viewx < bspcoord[BOXRIGHT])
+    else if (viewx < NODECOORD(bspcoord,BOXRIGHT))
 	boxx = 1;
     else
 	boxx = 2;
 		
-    if (viewy >= bspcoord[BOXTOP])
+    if (viewy >= NODECOORD(bspcoord,BOXTOP))
 	boxy = 0;
-    else if (viewy > bspcoord[BOXBOTTOM])
+    else if (viewy > NODECOORD(bspcoord,BOXBOTTOM))
 	boxy = 1;
     else
 	boxy = 2;
@@ -445,10 +445,10 @@ boolean R_CheckBBox (fixed_t*	bspcoord)
     if (boxpos == 5)
 	return true;
 	
-    x1 = bspcoord[checkcoord[boxpos][0]];
-    y1 = bspcoord[checkcoord[boxpos][1]];
-    x2 = bspcoord[checkcoord[boxpos][2]];
-    y2 = bspcoord[checkcoord[boxpos][3]];
+    x1 = NODECOORD(bspcoord,checkcoord[boxpos][0]);
+    y1 = NODECOORD(bspcoord,checkcoord[boxpos][1]);
+    x2 = NODECOORD(bspcoord,checkcoord[boxpos][2]);
+    y2 = NODECOORD(bspcoord,checkcoord[boxpos][3]);
     
     // check clip list for an open space
     angle1 = R_PointToAngle (x1, y1) - viewangle;
@@ -599,7 +599,7 @@ void R_RenderBSPNode (int bspnum)
     R_RenderBSPNode (bsp->children[side]); 
 
     // Possibly divide back space.
-    if (R_CheckBBox (bsp->bbox[side^1]))	
+    if (R_CheckBBox (NODE_BBOX(bsp,side^1)))	
 	R_RenderBSPNode (bsp->children[side^1]);
 }
 

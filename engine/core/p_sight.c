@@ -104,6 +104,64 @@ P_DivlineSide
 }
 
 
+#ifdef LEAN_LEVELS
+//
+// P_NodeSide
+// webdoom LEAN_LEVELS: P_DivlineSide with a node's partition line, read from
+// its 16-bit fields (r_defs.h) instead of a divline_t built for each visit.
+// The node's fixed_t values are those fields << FRACBITS, so each test below
+// is P_DivlineSide's on them: a zero, a sign or a >> FRACBITS of one is the
+// field's own.
+//
+static int
+P_NodeSide
+( fixed_t	x,
+  fixed_t	y,
+  node_t*	node )
+{
+    fixed_t	dx;
+    fixed_t	dy;
+    fixed_t	left;
+    fixed_t	right;
+
+    if (!node->dx16)
+    {
+	if (x==NODE_X(node))
+	    return 2;
+	
+	if (x <= NODE_X(node))
+	    return node->dy16 > 0;
+
+	return node->dy16 < 0;
+    }
+    
+    if (!node->dy16)
+    {
+	if (x==NODE_Y(node))	// sic: P_DivlineSide's
+	    return 2;
+
+	if (y <= NODE_Y(node))
+	    return node->dx16 < 0;
+
+	return node->dx16 > 0;
+    }
+	
+    dx = (x - NODE_X(node));
+    dy = (y - NODE_Y(node));
+
+    left =  node->dy16 * (dx>>FRACBITS);
+    right = (dy>>FRACBITS) * node->dx16;
+	
+    if (right < left)
+	return 0;	// front side
+    
+    if (left == right)
+	return 2;
+    return 1;		// back side
+}
+#endif
+
+
 //
 // P_InterceptVector2
 // Returns the fractional intercept point
@@ -170,7 +228,7 @@ boolean P_CrossSubsector (int num)
 
     for ( ; count ; seg++, count--)
     {
-	line = seg->linedef;
+	line = SEG_LINEDEF(seg);
 
 	// allready checked other side?
 	if (line->validcount == validcount)
@@ -178,19 +236,19 @@ boolean P_CrossSubsector (int num)
 	
 	line->validcount = validcount;
 		
-	v1 = line->v1;
-	v2 = line->v2;
-	s1 = P_DivlineSide (v1->x,v1->y, &strace);
-	s2 = P_DivlineSide (v2->x, v2->y, &strace);
+	v1 = LINE_V1(line);
+	v2 = LINE_V2(line);
+	s1 = P_DivlineSide (VX(v1),VY(v1), &strace);
+	s2 = P_DivlineSide (VX(v2), VY(v2), &strace);
 
 	// line isn't crossed?
 	if (s1 == s2)
 	    continue;
 	
-	divl.x = v1->x;
-	divl.y = v1->y;
-	divl.dx = v2->x - v1->x;
-	divl.dy = v2->y - v1->y;
+	divl.x = VX(v1);
+	divl.y = VY(v1);
+	divl.dx = VX(v2) - VX(v1);
+	divl.dy = VY(v2) - VY(v1);
 	s1 = P_DivlineSide (strace.x, strace.y, &divl);
 	s2 = P_DivlineSide (t2x, t2y, &divl);
 
@@ -204,8 +262,8 @@ boolean P_CrossSubsector (int num)
 	    return false;
 	
 	// crosses a two sided line
-	front = seg->frontsector;
-	back = seg->backsector;
+	front = SEG_FRONT(seg);
+	back = SEG_BACK(seg);
 
 	// no wall to block sight with?
 	if (front->floorheight == back->floorheight
@@ -254,6 +312,12 @@ boolean P_CrossSubsector (int num)
 
 
 
+#ifdef LEAN_LEVELS
+#define P_BSPSIDE(x,y,n)	P_NodeSide (x, y, n)
+#else
+#define P_BSPSIDE(x,y,n)	P_DivlineSide (x, y, (divline_t *)(n))	// node_t starts as one
+#endif
+
 //
 // P_CrossBSPNode
 // Returns true
@@ -275,7 +339,7 @@ boolean P_CrossBSPNode (int bspnum)
     bsp = &nodes[bspnum];
     
     // decide which side the start point is on
-    side = P_DivlineSide (strace.x, strace.y, (divline_t *)bsp);
+    side = P_BSPSIDE (strace.x, strace.y, bsp);
     if (side == 2)
 	side = 0;	// an "on" should cross both sides
 
@@ -284,7 +348,7 @@ boolean P_CrossBSPNode (int bspnum)
 	return false;
 	
     // the partition plane is crossed here
-    if (side == P_DivlineSide (t2x, t2y,(divline_t *)bsp))
+    if (side == P_BSPSIDE (t2x, t2y, bsp))
     {
 	// the line doesn't touch the other side
 	return true;

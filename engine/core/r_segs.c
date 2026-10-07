@@ -115,15 +115,15 @@ R_RenderMaskedSegRange
     //   for horizontal / vertical / diagonal. Diagonal?
     // OPTIMIZE: get rid of LIGHTSEGSHIFT globally
     curline = ds->curline;
-    frontsector = curline->frontsector;
-    backsector = curline->backsector;
-    texnum = texturetranslation[curline->sidedef->midtexture];
+    frontsector = SEG_FRONT(curline);
+    backsector = SEG_BACK(curline);
+    texnum = texturetranslation[SEG_SIDEDEF(curline)->midtexture];
 	
     lightnum = (frontsector->lightlevel >> LIGHTSEGSHIFT)+extralight;
 
-    if (curline->v1->y == curline->v2->y)
+    if (VY(SEG_V1(curline)) == VY(SEG_V2(curline)))
 	lightnum--;
-    else if (curline->v1->x == curline->v2->x)
+    else if (VX(SEG_V1(curline)) == VX(SEG_V2(curline)))
 	lightnum++;
 
     if (lightnum < 0)		
@@ -141,7 +141,7 @@ R_RenderMaskedSegRange
     mceilingclip = ds->sprtopclip;
     
     // find positioning
-    if (curline->linedef->flags & ML_DONTPEGBOTTOM)
+    if (SEG_LINEDEF(curline)->flags & ML_DONTPEGBOTTOM)
     {
 	dc_texturemid = frontsector->floorheight > backsector->floorheight
 	    ? frontsector->floorheight : backsector->floorheight;
@@ -153,7 +153,7 @@ R_RenderMaskedSegRange
 	    ? frontsector->ceilingheight : backsector->ceilingheight;
 	dc_texturemid = dc_texturemid - viewz;
     }
-    dc_texturemid += curline->sidedef->rowoffset;
+    dc_texturemid += SIDE_ROWOFS(SEG_SIDEDEF(curline));
 
     // webdoom: pin the column-height mask for
     //   masked mid-textures.  R_RenderMaskedSegRange is called from
@@ -408,21 +408,21 @@ R_StoreWallRange
 	I_Error ("Bad R_RenderWallRange: %i to %i", start , stop);
 #endif
     
-    sidedef = curline->sidedef;
-    linedef = curline->linedef;
+    sidedef = SEG_SIDEDEF(curline);
+    linedef = SEG_LINEDEF(curline);
 
     // mark the segment as visible for auto map
     linedef->flags |= ML_MAPPED;
     
     // calculate rw_distance for scale calculation
-    rw_normalangle = curline->angle + ANG90;
+    rw_normalangle = SEG_ANGLE(curline) + ANG90;
     offsetangle = abs(rw_normalangle-rw_angle1);
     
     if (offsetangle > ANG90)
 	offsetangle = ANG90;
 
     distangle = ANG90 - offsetangle;
-    hyp = R_PointToDist (curline->v1->x, curline->v1->y);
+    hyp = R_PointToDist (VX(SEG_V1(curline)), VY(SEG_V1(curline)));
     sineval = finesine[distangle>>ANGLETOFINESHIFT];
     rw_distance = FixedMul (hyp, sineval);
 		
@@ -488,7 +488,7 @@ R_StoreWallRange
 	    // top of texture at top
 	    rw_midtexturemid = worldtop;
 	}
-	rw_midtexturemid += sidedef->rowoffset;
+	rw_midtexturemid += SIDE_ROWOFS(sidedef);
 
 	ds_p->silhouette = SIL_BOTH;
 	ds_p->sprtopclip = screenheightarray;
@@ -617,8 +617,8 @@ R_StoreWallRange
 	    else	// top of texture at top
 		rw_bottomtexturemid = worldlow;
 	}
-	rw_toptexturemid += sidedef->rowoffset;
-	rw_bottomtexturemid += sidedef->rowoffset;
+	rw_toptexturemid += SIDE_ROWOFS(sidedef);
+	rw_bottomtexturemid += SIDE_ROWOFS(sidedef);
 	
 	// allocate space for masked texture tables
 	if (sidedef->midtexture)
@@ -658,7 +658,7 @@ R_StoreWallRange
 	if (rw_normalangle-rw_angle1 < ANG180)
 	    rw_offset = -rw_offset;
 
-	rw_offset += sidedef->textureoffset + curline->offset;
+	rw_offset += SIDE_TEXOFS(sidedef) + SEG_OFFSET(curline);
 	rw_centerangle = ANG90 + viewangle - rw_normalangle;
 	
 	// calculate light table
@@ -669,9 +669,9 @@ R_StoreWallRange
 	{
 	    lightnum = (frontsector->lightlevel >> LIGHTSEGSHIFT)+extralight;
 
-	    if (curline->v1->y == curline->v2->y)
+	    if (VY(SEG_V1(curline)) == VY(SEG_V2(curline)))
 		lightnum--;
-	    else if (curline->v1->x == curline->v2->x)
+	    else if (VX(SEG_V1(curline)) == VX(SEG_V2(curline)))
 		lightnum++;
 
 	    if (lightnum < 0)		

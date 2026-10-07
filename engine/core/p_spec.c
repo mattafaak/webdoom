@@ -222,7 +222,7 @@ getSector
   int		line,
   int		side )
 {
-    return sides[ (sectors[currentSector].lines[line])->sidenum[side] ].sector;
+    return SIDE_SECTOR (&sides[ (sectors[currentSector].lines[line])->sidenum[side] ]);
 }
 
 
@@ -1118,7 +1118,11 @@ void P_UpdateSpecials (void)
 	{
 	  case 48:
 	    // EFFECT FIRSTCOL SCROLL +
+#ifdef LEAN_LEVELS
+	    sides[line->sidenum[0]].textureoffset16 += 1;	// FRACUNIT
+#else
 	    sides[line->sidenum[0]].textureoffset += FRACUNIT;
+#endif
 	    break;
 	}
     }

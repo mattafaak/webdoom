@@ -73,6 +73,14 @@ endif
 ifeq ($(LEAN_SCREENS),1)
 CFLAGS += -DLEAN_SCREENS
 endif
+# LEAN_LEVELS=1 (engine/core/r_defs.h): the level in less RAM, exactly.
+# VERTEXES, SEGS and NODES as the WAD stores them, read in place under
+# ZERO_COPY=1 (else one PU_LEVEL copy each); lines and sides with 16-bit
+# integer parts and indices.  Its own OBJDIR and OUT:
+#   make LEAN=1 ZERO_COPY=1 LEAN_LEVELS=1 OBJDIR=obj-leanzc-lv OUT=fs-doom-leanzc-lv
+ifeq ($(LEAN_LEVELS),1)
+CFLAGS += -DLEAN_LEVELS
+endif
 
 # TEXTURES_CONST=1: the texture tables R_InitData builds in the zone (each
 # texture's definition, column lumps and offsets, width mask, height and
@@ -348,7 +356,7 @@ imports: $(OUT)
 	@bash gen-imports.sh
 
 clean:
-	rm -rf obj obj-* fs-doom fs-doom-o2 fs-doom-fixed fs-doom-zc fs-doom-lean fs-doom-lean-ref fs-doom-lean-rp-stride fs-doom-leanzc fs-doom-leanzc-rp-* $(OUT_DIR) synth-bench-O1 synth-bench-O2 synth-bench-x87 synth-exact
+	rm -rf obj obj-* fs-doom fs-doom-o2 fs-doom-fixed fs-doom-zc fs-doom-lean fs-doom-lean-ref fs-doom-lean-rp-stride fs-doom-leanzc fs-doom-leanzc-rp-* fs-doom-leanzc-lv fs-doom-lean-lv $(OUT_DIR) synth-bench-O1 synth-bench-O2 synth-bench-x87 synth-exact
 
 # ro-wad-check: read-only-WAD proof (XIP feasibility).
 # Runs all 13 demos with WD_RO_WAD=1: WAD blob mprotect(PROT_READ) after load.

@@ -96,6 +96,42 @@ extern line_t*		lines;
 extern int		numsides;
 extern side_t*		sides;
 
+#ifdef LEAN_LEVELS
+// webdoom LEAN_LEVELS (r_defs.h): a seg's back sector as vanilla's P_LoadSegs
+// set it.  One-sided by the map: none.  Two-sided: the linedef's other side's
+// sector, and a seg on side 0 of a line with no side 1 gets P_NullSector's
+// (p_setup.c, set up by every P_LoadSegs).  A side 1 implies a side 0, which
+// P_LoadLineDefs requires.
+extern sector_t*	p_nullsector;
+
+static __inline__ sector_t* P_SegBackSector (seg_t* s)
+{
+    line_t*	l = &lines[s->linedefi];
+
+    if (!l->twosided)
+	return NULL;
+    if (s->side)
+	return l->frontsector;
+    return l->backsector ? l->backsector : p_nullsector;
+}
+
+// A line's bounding box, from its vertices as P_LoadLineDefs fills vanilla's
+// (the lesser and greater of each coordinate).  i is a constant at every use.
+#include "m_bbox.h"
+
+static __inline__ fixed_t P_LineBBox (line_t* l, int i)
+{
+    vertex_t*	a = LINE_V1 (l);
+    vertex_t*	b = LINE_V2 (l);
+    short	p = i == BOXLEFT || i == BOXRIGHT ? a->x16 : a->y16;
+    short	q = i == BOXLEFT || i == BOXRIGHT ? b->x16 : b->y16;
+
+    if (i == BOXLEFT || i == BOXBOTTOM)
+	return (fixed_t) (p < q ? p : q) << FRACBITS;
+    return (fixed_t) (p < q ? q : p) << FRACBITS;
+}
+#endif
+
 
 //
 // POV data.

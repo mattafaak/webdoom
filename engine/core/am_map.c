@@ -397,15 +397,15 @@ void AM_findMinMaxBoundaries(void)
   
     for (i=0;i<numvertexes;i++)
     {
-	if (vertexes[i].x < min_x)
-	    min_x = vertexes[i].x;
-	else if (vertexes[i].x > max_x)
-	    max_x = vertexes[i].x;
+	if (VX(&vertexes[i]) < min_x)
+	    min_x = VX(&vertexes[i]);
+	else if (VX(&vertexes[i]) > max_x)
+	    max_x = VX(&vertexes[i]);
     
-	if (vertexes[i].y < min_y)
-	    min_y = vertexes[i].y;
-	else if (vertexes[i].y > max_y)
-	    max_y = vertexes[i].y;
+	if (VY(&vertexes[i]) < min_y)
+	    min_y = VY(&vertexes[i]);
+	else if (VY(&vertexes[i]) > max_y)
+	    max_y = VY(&vertexes[i]);
     }
   
     max_w = max_x - min_x;
@@ -1123,10 +1123,10 @@ void AM_drawWalls(void)
 
     for (i=0;i<numlines;i++)
     {
-	l.a.x = lines[i].v1->x;
-	l.a.y = lines[i].v1->y;
-	l.b.x = lines[i].v2->x;
-	l.b.y = lines[i].v2->y;
+	l.a.x = VX(LINE_V1(&lines[i]));
+	l.a.y = VY(LINE_V1(&lines[i]));
+	l.b.x = VX(LINE_V2(&lines[i]));
+	l.b.y = VY(LINE_V2(&lines[i]));
 	if (cheating || (lines[i].flags & ML_MAPPED))
 	{
 	    if ((lines[i].flags & LINE_NEVERSEE) && !cheating)

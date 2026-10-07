@@ -79,26 +79,26 @@ P_PointOnLineSide
     fixed_t	left;
     fixed_t	right;
 	
-    if (!line->dx)
+    if (LINE_DX(line) == 0)
     {
-	if (x <= line->v1->x)
-	    return line->dy > 0;
+	if (x <= VX(LINE_V1(line)))
+	    return LINE_DY(line) > 0;
 	
-	return line->dy < 0;
+	return LINE_DY(line) < 0;
     }
-    if (!line->dy)
+    if (LINE_DY(line) == 0)
     {
-	if (y <= line->v1->y)
-	    return line->dx < 0;
+	if (y <= VY(LINE_V1(line)))
+	    return LINE_DX(line) < 0;
 	
-	return line->dx > 0;
+	return LINE_DX(line) > 0;
     }
 	
-    dx = (x - line->v1->x);
-    dy = (y - line->v1->y);
+    dx = (x - VX(LINE_V1(line)));
+    dy = (y - VY(LINE_V1(line)));
 	
-    left = FixedMul ( line->dy>>FRACBITS , dx );
-    right = FixedMul ( dy , line->dx>>FRACBITS );
+    left = FixedMul ( LINE_DY(line)>>FRACBITS , dx );
+    right = FixedMul ( dy , LINE_DX(line)>>FRACBITS );
 	
     if (right < left)
 	return 0;		// front side
@@ -123,9 +123,9 @@ P_BoxOnLineSide
     switch (ld->slopetype)
     {
       case ST_HORIZONTAL:
-	p1 = tmbox[BOXTOP] > ld->v1->y;
-	p2 = tmbox[BOXBOTTOM] > ld->v1->y;
-	if (ld->dx < 0)
+	p1 = tmbox[BOXTOP] > VY(LINE_V1(ld));
+	p2 = tmbox[BOXBOTTOM] > VY(LINE_V1(ld));
+	if (LINE_DX(ld) < 0)
 	{
 	    p1 ^= 1;
 	    p2 ^= 1;
@@ -133,9 +133,9 @@ P_BoxOnLineSide
 	break;
 	
       case ST_VERTICAL:
-	p1 = tmbox[BOXRIGHT] < ld->v1->x;
-	p2 = tmbox[BOXLEFT] < ld->v1->x;
-	if (ld->dy < 0)
+	p1 = tmbox[BOXRIGHT] < VX(LINE_V1(ld));
+	p2 = tmbox[BOXLEFT] < VX(LINE_V1(ld));
+	if (LINE_DY(ld) < 0)
 	{
 	    p1 ^= 1;
 	    p2 ^= 1;
@@ -218,10 +218,10 @@ P_MakeDivline
 ( line_t*	li,
   divline_t*	dl )
 {
-    dl->x = li->v1->x;
-    dl->y = li->v1->y;
-    dl->dx = li->dx;
-    dl->dy = li->dy;
+    dl->x = VX(LINE_V1(li));
+    dl->y = VY(LINE_V1(li));
+    dl->dx = LINE_DX(li);
+    dl->dy = LINE_DY(li);
 }
 
 
@@ -578,8 +578,8 @@ PIT_AddLineIntercepts (line_t* ld)
 	 || trace.dx < -FRACUNIT*16
 	 || trace.dy < -FRACUNIT*16)
     {
-	s1 = P_PointOnDivlineSide (ld->v1->x, ld->v1->y, &trace);
-	s2 = P_PointOnDivlineSide (ld->v2->x, ld->v2->y, &trace);
+	s1 = P_PointOnDivlineSide (VX(LINE_V1(ld)), VY(LINE_V1(ld)), &trace);
+	s2 = P_PointOnDivlineSide (VX(LINE_V2(ld)), VY(LINE_V2(ld)), &trace);
     }
     else
     {

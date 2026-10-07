@@ -113,7 +113,39 @@ mapthing_t*	deathmatch_p;
 mapthing_t	playerstarts[MAXPLAYERS];
 
 
+#ifdef LEAN_LEVELS
+//
+// P_LevelShorts
+// webdoom LEAN_LEVELS (r_defs.h): a map lump made of 16-bit fields (VERTEXES,
+// SEGS, NODES) as an array of them in host order, which nothing writes: the
+// lump itself where it lies in place (w_wad.h) at an even address on a host
+// whose SHORT() changes nothing, else a PU_LEVEL copy, swapped.  The in-RAM
+// types are the records' own layouts (checked here).
+//
+typedef char p_vertex_is_its_record[sizeof(vertex_t) == sizeof(mapvertex_t) ? 1 : -1];
+typedef char p_seg_is_its_record[sizeof(seg_t) == sizeof(mapseg_t) ? 1 : -1];
+typedef char p_node_is_its_record[sizeof(node_t) == sizeof(mapnode_t) ? 1 : -1];
 
+static void* P_LevelShorts (int lump)
+{
+    short*	p;
+    int		i;
+    int		len = W_LumpLength (lump);
+
+#ifdef WEB_LUMPS_IN_PLACE
+    p = W_LumpInPlace (lump);
+    if (p && !((size_t) p & 1) && SHORT ((short) 0x0102) == 0x0102)
+	return p;
+#endif
+    p = Z_Malloc (len, PU_LEVEL, 0);
+    W_ReadLump (lump, p);
+    for (i=0 ; i<len/2 ; i++)
+	p[i] = SHORT (p[i]);
+    return p;
+}
+
+sector_t*	p_nullsector;	// SEG_BACK's (r_state.h), set by P_LoadSegs
+#endif
 
 
 //
@@ -129,6 +161,9 @@ void P_LoadVertexes (int lump)
     // Determine number of lumps:
     //  total lump length / vertex record length.
     numvertexes = W_LumpLength (lump) / sizeof(mapvertex_t);
+#ifdef LEAN_LEVELS
+    vertexes = P_LevelShorts (lump);	// read as they lie
+#else
 
     // Allocate zone memory for buffer.
     vertexes = Z_Malloc (numvertexes*sizeof(vertex_t),PU_LEVEL,0);	
@@ -149,6 +184,7 @@ void P_LoadVertexes (int lump)
 
     // Free buffer memory.
     Z_Free (data);
+#endif
 }
 
 
@@ -185,6 +221,26 @@ void P_LoadSegs (int lump)
     int			side;
 	
     numsegs = W_LumpLength (lump) / sizeof(mapseg_t);
+#ifdef LEAN_LEVELS
+    // read as they lie: the checks below, then nothing to convert
+    segs = P_LevelShorts (lump);
+    p_nullsector = P_NullSector ();
+    for (i=0, li = segs ; i<numsegs ; i++, li++)
+    {
+	if (li->v1i < 0 || li->v1i >= numvertexes
+	    || li->v2i < 0 || li->v2i >= numvertexes)
+	    I_Error ("P_LoadSegs: seg %d has an out-of-range vertex", i);
+	linedef = li->linedefi;
+	if (linedef < 0 || linedef >= numlines)
+	    I_Error ("P_LoadSegs: seg %d has out-of-range linedef %d", i, linedef);
+	side = li->side;
+	if (side != 0 && side != 1)
+	    I_Error ("P_LoadSegs: seg %d has side %d", i, side);
+	if (lines[linedef].sidenum[side] == -1)
+	    I_Error ("P_LoadSegs: seg %d is on a missing side of linedef %d",
+		     i, linedef);
+    }
+#else
     segs = Z_Malloc (numsegs*sizeof(seg_t),PU_LEVEL,0);	
     memset (segs, 0, numsegs*sizeof(seg_t));
     data = W_CacheLumpNum (lump,PU_STATIC);
@@ -224,6 +280,7 @@ void P_LoadSegs (int lump)
     }
 	
     Z_Free (data);
+#endif
 
     // Subsectors load first, so their ranges are checked once segs exist.
     // P_GroupLines reads segs[firstline] even of an empty subsector.
@@ -317,6 +374,14 @@ void P_LoadNodes (int lump)
     node_t*	no;
 	
     numnodes = W_LumpLength (lump) / sizeof(mapnode_t);
+#ifdef LEAN_LEVELS
+    // read as they lie: the children's checks below, nothing to convert
+    nodes = P_LevelShorts (lump);
+    for (i=0, no = nodes ; i<numnodes ; i++, no++)
+    {
+	for (j=0 ; j<2 ; j++)
+	{
+#else
     nodes = Z_Malloc (numnodes*sizeof(node_t),PU_LEVEL,0);	
     data = W_CacheLumpNum (lump,PU_STATIC);
 	
@@ -332,6 +397,7 @@ void P_LoadNodes (int lump)
 	for (j=0 ; j<2 ; j++)
 	{
 	    no->children[j] = SHORT(mn->children[j]);
+#endif
 	    if (no->children[j] & NF_SUBSECTOR
 		? (no->children[j] & ~NF_SUBSECTOR) >= numsubsectors
 		: no->children[j] >= numnodes)
@@ -344,12 +410,16 @@ void P_LoadNodes (int lump)
 	    if (!(no->children[j] & NF_SUBSECTOR) && no->children[j] >= i)
 		I_Error ("P_LoadNodes: node %d has child node %d at or above it",
 			 i, no->children[j]);
+#ifndef LEAN_LEVELS
 	    for (k=0 ; k<4 ; k++)
 		no->bbox[j][k] = SHORT(mn->bbox[j][k])<<FRACBITS;
+#endif
 	}
     }
 	
+#ifndef LEAN_LEVELS
     Z_Free (data);
+#endif
 }
 
 
@@ -458,6 +528,26 @@ void P_LoadLineDefs (int lump)
 	if (SHORT(mld->v1) < 0 || SHORT(mld->v1) >= numvertexes
 	    || SHORT(mld->v2) < 0 || SHORT(mld->v2) >= numvertexes)
 	    I_Error ("P_LoadLineDefs: linedef %d has an out-of-range vertex", i);
+#ifdef LEAN_LEVELS
+	// dx, dy and bbox are derived from the vertices where they are used
+	// (r_defs.h); the slope type is vanilla's, from the same dx and dy
+	ld->v1i = SHORT(mld->v1);
+	ld->v2i = SHORT(mld->v2);
+	ld->twosided = (ld->flags & ML_TWOSIDED) != 0;
+	
+	if (LINE_DX (ld) == 0)
+	    ld->slopetype = ST_VERTICAL;
+	else if (LINE_DY (ld) == 0)
+	    ld->slopetype = ST_HORIZONTAL;
+	else
+	{
+	    if (FixedDiv (LINE_DY (ld) , LINE_DX (ld)) > 0)
+		ld->slopetype = ST_POSITIVE;
+	    else
+		ld->slopetype = ST_NEGATIVE;
+	}
+		
+#else
 	v1 = ld->v1 = &vertexes[SHORT(mld->v1)];
 	v2 = ld->v2 = &vertexes[SHORT(mld->v2)];
 	ld->dx = v2->x - v1->x;
@@ -496,6 +586,7 @@ void P_LoadLineDefs (int lump)
 	    ld->bbox[BOXBOTTOM] = v2->y;
 	    ld->bbox[BOXTOP] = v1->y;
 	}
+#endif
 
 	ld->sidenum[0] = SHORT(mld->sidenum[0]);
 	ld->sidenum[1] = SHORT(mld->sidenum[1]);
@@ -510,7 +601,7 @@ void P_LoadLineDefs (int lump)
 	    if (ld->sidenum[0] < 0 || ld->sidenum[0] >= numsides)
 		I_Error ("P_LoadLineDefs: linedef %d has out-of-range front sidenum %d (0..%d)",
 			 i, ld->sidenum[0], numsides - 1);
-	    ld->frontsector = sides[ld->sidenum[0]].sector;
+	    ld->frontsector = SIDE_SECTOR (&sides[ld->sidenum[0]]);
 	}
 	else	/* P_GroupLines counts into frontsector; Chocolate crashes too */
 	    I_Error ("P_LoadLineDefs: linedef %d has no front side", i);
@@ -520,7 +611,7 @@ void P_LoadLineDefs (int lump)
 	    if (ld->sidenum[1] < 0 || ld->sidenum[1] >= numsides)
 		I_Error ("P_LoadLineDefs: linedef %d has out-of-range back sidenum %d (0..%d)",
 			 i, ld->sidenum[1], numsides - 1);
-	    ld->backsector = sides[ld->sidenum[1]].sector;
+	    ld->backsector = SIDE_SECTOR (&sides[ld->sidenum[1]]);
 	}
 	else
 	    ld->backsector = 0;
@@ -550,8 +641,13 @@ void P_LoadSideDefs (int lump)
     for (i=0 ; i<numsides ; i++, msd++, sd++)
     {
 	int sectoridx;
+#ifdef LEAN_LEVELS
+	sd->textureoffset16 = SHORT(msd->textureoffset);
+	sd->rowoffset16 = SHORT(msd->rowoffset);
+#else
 	sd->textureoffset = SHORT(msd->textureoffset)<<FRACBITS;
 	sd->rowoffset = SHORT(msd->rowoffset)<<FRACBITS;
+#endif
 	sd->toptexture = R_TextureNumForName(msd->toptexture);
 	sd->bottomtexture = R_TextureNumForName(msd->bottomtexture);
 	sd->midtexture = R_TextureNumForName(msd->midtexture);
@@ -562,7 +658,11 @@ void P_LoadSideDefs (int lump)
 	if (sectoridx < 0 || sectoridx >= numsectors)
 	    I_Error ("P_LoadSideDefs: sidedef %d references out-of-range sector %d (0..%d)",
 		     i, sectoridx, numsectors - 1);
+#ifdef LEAN_LEVELS
+	sd->sectori = sectoridx;
+#else
 	sd->sector = &sectors[sectoridx];
+#endif
     }
 	
     Z_Free (data);
@@ -722,7 +822,7 @@ void P_GroupLines (void)
     for (i=0 ; i<numsubsectors ; i++, ss++)
     {
 	seg = &segs[ss->firstline];
-	ss->sector = seg->sidedef->sector;
+	ss->sector = SIDE_SECTOR (SEG_SIDEDEF (seg));
     }
 
     // count number of lines in each sector
@@ -753,8 +853,8 @@ void P_GroupLines (void)
 	    if (li->frontsector == sector || li->backsector == sector)
 	    {
 		*linebuffer++ = li;
-		M_AddToBox (bbox, li->v1->x, li->v1->y);
-		M_AddToBox (bbox, li->v2->x, li->v2->y);
+		M_AddToBox (bbox, VX (LINE_V1 (li)), VY (LINE_V1 (li)));
+		M_AddToBox (bbox, VX (LINE_V2 (li)), VY (LINE_V2 (li)));
 	    }
 	}
 	if (linebuffer - sector->lines != sector->linecount)
