@@ -15,7 +15,10 @@ platform contract a no-OS port implements is [bare-metal.md](bare-metal.md).
 | RP2040 | **parked** | SRAM: 1,082,104 B needed vs 270,336 B, 4.00× over |
 | 386-class | **no harness** | about 3× short of 35 Hz; nothing here measures this code on one |
 | Sega 32X | **open** | simulation fits one SH-2; render 1.5–3.4× over both |
-| ESP32-S3 | **plausible, untested** | CPU 0.28–0.54× of one core; needs PSRAM |
+| ESP32-S3 | **plausible, untested** | CPU 0.28–0.54× of one core (mean tic, section 4); needs PSRAM |
+| RP2350 (2× Cortex-M33, 150 MHz) | **predicted: game fits one core; exact music does not fit the other** | section 5; worst tic measured on ARMv8-M in qemu, cycles estimated; PSRAM needed |
+| Teensy 4.1 (Cortex-M7, 600 MHz) | **predicted pass, the upper bracket** | section 5; cycles estimated; PSRAM or the memory diet needed |
+| EFR32MG24 (Cortex-M33, 78 MHz) | **predicted fail** | section 5: 1.28–1.86× one core on the worst tic |
 | Genesis + Sega CD | **infeasible** | CPU 13.5–30.6× over the combined budget |
 | GBA | **infeasible** | CPU 5.4–12.3× over; RAM 5.9× short |
 | SNES, SNES + Super FX 2 | **infeasible** | CPU 254–1,438× over (stock), 8.7–19.6× (Super FX 2) |
@@ -386,5 +389,68 @@ fixed-point multiply takes 150–400 cycles; the CPU is 254–1,438× short and 
 128 KB of RAM is 13× short. The Super FX 2 coprocessor narrows the CPU gap to
 8.7–19.6× and leaves RAM well under 1 MB. The 1995 SNES DOOM ran a different,
 non-vanilla engine on the Super FX 2.
+
+## 5. The floor (2026-10-07): the worst graded tic, measured per ISA
+
+Sections 3 and 4 grade the *mean* tic against estimates. The floor bar is
+stricter: all 13 demos tic-exact, full detail, every tic rendered, music and
+sound effects running, and the **worst** graded tic within 1/35 s (a tic in
+which a level load, intermission or finale started is not graded). The gate is
+[tools/floor/floor-gate.mjs](../tools/floor/floor-gate.mjs); a verdict comes
+only from hardware. What follows is measured demand and *predicted* cycles.
+
+### Demand at the worst graded tic
+
+The worst graded tic is the same on every ISA: plutonia-demo1 tic 5043 (sim
+23% of it, against 4–6% on an average tic). Instruction counts repeat to
+within a few instructions (timedemo runs on a virtual clock, one NetUpdate
+iteration per tic, as on a target at 35 Hz).
+
+| build | worst graded tic | mean tic | leg |
+|---|---|---|---|
+| x86 (gcc -m32 -O1), game only | 3,450,250 instructions | ~1.38 M | `floor-demand` |
+| x86, with the exact OPL2 synth and 8-channel mixer | 18,265,778 instructions | ~15.8 M | `floor-x86` |
+| ARMv6-M (Cortex-M0+ code, qemu mps2-an385), game | 4,922,520 instructions | ~1.80 M | `armv6m-qemu` |
+| ARMv8-M (Cortex-M33 code, qemu mps2-an505), game | 2,588,800 instructions | ~1.04 M | `armv8m-qemu` |
+| N64 VR4300 in ares, game | 11.27 M cycles (5,633,118 COUNT) | 4.65 M | `n64-floor`, section 2 |
+
+- The exact synth (byte-identical to `tools/floor/synth-ref.json`, the L2
+  grade) is 14.3 M x86 instructions per tic; exact savings measured on x86
+  bring it to 5.97 M mean, 6.44 M worst (`tools/floor/synth-savings.py`). On a
+  real OPL2 chip (the L1 grade, vanilla's own setup) the CPU only sequences.
+  ARM counts for the synth are **not measured**; below they are scaled from
+  x86 by the engine's own ratio (ARMv8-M/x86 0.75), an estimate.
+- The M0+ calls software helpers up to 19,646 times a tic for 64-bit multiply
+  (`__aeabi_lmul`) and 3,414 for divide; their instructions are in its count.
+- Memory: the smallest zone that runs all 13 demos correctly with audio is
+  **1,216 KiB** (`zone-min`); the Cortex-M builds' other writable data is
+  ~0.8 MB (422 KB .bss + 55 KB .data + 320,000 B of screens); stack peaks are
+  under 6 KB. So about 2 MB in all before the memory diet (Plans.md, Phase 4 of
+  the floor plan), and it shrinks: vanilla's 128 visplanes pass all 13 demos.
+
+### Predicted verdicts
+
+*F* here is cycles per instruction **of that ISA's own build** (not of x86),
+estimated from the core's pipeline: Cortex-M33 1.1–1.6 (3-stage, single
+issue, code through a flash cache), Cortex-M0+ 1.2–1.6, Cortex-M7 0.6–1.0
+(dual issue, zero-wait TCM). The N64's figure is measured in ares. L1 = music
+on a real chip; L2 = the exact software synth on a second core where there is
+one.
+
+| target | stock clock | budget per core (cycles/tic) | game, worst tic | L2 music | RAM |
+|---|---|---|---|---|---|
+| N64 VR4300 (ares) | 93.75 MHz | 2,678,571 | **4.21×, measured** (emulated) | RSP needed | 4 MB fits |
+| Teensy 4.1 (M7) | 600 MHz | 17,142,857 | 0.09–0.15× | 0.26–0.43× total, one core | 1 MB on chip: PSRAM or diet |
+| RP2350 (2× M33) | 150 MHz | 4,285,714 | 0.66–0.97× of core 0 | **1.24–1.80×** of core 1 | 520 KB SRAM: PSRAM needed |
+| RP2040 (2× M0+) | 133 MHz | 3,800,000 | 1.55–2.07× one core; ~0.8–1.1× split over two | no | 264 KB: ~7× short |
+| EFR32MG24 (M33) | 78 MHz | 2,228,571 | **1.28–1.86×** | no | 256 KB: ~8× short |
+
+So, before any hardware: the N64 is out on its CPU (the software renderer
+cannot reach 35 Hz on the VR4300 even with perfect caching, about 1.5× by
+ares's charges; RDP drawing would have to be pixel-exact). The likely floor
+with an OPL2 chip is RP2350-class, if its PSRAM keeps up; with exact software
+music, RP2350 at stock is short on its second core and the floor moves up to
+an M7-class part. These are predictions: the first board's measured CPI
+replaces every *F* above.
 
 The measured performance of the browser build is in [perf.md](perf.md).
