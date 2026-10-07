@@ -96,12 +96,26 @@ ticcmd_t* I_BaseTiccmd(void)
     return &emptycmd;
 }
 
+// A port with a free-running hardware counter defines FS_GET_TIME as the name
+// of `int FS_GET_TIME (void)`, the time in 35 Hz tics, and I_GetTime returns
+// it.  NetUpdate calls I_GetTime about five times a tic, so the clock_gettime
+// form below, with its 64-bit divides, would charge each tic the platform's
+// arithmetic rather than the engine's (tools/cortexm measured ~1,000 ARMv6-M
+// instructions a call).
+#ifdef FS_GET_TIME
+int FS_GET_TIME (void);
+int I_GetTime(void)
+{
+    return FS_GET_TIME ();
+}
+#else
 int I_GetTime(void)
 {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (int)((ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL) * TICRATE / 1000);
 }
+#endif
 
 void I_Init(void)
 {
