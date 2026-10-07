@@ -9,7 +9,7 @@
 # ensuring per-tic hash arithmetic is identical and hashes compare apples-to-apples.
 #
 # Usage:
-#   make               build fs-doom
+#   make               build fs-doom and synth-bench (the OPL synth, measured)
 #   make check         run doom.wad demo3 vs golden (requires wads/lib/doom.wad)
 #   make check-all     run all available WADs vs goldens
 #   make imports       regenerate tools/freestanding/IMPORTS.md
@@ -72,7 +72,7 @@ OBJ := $(patsubst $(CORE_DIR)/%.c,$(OBJDIR)/core/%.o,$(filter $(CORE_DIR)/%,$(SR
        $(patsubst %.c,$(OBJDIR)/plat/%.o,$(PLAT_SRC)) \
        $(OBJDIR)/floor/floor_log.o
 
-all: $(OUT)
+all: $(OUT) synth-bench
 
 $(OUT): $(OBJ)
 	$(CC) $(LDFLAGS) $^ -o $@
@@ -92,6 +92,53 @@ $(OBJDIR)/floor/%.o: ../floor/%.c
 
 -include $(OBJ:.o=.d)
 
+# ── synth-bench: the OPL music synth alone, native, measured ─────────────────
+# engine/web/mus_opl.c (through fs_mus.c), opl3.c and synth_main.c, unchanged,
+# at fs-doom's flags (-m32 -O1) and again at -O2, both with IEEE double
+# arithmetic (SYNTH_FP: the sequencer's clock is a double, and x87's 64-bit
+# mantissas move an event by a frame against synth.wasm; synth-bench.c says
+# where).  synth-bench-x87 is the -O1 build at gcc's default x87 code, kept for
+# that evidence.  stub/ supplies an empty EMSCRIPTEN_KEEPALIVE; --wrap taps the
+# register stream; -no-pie keeps the profile's sampled addresses the binary's
+# own.  See synth-bench.c.
+WEB_DIR     := ../../engine/web
+SYNTH_SRC   := fs_mus.c $(WEB_DIR)/opl3.c $(WEB_DIR)/synth_main.c synth-bench.c
+SYNTH_INC   := -Istub -I$(WEB_DIR)
+SYNTH_FP    := -msse2 -mfpmath=sse -ffp-contract=off
+SYNTH_LD    := -m32 -no-pie -Wl,--wrap=OPL3_WriteRegBuffered -lm
+SYNTH_OBJ_1 := $(addprefix obj/synth-O1/,$(notdir $(SYNTH_SRC:.c=.o)))
+SYNTH_OBJ_2 := $(addprefix obj/synth-O2/,$(notdir $(SYNTH_SRC:.c=.o)))
+SYNTH_OBJ_X := $(addprefix obj/synth-x87/,$(notdir $(SYNTH_SRC:.c=.o)))
+vpath %.c . $(WEB_DIR)
+
+synth-bench: synth-bench-O1 synth-bench-O2 synth-bench-x87
+
+synth-bench-O1: $(SYNTH_OBJ_1)
+	$(CC) $^ $(SYNTH_LD) -o $@
+	@echo "built $@"
+
+synth-bench-O2: $(SYNTH_OBJ_2)
+	$(CC) $^ $(SYNTH_LD) -o $@
+	@echo "built $@"
+
+synth-bench-x87: $(SYNTH_OBJ_X)
+	$(CC) $^ $(SYNTH_LD) -o $@
+	@echo "built $@"
+
+obj/synth-O1/%.o: %.c Makefile
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(SYNTH_FP) $(SYNTH_INC) -MMD -MP -c $< -o $@
+
+obj/synth-O2/%.o: %.c Makefile
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -O2 $(SYNTH_FP) $(SYNTH_INC) -MMD -MP -c $< -o $@
+
+obj/synth-x87/%.o: %.c Makefile
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(SYNTH_INC) -MMD -MP -c $< -o $@
+
+-include $(SYNTH_OBJ_1:.o=.d) $(SYNTH_OBJ_2:.o=.d) $(SYNTH_OBJ_X:.o=.d)
+
 # ── golden comparison ─────────────────────────────────────────────────────────
 WAD_DIR := ../../wads/lib
 GOLDEN  := ../../tools/golden
@@ -110,7 +157,7 @@ check: $(OUT)
 	@python3 ../native-sanitize/compare.py $(GOLDEN) $(OUT_DIR) sim
 
 # check-all: run all available WADs and compare vs goldens.
-check-all: $(OUT)
+check-all: $(OUT) synth-bench
 	@mkdir -p $(OUT_DIR)
 	@bash run-check.sh $(WAD_DIR) $(OUT_DIR)
 	@python3 ../native-sanitize/compare.py $(GOLDEN) $(OUT_DIR) sim
@@ -120,7 +167,7 @@ imports: $(OUT)
 	@bash gen-imports.sh
 
 clean:
-	rm -rf obj obj-* fs-doom fs-doom-o2 fs-doom-fixed $(OUT_DIR)
+	rm -rf obj obj-* fs-doom fs-doom-o2 fs-doom-fixed $(OUT_DIR) synth-bench-O1 synth-bench-O2 synth-bench-x87
 
 # ro-wad-check: read-only-WAD proof (XIP feasibility).
 # Runs all 13 demos with WD_RO_WAD=1: WAD blob mprotect(PROT_READ) after load.
@@ -140,4 +187,4 @@ check-stack-1m: $(OUT)
 	@echo "stack gate: ulimit -s $(STACK_LIMIT_KB) KiB active"
 	@bash -c 'ulimit -s $(STACK_LIMIT_KB) && echo "ulimit -s active = $$(ulimit -s) KiB" && bash run-check.sh $(WAD_DIR) $(OUT_DIR)'
 
-.PHONY: all check check-all imports clean ro-wad-check check-stack-1m
+.PHONY: all check check-all imports clean ro-wad-check check-stack-1m synth-bench

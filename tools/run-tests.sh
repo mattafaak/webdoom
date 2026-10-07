@@ -530,6 +530,11 @@ leg floor-x86       fs,wad     "floor gate on the host: 13 demos correct, worst 
 # boundary: 1200 passes, 1196 fails.
 leg floor-demand    fs,wad     "demand vector: same worst tic per demo, within 1%" -- node tools/floor/demand.mjs --check
 leg zone-min        fs,wad     "smallest zone with rendering is still 1200 KiB"     -- node tools/floor/zone-min.mjs --check 1200
+# The floor's music reference off the web: the OPL synth compiled natively
+# (tools/freestanding/synth-bench, built by the leg) renders what synth.wasm
+# renders, byte for byte, on the 13 demos' songs, and its register streams and
+# samples match tools/floor/synth-ref.json, which every port is graded on.
+leg synth-native    gcc,build,wad,heavy "native OPL synth == synth.wasm on 13 demo songs (OPL2/OPL3, 3 rates, -O1/-O2); L1/L2 references" -- node tools/synth-native-test.mjs
 # The ARM reference.  wasm is architecture-independent, so only a native build
 # tests ARM codegen, ABI and alignment; emulated cycles are not hardware
 # cycles, so this gates correctness, not timing.  zig cross-builds the

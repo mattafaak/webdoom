@@ -1,0 +1,267 @@
+{
+ "rate": 49716,
+ "volume": 67,
+ "about": "see tools/synth-native-test.mjs",
+ "demos": {
+  "doom-demo1.opl2": {
+   "song": "D_E1M5",
+   "wad": "doom.wad",
+   "tics": 1710,
+   "frames": 2428981,
+   "writes": 6141,
+   "l1": "9f120921",
+   "l2": "5929046b",
+   "events": 468
+  },
+  "doom-demo1.opl3": {
+   "song": "D_E1M5",
+   "wad": "doom.wad",
+   "tics": 1710,
+   "frames": 2428981,
+   "writes": 6145,
+   "l1": "ae1e722b",
+   "l2": "6fd6a123",
+   "events": 468
+  },
+  "doom-demo2.opl2": {
+   "song": "D_E2M2",
+   "wad": "doom.wad",
+   "tics": 2347,
+   "frames": 3333812,
+   "writes": 19991,
+   "l1": "94a7c9ab",
+   "l2": "54de97cd",
+   "events": 2716
+  },
+  "doom-demo2.opl3": {
+   "song": "D_E2M2",
+   "wad": "doom.wad",
+   "tics": 2347,
+   "frames": 3333812,
+   "writes": 19993,
+   "l1": "5c4c42f6",
+   "l2": "51f1d8e1",
+   "events": 2716
+  },
+  "doom-demo3.opl2": {
+   "song": "D_E3M5",
+   "wad": "doom.wad",
+   "tics": 3863,
+   "frames": 5487225,
+   "writes": 20062,
+   "l1": "535d5210",
+   "l2": "9f167cc7",
+   "events": 1712
+  },
+  "doom-demo3.opl3": {
+   "song": "D_E3M5",
+   "wad": "doom.wad",
+   "tics": 3863,
+   "frames": 5487225,
+   "writes": 20066,
+   "l1": "d49f9f21",
+   "l2": "9870a7f7",
+   "events": 1712
+  },
+  "doom-demo4.opl2": {
+   "song": "D_E3M2",
+   "wad": "doom.wad",
+   "tics": 818,
+   "frames": 1161933,
+   "writes": 6425,
+   "l1": "91964cf7",
+   "l2": "639b5526",
+   "events": 894
+  },
+  "doom-demo4.opl3": {
+   "song": "D_E3M2",
+   "wad": "doom.wad",
+   "tics": 818,
+   "frames": 1161933,
+   "writes": 6429,
+   "l1": "a1a06569",
+   "l2": "bbbb947a",
+   "events": 894
+  },
+  "doom2-demo1.opl2": {
+   "song": "D_STLKS2",
+   "wad": "doom2.wad",
+   "tics": 1205,
+   "frames": 1711650,
+   "writes": 7360,
+   "l1": "2c42bfd5",
+   "l2": "0fe93b6e",
+   "events": 977
+  },
+  "doom2-demo1.opl3": {
+   "song": "D_STLKS2",
+   "wad": "doom2.wad",
+   "tics": 1205,
+   "frames": 1711650,
+   "writes": 7364,
+   "l1": "98eada43",
+   "l2": "9e972c16",
+   "events": 977
+  },
+  "doom2-demo2.opl2": {
+   "song": "D_DOOM",
+   "wad": "doom2.wad",
+   "tics": 2001,
+   "frames": 2842334,
+   "writes": 7479,
+   "l1": "576472ce",
+   "l2": "2062bfe5",
+   "events": 1874
+  },
+  "doom2-demo2.opl3": {
+   "song": "D_DOOM",
+   "wad": "doom2.wad",
+   "tics": 2001,
+   "frames": 2842334,
+   "writes": 7481,
+   "l1": "d2eb43c2",
+   "l2": "2c267e3d",
+   "events": 1874
+  },
+  "doom2-demo3.opl2": {
+   "song": "D_MESSG2",
+   "wad": "doom2.wad",
+   "tics": 4471,
+   "frames": 6350863,
+   "writes": 16662,
+   "l1": "e9d80db3",
+   "l2": "9cc40846",
+   "events": 2297
+  },
+  "doom2-demo3.opl3": {
+   "song": "D_MESSG2",
+   "wad": "doom2.wad",
+   "tics": 4471,
+   "frames": 6350863,
+   "writes": 16666,
+   "l1": "abc6f57d",
+   "l2": "e1cf490e",
+   "events": 2297
+  },
+  "tnt-demo1.opl2": {
+   "song": "D_RUNNIN",
+   "wad": "tnt.wad",
+   "tics": 4531,
+   "frames": 6436091,
+   "writes": 55121,
+   "l1": "6962f45c",
+   "l2": "32a657f9",
+   "events": 7492
+  },
+  "tnt-demo1.opl3": {
+   "song": "D_RUNNIN",
+   "wad": "tnt.wad",
+   "tics": 4531,
+   "frames": 6436091,
+   "writes": 55125,
+   "l1": "5fb161a5",
+   "l2": "a4b85bbf",
+   "events": 7492
+  },
+  "tnt-demo2.opl2": {
+   "song": "D_THEDA2",
+   "wad": "tnt.wad",
+   "tics": 3653,
+   "frames": 5188929,
+   "writes": 33379,
+   "l1": "98b2b75d",
+   "l2": "beab88e5",
+   "events": 6560
+  },
+  "tnt-demo2.opl3": {
+   "song": "D_THEDA2",
+   "wad": "tnt.wad",
+   "tics": 3653,
+   "frames": 5188929,
+   "writes": 33383,
+   "l1": "f5202b1b",
+   "l2": "d1de5d45",
+   "events": 6560
+  },
+  "tnt-demo3.opl2": {
+   "song": "D_DOOM2",
+   "wad": "tnt.wad",
+   "tics": 3433,
+   "frames": 4876429,
+   "writes": 35076,
+   "l1": "d01faeea",
+   "l2": "fd924ab9",
+   "events": 4027
+  },
+  "tnt-demo3.opl3": {
+   "song": "D_DOOM2",
+   "wad": "tnt.wad",
+   "tics": 3433,
+   "frames": 4876429,
+   "writes": 35074,
+   "l1": "2d7da75b",
+   "l2": "c7a7ef29",
+   "events": 4027
+  },
+  "plutonia-demo1.opl2": {
+   "song": "D_STLKS3",
+   "wad": "plutonia.wad",
+   "tics": 7403,
+   "frames": 10515644,
+   "writes": 89305,
+   "l1": "36cff8e3",
+   "l2": "5e041d8a",
+   "events": 12482
+  },
+  "plutonia-demo1.opl3": {
+   "song": "D_STLKS3",
+   "wad": "plutonia.wad",
+   "tics": 7403,
+   "frames": 10515644,
+   "writes": 89309,
+   "l1": "80eb3a64",
+   "l2": "3687e9a8",
+   "events": 12482
+  },
+  "plutonia-demo2.opl2": {
+   "song": "D_DEAD",
+   "wad": "plutonia.wad",
+   "tics": 3483,
+   "frames": 4947452,
+   "writes": 17385,
+   "l1": "dd172cb4",
+   "l2": "29ca9946",
+   "events": 1422
+  },
+  "plutonia-demo2.opl3": {
+   "song": "D_DEAD",
+   "wad": "plutonia.wad",
+   "tics": 3483,
+   "frames": 4947452,
+   "writes": 17386,
+   "l1": "ed9371f1",
+   "l2": "faac5288",
+   "events": 1422
+  },
+  "plutonia-demo3.opl2": {
+   "song": "D_THEDA2",
+   "wad": "plutonia.wad",
+   "tics": 5662,
+   "frames": 8042628,
+   "writes": 70874,
+   "l1": "5e89ef0e",
+   "l2": "8cb18530",
+   "events": 10013
+  },
+  "plutonia-demo3.opl3": {
+   "song": "D_THEDA2",
+   "wad": "plutonia.wad",
+   "tics": 5662,
+   "frames": 8042628,
+   "writes": 70878,
+   "l1": "e86ba5a0",
+   "l2": "ecb6be30",
+   "events": 10013
+  }
+ }
+}
