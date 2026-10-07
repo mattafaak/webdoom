@@ -101,6 +101,54 @@ await runTest('1-wad-fetch-failure', async () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 1b. THE ENGINE WAS REPLACED UNDER THIS TAB.
+//     A page imports doom.js once and keeps it, so after a deploy its loader
+//     names a doom.wasm the server no longer holds, and the server answers
+//     409 (http-fuzz covers that half).  This tab is served the real loader
+//     with its module renamed to ?v=000000000000, which is what any loader
+//     from an earlier build looks like.  Graceful = the launcher back, saying
+//     reload -- not an emscripten abort quoting a URL.
+// ═══════════════════════════════════════════════════════════════════════════
+await runTest('1b-engine-replaced-under-the-loader', async () => {
+    const tab = await chrome.tab(url);
+    try {
+        if (!await tab.waitForMenu()) throw new Error('menu did not appear');
+        // the service worker would fetch the loader itself, out of this tab's sight
+        await tab.cdp('Network.enable', {});
+        await tab.cdp('Network.setBypassServiceWorker', { bypass: true });
+        let renamed = 0;
+        tab.on('Fetch.requestPaused', async p => {
+            const js = (await (await fetch(p.request.url)).text())
+                .replace(/doom\.wasm\?v=[0-9a-f]{12}/g, () => { renamed++; return 'doom.wasm?v=000000000000'; });
+            tab.cdp('Fetch.fulfillRequest', {
+                requestId: p.requestId,
+                responseCode: 200,
+                responseHeaders: [{ name: 'content-type', value: 'text/javascript; charset=utf-8' }],
+                body: Buffer.from(js).toString('base64'),
+            });
+        });
+        await tab.cdp('Fetch.enable', { patterns: [{ urlPattern: '*/engine/doom.js*' }] });
+
+        await tab.ev(`document.querySelector('#dmenu .row[data-label="SINGLE PLAYER"]')?.click()`);
+        await sleep(600);
+        await tab.ev(`(document.querySelector('#dmenu .row[data-label*="ULTIMATE"]')
+                    || document.querySelector('#dmenu .row[data-label*="DOOM"]'))?.click()`);
+        let statusText = '';
+        for (let i = 0; i < 40 && !statusText; i++) {
+            await sleep(500);
+            statusText = (await tab.ev(`document.getElementById('status')?.textContent`)) ?? '';
+        }
+        const landing = await tab.ev(`!document.getElementById('landing').hidden`);
+        assert(renamed > 0, `the loader named no doom.wasm?v= to rename (${renamed}) -- the case measured nothing`);
+        assert(/engine was updated.*reload/i.test(statusText),
+            `told "${statusText || '(nothing)'}" when the server refused this tab's module`);
+        assert(landing === true, 'the launcher did not come back');
+    } finally {
+        tab.close();
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // 2. SW update mid-session — synthetic controllerchange event; graceful =
 //    client shows a "reload to update" notification without crashing.
 // ═══════════════════════════════════════════════════════════════════════════

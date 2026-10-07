@@ -6,8 +6,6 @@ behind the current state live in `spec.md` and `docs/`.
 
 ## Server
 
-- `doom.js` and `doom.wasm` are served without anything binding them to the
-  same build, so a deploy mid-load can pair a new loader with an old module.
 - The cache of compressed representations (`reps` in serve.js, 64 entries,
   oldest evicted on insert) can thrash when more than 64 distinct bodies are
   requested in rotation, recompressing each one.

@@ -100,15 +100,38 @@ self.addEventListener('fetch', e => {
 
     // shell: network-first (dev-friendly), cache fallback (offline SP)
     const store = LAUNCHER_API.test(url.pathname) ? API : SHELL;
+    // doom.js names its module by content (doom.wasm?v=<sha256[:12]>): each
+    // module is kept under its own v, an older build's goes, and offline a
+    // loader is answered only with the module it names
+    const v = url.pathname.startsWith('/engine/') ? url.searchParams.get('v') : null;
     e.respondWith(
         fetch(e.request).then(res => {
             // best-effort: a rejected cache write (quota, opaque response) must
             // not become an unhandled rejection in the worker
-            if (res.ok)
+            if (res.ok) {
+                const copy = res.clone();
                 caches.open(store)
-                    .then(c => c.put(e.request, res.clone()))
+                    .then(async c => {
+                        if (v !== null)
+                            for (const k of await c.keys(e.request, { ignoreSearch: true }))
+                                if (k.url !== e.request.url) await c.delete(k);
+                        await c.put(e.request, copy);
+                    })
                     .catch(err => console.warn(`webdoom sw: could not cache ${e.request.url}: ${err?.message ?? err}`));
-            return res.clone();
-        }).catch(() => caches.match(e.request, { ignoreSearch: true })),
+            }
+            return res;
+        }).catch(() => v !== null ? cachedModule(e.request, v) : caches.match(e.request, { ignoreSearch: true })),
     );
 });
+
+// The cached module whose sha256 begins with v, or a network error: the cache
+// can hold another build's (the one precached at install), and instantiated
+// under this loader it would bind exports to the wrong functions.
+async function cachedModule(req, v) {
+    const c = await caches.open(SHELL);
+    for (const res of await c.matchAll(req, { ignoreSearch: true })) {
+        const sum = new Uint8Array(await crypto.subtle.digest('SHA-256', await res.clone().arrayBuffer()));
+        if ([...sum.slice(0, 6)].map(b => b.toString(16).padStart(2, '0')).join('') === v) return res;
+    }
+    return Response.error();
+}

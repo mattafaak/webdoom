@@ -173,10 +173,19 @@ export async function bootDoom({ wads, saves = null, args = [], net = null, onQu
     let doom, blocks, persisted;
     try {
         const { default: createDoom } = await import('/engine/doom.js');
+        let wasmUrl = null;
         doom = await createDoom({
             print: t => console.log(t),
             printErr: t => console.warn(t),
             onDoomError: msg => endSession(`engine error: ${msg}`),   // I_Error → abort()
+            locateFile: (path, prefix) => (wasmUrl = prefix + path),   // noted; the URL is unchanged
+        }).catch(async err => {
+            // doom.js asks for the doom.wasm it was linked with (?v=<hash>),
+            // and the server answers 409 once a deploy has replaced it.
+            // Emscripten's abort does not say why the fetch failed, so ask.
+            // The import above is this page's for life: only a reload helps.
+            const replaced = wasmUrl && await fetch(wasmUrl, { method: 'HEAD' }).then(r => r.status === 409, () => false);
+            throw replaced ? new Error('the engine was updated — reload the page') : err;
         });
         const got = new Array(wads.length).fill(0);
         const tot = new Array(wads.length).fill(0);

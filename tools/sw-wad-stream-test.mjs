@@ -33,16 +33,16 @@ function cacheStorage({ putFails = false } = {}) {
     const named = new Map();
     const url = r => typeof r === 'string' ? r : r.url;
     const bare = u => { const x = new URL(u); x.search = ''; return x.href; };
-    const find = (store, r, o) => o?.ignoreSearch
-        ? [...store].find(([k]) => bare(k) === bare(url(r)))?.[1]
-        : store.get(url(r));
+    const hits = (store, r, o) => [...store].filter(([k]) => o?.ignoreSearch ? bare(k) === bare(url(r)) : k === url(r));
+    const find = (store, r, o) => hits(store, r, o)[0]?.[1];
     const open = async name => {
         if (!named.has(name)) {
             const store = new Map();
             named.set(name, {
                 store,
                 match: async (r, o) => find(store, r, o)?.clone(),
-                keys: async () => [...store.keys()].map(u => new Request(u)),
+                matchAll: async (r, o) => hits(store, r, o).map(([, res]) => res.clone()),
+                keys: async (r, o) => (r ? hits(store, r, o).map(([k]) => k) : [...store.keys()]).map(u => new Request(u)),
                 delete: async r => store.delete(url(r)),
                 put: async (r, res) => {
                     if (putFails) throw new DOMException('quota', 'QuotaExceededError');
@@ -171,5 +171,54 @@ const offlineGameList = async w => {
           !!api && [...api.store.keys()].every(u => new URL(u).pathname.startsWith('/api/')),
           `api cache holds ${api ? [...api.store.keys()].join(', ') : 'nothing'}`);
 }
-summary('the service worker streams a WAD to the page and caches it behind, and an update keeps the launcher\'s API reads',
-        { min: 11 });
+
+// ── the engine: a loader is answered only with its own module ────────────────
+//
+// doom.js names its module by content (doom.wasm?v=<sha256[:12]>).  Offline,
+// the shell cache answers in its place, and it can hold another build's
+// module: the one precached at install, or the one an earlier visit stored.
+// Instantiated under this loader, that module binds exports to the wrong
+// functions.
+{
+    const { createHash } = await import('node:crypto');
+    const tag = b => createHash('sha256').update(b).digest('hex').slice(0, 12);
+    const A = new Uint8Array(64).fill(0xa1), B = new Uint8Array(64).fill(0xb2);
+    const bytesOf = async w => {
+        const r = await w.request(`/engine/doom.wasm?v=${w.v}`).responded.catch(e => e);
+        if (!(r instanceof Response) || r.type === 'error') return 'no module';
+        const b = new Uint8Array(await r.arrayBuffer());
+        return b[0] === 0xa1 ? 'A' : b[0] === 0xb2 ? 'B' : `${b.length} B of something else`;
+    };
+    const shellOf = async caches => caches.open(`webdoom-shell-v${SHIPPED}`);
+
+    // installed with build A's module precached by name, then a visit online
+    // with build B's loader, then offline
+    const caches = cacheStorage();
+    await (await shellOf(caches)).put(new Request(ORIGIN + '/engine/doom.wasm'), new Response(A));
+    const visit = worker({ caches, network: async () => new Response(B, { status: 200 }) });
+    await visit.request(`/engine/doom.wasm?v=${tag(B)}`).responded;
+    await sleep(50);            // the cache write is not awaited by the handler
+    const kept = [...(await shellOf(caches)).store.keys()].filter(u => new URL(u).pathname === '/engine/doom.wasm');
+    check('a module cached under its v replaces the older ones for that path',
+          kept.length === 1, `${kept.length} kept: ${kept.map(u => new URL(u).search || '(unversioned)').join(', ')}`);
+    const off = worker({ caches, network: offline });
+    const own = await bytesOf(Object.assign(off, { v: tag(B) }));
+    check('offline, build B\'s loader gets build B\'s module', own === 'B', `got ${own}`);
+    const older = await bytesOf(Object.assign(off, { v: tag(A) }));
+    check('offline, a loader whose module is not cached gets none, not another build\'s',
+          older === 'no module', `got ${older}`);
+
+    // installed, then offline before any online boot: the precached module
+    // answers only the loader it belongs to
+    const fresh = cacheStorage();
+    await (await shellOf(fresh)).put(new Request(ORIGIN + '/engine/doom.wasm'), new Response(A));
+    const first = worker({ caches: fresh, network: offline });
+    const pre = await bytesOf(Object.assign(first, { v: tag(A) }));
+    check('offline, the precached module answers the loader it was precached with', pre === 'A', `got ${pre}`);
+    const stranger = await bytesOf(Object.assign(first, { v: tag(B) }));
+    check('offline, the precached module does not answer another build\'s loader',
+          stranger === 'no module', `got ${stranger}`);
+}
+
+summary('the service worker streams a WAD to the page and caches it behind, an update keeps the launcher\'s API reads, and a loader gets only its own module',
+        { min: 16 });

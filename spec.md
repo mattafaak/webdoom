@@ -31,7 +31,7 @@ fails when a leg named here does not exist.
 | User WAD import into an IndexedDB library | `browser-wadimport`, `browser-mp-gating` |
 | Savegames and config across reloads, per game (a PWAD's saves are its own) | `persist`, `browser-pwad-session`, `save-compat` |
 | Offline single player once a WAD is cached, across an update of the app | `browser-offline`, `sw-precache`, `sw-wad-stream` |
-| A loader is answered only with the module it was linked with (`doom.wasm?v=<sha256[:12]>`; any other v is 409) | `http-fuzz`, `freshness` |
+| A loader is answered only with the module it was linked with (`doom.wasm?v=<sha256[:12]>`), online and offline; a tab that outlived a deploy is told to reload | `http-fuzz`, `freshness`, `sw-wad-stream`, `browser-resilience` |
 | Rebindable keys, gamepad, and an OPTIONS screen | `browser-options`, `browser-gamepad` |
 | The lobby's RULES (no monsters, fast, respawn, timer) reach the engine | `launch-args` |
 | Freelook and frame interpolation, render-side and opt-in | `sim-freelook`, `sim-invariants` |
