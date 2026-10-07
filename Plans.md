@@ -47,6 +47,17 @@ owner):
   `PTR_ShootTraverse` (p_map.c) read a NULL `backsector` when a hitscan
   crosses it: a fault on a native build, a read of address 0 in wasm. It is
   vanilla behaviour, and the IWAD demos never reach it.
+- **Loading a save can dereference a NULL `target`.** P_UnArchiveThinkers
+  (p_saveg.c) clears every `mobj->target`, as vanilla does, so a monster
+  saved mid-attack acts on NULL in its next action: a mancubus's
+  A_FatAttack2/3 calls P_SpawnMissile with no `dest` (p_mobj.c:947), and a boss
+  cube's A_SpawnFly reads its target (p_enemy.c:1964). Native builds fault
+  (SIGSEGV, measured on doom2 MAP07 and MAP30 and plutonia MAP32 by the floor's
+  scripted saves); in wasm the read does not trap and reads near address 0.
+  The play set skips the save and load on those three maps
+  (`SAVELOAD_CRASHES`, tools/floor/play-set.mjs). A fix is a choice between
+  guarding each action and keeping targets in the savegame, which changes its
+  format.
 - **386-class:** no harness. Measuring id's DOS binary would give the atlas a
   baseline, but nothing in this codebase could move it.
 

@@ -124,6 +124,8 @@ export function events(elf) {
             if (f !== 'cm_main.c') continue;
             if (/\bnow\s*=\s*cm_ticks/.test(t)) ev.push({ addr: s.addr, kind: 'E', stage: 0, at: `${f}:${s.line}` });
             else if (/\blast\s*=\s*cm_ticks/.test(t)) ev.push({ addr: s.addr, kind: 'B', stage: 0, at: `${f}:${s.line}` });
+            // play_run's frame timer: play mode only, and attrib runs demos
+            else if (/\bt[01]\s*=\s*cm_ticks/.test(t)) continue;
             else throw new Error(`unclassified cm_ticks call at ${f}:${s.line}: ${t.trim()}`);
             continue;
         }

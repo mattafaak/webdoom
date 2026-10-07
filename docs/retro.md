@@ -416,6 +416,9 @@ iteration per tic, as on a target at 35 Hz).
 | ARMv6-M, lumps read in place | 4,934,200 instructions | ~1.80 M | `armv6m-zc` |
 | ARMv8-M, lumps read in place | 2,583,150 instructions | ~1.04 M | `armv8m-zc` |
 | N64 VR4300 in ares, game | 11.27 M cycles (5,633,118 COUNT) | 4.65 M | `n64-floor`, section 2 |
+| ARMv6-M, fast drawers + FixedMul/FixedDiv without libgcc (below) | 3,398,520 instructions | ~1.32 M | `armv6m-fast` |
+| ARMv8-M, fast drawers (below) | 2,366,150 instructions | ~0.94 M | `armv8m-fast` |
+| x86, the full memory diet, with audio | 10,535,074 instructions | — | `floor-lean` |
 
 - The exact synth (byte-identical to `tools/floor/synth-ref.json`, the L2
   grade) was 14.3 M x86 instructions per tic. Its exact savings are now in
@@ -430,12 +433,9 @@ iteration per tic, as on a target at 35 Hz).
   engine's own ratio (ARMv8-M/x86 0.75), an estimate.
 - The M0+ calls software helpers up to 19,646 times a tic for 64-bit multiply
   (`__aeabi_lmul`) and 3,414 for divide; their instructions are in its count.
-- Memory: the smallest zone that runs all 13 demos correctly with audio is
-  **1,216 KiB** (`zone-min`); the Cortex-M builds' other writable data is
-  ~0.8 MB (422 KB .bss + 55 KB .data + 320,000 B of screens); stack peaks are
-  under 6 KB. So about 2 MB in all before the memory diet (Plans.md, Phase 4 of
-  the floor plan), and it shrinks: vanilla's 128 visplanes pass all 13 demos.
-  Reading lumps in place takes the zone to **924 KiB** (below).
+- Memory: the default build needs a 1,216 KiB zone for the 13 demos and
+  1,764 KiB for real play; the memory diet below takes a Cortex-M port's whole
+  RAM floor to 1.33 MB.
 
 ### Zero-copy lumps
 
@@ -479,7 +479,103 @@ byte-identical. Measured on the 13 demos, all tic-exact in sim and render:
 - Alignment is proven on the board that traps: `armv6m-zc-misaligned` replays
   the 13 demos from WADs rewritten with every lump at an odd offset.
 
-### Predicted verdicts
+### The memory diet and the RAM floor
+
+Each lever is an opt-in for bare-metal builds, proven tic-exact on all 13
+demos by its own leg, and leaves the browser's `doom.wasm` byte-identical:
+
+| lever | define | what it moves | leg |
+|---|---|---|---|
+| vanilla's 128 visplanes and vissprites | `MAXVISPLANES`, `MAXVISSPRITES` | −138,752 B of .bss (peaks 118 and 123) | `floor-lean` |
+| lookup tables as const data | `TABLES_CONST` | −65,568 B of .bss, checked by `TABLES_CRC` at boot | `floor-lean` |
+| screens borrowed from the zone, a 32-row status bar | `LEAN_SCREENS` | −254,712 B of .bss | `lean-screens` |
+| texture tables and composites as const data, per IWAD | `TEXTURES_CONST`, `COMPOSITES_CONST` | zone 920 → 544 KiB (lean, in place); a PWAD that changes textures falls back to building them | `textures-const` |
+| lumps read in place | `WEB_LUMPS_IN_PLACE` | zone 1,216 → 924 KiB | `zero-copy`, `ro-wad-zc` |
+| the level read in place and narrowed | `LEAN_LEVELS` | zone 920 → 744 KiB (lean, in place); +1.6% at the worst tic on ARMv6-M | `lean-levels` |
+
+`LEAN=1` builds the first four together; the **full diet** is
+`LEAN=1 ZERO_COPY=1 LEAN_LEVELS=1`.
+
+**The 13 demos are not the floor.** A level change (its wipe and
+intermission) and the biggest maps need more zone than any demo, and whether a
+run fits is not monotone in zone size. So the floors below are play-inclusive:
+the lowest size from which every 4 KiB step upward runs all 13 demos plus the
+play set (each demo exited into its next level, and a scripted run on all 132
+IWAD maps, 129 of them saved and loaded), with 4 KiB less failing. At 4 KiB below
+each floor the first map to fail is tnt MAP20 (plutonia MAP28 for `LEAN=1`).
+
+| build | zone, 13 demos | zone, play-inclusive | leg |
+|---|---|---|---|
+| default | 1,216 KiB | 1,764 KiB | `zone-min`, `zone-min-play` |
+| lumps in place | 924 KiB | 1,324 KiB | `zero-copy`, `zone-min-play-zc` |
+| `LEAN=1` | — | 1,368 KiB | `zone-min-play-lean` |
+| `LEAN=1`, lumps in place | 544 KiB | 920 KiB | `textures-const`, `zone-min-play-leanzc` |
+| full diet | 352 KiB | **604 KiB** | `floor-lean`, `zone-min-play-full` |
+
+The RAM floor, play-inclusive (`tools/floor/ram-floor.mjs`, held to
+`tools/golden/floor-ram.json` within 1,024 B):
+
+| target | statics | zone | heap | stack | floor |
+|---|---|---|---|---|---|
+| x86, default | 972,832 | 1,806,336 | 238,505 | 5,520 | 3,023,193 B |
+| x86, full diet | 514,172 | 618,496 | 238,505 | 5,520 | 1,376,693 B |
+| ARMv6-M, full diet | 404,299 | 618,496 | 301,496 | 5,648 | **1,329,939 B** |
+| ARMv8-M, full diet | 404,299 | 618,496 | 301,496 | 5,200 | **1,329,491 B** |
+
+- The heap includes a 158 KB savegame buffer. On tnt and plutonia the
+  Cortex-M heap also holds the qemu rig's 49–50 KB copy of the WAD's
+  directory.
+- Flash holds the code, the const tables and the load images: 1.73–1.75 MB
+  linked with doom.wad's texture tables and composites (1,400,292 B of it).
+  tnt's are the largest, 2,080,980 B. With the WAD at 3 MiB on a 16 MiB flash
+  board, doom.wad fits; doom2, plutonia and tnt do not, stored uncompressed
+  (`pico-link`).
+- **RP2350, link only:** the full diet links with pico-sdk 2.3.0 only with the
+  zone, `screens[0]` and the heap in PSRAM: 354,096 of 530,432 B of SRAM.
+  With the heap in SRAM it is 125,744 B over (`pico-link`). Nothing has run.
+- **RP2040, link only:** 1,065,236 B over (4.97×). A 2 MB Pico cannot hold
+  the code and tables (about 1.75 MB) and the WAD.
+- A melt wipe costs 3.7 M instructions over 41 frames and holds 128 KB of zone
+  (`wipe-probe`; wipes are not graded).
+
+### The CPU levers
+
+Measured under qemu (`tools/cortexm/attrib.mjs` counts every instruction by
+function) at the worst graded tic, ARMv6-M / ARMv8-M:
+
+- R_DrawSpan 868,527 / 437,218.
+- The column drawers 513,195 / 414,530.
+- BSP and seg code 695,170 / 583,702.
+- Simulation 554,495 / 492,105.
+- On ARMv6-M, the 64-bit FixedMul and FixedDiv helpers (488,004 + 712,910) and
+  the 32-bit divide (413,404).
+
+Two exact levers (`FAST=1` in tools/cortexm):
+- **Drawers.** Thumb-1 and Thumb-2 R_DrawColumn and R_DrawSpan.
+- **FixedMul and FixedDiv on ARMv6-M without libgcc's 64-bit helpers.**
+  - FixedMul is three MULS on the operands' 16-bit halves. It is proven equal
+    to `(int64)a*b >> 16` for all inputs: a·b = 2¹⁶(a·bh + ah·bl) + al·bl
+    exactly, with 0 ≤ al·bl < 2³².
+  - FixedDiv is a 30-step restoring division, exact past the clamp.
+
+| | ARMv6-M worst / mean | ARMv8-M worst / mean |
+|---|---|---|
+| before | 4,922,520 / 1,817,319 | 2,588,800 / 1,049,253 |
+| fast | **3,398,520 / 1,320,331** (−31%) | **2,366,150 / 943,909** (−8.6%) |
+
+**A two-core split of one frame** (`tools/cortexm/dualcore.mjs`):
+- **The split:**
+  - core 0 runs the simulation and BSP walk, queueing wall columns;
+  - core 1 draws the queued columns;
+  - both draw planes and masked by screen half.
+- **The result:** core 0 still carries 83–90% of the worst tic (by ISA and by
+  how plane and masked overheads split), because the simulation and the BSP
+  walk are serial. The board figures below are the highest core-0 load over
+  all 44,567 graded tics.
+- **Status:** a costed model from measured stage counts. Its queue and
+  barrier costs are estimates.
+
+### Predicted verdicts### Predicted verdicts
 
 *F* here is cycles per instruction **of that ISA's own build** (not of x86),
 estimated from the core's pipeline: Cortex-M33 1.1–1.6 (3-stage, single
@@ -488,20 +584,23 @@ issue, code through a flash cache), Cortex-M0+ 1.2–1.6, Cortex-M7 0.6–1.0
 on a real chip; L2 = the exact software synth on a second core where there is
 one.
 
-| target | stock clock | budget per core (cycles/tic) | game, worst tic | L2 music | RAM |
+| target | stock clock | budget per core (cycles/tic) | game, worst tic | L2 music | RAM (floor 1.33 MB) |
 |---|---|---|---|---|---|
 | N64 VR4300 (ares) | 93.75 MHz | 2,678,571 | **4.21×, measured** (emulated) | RSP needed | 4 MB fits |
-| Teensy 4.1 (M7) | 600 MHz | 17,142,857 | 0.09–0.15× | 0.26–0.43× total, one core | 1 MB on chip: PSRAM or diet |
-| RP2350 (2× M33) | 150 MHz | 4,285,714 | 0.66–0.97× of core 0 | **1.24–1.80×** of core 1 | 520 KB SRAM: PSRAM needed |
-| RP2040 (2× M0+) | 133 MHz | 3,800,000 | 1.55–2.07× one core; ~0.8–1.1× split over two | no | 264 KB: ~7× short |
-| EFR32MG24 (M33) | 78 MHz | 2,228,571 | **1.28–1.86×** | no | 256 KB: ~8× short |
+| Teensy 4.1 (M7) | 600 MHz | 17,142,857 | 0.08–0.14× (fast build) | 0.25–0.42× total, one core | 1 MB on chip: PSRAM needed |
+| RP2350 (2× M33) | 150 MHz | 4,285,714 | 0.61–0.88× one core; 0.50–0.77× core 0 split | **1.24–1.80×** of core 1 | 520 KB SRAM: PSRAM needed (links, section above) |
+| RP2040 (2× M0+) | 133 MHz | 3,800,000 | 0.96–1.28× one core; 0.84–1.15× core 0 split | no | 264 KB: 4.97× short (links) |
+| EFR32MG24 (M33) | 78 MHz | 2,228,571 | **1.17–1.70×** | no | 256 KB: about 5× short |
 
 So, before any hardware: the N64 is out on its CPU (the software renderer
 cannot reach 35 Hz on the VR4300 even with perfect caching, about 1.5× by
 ares's charges; RDP drawing would have to be pixel-exact). The likely floor
-with an OPL2 chip is RP2350-class, if its PSRAM keeps up; with exact software
-music, RP2350 at stock is short on its second core and the floor moves up to
-an M7-class part. These are predictions: the first board's measured CPI
-replaces every *F* above.
+with an OPL2 chip is the RP2350, on one core, with the zone, a screen and the
+heap in PSRAM, if PSRAM keeps up. The RP2040 is marginal on CPU even split
+over two cores, and about 5× short on RAM. With exact software music the
+RP2350 at stock is short on its second core, and the floor moves up to an
+M7-class part. These are predictions: the first board's measured cycles per
+instruction replace every *F* above. The RP2040 rows assume its hardware
+divider at 24 cycles a call.
 
 The measured performance of the browser build is in [perf.md](perf.md).
