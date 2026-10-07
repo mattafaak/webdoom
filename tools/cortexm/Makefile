@@ -25,9 +25,24 @@
 #                      m_fixed.h's WEB_FIXED_PORT; on ARMv6-M MULS pieces and
 #                      fixed_v6m.S's divide instead of libgcc's 64-bit helpers)
 #   FAST=1             both
+#   LEAN=1             the lean memory build, tools/freestanding's LEAN=1:
+#                      vanilla's renderer limits, the lookup tables, texture
+#                      tables and composites as const data (TABLES_CONST,
+#                      TEXTURES_CONST, COMPOSITES_CONST: generated on the host
+#                      by the engine's own recipes, tools/freestanding's
+#                      rules, and checked at boot), LEAN_SCREENS
+#   LEAN_LEVELS=1      with LEAN=1: the level read in place and narrowed
+#                      (engine/core/r_defs.h); LEAN=1 ZC=1 LEAN_LEVELS=1 is
+#                      the full diet (tools/floor/ram-floor.mjs measures it)
+#   TEXTURES_WADS=W    with LEAN=1, required: the one IWAD whose texture
+#                      tables and composites are built in (the four IWADs'
+#                      come to 6.2 MB, past the boards' 4 MiB CODE; a port
+#                      ships its one WAD's), e.g. TEXTURES_WADS=tnt.wad.  A
+#                      LEAN build also cuts fs_audio.c's harness buffers to
+#                      one entry (FS_AUDIO_HARNESS=0, 933,888 B of .bss)
 #
-# Products, under build/<isa><opt>[-count][-zc][-dr|-fx|-fast]/ (run-floor.sh
-# passes B):
+# Products, under build/<isa><opt>[-count][-lean-<wad>][-lv][-zc][-dr|-fx|-fast]/
+# (run-floor.sh passes B):
 #   cm-doom.elf  cm-doom.map  helpers.txt (the libgcc helpers the objects call)
 #   cm-selftest.elf (the instrument's red-proof, selftest.c)
 #   cm-fasttest.elf (with DRAWERS or FIXED: the port's drawers and fixed-point
@@ -117,8 +132,28 @@ WAD_READ := -DFS_WAD_READ=cm_wad_read
 ZC_LD  :=
 endif
 
-SUFFIX := $(if $(filter 1,$(COUNT)),-count,)$(if $(filter 1,$(ZC)),-zc,)$(PORT_SUF)
+LEAN ?= 0
+LEAN_LEVELS ?= 0
+ifeq ($(filter 0 1,$(LEAN))$(filter 0 1,$(LEAN_LEVELS)),)
+$(error LEAN and LEAN_LEVELS must be 0 or 1)
+endif
+ifeq ($(LEAN_LEVELS)$(LEAN),10)
+$(error LEAN_LEVELS=1 needs LEAN=1)
+endif
+TEXTURES_WADS ?=
+ifeq ($(LEAN),1)
+ifneq ($(words $(TEXTURES_WADS)),1)
+$(error LEAN=1 needs TEXTURES_WADS=<one IWAD>: the four IWADs' const texture tables do not fit the boards' 4 MiB CODE)
+endif
+endif
+SUFFIX := $(if $(filter 1,$(COUNT)),-count,)$(if $(filter 1,$(LEAN)),-lean-$(basename $(TEXTURES_WADS)),)$(if $(filter 1,$(LEAN_LEVELS)),-lv,)$(if $(filter 1,$(ZC)),-zc,)$(PORT_SUF)
 B      := build/$(ISA)$(OPT)$(SUFFIX)
+ifeq ($(LEAN),1)
+LEAN_FLAGS := -DMAXVISPLANES=128 -DMAXVISSPRITES=128 -DTABLES_CONST \
+              -DTEXTURES_CONST -DCOMPOSITES_CONST -DLEAN_SCREENS \
+              $(if $(filter 1,$(LEAN_LEVELS)),-DLEAN_LEVELS,) -DFS_AUDIO_HARNESS=0 \
+              -I$(B)/gen
+endif
 CORE   := ../../engine/core
 FS     := ../freestanding
 
@@ -138,7 +173,7 @@ CFLAGS := $(CPU) $(OPT) -g -std=gnu89 -DNORMALUNIX -Dalloca=__builtin_alloca \
           -Wall -Wno-unused-variable -Wno-unused-but-set-variable \
           -Wno-dangling-else -Wno-parentheses -Wno-missing-braces \
           -Wno-unused-value -Wno-pointer-sign -Wno-implicit-function-declaration \
-          -DFS_AUDIO_DEFAULT=0 $(PORT_CFLAGS) \
+          -DFS_AUDIO_DEFAULT=0 $(PORT_CFLAGS) $(LEAN_FLAGS) \
           -I$(CORE) -I$(FS) -I../floor -I. $(EXTRA_CFLAGS)
 
 # The audio (tools/freestanding/fs_audio.c): built, and off unless WD_AUDIO
@@ -248,6 +283,28 @@ $(B)/web/%.o: $(WEB)/%.c $(B)/flags.txt
 $(B)/cm/%.o: %.c $(B)/flags.txt
 	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+# the const tables (LEAN=1): tools/freestanding's rules.  The lookup tables'
+# generator runs on the host (its tables are integers, the same on every host:
+# the boot-time checksum in tables.c holds the target to them again).  The
+# texture tables and composites are the engine's own R_InitData output as C
+# initializers (tools/floor/gen-texture-tables.c), made by an x86 build of the
+# same LEAN, ZC and LEAN_LEVELS in an object directory under this one, and
+# checked against the WAD at boot as on the host.
+$(B)/gen/tables_const.inc: ../floor/gen-const-tables.c $(CORE)/tables.c $(CORE)/tables_fix.h
+	@mkdir -p $(dir $@)
+	@gcc -m32 -O1 -std=gnu89 -I$(CORE) ../floor/gen-const-tables.c $(CORE)/tables.c -lm -o $(B)/gen/gen-const-tables
+	@$(B)/gen/gen-const-tables > $@.tmp && mv $@.tmp $@
+X86_GEN := $(abspath $(B))/x86gen
+$(B)/gen/textures_const.inc: $(CORE)/r_data.c ../floor/gen-texture-tables.c $(B)/flags.txt
+	@mkdir -p $(dir $@)
+	@$(MAKE) -s -C $(FS) LEAN=1 ZERO_COPY=$(ZC) LEAN_LEVELS=$(LEAN_LEVELS) TEXTURES_WADS=$(TEXTURES_WADS) \
+	    OBJDIR=$(X86_GEN) $(X86_GEN)/gen/textures_const.inc > $(B)/gen/texgen.log 2>&1 || { tail -5 $(B)/gen/texgen.log; exit 1; }
+	@cp $(X86_GEN)/gen/textures_const.inc $@
+ifeq ($(LEAN),1)
+$(B)/core/tables.o: $(B)/gen/tables_const.inc
+$(B)/core/r_data.o: $(B)/gen/textures_const.inc
+endif
 
 -include $(OBJ:.o=.d) $(B)/cm/selftest.d $(B)/cm/fasttest.d $(B)/cm/fasttest_ref.d
 

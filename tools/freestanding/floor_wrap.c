@@ -24,11 +24,18 @@ extern volatile unsigned fs_floor_mbytes;
 extern const unsigned char* fs_floor_blob;
 extern size_t fs_floor_blob_len;
 
+// fs_floor_setup_hook, when a harness sets it, is called after every level
+// load, with the level in the zone: i_main.c's -frames mode records what the
+// level holds there (tools/floor/play-set.mjs ranks the maps by it).
+void (*fs_floor_setup_hook) (void);
+
 void __real_P_SetupLevel (int episode, int map, int playermask, skill_t skill);
 void __wrap_P_SetupLevel (int episode, int map, int playermask, skill_t skill)
 {
     fs_floor_load = 1;
     __real_P_SetupLevel (episode, map, playermask, skill);
+    if (fs_floor_setup_hook)
+        fs_floor_setup_hook ();
 }
 
 void __real_WI_Start (wbstartstruct_t* wbstartstruct);

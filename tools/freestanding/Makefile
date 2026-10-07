@@ -111,8 +111,14 @@ endif
 # The floor gate's tic flags (floor_wrap.c): a level load, intermission or
 # finale starting, and the bytes a lump copy takes out of the WAD blob.
 FLOOR_WRAP := -Wl,--wrap=P_SetupLevel,--wrap=WI_Start,--wrap=F_StartFinale,--wrap=memcpy
+# The heap the engine and port ask for (heap_wrap.c): the RAM floor's heap
+# peak, counted at the link (tools/floor/ram-floor.mjs reads it)
+HEAP_WRAP := -Wl,--wrap=malloc,--wrap=calloc,--wrap=realloc,--wrap=free
+# A wipe's own instructions and zone in -frames mode (frames_wrap.c): the
+# wipe probe, tools/floor/wipe-probe.mjs
+FRAMES_WRAP := -Wl,--wrap=wipe_StartScreen,--wrap=wipe_EndScreen,--wrap=wipe_ScreenWipe
 # -no-pie: the synth's objects are position-dependent (SYNTH_NOPIE, below)
-LDFLAGS := -m32 -no-pie -lm $(FLOOR_WRAP)
+LDFLAGS := -m32 -no-pie -lm $(FLOOR_WRAP) $(HEAP_WRAP) $(FRAMES_WRAP)
 
 CORE_DIR := ../../engine/core
 OUT      ?= fs-doom
@@ -129,7 +135,7 @@ CORE_SRC := $(filter-out $(CORE_EXCLUDE),$(wildcard $(CORE_DIR)/*.c))
 
 # Freestanding platform files (this directory).
 PLAT_SRC := i_main.c i_system.c i_video.c i_sound.c d_net.c files.c perf.c \
-            fs_audio.c sfx_mix.c
+            fs_audio.c sfx_mix.c heap_wrap.c frames_wrap.c
 # The audio (fs_audio.c): the web build's OPL synth, its sources unchanged
 # (fs_mus.c includes engine/web/mus_opl.c; opl3.c is found through vpath), and
 # the mixer.  The synth's clock is a double and must round as IEEE double does,
@@ -162,8 +168,10 @@ fs-doom-zc:
 	$(MAKE) ZERO_COPY=1 OBJDIR=obj-zc OUT=fs-doom-zc fs-doom-zc
 endif
 
+# the link map beside it: tools/floor/ram-floor.mjs reads code and const data
+# per object from it
 $(OUT): $(OBJ)
-	$(CC) $(LDFLAGS) $^ -o $@
+	$(CC) $(LDFLAGS) $^ -o $@ -Wl,-Map=$@.map
 	@echo "built $@"
 
 $(OBJDIR)/core/%.o: $(CORE_DIR)/%.c
@@ -356,7 +364,7 @@ imports: $(OUT)
 	@bash gen-imports.sh
 
 clean:
-	rm -rf obj obj-* fs-doom fs-doom-o2 fs-doom-fixed fs-doom-zc fs-doom-lean fs-doom-lean-ref fs-doom-lean-rp-stride fs-doom-leanzc fs-doom-leanzc-rp-* fs-doom-leanzc-lv fs-doom-lean-lv $(OUT_DIR) synth-bench-O1 synth-bench-O2 synth-bench-x87 synth-exact
+	rm -rf obj obj-* fs-doom fs-doom-o2 fs-doom-fixed fs-doom-zc fs-doom-lean fs-doom-lean-ref fs-doom-lean-rp-stride fs-doom-leanzc fs-doom-leanzc-rp-* fs-doom-leanzc-lv fs-doom-lean-lv fs-doom-lean-floor fs-doom-leanzc-floor fs-doom-full-floor fs-doom-full fs-doom-leanzc-lvref fs-doom-rp-ramfloor *.map .*.lock $(OUT_DIR) synth-bench-O1 synth-bench-O2 synth-bench-x87 synth-exact
 
 # ro-wad-check: read-only-WAD proof (XIP feasibility).
 # Runs all 13 demos with WD_RO_WAD=1: WAD blob mprotect(PROT_READ) after load.

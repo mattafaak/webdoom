@@ -33,6 +33,11 @@
 // the mixer and the sum in every tic and prints what each cost, per tic, to
 // stderr after the demo (the reads themselves are counted: not for a graded
 // run).
+// The trace and stage buffers are the harness's (720,896 + 212,992 B of
+// .bss); a port that does not measure itself builds with -DFS_AUDIO_HARNESS=0
+// and they shrink to one entry each, WD_AUDIO_TRACE and WD_AUDIO_STAGES then
+// recording nothing (tools/pico's link check does; tools/floor/ram-floor.mjs
+// leaves them out of the RAM floor either way).
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,7 +75,10 @@ static unsigned blocks, sfx_starts;
 static unsigned synthhash = FNV0, mixhash = FNV0, sfxhash = FNV0;
 
 // ── the event trace (WD_AUDIO_TRACE) ─────────────────────────────────────────
-#define TRACE_MAX 16384
+#ifndef FS_AUDIO_HARNESS
+#define FS_AUDIO_HARNESS 1
+#endif
+#define TRACE_MAX (FS_AUDIO_HARNESS ? 16384 : 1)
 typedef struct
 {
     int tic, id, vol, sep, pitch, handle;
@@ -109,7 +117,7 @@ static unsigned fnv (unsigned h, unsigned v, int bytes)
 }
 
 // ── WD_AUDIO_STAGES: what each part of a tic's audio cost ─────────────────────
-#define STAGE_MAX 16384
+#define STAGE_MAX (FS_AUDIO_HARNESS ? 16384 : 1)
 static int stages;
 static unsigned st_mus[STAGE_MAX], st_sfx[STAGE_MAX], st_sum[STAGE_MAX];
 static unsigned char st_live[STAGE_MAX];

@@ -21,6 +21,24 @@
 // -zone hands the engine only the first KB KiB of the zone arena (as fs-doom's
 // WD_ZONE_KB does), so one binary can bisect the smallest zone that works.
 //
+// The play mode (tools/floor/play-set.mjs's runCm, run by
+// tools/floor/ram-floor.mjs) is fs-doom's -frames mode on the board:
+//   cm-doom ... -frames REC [-exit-at T] [-lmp DEMO] [-audio 1]
+//               [-save-at T -load-at T -end-at T]
+// every frame recorded in fs-doom's F-line layout (frame, gametic, gamestate,
+// wipe, render, sim, six fields fs-doom fills and this leaves 0, episode, map,
+// instructions, wiping), wipes run to their end on the wipe clock, a level
+// exit at the first frame whose gametic is >= T, DEMO's bytes played as the
+// -timedemo lump (wad_semi.c's cm_wad_demo), an L line after every level load
+// (what the zone holds), and at the end a MEM line: the peak stack (from the
+// top of the stack region, init and play together) and newlib's heap
+// high-water.  -audio 1 runs the sound (the OPL synth and the mixer) as fs-doom
+// does; the floor log mode leaves it off.  -save-at, -load-at and -end-at are
+// fs-doom's WD_SAVE_AT, WD_LOAD_AT and WD_END_AT in slot 0: the game saved
+// (an S line: frame, gametic, slot, the save's bytes), kept by files.c in a
+// buffer in .big (fs_keep_alloc), loaded back, the run ended.  No floor log
+// is written.
+//
 // The zero-copy build (Makefile ZC=1, CM_ZERO_COPY) reads lumps in place
 // (WEB_LUMPS_IN_PLACE): the WAD is put in guest memory before the engine
 // starts (wad_semi.c's cm_wad_load) instead of being read through the window.
@@ -50,6 +68,8 @@
 #include "perf.h"
 #include "floor_log.h"
 #include "fs_state_hash.h"
+#include "z_zone.h"
+#include "d_event.h" /* gameaction */
 
 #include "board.h"
 #include "semihost.h"
@@ -65,6 +85,16 @@ extern unsigned cm_wad_image, cm_wad_tail;
 #endif
 extern int fs_zone_bytes;     /* tools/freestanding/i_system.c */
 unsigned cm_heap_peak (void); /* syscalls.c */
+void cm_wad_demo (const char* path, const char* lump); /* wad_semi.c */
+extern void (*fs_floor_setup_hook) (void);             /* floor_wrap.c */
+void G_ExitLevel (void);                               /* g_game.c */
+void G_LoadGame (char* name);
+extern int savegameslot;
+extern char savedescription[32];
+extern char** environ;
+void G_DoSaveGame (void);
+extern void* (*fs_keep_alloc) (size_t n);
+extern void (*fs_keep_release) (void* p);
 
 // ── floor_wrap.c's tic flags (it is linked with the same --wrap hooks) ───────
 volatile unsigned fs_floor_load;
@@ -178,6 +208,177 @@ static void need (const char* v, const char* key)
 
 static const char* fwd[4];
 
+// ── the play mode ────────────────────────────────────────────────────────────
+// The zone's own header, as z_zone.c declares it (i_main.c walks it the same
+// way, and checks the walk adds up; so does this one).
+typedef struct
+{
+    int size;
+    memblock_t blocklist;
+    memblock_t* rover;
+} cm_memzone_t;
+extern cm_memzone_t* mainzone;
+static int play_frame;
+
+static void out_kv (const char* k, unsigned v)
+{
+    out_putc (' ');
+    out_puts (k);
+    out_putc ('=');
+    out_putu (v);
+}
+
+// After every level load: L <frame> <episode> <map> static= level= cache=
+// free= run= (i_main.c's frames_zone, the same classes)
+static void play_level (void)
+{
+    memblock_t* b;
+    unsigned st = 0, lv = 0, ca = 0, fr = 0, run = 0, best = 0, total = 0;
+    for (b = mainzone->blocklist.next; b != &mainzone->blocklist; b = b->next)
+    {
+        if (b->next->prev != b || b->size < (int) sizeof (memblock_t))
+            break;
+        total += (unsigned) b->size;
+        if (!b->user)
+            fr += (unsigned) b->size;
+        else if (b->tag < PU_LEVEL)
+            st += (unsigned) b->size;
+        else if (b->tag < PU_PURGELEVEL)
+            lv += (unsigned) b->size;
+        else
+            ca += (unsigned) b->size;
+        run = (!b->user || b->tag >= PU_PURGELEVEL) ? run + (unsigned) b->size
+                                                    : 0;
+        if (run > best)
+            best = run;
+    }
+    if (b != &mainzone->blocklist ||
+        total != (unsigned) mainzone->size - sizeof (cm_memzone_t))
+    {
+        cm_uart_puts ("FAIL cm-doom: the zone walk does not add up\n");
+        sh_exit (8);
+    }
+    out_puts ("L ");
+    out_putu ((unsigned) play_frame);
+    out_putc (' ');
+    out_putu ((unsigned) gameepisode);
+    out_putc (' ');
+    out_putu ((unsigned) gamemap);
+    out_kv ("static", st);
+    out_kv ("level", lv);
+    out_kv ("cache", ca);
+    out_kv ("free", fr);
+    out_kv ("run", best);
+    out_putc ('\n');
+}
+
+// The kept savegames' memory (files.c's fs_keep_alloc): a buffer in .big,
+// handed out in order, so a kept save is never newlib's heap (it stands for a
+// port's file system); the last block handed out can be taken back
+#define KEEP_MAX (256 * 1024) /* the largest save measured: 158,166 B */
+static unsigned char keep_buf[KEEP_MAX] BIG (keep);
+static unsigned keep_used, keep_last;
+static void* keep_alloc (size_t n)
+{
+    unsigned at = (keep_used + 7u) & ~7u;
+    if (n > KEEP_MAX - at)
+    {
+        cm_uart_puts ("cm-doom: a kept savegame larger than its buffer\n");
+        return 0;
+    }
+    keep_last = at;
+    keep_used = at + (unsigned) n;
+    return keep_buf + at;
+}
+static void keep_release (void* p)
+{
+    if (p && (unsigned char*) p == keep_buf + keep_last)
+        keep_used = keep_last;
+}
+
+// Every frame, wipe frames included, until the demo's end longjmps out (or
+// -end-at does).
+static void play_run (int exit_at, int save_at, int load_at, int end_at)
+{
+    int exited = exit_at < 0, saved = save_at < 0, loaded = load_at < 0;
+    unsigned k = CM_INSN_PER_TICK;
+    out_puts ("FRAMES zone=");
+    out_putu ((unsigned) fs_zone_bytes);
+    out_puts (" wipes=1 poison=0 lean_screens=");
+#ifdef LEAN_SCREENS
+    out_putc ('1');
+#else
+    out_putc ('0');
+#endif
+    out_putc ('\n');
+    for (;;)
+    {
+        unsigned t0, t1;
+        int wiping;
+        if (!exited && gametic >= exit_at && !wipeactive)
+        {
+            exited = 1;
+            G_ExitLevel ();
+        }
+        // as fs-doom's -frames does (i_main.c: WD_SAVE_AT, WD_LOAD_AT): the
+        // save done there and then, the load by the next tic, slot 0
+        if (!saved && gametic >= save_at && !wipeactive)
+        {
+            int len = 0;
+            saved = 1;
+            savegameslot = 0;
+            strcpy (savedescription, "fs-doom");
+            G_DoSaveGame ();
+            fs_kept_file ("doomsav0.dsg", &len);
+            out_puts ("S ");
+            out_putu ((unsigned) play_frame);
+            out_putc (' ');
+            out_putu ((unsigned) gametic);
+            out_puts (" 0 ");
+            out_putu ((unsigned) len);
+            out_puts (" 0\n");
+        }
+        if (!loaded && gametic >= load_at && !wipeactive)
+        {
+            loaded = 1;
+            G_LoadGame ("doomsav0.dsg");
+        }
+        if (end_at >= 0 && gametic >= end_at && !wipeactive)
+        {
+            fs_timedemo_gametics = gametic;
+            longjmp (fs_demo_jmp, 1);
+        }
+        if (wipeactive)
+            fs_wipe_clock++;
+        wiping = wipeactive ? 1 : 0;
+        t0 = cm_ticks ();
+        D_DoomFrame ();
+        t1 = cm_ticks ();
+        out_puts ("F ");
+        out_putu ((unsigned) play_frame);
+        out_putc (' ');
+        out_putu ((unsigned) gametic);
+        out_putc (' ');
+        out_putu ((unsigned) gamestate);
+        out_putc (' ');
+        out_putu (wipeactive ? 1 : 0);
+        out_putc (' ');
+        out_putu (fs_render_hash ());
+        out_putc (' ');
+        out_putu ((unsigned) fs_state_hash ());
+        out_puts (" 0 0 0 0 0 0 "); /* fs-doom's held..write hash: unused */
+        out_putu ((unsigned) gameepisode);
+        out_putc (' ');
+        out_putu ((unsigned) gamemap);
+        out_putc (' ');
+        out_putu ((t1 - t0) * k);
+        out_putc (' ');
+        out_putu ((unsigned) wiping);
+        out_putc ('\n');
+        play_frame++;
+    }
+}
+
 void cm_start (void)
 {
     static char* argv[32];
@@ -185,6 +386,9 @@ void cm_start (void)
     char* p;
     const char *wad, *as, *demo, *floor_path, *mode_s, *name, *build, *stats;
     const char* zone_kb;
+    const char *play, *exit_at_s, *lmp, *audio, *save_at_s, *load_at_s,
+        *end_at_s;
+    static char* audio_env[] = {"WD_AUDIO=1", 0};
     char mode;
     unsigned stack_demo, last, k;
     int last_tic;
@@ -208,15 +412,40 @@ void cm_start (void)
     need (wad = arg (argc, argv, "-wad"), "-wad");
     need (as = arg (argc, argv, "-as"), "-as");
     need (demo = arg (argc, argv, "-timedemo"), "-timedemo");
-    need (floor_path = arg (argc, argv, "-floor"), "-floor");
-    need (mode_s = arg (argc, argv, "-mode"), "-mode");
-    need (name = arg (argc, argv, "-name"), "-name");
-    need (build = arg (argc, argv, "-build"), "-build");
-    need (stats = arg (argc, argv, "-stats"), "-stats");
-    // exactly A or B: a typo must not quietly run the other mode
-    if ((mode_s[0] != 'A' && mode_s[0] != 'B') || mode_s[1])
-        need (NULL, "-mode A or -mode B");
-    mode = mode_s[0];
+    play = arg (argc, argv, "-frames");
+    exit_at_s = arg (argc, argv, "-exit-at");
+    lmp = arg (argc, argv, "-lmp");
+    audio = arg (argc, argv, "-audio");
+    save_at_s = arg (argc, argv, "-save-at");
+    load_at_s = arg (argc, argv, "-load-at");
+    end_at_s = arg (argc, argv, "-end-at");
+    if (!play &&
+        (exit_at_s || lmp || audio || save_at_s || load_at_s || end_at_s))
+        need (NULL, "-frames (-exit-at, -lmp, -audio, -save-at, -load-at and "
+                    "-end-at are the play mode's)");
+    if (play)
+    {
+        floor_path = mode_s = name = build = stats = 0;
+        mode = 'A';
+    }
+    else
+    {
+        need (floor_path = arg (argc, argv, "-floor"), "-floor");
+        need (mode_s = arg (argc, argv, "-mode"), "-mode");
+        need (name = arg (argc, argv, "-name"), "-name");
+        need (build = arg (argc, argv, "-build"), "-build");
+        need (stats = arg (argc, argv, "-stats"), "-stats");
+        // exactly A or B: a typo must not quietly run the other mode
+        if ((mode_s[0] != 'A' && mode_s[0] != 'B') || mode_s[1])
+            need (NULL, "-mode A or -mode B");
+        mode = mode_s[0];
+    }
+    // -audio 1: the sound on, through the environment fs_audio.c reads (a
+    // static one: no heap)
+    if (audio && !strcmp (audio, "1"))
+        environ = audio_env;
+    else if (audio)
+        need (NULL, "-audio 1");
     zone_kb = arg (argc, argv, "-zone");
     if (zone_kb)
     {
@@ -232,7 +461,7 @@ void cm_start (void)
     }
 
     cm_uart_puts ("cm-doom: " CM_TARGET " on " CM_BOARD_NAME ", ");
-    cm_uart_puts (name);
+    cm_uart_puts (play ? "play mode" : name);
     cm_uart_puts (" mode ");
     cm_uart_putc (mode);
     cm_uart_puts ("\n");
@@ -242,6 +471,17 @@ void cm_start (void)
 #else
     cm_wad_open (wad, as);
 #endif
+    if (lmp)
+        cm_wad_demo (lmp, demo);
+    if (play)
+    {
+        if (!out_open (play))
+            need (NULL, "writable -frames path");
+        fs_wipe_clock = 0; /* the wipes run, on the wipe clock */
+        fs_floor_setup_hook = play_level;
+        fs_keep_alloc = keep_alloc;
+        fs_keep_release = keep_release;
+    }
 
     fwd[0] = "cm-doom";
     fwd[1] = "-timedemo";
@@ -260,6 +500,11 @@ void cm_start (void)
     // below this frame so the demo loop's is measured on its own
     stack_init = cm_stack_peak ();
     cm_stack_repaint ();
+    if (play)
+        play_run (exit_at_s ? atoi (exit_at_s) : -1,
+                  save_at_s ? atoi (save_at_s) : -1,
+                  load_at_s ? atoi (load_at_s) : -1,
+                  end_at_s ? atoi (end_at_s) : -1);
 
     k = CM_INSN_PER_TICK;
     snap[0] = web_perf_sim_us;
@@ -342,6 +587,35 @@ void cm_start (void)
 done:
     fs_timedemo_active = 0;
     stack_demo = cm_stack_peak ();
+    if (play)
+    {
+        out_puts ("MEM stack_peak=");
+        out_putu (stack_init > stack_demo ? stack_init : stack_demo);
+        out_kv ("stack_init", stack_init);
+        out_kv ("stack_play", stack_demo);
+        out_kv ("heap_peak", cm_heap_peak ());
+        out_kv ("zone", (unsigned) fs_zone_bytes);
+        out_kv ("region",
+                (unsigned) ((char*) _stack_top - (char*) _stack_bottom));
+        out_puts ("\nEND frames=");
+        out_putu ((unsigned) play_frame);
+        out_puts (" gametics=");
+        out_putu ((unsigned) fs_timedemo_gametics);
+        out_putc ('\n');
+        out_close ();
+        if (stack_init >=
+                (unsigned) ((char*) _stack_top - (char*) _stack_bottom) ||
+            stack_demo >=
+                (unsigned) ((char*) _stack_top - (char*) _stack_bottom))
+        {
+            cm_uart_puts ("FAIL cm-doom: the stack region was exhausted\n");
+            sh_exit (6);
+        }
+        cm_uart_puts ("cm-doom: play mode, ");
+        cm_uart_dec ((unsigned) play_frame);
+        cm_uart_puts (" frames\n");
+        sh_exit (0);
+    }
     if (overflow)
     {
         cm_uart_puts ("FAIL cm-doom: more than CM_MAX_TICS tics\n");

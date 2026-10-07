@@ -267,7 +267,8 @@ static const char* path_basename (const char* path)
     return s ? s + 1 : path;
 }
 
-static byte* load_wad (const char* path, int* lenout)
+// extra: bytes reserved after the file's own (the -lmp demo is appended there)
+static byte* load_wad (const char* path, int* lenout, int extra)
 {
     int fd;
     long sz;
@@ -292,7 +293,7 @@ static byte* load_wad (const char* path, int* lenout)
     {
         /* mmap returns page-aligned memory; mprotect will work on the full
          * mapping without needing manual page rounding. */
-        buf = (byte*) mmap (NULL, (size_t) sz, PROT_READ | PROT_WRITE,
+        buf = (byte*) mmap (NULL, (size_t) sz + extra, PROT_READ | PROT_WRITE,
                             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         if (buf == (byte*) MAP_FAILED)
         {
@@ -302,7 +303,7 @@ static byte* load_wad (const char* path, int* lenout)
     }
     else
     {
-        buf = (byte*) malloc ((size_t) sz);
+        buf = (byte*) malloc ((size_t) sz + extra);
         if (!buf)
         {
             close (fd);
@@ -313,7 +314,7 @@ static byte* load_wad (const char* path, int* lenout)
     if ((long) read (fd, buf, (size_t) sz) != sz)
     {
         if (use_ro)
-            munmap (buf, (size_t) sz);
+            munmap (buf, (size_t) sz + extra);
         else
             free (buf);
         close (fd);
@@ -659,6 +660,20 @@ static void emit_tictrace (const char* path)
 //                           twosided  from the second frame on, no line is
 //                                  two-sided as loaded (line_t's twosided):
 //                                  every seg has no back sector
+//   WD_ZONE_WALK=1          after every frame, a Z line: what the zone holds
+//                           (frames_level's classes), for the wipe probe
+//                           (tools/floor/wipe-probe.mjs)
+// Three more fields end each F line, after <gamemap>: <instructions>
+// D_DoomFrame took (with
+// WD_CYCLES=1, else 0; the counter is read just before and just after it, so
+// the record's own work is in no frame); <wiping>, 1 if a wipe was already
+// running when the frame began (a melt step only; a wipe's first frame, which
+// draws the new screen and captures both, has <wipe> 1 and <wiping> 0, and
+// its last has <wipe> 0 and <wiping> 1); and <wipe instructions>, the part
+// of the frame inside the wipe's own functions (frames_wrap.c).  A frame that
+// captures a wipe's screens also gets a W line: the zone's non-purgeable
+// bytes just before the start screen and just after the end screen,
+//   W <frame> before=<B> after=<B>
 static FILE* frames_file;
 static int   frames_n;
 static int   frames_poison;
@@ -668,11 +683,34 @@ static int   frames_nsched;
 static int   frames_free_at = -1, frames_free_scrn;
 static int   frames_fault;  /* WD_LEVELS_FAULT: 0 none, 1 glass, 2 save, 3 twosided */
 static int   frames_loaded; /* the frame a scheduled load completes in, or -1 */
+static int   frames_zone_walk;
 extern int      fs_write_count; /* files.c: what Web_FileWrite was given */
 extern unsigned fs_write_hash;
 extern int  savegameslot;       /* g_game.c: the menu's save, done directly */
 extern char savedescription[32];
 void        G_DoSaveGame (void);
+
+// The kept savegames' memory (files.c's fs_keep_alloc): malloc's, with
+// heap_wrap.c's count paused, since a kept save stands for a port's file
+// system, not its heap (heap_wrap.c forgets a block it never counted)
+extern void* (*fs_keep_alloc) (size_t n);
+extern void (*fs_keep_release) (void* p);
+extern int fs_heap_counting __attribute__ ((weak));
+static void* keep_alloc (size_t n)
+{
+    int was = &fs_heap_counting ? fs_heap_counting : 0;
+    void* p;
+    if (&fs_heap_counting)
+        fs_heap_counting = 0;
+    p = malloc (n);
+    if (&fs_heap_counting)
+        fs_heap_counting = was;
+    return p;
+}
+static void keep_release (void* p)
+{
+    free (p);
+}
 
 static void frames_parse_sched (const char* env, int kind)
 {
@@ -791,6 +829,77 @@ static void frames_save_world (int slot)
     fprintf (frames_file, "S %d %d %d %d %u\n", frames_n, gametic, slot, n, h);
 }
 
+// After every level load (floor_wrap.c's fs_floor_setup_hook): what the zone
+// holds with the level in it, one line in the record:
+//   L <frame> <episode> <map> static=<B> level=<B> cache=<B> free=<B> run=<B>
+// static is every block below PU_LEVEL, level PU_LEVEL and PU_LEVSPEC (the
+// level's arrays and its thinkers), cache the purgable blocks, free the rest;
+// run is the largest run of free and purgable blocks, the biggest
+// allocation that could succeed at that moment.  tools/floor/play-set.mjs
+// ranks the maps by level=.
+static void frames_zone (char kind)
+{
+    memblock_t* b;
+    long st = 0, lv = 0, ca = 0, fr = 0, run = 0, best = 0;
+    for (b = mainzone->blocklist.next; b != &mainzone->blocklist; b = b->next)
+    {
+        if (!b->user)
+            fr += b->size;
+        else if (b->tag < PU_LEVEL)
+            st += b->size;
+        else if (b->tag < PU_PURGELEVEL)
+            lv += b->size;
+        else
+            ca += b->size;
+        run = (!b->user || b->tag >= PU_PURGELEVEL) ? run + b->size : 0;
+        if (run > best)
+            best = run;
+    }
+    if (kind == 'L')
+        fprintf (frames_file, "L %d %d %d static=%ld level=%ld cache=%ld free=%ld run=%ld\n",
+                 frames_n, gameepisode, gamemap, st, lv, ca, fr, best);
+    else
+        fprintf (frames_file, "Z %d static=%ld level=%ld cache=%ld free=%ld run=%ld\n", frames_n,
+                 st, lv, ca, fr, best);
+}
+static void frames_level (void)
+{
+    frames_zone ('L');
+}
+
+// frames_wrap.c's hooks: the wipe's own instructions and zone (above)
+static long long wipe_instr, wipe_t0;
+static long wipe_before = -1;
+static long frames_static (void)
+{
+    memblock_t* b;
+    long st = 0;
+    for (b = mainzone->blocklist.next; b != &mainzone->blocklist; b = b->next)
+        if (b->user && b->tag < PU_LEVEL)
+            st += b->size;
+    return st;
+}
+void fs_frames_wipe_enter (void)
+{
+    if (frames_file && wd_cycles_fd >= 0)
+        wipe_t0 = wd_perf_read (wd_cycles_fd);
+}
+void fs_frames_wipe_leave (void)
+{
+    if (frames_file && wd_cycles_fd >= 0)
+        wipe_instr += wd_perf_read (wd_cycles_fd) - wipe_t0;
+}
+void fs_frames_wipe_zone (int after)
+{
+    if (!frames_file)
+        return;
+    if (!after)
+        wipe_before = frames_static ();
+    else
+        fprintf (frames_file, "W %d before=%ld after=%ld\n", frames_n, wipe_before,
+                 frames_static ());
+}
+
 static void frames_run (void)
 {
     fprintf (frames_file, "FRAMES zone=%d wipes=%d poison=%d lean_screens=%d\n",
@@ -803,7 +912,8 @@ static void frames_run (void)
              );
     for (;;)
     {
-        int i, held = 0;
+        int i, held = 0, wiping;
+        long long n0, n1;
         for (i = 0; i < frames_nsched; i++)
             if (!frames_sched[i].done && gametic >= frames_sched[i].tic && !wipeactive)
             {
@@ -842,15 +952,22 @@ static void frames_run (void)
         else
             wipeactive = 0; /* as the demo loop does */
 
+        wiping = wipeactive ? 1 : 0;
+        wipe_instr = 0;
+        n0 = wd_cycles_fd >= 0 ? wd_perf_read (wd_cycles_fd) : 0;
         D_DoomFrame ();
+        n1 = wd_cycles_fd >= 0 ? wd_perf_read (wd_cycles_fd) : 0;
 
         for (i = 1; i <= 4; i++)
             if (screens[i])
                 held |= 1 << i;
-        fprintf (frames_file, "F %d %d %d %d %u %u %d %d %d %d %d %u %d %d\n", frames_n, gametic,
-                 (int) gamestate, wipeactive ? 1 : 0, fs_render_hash (),
+        fprintf (frames_file, "F %d %d %d %d %u %u %d %d %d %d %d %u %d %d %lld %d %lld\n",
+                 frames_n, gametic, (int) gamestate, wipeactive ? 1 : 0, fs_render_hash (),
                  (unsigned) fs_state_hash (), held, scaledviewwidth, viewheight,
-                 detailshift, fs_write_count, fs_write_hash, gameepisode, gamemap);
+                 detailshift, fs_write_count, fs_write_hash, gameepisode, gamemap, n1 - n0,
+                 wiping, wipe_instr);
+        if (frames_zone_walk)
+            frames_zone ('Z');
 #ifdef LEAN_SCREENS
         if (frames_n == frames_free_at)
             V_ReleaseScreen (frames_free_scrn);
@@ -869,6 +986,190 @@ static void frames_run (void)
             frames_poison_zone ();
         frames_n++;
     }
+}
+
+// ── -lmp <path>: a scripted demo in place of the -timedemo lump ─────────────
+// A play scenario (tools/floor/play-set.mjs) is a demo the harness wrote: a map,
+// a skill and scripted input.  Its bytes are appended to the WAD blob and the
+// -timedemo lump's directory entry is pointed at them, so the engine sees the
+// IWAD with one demo replaced: the same lumps, the same directory, the same
+// heap as with a real demo, and in a zero-copy build the demo is read in place
+// as the real ones are.  (A second file would add a lumpinfo realloc to the
+// heap; a lump outside the blob would widen W_AddInPlace's span of the WAD
+// over memory that is not the WAD.)
+static int lmp_size (const char* path)
+{
+    int fd = open (path, O_RDONLY);
+    long sz;
+    if (fd < 0)
+        return -1;
+    sz = (long) lseek (fd, 0, SEEK_END);
+    close (fd);
+    return sz > 0 && sz < (1 << 24) ? (int) sz : -1;
+}
+
+static int le32 (const byte* p)
+{
+    return (int) (p[0] | (p[1] << 8) | (p[2] << 16) | ((unsigned) p[3] << 24));
+}
+
+static void put_le32 (byte* p, int v)
+{
+    p[0] = (byte) v;
+    p[1] = (byte) (v >> 8);
+    p[2] = (byte) (v >> 16);
+    p[3] = (byte) ((unsigned) v >> 24);
+}
+
+// the blob has room for lmplen more bytes; 0 if `lump` is not in its directory
+static int replace_lump (byte* wad, int* len, const char* lump, const char* lmp_path, int lmplen)
+{
+    int n = le32 (wad + 4), dir = le32 (wad + 8), i, fd;
+    if (n <= 0 || dir < 12 || dir > *len - n * 16)
+        return 0;
+    for (i = 0; i < n; i++)
+    {
+        byte* e = wad + dir + i * 16;
+        if (strncasecmp ((const char*) e + 8, lump, 8) != 0 || (strlen (lump) < 8 && e[8 + strlen (lump)]))
+            continue;
+        fd = open (lmp_path, O_RDONLY);
+        if (fd < 0 || (long) read (fd, wad + *len, (size_t) lmplen) != lmplen)
+            return 0;
+        close (fd);
+        put_le32 (e, *len);
+        put_le32 (e + 4, lmplen);
+        *len += lmplen;
+        return 1;
+    }
+    return 0;
+}
+
+// ── The RAM floor's stack and heap peaks (tools/floor/ram-floor.mjs) ────────
+// The stack: before anything else, main paints FS_STACK_PAINT bytes below its
+// own frame (0xA5), and at the end the lowest byte no longer 0xA5 is the
+// deepest the stack went below main, harness and engine together (as
+// tools/cortexm's crt0.S paints its stack region).  The heap: heap_wrap.c's
+// count of what the engine and port asked for, from D_DoomMain on.  Both are
+// printed at the end of every run, to stderr and into a -frames record:
+//   MEM stack_peak=<B> heap_peak=<B> heap_lost=<blocks> zone=<B>
+// heap_wrap.c is linked only by this directory's Makefile; the cross builds
+// (be-build.sh) have no heap count, so its symbols are weak here.
+#define FS_STACK_PAINT (512 * 1024)
+static size_t stack_lo, stack_hi; /* the painted region, as addresses */
+static void __attribute__ ((noinline)) stack_paint (void)
+{
+    volatile unsigned char region[FS_STACK_PAINT];
+    int i;
+    for (i = 0; i < FS_STACK_PAINT; i++)
+        region[i] = 0xA5;
+    stack_lo = (size_t) region;
+    stack_hi = stack_lo + FS_STACK_PAINT;
+}
+static unsigned stack_peak (void)
+{
+    size_t a = stack_lo;
+    while (a < stack_hi && *(const volatile unsigned char*) a == 0xA5)
+        a++;
+    return (unsigned) (stack_hi - a);
+}
+extern int fs_heap_counting __attribute__ ((weak));
+extern size_t fs_heap_peak __attribute__ ((weak));
+extern unsigned fs_heap_lost __attribute__ ((weak));
+extern void (*fs_floor_setup_hook) (void) __attribute__ ((weak));
+
+// ── WD_DATA_DIFF=<path>: which static bytes a run changes, and when ──────────
+// The RAM floor's flash question (tools/floor/ram-floor.mjs): a .data variable
+// no run ever changes could be const, in flash; one that only init changes
+// could be generated at build time (as TABLES_CONST does for the trig
+// tables); a .bss one nothing ever touches is RAM nobody uses.  So the whole
+// static image, .data and .bss ([__data_start, _end)), is copied at the top of
+// main and again when D_DoomMain returns, and at the end each copy is compared
+// with what follows it.  The file gets the changed address ranges:
+//   I <start> <end>   changed during init (main's top to D_DoomMain's return)
+//   P <start> <end>   changed after init (play, to the demo's end)
+// (hex addresses, end exclusive); the tool maps them onto nm's symbols.  A
+// byte written with the value it held is not seen: "never changed", not
+// "never written".  The copies are the harness's (malloc'd before heap_wrap.c
+// counts), never the engine's.
+// (glibc's crt1 defines __data_start and ld _end; a cross build's C library
+// may not, so both are weak and WD_DATA_DIFF is then refused)
+extern char __data_start[] __attribute__ ((weak)), _end[] __attribute__ ((weak));
+static unsigned char *diff_start, *diff_init, *diff_end;
+static const char* diff_path;
+// all three copies are allocated at main's top, before heap_wrap.c counts
+static void diff_alloc (void)
+{
+    size_t n;
+    if (!__data_start || !_end || (size_t) _end <= (size_t) __data_start)
+    {
+        fprintf (stderr, "fs-doom: WD_DATA_DIFF: this build has no __data_start/_end\n");
+        diff_path = NULL;
+        return;
+    }
+    n = (size_t) (_end - __data_start);
+    diff_start = (unsigned char*) malloc (n);
+    diff_init = (unsigned char*) malloc (n);
+    diff_end = (unsigned char*) malloc (n);
+    if (!diff_start || !diff_init || !diff_end)
+        diff_path = NULL;
+}
+static void diff_snap (unsigned char* into)
+{
+    if (into)
+        memcpy (into, __data_start, (size_t) (_end - __data_start));
+}
+static void diff_ranges (FILE* f, char tag, const unsigned char* a, const unsigned char* b)
+{
+    size_t n = (size_t) (_end - __data_start), i = 0, j;
+    while (i < n)
+    {
+        if (a[i] == b[i])
+        {
+            i++;
+            continue;
+        }
+        for (j = i; j < n && a[j] != b[j]; j++)
+            ;
+        // ranges closer than 16 bytes are one: the tool reads symbols, not bytes
+        while (j < n)
+        {
+            size_t k = j;
+            while (k < n && k < j + 16 && a[k] == b[k])
+                k++;
+            if (k == n || k == j + 16)
+                break;
+            for (j = k; j < n && a[j] != b[j]; j++)
+                ;
+        }
+        fprintf (f, "%c %lx %lx\n", tag, (unsigned long) (size_t) (__data_start + i),
+                 (unsigned long) (size_t) (__data_start + j));
+        i = j;
+    }
+}
+static void diff_write (void)
+{
+    FILE* f;
+    if (!diff_path)
+        return;
+    diff_snap (diff_end);
+    f = fopen (diff_path, "w");
+    if (!f)
+    {
+        fprintf (stderr, "fs-doom: WD_DATA_DIFF: cannot write %s\n", diff_path);
+        return;
+    }
+    fprintf (f, "DATA %lx %lx\n", (unsigned long) (size_t) __data_start,
+             (unsigned long) (size_t) _end);
+    diff_ranges (f, 'I', diff_start, diff_init);
+    diff_ranges (f, 'P', diff_init, diff_end);
+    fclose (f);
+}
+
+static void mem_line (FILE* f)
+{
+    fprintf (f, "MEM stack_peak=%u heap_peak=%lu heap_lost=%u zone=%d\n", stack_peak (),
+             &fs_heap_peak ? (unsigned long) fs_heap_peak : 0UL,
+             &fs_heap_lost ? fs_heap_lost : 0u, fs_zone_bytes);
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
@@ -890,6 +1191,15 @@ int main (int argc, char** argv)
     int last_tic;
     int wad_len;
     byte* wad_data;
+    const char* lmp_path = NULL; /* -lmp: a scripted demo for -timedemo's lump */
+    int lmp_len = 0;
+
+    stack_paint ();
+    diff_path = getenv ("WD_DATA_DIFF");
+    if (diff_path)
+        diff_alloc ();
+    if (diff_path)
+        diff_snap (diff_start);
 
     // Peel off the WAD positional arg, -sim, -cycles, -attrib, and -zonestats
     // flags; forward the rest.
@@ -935,6 +1245,12 @@ int main (int argc, char** argv)
             frames_out = argv[++i];
             continue;
         }
+        // -lmp <path>: a scripted demo played as -timedemo's lump (below)
+        if (strcmp (argv[i], "-lmp") == 0 && i + 1 < argc)
+        {
+            lmp_path = argv[++i];
+            continue;
+        }
         if (strcmp (argv[i], "-timedemo") == 0 && i + 1 < argc)
             timedemo = argv[i + 1]; /* still forwarded below */
         // First bare positional (non-flag) argument is the WAD path.
@@ -956,12 +1272,27 @@ int main (int argc, char** argv)
     // ══════════════════════════════════════════════════════════════════════════
     // SHIM LINE — WAD blob loading: the only open/read/malloc below D_DoomMain.
     // ══════════════════════════════════════════════════════════════════════════
-    wad_data = load_wad (wad_path, &wad_len);
+    lmp_len = lmp_path ? lmp_size (lmp_path) : 0;
+    if (lmp_len < 0 || (lmp_path && !timedemo))
+    {
+        fs_puts ("fs-doom: -lmp needs a readable file and -timedemo <lump>\n");
+        return 1;
+    }
+    wad_data = load_wad (wad_path, &wad_len, lmp_len);
     if (!wad_data)
     {
         fs_puts ("fs-doom: cannot load WAD: ");
         fs_puts (wad_path);
         fs_putc ('\n');
+        return 1;
+    }
+    if (lmp_path && !replace_lump (wad_data, &wad_len, timedemo, lmp_path, lmp_len))
+    {
+        fs_puts ("fs-doom: -lmp: no lump ");
+        fs_puts (timedemo);
+        fs_puts (" in the WAD's directory, or ");
+        fs_puts (lmp_path);
+        fs_puts (" unreadable\n");
         return 1;
     }
     // Hand the blob to files.c — no more file I/O below this point.
@@ -1057,6 +1388,9 @@ int main (int argc, char** argv)
             fprintf (stderr, "fs-doom: WD_LEVELS_FAULT is glass, save or twosided, in a LEAN_LEVELS build\n");
             return 1;
         }
+        frames_zone_walk = getenv ("WD_ZONE_WALK") && getenv ("WD_ZONE_WALK")[0] == '1';
+        fs_keep_alloc = keep_alloc;
+        fs_keep_release = keep_release;
         if (getenv ("WD_FREE_AT"))
             sscanf (getenv ("WD_FREE_AT"), "%d:%d", &frames_free_at, &frames_free_scrn);
 #ifndef LEAN_SCREENS
@@ -1068,11 +1402,18 @@ int main (int argc, char** argv)
 #endif
     }
 
+    if (frames_out && &fs_floor_setup_hook)
+        fs_floor_setup_hook = frames_level;
+
     if (setjmp (fs_demo_jmp) != 0)
         goto done;
 
+    if (&fs_heap_counting)
+        fs_heap_counting = 1;
     D_DoomMain (); // init + loads WAD via fs_register_wad/W_WebFile; no disk
                    // I/O
+    if (diff_path)
+        diff_snap (diff_init);
 
     // WD_DETAIL=1: opt-in low-detail mode for bare-metal/freestanding.
     // Routes through the vanilla R_SetViewSize mechanism so
@@ -1123,7 +1464,14 @@ int main (int argc, char** argv)
     fs_floor_mbytes = 0;
 
     if (frames_out)
+    {
+        if (wd_cycles_fd >= 0)
+        {
+            ioctl (wd_cycles_fd, PERF_EVENT_IOC_RESET, 0);
+            ioctl (wd_cycles_fd, PERF_EVENT_IOC_ENABLE, 0);
+        }
         frames_run (); /* returns only through the demo's end (fs_demo_jmp) */
+    }
 
     // Enable the instruction counter after init, before the demo loop.
     // Read the initial cumulative value so the first per-tic delta is correct.
@@ -1215,8 +1563,11 @@ int main (int argc, char** argv)
 
 done:
     fs_timedemo_active = 0;
+    mem_line (stderr);
+    diff_write ();
     if (frames_file)
     {
+        mem_line (frames_file);
         fprintf (frames_file, "END frames=%d gametics=%d\n", frames_n, fs_timedemo_gametics);
         fclose (frames_file);
         frames_file = NULL;

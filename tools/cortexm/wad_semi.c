@@ -47,6 +47,16 @@ static unsigned wad_pos; // the host file's position after the last read
 static unsigned wad_len;
 unsigned cm_wad_reads; // semihosted lump copies, for the stats
 
+// What files.c was handed, for cm_wad_demo: the blob, its directory as the
+// engine reads it, and how a lump's address is written into an entry.
+static unsigned char* reg_data; // fs_register_wad's data
+static unsigned char* reg_dir;  // the first directory entry the engine reads
+static unsigned reg_n;
+static const char* reg_as;
+static int reg_mode;    // 0 the window, 1 the whole WAD in PSRAM, 2 split
+static int lmp_fd = -1; // the window: a scripted demo past the WAD's end
+static unsigned lmp_len;
+
 static void wad_fail (const char* why, const char* path)
 {
     cm_uart_puts ("FAIL cm_wad: ");
@@ -133,12 +143,26 @@ unsigned cm_wad_open (const char* path, const char* present_as)
     fs_register_wad (present_as, dir, (int) wad_len);
     fs_floor_blob = (const unsigned char*) CM_WAD_WINDOW;
     fs_floor_blob_len = wad_len;
+    reg_data = dir;
+    reg_dir = dir + 12;
+    reg_n = n;
+    reg_as = present_as;
+    reg_mode = 0;
     return n;
 }
 
 // floor_wrap.c's FS_WAD_READ: a memcpy whose source is inside the window
+// (past the WAD's end, a scripted demo's, from its own file: cm_wad_demo)
 void cm_wad_read (void* dest, size_t offset, size_t n)
 {
+    if (lmp_fd >= 0 && offset >= wad_len && offset + n <= wad_len + lmp_len)
+    {
+        if (sh_seek (lmp_fd, (unsigned) (offset - wad_len)) != 0 ||
+            sh_read (lmp_fd, dest, (unsigned) n) != 0)
+            wad_fail ("short read", "(the -lmp demo)");
+        cm_wad_reads++;
+        return;
+    }
     if (offset + n > wad_len)
         wad_fail ("a copy runs past the end of the WAD", "(window)");
     if (offset != wad_pos && sh_seek (wad_fd, (unsigned) offset) != 0)
@@ -205,6 +229,11 @@ unsigned cm_wad_load (const char* path, const char* present_as)
         fs_register_wad (present_as, _swad, (int) wad_len);
         fs_floor_blob = _swad;
         fs_floor_blob_len = wad_len;
+        reg_data = _swad;
+        reg_dir = _swad + le32 (_swad + 8);
+        reg_n = n;
+        reg_as = present_as;
+        reg_mode = 1;
         return n;
     }
 
@@ -249,6 +278,102 @@ unsigned cm_wad_load (const char* path, const char* present_as)
                                                : _swad + cap;
     fs_floor_blob = lo;
     fs_floor_blob_len = (size_t) (hi - lo);
+    reg_data = dir;
+    reg_dir = dir + 12;
+    reg_n = n;
+    reg_as = present_as;
+    reg_mode = 2;
     return n;
 }
 #endif
+
+// ── -lmp: a scripted demo in place of a demo lump (cm_main.c) ───────────────
+// As fs-doom's -lmp does (tools/freestanding/i_main.c): the demo's bytes
+// follow the WAD's own, and the lump's directory entry points at them, so the
+// engine sees the IWAD with one demo replaced, and the zero-copy build reads
+// it in place, inside the WAD's span.  Where "after the WAD" is depends on
+// how the WAD was given to the engine:
+//   the window (copying build)  past the file's end in the window, served
+//                               from the demo's own file by cm_wad_read;
+//   PSRAM (zero copy, it fits)  right after the file in PSRAM;
+//   split (zero copy, longer)   right after the file's tail in .wadtail.
+// Call after cm_wad_open or cm_wad_load, before the engine starts.
+void cm_wad_demo (const char* path, const char* lump)
+{
+    unsigned i, k, len;
+    unsigned char *e = 0, *at;
+    int fd = sh_open (path, 1 /* "rb" */);
+    if (fd < 0)
+        wad_fail ("cannot open", path);
+    len = (unsigned) sh_flen (fd);
+    for (i = 0; i < reg_n && !e; i++)
+    {
+        unsigned char* d = reg_dir + i * 16;
+        for (k = 0; k < 8; k++)
+        {
+            char a = (char) d[8 + k], b = lump[k];
+            if (a >= 'a' && a <= 'z')
+                a = (char) (a - 32);
+            if (b >= 'a' && b <= 'z')
+                b = (char) (b - 32);
+            if (a != b)
+                break;
+            if (!a)
+            {
+                k = 8;
+                break;
+            }
+        }
+        if (k == 8)
+            e = d;
+    }
+    if (!e)
+        wad_fail ("no such lump for -lmp", lump);
+    if (reg_mode == 0)
+    {
+        lmp_fd = fd;
+        lmp_len = len;
+        // handle = dir + filepos must be CM_WAD_WINDOW + wad_len
+        put_le32 (e, CM_WAD_WINDOW + wad_len - (unsigned) reg_data);
+        put_le32 (e + 4, len);
+        fs_floor_blob_len = wad_len + len;
+        fs_register_wad (reg_as, reg_data, (int) (wad_len + len));
+        return;
+    }
+#ifdef CM_ZERO_COPY
+    if (reg_mode == 1)
+    {
+        if (len > (unsigned) (_ewad - _swad) - wad_len)
+            wad_fail ("no room in PSRAM after the WAD for", path);
+        at = _swad + wad_len;
+    }
+    else
+    {
+        if (len > (unsigned) (_ewadtail - _swadtail) - cm_wad_tail)
+            wad_fail ("no room in .wadtail after the WAD for", path);
+        at = _swadtail + cm_wad_tail;
+    }
+    if (sh_seek (fd, 0) != 0 || sh_read (fd, at, len) != 0)
+        wad_fail ("short read", path);
+    sh_close (fd);
+    put_le32 (e, (unsigned) at - (unsigned) reg_data);
+    put_le32 (e + 4, len);
+    if (reg_mode == 1)
+    {
+        cm_wad_image += len;
+        fs_floor_blob_len += len;
+        fs_register_wad (reg_as, reg_data, (int) (wad_len + len));
+    }
+    else
+    {
+        cm_wad_tail += len;
+        if (_swadtail + cm_wad_tail > fs_floor_blob + fs_floor_blob_len)
+            fs_floor_blob_len =
+                (size_t) (_swadtail + cm_wad_tail - fs_floor_blob);
+        fs_register_wad (reg_as, reg_data, (int) (wad_len + len));
+    }
+#else
+    (void) at;
+    wad_fail ("a zero-copy layout in a copying build", path);
+#endif
+}

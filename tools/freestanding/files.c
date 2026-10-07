@@ -79,6 +79,12 @@ int W_WebFileInPlace(char* filename, unsigned char* data, int length)
 // D_DoomMain and take one out at the end (fs_keep_file, fs_kept_file: another
 // build's save, loaded here).  Anything else reads as absent.
 #define FS_KEPT_MAX 4
+// The kept copies' memory: malloc's, unless a harness that measures the heap
+// points these elsewhere (i_main.c: malloc with heap_wrap.c's count paused;
+// cm_main.c: a buffer of its own), since a kept save stands for a port's file
+// system, not for its heap.
+void* (*fs_keep_alloc)(size_t n);
+void (*fs_keep_release)(void* p);
 static struct
 {
     char  name[32];
@@ -103,8 +109,12 @@ int fs_keep_file(const char* name, const byte* data, int len)
             ;
     if (i >= FS_KEPT_MAX || len < 0 || strlen(fs_basename(name)) >= sizeof(fs_kept[i].name))
         return 0;
-    free(fs_kept[i].data);
-    fs_kept[i].data = malloc(len ? (size_t) len : 1);
+    if (fs_keep_release)
+        fs_keep_release(fs_kept[i].data);
+    else
+        free(fs_kept[i].data);
+    fs_kept[i].data = fs_keep_alloc ? fs_keep_alloc(len ? (size_t) len : 1)
+                                    : malloc(len ? (size_t) len : 1);
     if (!fs_kept[i].data)
         return 0;
     memcpy(fs_kept[i].data, data, (size_t) len);

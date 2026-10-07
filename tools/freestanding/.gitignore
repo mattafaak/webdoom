@@ -29,3 +29,9 @@ fs-doom-leanzc-lv
 fs-doom-lean-lv
 fs-doom-leanzc-lvref
 fs-doom-full
+fs-doom-rp-ramfloor
+*.map
+fs-doom-lean-floor
+fs-doom-leanzc-floor
+fs-doom-full-floor
+.*.lock
