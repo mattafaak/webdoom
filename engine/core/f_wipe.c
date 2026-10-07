@@ -34,6 +34,9 @@ static const char rcsid[] = "$Id: f_wipe.c,v 1.2 1997/02/03 22:45:09 b1 Exp $";
 #include "doomdef.h"
 
 #include "f_wipe.h"
+#ifdef LEAN_SCREENS
+#include "i_system.h"
+#endif
 
 //
 //                       SCREEN WIPE PACKAGE
@@ -65,6 +68,23 @@ wipe_shittyColMajorXform
     int		y;
     short*	dest;
 
+#ifdef LEAN_SCREENS
+    /* In place, one pair of byte columns at a time: short-column i takes
+       exactly the bytes of byte columns 2i and 2i+1, so a copy of that
+       pair is all the scratch it needs (vanilla's is a whole screen from
+       the zone).  Same bytes out. */
+    byte	pair[2*SCREENHEIGHT];
+
+    if (height > SCREENHEIGHT)
+	I_Error ("wipe_shittyColMajorXform: height %d", height);
+    dest = array;
+    for(i=0;i<width;i++)
+    {
+	memcpy(pair, src + (2*i)*height, 2*height);
+	for(y=0;y<height;y++)
+	    dest[i*height+y] = (short)(pair[y] | (pair[height+y] << 8));
+    }
+#else
     dest = (short*) Z_Malloc(width*height*2, PU_STATIC, 0);
 
     for(i=0;i<width;i++)
@@ -75,6 +95,7 @@ wipe_shittyColMajorXform
     memcpy(array, dest, width*height*2);
 
     Z_Free(dest);
+#endif
 
 }
 
@@ -145,6 +166,13 @@ wipe_exitColorXForm
 
 
 static int*	y;
+#ifdef LEAN_SCREENS
+// The melt's column offsets, static here: a wipe a platform cuts short keeps
+// them for the next one (vanilla leaves its zone block allocated), and
+// allocated after the two borrowed screens that block would stay behind as a
+// PU_STATIC island in the middle of the zone once they are freed.
+static int	ybuf[SCREENWIDTH];
+#endif
 
 int
 wipe_initMelt
@@ -164,7 +192,13 @@ wipe_initMelt
     
     // setup initial column positions
     // (y<0 => not ready to scroll yet)
+#ifdef LEAN_SCREENS
+    if (width > SCREENWIDTH)
+	I_Error ("wipe_initMelt: width %d", width);
+    y = ybuf;
+#else
     y = (int *) Z_Malloc(width*sizeof(int), PU_STATIC, 0);
+#endif
     y[0] = -(M_Random()%16);
     for (i=1;i<width;i++)
     {
@@ -244,7 +278,9 @@ wipe_exitMelt
   int	height,
   int	ticks )
 {
+#ifndef LEAN_SCREENS
     Z_Free(y);
+#endif
     return 0;
 }
 
@@ -255,7 +291,11 @@ wipe_StartScreen
   int	width,
   int	height )
 {
+#ifdef LEAN_SCREENS
+    wipe_scr_start = V_HoldScreen(2, PU_STATIC);
+#else
     wipe_scr_start = screens[2];
+#endif
     I_ReadScreen(wipe_scr_start);
     return 0;
 }
@@ -267,7 +307,14 @@ wipe_EndScreen
   int	width,
   int	height )
 {
+#ifdef LEAN_SCREENS
+    // nothing reads the back screen while the melt runs: its memory is the
+    // end screen's for now (V_SuspendBackScreen)
+    V_SuspendBackScreen();
+    wipe_scr_end = V_HoldScreen(3, PU_STATIC);
+#else
     wipe_scr_end = screens[3];
+#endif
     I_ReadScreen(wipe_scr_end);
     /* wipe_scr_start is a raw copy of column-major screens[0]
        (I_ReadScreen), so restoring it is a raw copy back — V_DrawBlock
@@ -313,8 +360,27 @@ wipe_ScreenWipe
     {
 	go = 0;
 	(*wipes[wipeno*3+2])(width, height, ticks);
+#ifdef LEAN_SCREENS
+	wipe_Release();
+#endif
     }
 
     return !go;
 
 }
+
+#ifdef LEAN_SCREENS
+// Both screens back to the zone, and the melt's own pointers to them
+// cleared, so a melt step after this dereferences NULL instead of reading
+// freed memory; then the back screen, if the wipe had it, is drawn again.
+// A wipe cut short keeps vanilla's state otherwise: `go` stays set and `y`
+// keeps its columns, so the next wipe resumes them on fresh captures, as
+// vanilla's does on its static screens.
+void wipe_Release (void)
+{
+    V_ReleaseScreen(2);
+    V_ReleaseScreen(3);
+    wipe_scr_start = wipe_scr_end = NULL;
+    V_ResumeBackScreen();
+}
+#endif

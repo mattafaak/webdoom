@@ -477,6 +477,22 @@ WritePCXfile
     // pack the image
     pack = &pcx->data;
 	
+#ifdef LEAN_SCREENS
+    // data is column-major (screens[0] itself, M_ScreenShot): read in the
+    // row-major order vanilla's row-major copy is packed in
+    for (i=0 ; i<width*height ; i++)
+    {
+	byte	c = data[(i % width) * height + i / width];
+
+	if ( (c & 0xc0) != 0xc0)
+	    *pack++ = c;
+	else
+	{
+	    *pack++ = 0xc1;
+	    *pack++ = c;
+	}
+    }
+#else
     for (i=0 ; i<width*height ; i++)
     {
 	if ( (*data & 0xc0) != 0xc0)
@@ -487,6 +503,7 @@ WritePCXfile
 	    *pack++ = *data++;
 	}
     }
+#endif
     
     // write the palette
     *pack++ = 0x0c;	// palette ID byte
@@ -516,10 +533,16 @@ void M_ScreenShot (void)
     /* screens[0] is column-major but WritePCXfile packs rows
        (bytes_per_line = SCREENWIDTH), so untranspose here — a raw
        I_ReadScreen copy would produce a spatially transposed PCX. */
+#ifdef LEAN_SCREENS
+    // no row-major copy (vanilla's is in screens[2]): WritePCXfile packs
+    // straight from screens[0]
+    linear = screens[0];
+#else
     linear = screens[2];
     for (x=0 ; x<SCREENWIDTH ; x++)
 	for (y=0 ; y<SCREENHEIGHT ; y++)
 	    linear[y*SCREENWIDTH+x] = screens[0][x*SCREENHEIGHT+y];
+#endif
 
     // find a file name to save it to
     strcpy(lbmname,"DOOM00.pcx");
@@ -535,9 +558,19 @@ void M_ScreenShot (void)
 	I_Error ("M_ScreenShot: Couldn't create a PCX");
 
     // save the pcx file
+#ifdef LEAN_SCREENS
+    // the palette copied first: WritePCXfile's Z_Malloc may purge PLAYPAL,
+    // a PU_CACHE lump, before it reads the pointer it was given
+    {
+	byte	pal[768];
+	memcpy (pal, W_CacheLumpName ("PLAYPAL",PU_CACHE), sizeof(pal));
+	WritePCXfile (lbmname, linear, SCREENWIDTH, SCREENHEIGHT, pal);
+    }
+#else
     WritePCXfile (lbmname, linear,
 		  SCREENWIDTH, SCREENHEIGHT,
 		  W_CacheLumpName ("PLAYPAL",PU_CACHE));
+#endif
 	
     players[consoleplayer].message = "screen shot";
 }

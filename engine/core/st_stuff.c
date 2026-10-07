@@ -1463,9 +1463,18 @@ void ST_Init (void)
 {
     veryfirsttime = 0;
     ST_loadData();
+#ifdef LEAN_SCREENS
+    /* LEAN_SCREENS: the ST_HEIGHT rows that are drawn and read, at that
+       column stride (V_STRIDE); vanilla's whole screen below. */
+#if ST_HEIGHT != V_SBARHEIGHT
+#error "the status bar is not V_SBARHEIGHT rows"
+#endif
+    screens[4] = (byte *) Z_Malloc(V_SBARBYTES, PU_STATIC, 0);
+#else
     /* column-major: screens[4] must use the same column stride (SCREENHEIGHT)
        as screens[0..3] so V_CopyRect/V_DrawPatch addressing is consistent.
        Allocate SCREENWIDTH*SCREENHEIGHT; only the top ST_HEIGHT rows of each
        column are used for status-bar content. */
     screens[4] = (byte *) Z_Malloc(SCREENWIDTH*SCREENHEIGHT, PU_STATIC, 0);
+#endif
 }

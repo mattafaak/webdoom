@@ -897,13 +897,25 @@ void R_FillBackScreen (void)
     char*	name;
 	
     if (scaledviewwidth == 320)
+    {
+#ifdef LEAN_SCREENS
+	// a full-width view has no border to restore.  Not in an intermission:
+	// a netgame peer's save (G_DoSaveGame) lands here in any gamestate,
+	// and the intermission's background is in this screen.
+	if (gamestate != GS_INTERMISSION)
+	    V_ReleaseScreen (1);
+#endif
 	return;
+    }
 	
     if ( gamemode == commercial)
 	name = name2;
     else
 	name = name1;
     
+#ifdef LEAN_SCREENS
+    V_BackScreen (R_FillBackScreen);	// before the flat is cached: Z_Malloc may purge
+#endif
     src = W_CacheLumpName (name, PU_CACHE);
     /* column-major: fill screens[1] column by column.
        screens[1] pixel at (x,y) lives at screens[1] + x*SCREENHEIGHT + y.
@@ -969,6 +981,14 @@ R_VideoErase
   int		height )
 {
     int cx;
+#ifdef LEAN_SCREENS
+    // Released by a level load (PU_LEVEL) that drew no new border: a
+    // player's reborn reloads the level and D_Display does not refill it.
+    // The pattern is a function of the view and the IWAD, so it is drawn
+    // again and is the one vanilla still holds.
+    if (!screens[1])
+	R_FillBackScreen ();
+#endif
     for (cx = x; cx < x + width; cx++)
         memcpy (screens[0] + cx * SCREENHEIGHT + y,
                 screens[1] + cx * SCREENHEIGHT + y,

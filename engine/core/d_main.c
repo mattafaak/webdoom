@@ -389,6 +389,12 @@ void D_DoomFrame (void)
 	D_WipeFrame ();
 	return;
     }
+#ifdef LEAN_SCREENS
+    // a wipe the platform cut short (web_wipe_skip, the demo harnesses)
+    // never reached the melt's end, so its screens go back to the zone here
+    if (screens[3])
+	wipe_Release ();
+#endif
 
     // frame syncronous IO operations
     I_StartFrame ();

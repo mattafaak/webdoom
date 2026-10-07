@@ -183,11 +183,31 @@ V_CopyRect
 	I_Error ("Bad V_CopyRect");
     }
 #endif 
+#ifdef LEAN_SCREENS
+    // The short status-bar screen (4) has V_SBARHEIGHT rows and is only
+    // ever a source: st_lib.c copies its row y-ST_Y to screen row y, so a
+    // copy the check above accepts never reads past its last row.
+    if (destscrn == 4 || (srcscrn == 4 && srcy+height > V_SBARHEIGHT))
+	I_Error ("Bad V_CopyRect: screen %d to %d, rows %d..%d",
+		 srcscrn, destscrn, srcy, srcy+height-1);
+#endif
     V_MarkRect (destx, desty, width, height);
 
     /* column-major: each column is contiguous; copy column by column. */
     {
 	int cx;
+#ifdef LEAN_SCREENS
+	// the status bar's every-tic copies, each pointer stepped by its
+	// own screen's stride
+	if (srcscrn == 4)
+	{
+	    src  = screens[4] + srcx * V_SBARSTRIDE + srcy;
+	    dest = screens[destscrn] + destx * SCREENHEIGHT + desty;
+	    for (cx = 0; cx < width; cx++, src += V_SBARSTRIDE, dest += SCREENHEIGHT)
+		memcpy (dest, src, (size_t)height);
+	    return;
+	}
+#endif
 	for (cx = 0; cx < width; cx++)
 	{
 	    src  = screens[srcscrn]  + (srcx  + cx) * SCREENHEIGHT + srcy;
@@ -197,6 +217,56 @@ V_CopyRect
     }
 } 
  
+
+#ifdef LEAN_SCREENS
+//
+// V_DrawPatchStrip (LEAN_SCREENS)
+// V_DrawPatch into the short status-bar screen (4).  Every write lands
+// where vanilla's would in a whole screen 4, column-major at SCREENHEIGHT,
+// including a post that runs past row SCREENHEIGHT-1 into the next column,
+// and is kept when that cell is one of the V_SBARHEIGHT rows anything reads.
+// Not static: gcc inlines a static function called once, and inlined here it
+// changed V_DrawPatch's screen-0 code, which the status bar runs every tic.
+//
+void V_DrawPatchStrip (int x, int y, patch_t* patch)
+{
+    int		col;
+    int		w;
+    int		cx;
+    int		cy;
+    int		count;
+    column_t*	column;
+    byte*	source;
+
+    w = SHORT(patch->width);
+    for (col = 0 ; col<w ; col++)
+    {
+	column = (column_t *)((byte *)patch + LONG(patch->columnofs[col]));
+	while (column->topdelta != 0xff)
+	{
+	    source = (byte *)column + 3;
+	    cx = x + col;
+	    cy = y + column->topdelta;
+	    while (cy >= SCREENHEIGHT)
+	    {
+		cy -= SCREENHEIGHT;
+		cx++;
+	    }
+	    for (count = column->length ; count ; count--, source++)
+	    {
+		if (cy < V_SBARHEIGHT && cx < SCREENWIDTH)
+		    screens[4][cx * V_SBARSTRIDE + cy] = *source;
+		if (++cy == SCREENHEIGHT)
+		{
+		    cy = 0;
+		    cx++;
+		}
+	    }
+	    column = (column_t *)((byte *)column + column->length + 4);
+	}
+    }
+}
+#endif
 
 //
 // V_DrawPatch
@@ -236,6 +306,15 @@ V_DrawPatch
  
     if (!scrn)
 	V_MarkRect (x, y, SHORT(patch->width), SHORT(patch->height)); 
+#ifdef LEAN_SCREENS
+    else if (scrn == 4)
+    {
+	V_DrawPatchStrip (x, y, patch);
+	return;
+    }
+    else if (!screens[scrn])
+	I_Error ("V_DrawPatch: screen %d is not held", scrn);
+#endif
 
     col = 0;
     /* column-major: desttop points to start of column x.
@@ -302,6 +381,10 @@ V_DrawPatchFlipped
       I_Error ("Bad V_DrawPatch in V_DrawPatchFlipped");
     }
 #endif 
+#ifdef LEAN_SCREENS
+    if (V_STRIDE(scrn) != SCREENHEIGHT || !screens[scrn])
+	I_Error ("V_DrawPatchFlipped: screen %d is short or not held", scrn);
+#endif
  
     if (!scrn)
 	V_MarkRect (x, y, SHORT(patch->width), SHORT(patch->height)); 
@@ -428,6 +511,10 @@ V_DrawBlock
 	I_Error ("Bad V_DrawBlock");
     }
 #endif
+#ifdef LEAN_SCREENS
+    if (V_STRIDE(scrn) != SCREENHEIGHT || !screens[scrn])
+	I_Error ("V_DrawBlock/V_GetBlock: screen %d is short or not held", scrn);
+#endif
 
     V_MarkRect (x, y, width, height);
 
@@ -475,6 +562,10 @@ V_GetBlock
 	I_Error ("Bad V_DrawBlock");
     }
 #endif
+#ifdef LEAN_SCREENS
+    if (V_STRIDE(scrn) != SCREENHEIGHT || !screens[scrn])
+	I_Error ("V_DrawBlock/V_GetBlock: screen %d is short or not held", scrn);
+#endif
 
     /* column-major: screens[scrn] column-major → dest row-major. */
     {
@@ -496,6 +587,10 @@ V_GetBlock
 // 
 void V_Init (void) 
 { 
+#ifdef LEAN_SCREENS
+    // screens[0] only; [1]..[3] are held from the zone while needed
+    screens[0] = I_AllocLow (SCREENWIDTH*SCREENHEIGHT);
+#else
     int		i;
     byte*	base;
 		
@@ -505,4 +600,65 @@ void V_Init (void)
 
     for (i=0 ; i<4 ; i++)
 	screens[i] = base + i*SCREENWIDTH*SCREENHEIGHT;
+#endif
 }
+
+#ifdef LEAN_SCREENS
+//
+// V_HoldScreen, V_ReleaseScreen, V_BackScreen (LEAN_SCREENS)
+// A held screen is a whole-screen zone block whose owner pointer is its
+// screens[] slot (v_video.h says who holds which, and for how long).
+//
+byte* V_HoldScreen (int scrn, int tag)
+{
+    if (scrn < 1 || scrn > 3)
+	I_Error ("V_HoldScreen: screen %d is not a borrowed one", scrn);
+    if (!screens[scrn])
+	Z_Malloc (SCREENWIDTH*SCREENHEIGHT, tag, &screens[scrn]);
+    return screens[scrn];
+}
+
+void V_ReleaseScreen (int scrn)
+{
+    if (screens[scrn])
+	Z_Free (screens[scrn]);		// leaves screens[scrn] NULL
+}
+
+// The back screen lives as long as the level it is drawn for: PU_LEVEL,
+// freed by the next P_SetupLevel's Z_FreeTags.  A new one is zeroed, so
+// pixels nothing drew read as 0, never as another block's leftovers.
+// Callers hold it BEFORE caching what they draw into it: a Z_Malloc may
+// purge a PU_CACHE lump already in hand.  `redraw` is the owner's function
+// that draws it whole: R_FillBackScreen, or the intermission's background.
+static void	(*v_backredraw) (void);
+static boolean	v_backsuspended;
+
+byte* V_BackScreen (void (*redraw) (void))
+{
+    v_backredraw = redraw;
+    if (!screens[1])
+	memset (V_HoldScreen (1, PU_LEVEL), 0, SCREENWIDTH*SCREENHEIGHT);
+    return screens[1];
+}
+
+// While a melt runs D_DoomFrame steps only the wipe, so no drawer reads the
+// back screen: wipe_EndScreen gives it back to the zone before it takes its
+// own screen, and the melt's end (wipe_Release) has the owner draw it again.
+void V_SuspendBackScreen (void)
+{
+    if (screens[1] && v_backredraw)
+    {
+	V_ReleaseScreen (1);
+	v_backsuspended = true;
+    }
+}
+
+void V_ResumeBackScreen (void)
+{
+    if (v_backsuspended)
+    {
+	v_backsuspended = false;
+	v_backredraw ();
+    }
+}
+#endif

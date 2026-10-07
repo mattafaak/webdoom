@@ -63,6 +63,12 @@ wipe_ScreenWipe
   int		height,
   int		ticks );
 
+#ifdef LEAN_SCREENS
+// The wipe's two screens back to the zone (LEAN_SCREENS).  The melt calls it
+// when it ends; D_DoomFrame calls it for a wipe a platform cut short.
+void wipe_Release (void);
+#endif
+
 #endif
 //-----------------------------------------------------------------------------
 //

@@ -17,7 +17,11 @@
 // Static screen-0 buffer (palette indices, row-major 320*200 = 64,000 bytes).
 // In a freestanding port this lives in a chosen memory region (SRAM, PSRAM).
 /* 4-byte alignment: screens[0] may be cast to short* / int* by render code. */
+// LEAN_SCREENS: none here; screens[0] is V_Init's, from I_AllocLow's
+// 64,000-byte block (i_system.c), so the screen is held once.
+#ifndef LEAN_SCREENS
 static byte fs_screenbuf[SCREENWIDTH * SCREENHEIGHT] __attribute__((aligned(4)));
+#endif
 
 // Gamma-corrected RGB palette mirror (same layout as web/i_video.c webpalette).
 static byte fs_palette[256 * 3];
@@ -27,8 +31,12 @@ void I_InitGraphics(void)
 {
     // Override screens[0] set by V_Init/I_AllocLow.  I_InitGraphics is called
     // after V_Init so this write wins.
+#ifdef LEAN_SCREENS
+    memset(screens[0], 0, SCREENWIDTH * SCREENHEIGHT);
+#else
     screens[0] = fs_screenbuf;
     memset(fs_screenbuf, 0, sizeof(fs_screenbuf));
+#endif
     fs_palette_version = 0;
 }
 

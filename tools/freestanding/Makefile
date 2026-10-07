@@ -55,8 +55,17 @@ CFLAGS  := -m32 $(OPT) -g \
 # tables as const data generated at build time (TABLES_CONST: in flash on a
 # microcontroller, 65,540 B of RAM saved).
 #   make LEAN=1 OBJDIR=obj-lean OUT=fs-doom-lean
+# and LEAN_SCREENS (engine/core/v_video.h): screens[0] alone is static; the
+# back screen and the wipe's two screens are zone blocks held while needed,
+# and the status bar's background is its 32 rows.  LEAN_SCREENS=0 drops it
+# from the lean set, a reference build:
+#   make LEAN=1 LEAN_SCREENS=0 OBJDIR=obj-lean-ref OUT=fs-doom-lean-ref
 ifeq ($(LEAN),1)
 CFLAGS += -DMAXVISPLANES=128 -DMAXVISSPRITES=128 -DTABLES_CONST -I$(OBJDIR)/gen
+LEAN_SCREENS ?= 1
+endif
+ifeq ($(LEAN_SCREENS),1)
+CFLAGS += -DLEAN_SCREENS
 endif
 
 # The floor gate's tic flags (floor_wrap.c): a level load, intermission or
@@ -259,7 +268,7 @@ imports: $(OUT)
 	@bash gen-imports.sh
 
 clean:
-	rm -rf obj obj-* fs-doom fs-doom-o2 fs-doom-fixed fs-doom-zc fs-doom-lean $(OUT_DIR) synth-bench-O1 synth-bench-O2 synth-bench-x87 synth-exact
+	rm -rf obj obj-* fs-doom fs-doom-o2 fs-doom-fixed fs-doom-zc fs-doom-lean fs-doom-lean-ref $(OUT_DIR) synth-bench-O1 synth-bench-O2 synth-bench-x87 synth-exact
 
 # ro-wad-check: read-only-WAD proof (XIP feasibility).
 # Runs all 13 demos with WD_RO_WAD=1: WAD blob mprotect(PROT_READ) after load.

@@ -1838,10 +1838,20 @@ void WI_initVariables(wbstartstruct_t* wbstartstruct)
 	wbs->epsd -= 3;
 }
 
+#ifdef LEAN_SCREENS
+static void WI_drawBackScreen(void);
+#endif
+
 void WI_Start(wbstartstruct_t* wbstartstruct)
 {
 
     WI_initVariables(wbstartstruct);
+#ifdef LEAN_SCREENS
+    // the background goes into the back screen (WI_loadData), and every
+    // frame copies it out (WI_slamBackground) until the next level load
+    // frees it.  Held here, before the background lump is cached.
+    V_BackScreen(WI_drawBackScreen);
+#endif
     WI_loadData();
 
     if (deathmatch)
@@ -1851,3 +1861,26 @@ void WI_Start(wbstartstruct_t* wbstartstruct)
     else
 	WI_initStats();
 }
+
+#ifdef LEAN_SCREENS
+// The background into the back screen, as WI_loadData draws it, for
+// V_ResumeBackScreen after a wipe has had the back screen's memory.
+static void WI_drawBackScreen(void)
+{
+    char	name[9];
+
+    if (gamemode == commercial)
+	strcpy(name, "INTERPIC");
+    else
+	sprintf(name, "WIMAP%d", wbs->epsd);
+
+    if ( gamemode == retail )
+    {
+      if (wbs->epsd == 3)
+	strcpy(name,"INTERPIC");
+    }
+
+    V_BackScreen(WI_drawBackScreen);
+    V_DrawPatch(0, 0, 1, W_CacheLumpName(name, PU_CACHE));
+}
+#endif
