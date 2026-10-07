@@ -17,15 +17,21 @@
 #   ZONE_KB=N          the zone arena, KiB: 4096 by default, 2048 with ZC=1,
 #                      which leaves the rest of the ZONE SSRAM to .wadtail
 #                      (the part of a WAD longer than 16 MiB)
+#   DRAWERS=1          the port's R_DrawColumn and R_DrawSpan (drawers_v6m.S,
+#                      drawers_v8m.S) in place of r_draw.c's, through
+#                      --wrap: engine/core is compiled unmodified, and every
+#                      case they do not take goes to the engine's own
 #   FIXED=1            the port's FixedMul and FixedDiv (cm_fixed.h, through
 #                      m_fixed.h's WEB_FIXED_PORT; on ARMv6-M MULS pieces and
 #                      fixed_v6m.S's divide instead of libgcc's 64-bit helpers)
+#   FAST=1             both
 #
-# Products, under build/<isa><opt>[-count][-zc][-fx]/ (run-floor.sh passes B):
+# Products, under build/<isa><opt>[-count][-zc][-dr|-fx|-fast]/ (run-floor.sh
+# passes B):
 #   cm-doom.elf  cm-doom.map  helpers.txt (the libgcc helpers the objects call)
 #   cm-selftest.elf (the instrument's red-proof, selftest.c)
-#   cm-fasttest.elf (with FIXED: the port's FixedMul and FixedDiv against
-#   m_fixed.h's on boundary and random inputs, fasttest.c)
+#   cm-fasttest.elf (with DRAWERS or FIXED: the port's drawers and fixed-point
+#   against the engine's on random and boundary inputs, fasttest.c)
 #
 # Toolchain: the system arm-none-eabi-gcc with full newlib (not nano: nano is
 # built for size, and its memcpy/memset would not be what a port ships).
@@ -72,11 +78,23 @@ endif
 ifeq ($(filter 0 1,$(ZC)),)
 $(error ZC must be 0 or 1, not '$(ZC)')
 endif
-FIXED   ?= 0
-ifeq ($(filter 0 1,$(FIXED)),)
-$(error FIXED must be 0 or 1, not '$(FIXED)')
+FAST    ?= 0
+ifeq ($(FAST),1)
+DRAWERS := 1
+FIXED   := 1
 endif
+DRAWERS ?= 0
+FIXED   ?= 0
+ifeq ($(filter 0 1,$(DRAWERS))$(filter 0 1,$(FIXED)),)
+$(error DRAWERS and FIXED must be 0 or 1)
+endif
+ISA_S := $(if $(filter armv6m,$(ISA)),v6m,v8m)
 PORT_OBJ :=
+PORT_WRAP :=
+ifeq ($(DRAWERS),1)
+PORT_OBJ  += drawers_$(ISA_S).o
+PORT_WRAP += -Wl,--wrap=R_DrawColumn,--wrap=R_DrawSpan
+endif
 ifeq ($(FIXED),1)
 PORT_CFLAGS := '-DWEB_FIXED_PORT="cm_fixed.h"'
 ifeq ($(ISA),armv6m)
@@ -85,7 +103,7 @@ endif
 else
 PORT_CFLAGS :=
 endif
-PORT_SUF := $(if $(filter 1,$(FIXED)),-fx,)
+PORT_SUF := $(if $(filter 11,$(DRAWERS)$(FIXED)),-fast,$(if $(filter 1,$(DRAWERS)),-dr,$(if $(filter 1,$(FIXED)),-fx,)))
 ifeq ($(ZC),1)
 LDS    := $(LDS:.ld=-zc.ld)
 ZC_FLAGS := -DWEB_LUMPS_IN_PLACE -DCM_ZERO_COPY
@@ -151,14 +169,17 @@ LDFLAGS := $(CPU) -nostartfiles -T $(LDS) -Wl,--gc-sections -Wl,--no-enum-size-w
 LIBS    := -Wl,--start-group -lc -lm -lgcc -Wl,--end-group
 
 FT_OBJ := $(B)/crt0.o $(addprefix $(B)/cm/,board.o fault.o semihost.o syscalls.o fasttest.o fasttest_ref.o) \
-          $(addprefix $(B)/cm/,$(PORT_OBJ))
+          $(B)/core/r_draw.o $(addprefix $(B)/cm/,$(PORT_OBJ))
+# the test calls the port's drawers by their own names and stands between them
+# and the engine's (__real_*), counting the cases the port hands back
+FT_LD := -Wl,--defsym=__real_R_DrawColumn=ft_real_column,--defsym=__real_R_DrawSpan=ft_real_span
 
-all: $(B)/cm-doom.elf $(B)/cm-selftest.elf $(if $(PORT_CFLAGS),$(B)/cm-fasttest.elf,)
+all: $(B)/cm-doom.elf $(B)/cm-selftest.elf $(if $(PORT_OBJ)$(PORT_CFLAGS),$(B)/cm-fasttest.elf,)
 
 # Every object depends on the flags it was compiled with: make tracks files,
 # not command lines, so without this a changed -D or OPT leaves stale objects
 # that link cleanly and measure the old build.
-FLAGS_NOW := $(CC) $(CPU) $(CFLAGS) $(LDS) $(ZC_LD) $(PORT_OBJ)
+FLAGS_NOW := $(CC) $(CPU) $(CFLAGS) $(LDS) $(ZC_LD) $(PORT_OBJ) $(PORT_WRAP)
 $(B)/flags.txt: FORCE
 	@mkdir -p $(B)
 	@echo '$(subst ','\'',$(FLAGS_NOW))' | cmp -s - $@ || echo '$(subst ','\'',$(FLAGS_NOW))' > $@
@@ -186,7 +207,7 @@ $(B)/cm-doom.elf: $(B)/helpers.o
 endif
 
 $(B)/cm-doom.elf: $(OBJ) $(LDS) sections.ld $(B)/helpers.txt $(B)/flags.txt
-	@$(CC) $(LDFLAGS) $(FLOOR_WRAP) $(HELPER_WRAP) -Wl,-Map=$(B)/cm-doom.map \
+	@$(CC) $(LDFLAGS) $(FLOOR_WRAP) $(HELPER_WRAP) $(PORT_WRAP) -Wl,-Map=$(B)/cm-doom.map \
 	    $(OBJ) $(HELPER_OBJ) $(LIBS) -o $@
 	@$(SIZE) $@ | tail -1 | awk '{printf "built %s: text %d data %d bss %d (B)\n", "$@", $$1, $$2, $$3}'
 
@@ -194,7 +215,8 @@ $(B)/cm-selftest.elf: $(ST_OBJ) $(LDS) sections.ld $(B)/flags.txt
 	@$(CC) $(LDFLAGS) -Wl,-Map=$(B)/cm-selftest.map $(ST_OBJ) $(LIBS) -o $@
 
 $(B)/cm-fasttest.elf: $(FT_OBJ) $(LDS) sections.ld $(B)/flags.txt
-	@$(CC) $(LDFLAGS) -Wl,-Map=$(B)/cm-fasttest.map $(FT_OBJ) $(LIBS) -o $@
+	@$(CC) $(LDFLAGS) $(FT_LD) -Wl,-Map=$(B)/cm-fasttest.map $(FT_OBJ) $(LIBS) -o $@
+$(B)/cm/fasttest.o: CFLAGS += -DCM_FT_DRAWERS=$(DRAWERS)
 # fasttest_ref.c compiles m_fixed.h's own FixedMul and FixedDiv: the reference
 $(B)/cm/fasttest_ref.o: fasttest_ref.c $(B)/flags.txt
 	@mkdir -p $(dir $@)

@@ -13,11 +13,12 @@
 #            [--misaligned]                  with --zero-copy: every demo's WAD
 #                                            rewritten with each lump at an odd
 #                                            address (tools/floor/misalign-wad.mjs)
-#            [--fixed]                       the port's FixedMul and FixedDiv
-#                                            (Makefile FIXED=1), which first
-#                                            passes cm-fasttest, the port
-#                                            against m_fixed.h input by input
-#
+#            [--drawers] [--fixed] [--fast]  the port's drawers (Makefile
+#                                            DRAWERS=1), its FixedMul/FixedDiv
+#                                            (FIXED=1), or both (FAST=1); each
+#                                            first passes cm-fasttest, the port
+#                                            against the engine input by input
+
 #   armv6m  -mcpu=cortex-m0plus code on mps2-an385 (exact M0+ instruction
 #           counts; unaligned accesses trap as on an M0+)
 #   armv8m  -mcpu=cortex-m33 code on mps2-an505
@@ -61,6 +62,7 @@ ZC=0
 ZONE=""
 CORRECT=0
 MISALIGN=0
+DRAWERS=0
 FIXED=0
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -75,7 +77,9 @@ while [ $# -gt 0 ]; do
         --zone) ZONE="$2"; shift 2 ;;
         --correctness) CORRECT=1; shift ;;
         --misaligned) MISALIGN=1; shift ;;
+        --drawers) DRAWERS=1; shift ;;
         --fixed) FIXED=1; shift ;;
+        --fast) DRAWERS=1; FIXED=1; shift ;;
         *) echo "FAIL run-floor: unknown argument '$1'"; exit 2 ;;
     esac
 done
@@ -101,7 +105,7 @@ SUF=""
 [ "$COUNT" = 1 ] && SUF=-count
 [ "$ZC" = 1 ] && SUF="$SUF-zc"
 PSUF=""   # the Makefile's PORT_SUF
-[ "$FIXED" = 1 ] && PSUF=-fx
+case "$DRAWERS$FIXED" in 11) PSUF=-fast ;; 10) PSUF=-dr ;; 01) PSUF=-fx ;; esac
 SUF="$SUF$PSUF"
 if [ -n "$XCFLAGS" ]; then
     [ -n "$VARIANT" ] || { echo "FAIL run-floor: --cflags needs --variant NAME (its own build dir)"; exit 2; }
@@ -117,7 +121,7 @@ WADS="$ROOT/wads/lib"
 echo "run-floor: building $ISA $OPT${SUF:+ ($SUF)}"
 BLOG="$B.log"
 mkdir -p "$CM/build"
-make -s -C "$CM" ISA="$ISA" OPT="$OPT" COUNT="$COUNT" ZC="$ZC" FIXED="$FIXED" B="$B" EXTRA_CFLAGS="$XCFLAGS" > "$BLOG" 2>&1 ||
+make -s -C "$CM" ISA="$ISA" OPT="$OPT" COUNT="$COUNT" ZC="$ZC" DRAWERS="$DRAWERS" FIXED="$FIXED" B="$B" EXTRA_CFLAGS="$XCFLAGS" > "$BLOG" 2>&1 ||
     { tail -20 "$BLOG"; echo "FAIL run-floor: build failed"; exit 1; }
 grep -E '^(built|armv)' "$BLOG" || true
 ELF="$B/cm-doom.elf"
@@ -182,7 +186,7 @@ st semihost 0 '^PASS semihost: ' "$WADS/doom.wad"
 st memcpy 0 '^PASS memcpy: '
 # the port's code against the engine's, input by input (fasttest.c), before
 # any demo: a pass names how many cases each part checked
-if [ "$FIXED" = 1 ]; then
+if [ "$DRAWERS$FIXED" != 00 ]; then
     rc=0
     timeout 1800 qemu-system-arm -M "$BOARD" -display none -monitor none -serial "file:$OUT/fasttest.uart" \
         -semihosting-config enable=on,target=native,arg=cm-fasttest,arg=1,arg=1 -kernel "$B/cm-fasttest.elf" || rc=$?
@@ -192,7 +196,7 @@ if [ "$FIXED" = 1 ]; then
         echo "FAIL run-floor: cm-fasttest exited $rc: $line"
         exit 1
     fi
-    sed -n 's/^  \(mul\|div\):/  fasttest \1:/p' "$OUT/fasttest.uart"
+    sed -n 's/^  \(mul\|div\|column\|span\):/  fasttest \1:/p' "$OUT/fasttest.uart"
 fi
 
 # ── 3. the demos ─────────────────────────────────────────────────────────────
