@@ -69,12 +69,16 @@ else
         echo "lint: SKIP: clang-format major is $CF_VERSION, pinned $PINNED_MAJOR — C formatting checks did NOT run"
         echo "lint:       (output varies across major versions; skipped to avoid false positives on a contributor's box)"
     else
+        # tools/floor and tools/cortexm are new trees with no history to
+        # bury, so they are formatted rather than exempted.
         C_FILES=(
             engine/web/*.c
             engine/web/*.h
             tools/archaeology/*.c
             tools/floor/*.c
             tools/floor/*.h
+            tools/cortexm/*.c
+            tools/cortexm/*.h
         )
 
         if [ "$FIX" = "1" ]; then
@@ -100,9 +104,9 @@ else
 
             # ── what clang-format does NOT cover, said out loud ──────────────
             #
-            # C_FILES is engine/web, tools/archaeology and tools/floor. Six
-            # other trees hold tracked C and were outside the gate with nothing
-            # saying so --
+            # C_FILES is engine/web, tools/archaeology, tools/floor and
+            # tools/cortexm. Six other trees hold tracked C and were outside
+            # the gate with nothing saying so --
             # scope that is narrow by accident reads exactly like scope that is
             # narrow by decision.
             #
@@ -123,7 +127,7 @@ else
             )
             UNDECLARED=()
             while IFS= read -r f; do
-                case "$f" in engine/web/*|tools/archaeology/*|tools/floor/*) continue ;; esac
+                case "$f" in engine/web/*|tools/archaeology/*|tools/floor/*|tools/cortexm/*) continue ;; esac
                 declared=0
                 for d in "${C_EXEMPT_DIRS[@]}"; do
                     case "$f" in "$d"/*) declared=1; break ;; esac
