@@ -775,6 +775,11 @@ int main (int argc, char** argv)
     // Disable smooth render interpolation (non-deterministic wall-clock drift).
     smoothrender = false;
     last_tic = -1;
+    // D_DoomMain's own WAD reads (R_InitTextures alone reads every patch) are
+    // init, not tic 0: left in, they made tic 0 claim 5,017,670 B of doom.wad
+    // that no tic copied
+    fs_floor_load = 0;
+    fs_floor_mbytes = 0;
 
     // Enable the instruction counter after init, before the demo loop.
     // Read the initial cumulative value so the first per-tic delta is correct.
