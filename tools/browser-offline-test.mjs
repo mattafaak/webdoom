@@ -151,10 +151,15 @@ await waitForMenu(tab1, 'tab1 (online)');
 console.log('  lobby menu visible — booting SP online to prime wads cache...');
 await bootIntoSP(tab1, 'tab1 (online)');
 
-// WAD is now in the wads cache.
-const wadsEntries = await tab1.ev(
+// The service worker hands the page the WAD first and writes its cache copy
+// in the background (e.waitUntil, client/sw.js), so the boot can finish
+// before the copy lands: one read raced it and failed on a loaded host while
+// the same run's offline phase found the entry.  Wait for it, to a deadline.
+const wadsCount = () => tab1.ev(
     `caches.open('webdoom-wads-v1').then(c => c.keys()).then(k => k.length)`,
 );
+await tab1.waitFor(async () => (await wadsCount()) > 0, { timeout: 20000, every: 250 });
+const wadsEntries = await wadsCount();
 console.log(`  SP booted online; wads cache has ${wadsEntries} WAD entries`);
 check('the wads cache holds the WAD after the online boot', wadsEntries > 0,
       'wads cache empty after online SP boot — WAD was not cached by SW');
