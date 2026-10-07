@@ -92,7 +92,7 @@ OBJ := $(patsubst $(CORE_DIR)/%.c,$(OBJDIR)/core/%.o,$(filter $(CORE_DIR)/%,$(SR
        $(patsubst %.c,$(OBJDIR)/plat/%.o,$(PLAT_SRC)) \
        $(OBJDIR)/floor/floor_log.o
 
-all: $(OUT) synth-bench
+all: $(OUT) synth-bench synth-exact
 
 $(OUT): $(OBJ)
 	$(CC) $(LDFLAGS) $^ -o $@
@@ -170,6 +170,34 @@ obj/synth-x87/%.o: %.c Makefile
 
 -include $(SYNTH_OBJ_1:.o=.d) $(SYNTH_OBJ_2:.o=.d) $(SYNTH_OBJ_X:.o=.d)
 
+# ── synth-exact: the synth against its reference, frame by frame ─────────────
+# engine/web/opl3.c beside the reference core (opl3-ref-wrap.c includes
+# tools/floor/opl3-ref/opl3.c, Nuked 1.8 before the floor's exact savings,
+# with its public functions renamed), mus_opl.c and synth_main.c driving them
+# through the shipped chip's five entry points, which --wrap mirrors onto the
+# reference.  tools/synth-exact-test.mjs runs it.  SYNTH_EXACT_OPL3,
+# SYNTH_EXACT_OBJ and SYNTH_EXACT_OUT build it from another opl3.c (the test's
+# red-proof variants), in objects of its own.
+SYNTH_EXACT_OPL3 ?= $(WEB_DIR)/opl3.c
+SYNTH_EXACT_OBJ  ?= obj/synth-exact
+SYNTH_EXACT_OUT  ?= synth-exact
+SYNTH_EXACT_WRAP := --wrap=OPL3_Reset,--wrap=OPL3_WriteReg,--wrap=OPL3_WriteRegBuffered,--wrap=OPL3_Generate,--wrap=OPL3_GenerateResampled
+SYNTH_EXACT_OBJS := $(addprefix $(SYNTH_EXACT_OBJ)/,fs_mus.o opl3.o synth_main.o synth-exact.o opl3-ref-wrap.o)
+
+$(SYNTH_EXACT_OUT): $(SYNTH_EXACT_OBJS)
+	$(CC) $^ -m32 -no-pie -Wl,$(SYNTH_EXACT_WRAP) -lm -o $@
+	@echo "built $@"
+
+$(SYNTH_EXACT_OBJ)/opl3.o: $(SYNTH_EXACT_OPL3) Makefile
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -O2 $(SYNTH_FP) $(SYNTH_INC) -MMD -MP -c $< -o $@
+
+$(SYNTH_EXACT_OBJ)/%.o: %.c Makefile
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -O2 $(SYNTH_FP) $(SYNTH_INC) -MMD -MP -c $< -o $@
+
+-include $(SYNTH_EXACT_OBJS:.o=.d)
+
 # ── golden comparison ─────────────────────────────────────────────────────────
 WAD_DIR := ../../wads/lib
 GOLDEN  := ../../tools/golden
@@ -198,7 +226,7 @@ imports: $(OUT)
 	@bash gen-imports.sh
 
 clean:
-	rm -rf obj obj-* fs-doom fs-doom-o2 fs-doom-fixed $(OUT_DIR) synth-bench-O1 synth-bench-O2 synth-bench-x87
+	rm -rf obj obj-* fs-doom fs-doom-o2 fs-doom-fixed $(OUT_DIR) synth-bench-O1 synth-bench-O2 synth-bench-x87 synth-exact
 
 # ro-wad-check: read-only-WAD proof (XIP feasibility).
 # Runs all 13 demos with WD_RO_WAD=1: WAD blob mprotect(PROT_READ) after load.

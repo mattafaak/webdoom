@@ -540,6 +540,11 @@ leg zone-min        fs,wad     "smallest zone with rendering is still 1216 KiB" 
 # renders, byte for byte, on the 13 demos' songs, and its register streams and
 # samples match tools/floor/synth-ref.json, which every port is graded on.
 leg synth-native    gcc,build,wad,heavy "native OPL synth == synth.wasm on 13 demo songs (OPL2/OPL3, 3 rates, -O1/-O2); L1/L2 references" -- node tools/synth-native-test.mjs
+# The synth's exact savings (engine/web/opl3.c, "WEBDOOM: EXACT SAVINGS") held
+# to the core as it was before them (tools/floor/opl3-ref), frame by frame:
+# every music score in the four IWADs, OPL2 and OPL3, at 49,716 and 44,100 Hz,
+# each whole, plus random register streams; four inexact variants must fail.
+leg synth-exact     gcc,wad,heavy "OPL synth == its pre-savings reference: 137 IWAD scores x OPL2/OPL3 x 2 rates, fuzz; 4 inexact variants caught" -- node tools/synth-exact-test.mjs
 # The same demand on the floor's candidate ISAs (tools/cortexm): engine/core
 # with newlib on qemu's Cortex-M boards, no OS, the WAD read by semihosting.
 # Each run first proves its instrument on the board (1e6/2e6-instruction

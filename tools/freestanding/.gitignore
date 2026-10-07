@@ -13,6 +13,7 @@ fs-doom-fixed
 synth-bench-O1
 synth-bench-O2
 synth-bench-x87
+synth-exact
 fs-doom-rv32imac
 fs-doom-rv32gc
 out-rv32imac/

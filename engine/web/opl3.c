@@ -25,6 +25,47 @@
 //
 // version: 1.8
 //
+// WEBDOOM: EXACT SAVINGS
+// ----------------------
+// Three changes from Nuked 1.8 (the file as it was at 4eba931, kept verbatim
+// as tools/floor/opl3-ref/opl3.c), each of which leaves every output sample
+// the same for ANY register stream, not only for the ones mus_opl.c writes.
+// tools/synth-exact-test.mjs runs this file and the reference side by side,
+// sample for sample, over every music lump in the four IWADs and over random
+// register streams (rhythm mode, bank-1 writes in OPL2 mode, 4-op, resets at
+// any rate), and red-proofs itself with four inexact variants each run.
+//
+// 1. Bank 1 is skipped until it is written.  OPL3_Reset leaves slots 18..35
+//    with f_num 0, key 0, eg_rout 0x1ff in release, phase 0 and every output
+//    0; from that state one OPL3_Generate step leaves each of them exactly as
+//    it was (fb 0 gives fbmod 0; release with the envelope off holds 0x1ff;
+//    f_num 0 adds 0 to the phase; every waveform at phase 0 under 0x1ff of
+//    attenuation is 0) and channels 9..17 mix 0.  Only a write with the 0x100
+//    bit can move bank-1 state: slot registers address 18 * high + slot,
+//    channel registers 9 * high + channel, 4-op pairs never cross a bank and
+//    rhythm mode is channels 6..8.  0x104 and 0x105 change how LATER writes
+//    act (4-op type, NEW) and nothing else.  So until OPL3_WriteReg sees a
+//    bank-1 register at 0x120 or above (bank1_live), the skipped work is a
+//    fixed point.  Nuked does not gate bank-1 writes on NEW, and in OPL2 mode
+//    (NEW=0) cha = chb = ~0, so a keyed bank-1 channel IS audible in OPL2
+//    mode: the skip is keyed to the writes, never to NEW.  mus_opl.c writes
+//    no 0x1xx register in OPL2 mode, so there it lasts the whole song.
+// 2. The noise LFSR is stepped 36 times per sample in one place.  The
+//    reference stepped it once per slot inside OPL3_PhaseGenerate, and its
+//    only readers are the hi-hat (slot 13) and snare (slot 16) in rhythm mode,
+//    which read bit 0 after 13 and 16 steps of the sample: bits 13 and 16 of
+//    the sample's starting state (bit k of the state after j steps is bit
+//    j + k of the state before, for j + k < 23).  Nine steps at once are
+//    exact: the nine new bits are bits 0..8 xor bits 14..22.  This also frees
+//    the noise from the slot loop, which change 1 shortens.  The hi-hat phase
+//    bits, which slot 13 stored every sample, are stored in rhythm mode only:
+//    their readers run in rhythm mode only, after slot 13 of the same sample.
+// 3. At the chip's own rate (49,716 Hz, rateratio == 1 << RSM_FRAC) the
+//    resampler is a one-frame delay: samplecnt is 0 before the first frame
+//    after a reset and 1 << RSM_FRAC after every frame, so each frame is the
+//    previous OPL3_Generate output exactly (x * 1024 / 1024 == x), and no
+//    multiply or divide is needed.
+//
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -491,8 +532,7 @@ static void OPL3_PhaseGenerate (opl3_slot* slot)
     opl3_chip* chip;
     Bit16u f_num;
     Bit32u basefreq;
-    Bit8u rm_xor, n_bit;
-    Bit32u noise;
+    Bit8u rm_xor;
     Bit16u phase;
 
     chip = slot->chip;
@@ -528,9 +568,14 @@ static void OPL3_PhaseGenerate (opl3_slot* slot)
         slot->pg_phase = 0;
     }
     slot->pg_phase += (basefreq * mt[slot->reg_mult]) >> 1;
-    // Rhythm mode
-    noise = chip->noise;
     slot->pg_phase_out = phase;
+    // Rhythm mode.  chip->noise is the sample's starting LFSR state, stepped
+    // in OPL3_Generate: the hi-hat and snare read its bits 13 and 16
+    // ("WEBDOOM: EXACT SAVINGS", 2).
+    if (!(chip->rhy & 0x20))
+    {
+        return;
+    }
     if (slot->slot_num == 13) // hh
     {
         chip->rm_hh_bit2 = (phase >> 2) & 1;
@@ -538,42 +583,38 @@ static void OPL3_PhaseGenerate (opl3_slot* slot)
         chip->rm_hh_bit7 = (phase >> 7) & 1;
         chip->rm_hh_bit8 = (phase >> 8) & 1;
     }
-    if (slot->slot_num == 17 && (chip->rhy & 0x20)) // tc
+    if (slot->slot_num == 17) // tc
     {
         chip->rm_tc_bit3 = (phase >> 3) & 1;
         chip->rm_tc_bit5 = (phase >> 5) & 1;
     }
-    if (chip->rhy & 0x20)
+    rm_xor = (chip->rm_hh_bit2 ^ chip->rm_hh_bit7) |
+             (chip->rm_hh_bit3 ^ chip->rm_tc_bit5) |
+             (chip->rm_tc_bit3 ^ chip->rm_tc_bit5);
+    switch (slot->slot_num)
     {
-        rm_xor = (chip->rm_hh_bit2 ^ chip->rm_hh_bit7) |
-                 (chip->rm_hh_bit3 ^ chip->rm_tc_bit5) |
-                 (chip->rm_tc_bit3 ^ chip->rm_tc_bit5);
-        switch (slot->slot_num)
+    case 13: // hh
+        slot->pg_phase_out = rm_xor << 9;
+        if (rm_xor ^ ((chip->noise >> 13) & 1))
         {
-        case 13: // hh
-            slot->pg_phase_out = rm_xor << 9;
-            if (rm_xor ^ (noise & 1))
-            {
-                slot->pg_phase_out |= 0xd0;
-            }
-            else
-            {
-                slot->pg_phase_out |= 0x34;
-            }
-            break;
-        case 16: // sd
-            slot->pg_phase_out = (chip->rm_hh_bit8 << 9) |
-                                 ((chip->rm_hh_bit8 ^ (noise & 1)) << 8);
-            break;
-        case 17: // tc
-            slot->pg_phase_out = (rm_xor << 9) | 0x80;
-            break;
-        default:
-            break;
+            slot->pg_phase_out |= 0xd0;
         }
+        else
+        {
+            slot->pg_phase_out |= 0x34;
+        }
+        break;
+    case 16: // sd
+        slot->pg_phase_out =
+            (chip->rm_hh_bit8 << 9) |
+            ((chip->rm_hh_bit8 ^ ((chip->noise >> 16) & 1)) << 8);
+        break;
+    case 17: // tc
+        slot->pg_phase_out = (rm_xor << 9) | 0x80;
+        break;
+    default:
+        break;
     }
-    n_bit = ((noise >> 14) ^ noise) & 0x01;
-    chip->noise = (noise >> 1) | (n_bit << 22);
 }
 
 //
@@ -1019,6 +1060,12 @@ void OPL3_Generate (opl3_chip* chip, Bit16s* buf)
     Bit8u jj;
     Bit16s accm;
     Bit8u shift = 0;
+    // while bank 1 is unwritten: channels 0..8 and slots 0..17 only
+    // ("WEBDOOM: EXACT SAVINGS", 1)
+    Bit8u channels = chip->bank1_live ? 18 : 9;
+    Bit8u slots_mid = chip->bank1_live ? 33 : 18; // end of slots 18..32
+    Bit8u slots_end = chip->bank1_live ? 36 : 33; // end of slots 33..35
+    Bit32u noise;
 
     buf[1] = OPL3_ClipSample (chip->mixbuff[1]);
 
@@ -1031,7 +1078,7 @@ void OPL3_Generate (opl3_chip* chip, Bit16s* buf)
     }
 
     chip->mixbuff[0] = 0;
-    for (ii = 0; ii < 18; ii++)
+    for (ii = 0; ii < channels; ii++)
     {
         accm = 0;
         for (jj = 0; jj < 4; jj++)
@@ -1051,7 +1098,7 @@ void OPL3_Generate (opl3_chip* chip, Bit16s* buf)
 
     buf[0] = OPL3_ClipSample (chip->mixbuff[0]);
 
-    for (ii = 18; ii < 33; ii++)
+    for (ii = 18; ii < slots_mid; ii++)
     {
         OPL3_SlotCalcFB (&chip->slot[ii]);
         OPL3_EnvelopeCalc (&chip->slot[ii]);
@@ -1060,7 +1107,7 @@ void OPL3_Generate (opl3_chip* chip, Bit16s* buf)
     }
 
     chip->mixbuff[1] = 0;
-    for (ii = 0; ii < 18; ii++)
+    for (ii = 0; ii < channels; ii++)
     {
         accm = 0;
         for (jj = 0; jj < 4; jj++)
@@ -1070,13 +1117,22 @@ void OPL3_Generate (opl3_chip* chip, Bit16s* buf)
         chip->mixbuff[1] += (Bit16s) (accm & chip->channel[ii].chb);
     }
 
-    for (ii = 33; ii < 36; ii++)
+    for (ii = 33; ii < slots_end; ii++)
     {
         OPL3_SlotCalcFB (&chip->slot[ii]);
         OPL3_EnvelopeCalc (&chip->slot[ii]);
         OPL3_PhaseGenerate (&chip->slot[ii]);
         OPL3_SlotGenerate (&chip->slot[ii]);
     }
+
+    // The noise LFSR, 36 steps (one per slot), nine at a time
+    // ("WEBDOOM: EXACT SAVINGS", 2)
+    noise = chip->noise;
+    for (jj = 0; jj < 4; jj++)
+    {
+        noise = (noise >> 9) | (((noise ^ (noise >> 14)) & 0x1ff) << 14);
+    }
+    chip->noise = noise;
 
     if ((chip->timer & 0x3f) == 0x3f)
     {
@@ -1147,6 +1203,20 @@ void OPL3_Generate (opl3_chip* chip, Bit16s* buf)
 
 void OPL3_GenerateResampled (opl3_chip* chip, Bit16s* buf)
 {
+    // at the chip's own rate: the previous frame ("WEBDOOM: EXACT SAVINGS", 3)
+    if (chip->rateratio == 1 << RSM_FRAC)
+    {
+        if (chip->samplecnt)
+        {
+            chip->oldsamples[0] = chip->samples[0];
+            chip->oldsamples[1] = chip->samples[1];
+            OPL3_Generate (chip, chip->samples);
+        }
+        chip->samplecnt = 1 << RSM_FRAC;
+        buf[0] = chip->oldsamples[0];
+        buf[1] = chip->oldsamples[1];
+        return;
+    }
     while (chip->samplecnt >= chip->rateratio)
     {
         chip->oldsamples[0] = chip->samples[0];
@@ -1216,6 +1286,12 @@ void OPL3_WriteReg (opl3_chip* chip, Bit16u reg, Bit8u v)
 {
     Bit8u high = (reg >> 8) & 0x01;
     Bit8u regm = reg & 0xff;
+    // a bank-1 slot or channel register: bank 1 leaves its reset state
+    // ("WEBDOOM: EXACT SAVINGS", 1)
+    if (high && regm >= 0x20)
+    {
+        chip->bank1_live = 1;
+    }
     switch (regm & 0xf0)
     {
     case 0x00:

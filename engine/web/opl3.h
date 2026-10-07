@@ -118,6 +118,10 @@ struct _opl3_chip
     Bit8u newm;
     Bit8u nts;
     Bit8u rhy;
+    // webdoom: set by the first write to a bank-1 slot or channel register
+    // (0x120 and up) after OPL3_Reset; until then OPL3_Generate skips bank 1
+    // (opl3.c, "WEBDOOM: EXACT SAVINGS")
+    Bit8u bank1_live;
     Bit8u vibpos;
     Bit8u vibshift;
     Bit8u tremolo;

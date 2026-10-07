@@ -35,7 +35,7 @@ fails when a leg named here does not exist.
 | Rebindable keys, gamepad, and an OPTIONS screen | `browser-options`, `browser-gamepad` |
 | The lobby's RULES (no monsters, fast, respawn, timer) reach the engine | `launch-args` |
 | Freelook and frame interpolation, render-side and opt-in | `sim-freelook`, `sim-invariants` |
-| Music: the in-engine OPL2/OPL3 sequencer from the IWAD's GENMIDI, on the audio thread, or the main thread on an insecure origin | `opl-mode`, `browser-music-worklet`, `browser-insecure` |
+| Music: the in-engine OPL2/OPL3 sequencer from the IWAD's GENMIDI, on the audio thread, or the main thread on an insecure origin | `opl-mode`, `synth-exact`, `browser-music-worklet`, `browser-insecure` |
 | Low-detail render mode, pixel-exact against its own goldens | `render-low` |
 | A freestanding core with no OS, and an N64 correctness leg | `freestanding-sim`, `ro-wad`, `arm-cross`, `be-cross`, `n64-demos` |
 | The engine's derived figures reproduce, the artifacts fit their ceilings, and the platform contract matches the exports | `archaeology`, `size-budget`, `web-contract` |
@@ -159,6 +159,11 @@ context: browsers withhold `navigator.serviceWorker` and
   programmed from the IWAD's own GENMIDI lump: no assets, DMX-faithful. The
   OPL2 (mono, 9 voices) and OPL3 (stereo, 18 voices) modes are render-side
   flavour; neither reads game state.
+- The core is Nuked OPL3 1.8 with three savings that change no sample for
+  any register stream (`engine/web/opl3.c`, "WEBDOOM: EXACT SAVINGS").
+  `synth-exact` holds it frame by frame to the unmodified core
+  (`tools/floor/opl3-ref`) on every music score in the four IWADs and on
+  random register streams.
 - Never bundled: Microsoft GS wavetable, Roland ROMs or Nuked-SC55, or
   soundfonts of unclear provenance.
 - On a secure origin the AudioWorklet runs its own copy of the sequencer,

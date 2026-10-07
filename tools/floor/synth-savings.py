@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 # tools/floor/synth-savings.py — candidate savings in the OPL synth, measured
-# for exactness and for cost.  It never edits engine/web/opl3.c: each variant
-# is written to a temporary directory, built into a synth-bench with the
-# Makefile's flags, and run over the 13 demo songs in both modes at 49,716 Hz.
+# for exactness and for cost.  The variants are edits of the reference core,
+# tools/floor/opl3-ref/opl3.c (engine/web/opl3.c as it was when phase 1a
+# measured them; A, C and D are now made real in engine/web/opl3.c, D in an
+# exact-for-any-stream form, and tools/synth-exact-test.mjs holds it to this
+# reference).  Each variant is written to a temporary directory, built into a
+# synth-bench with the Makefile's flags, and run over the 13 demo songs in both
+# modes at 49,716 Hz.
 # A variant is EXACT when every render's samples (L2) equal
 # tools/floor/synth-ref.json's, which tools/synth-native-test.mjs holds equal to
 # build/synth.wasm.  Counts are user-space instructions, pinned to P-cores.
@@ -21,6 +25,8 @@
 #      multiply or divide: the same samples.
 #   D  with rhythm mode never on (mus_opl.c never writes 0xbd), the noise
 #      LFSR and the hi-hat/cymbal phase bits are never read: not computed.
+#   shipped  no edit of the reference: engine/web/opl3.c as it ships, with A,
+#      C and D made real (D exact for any register stream), for comparison.
 #   nopie  the same source built -fno-pie (gcc here defaults to PIE, and i386
 #      PIC code reaches every table through __x86.get_pc_thunk); a bare-metal
 #      build is not PIC.
@@ -39,6 +45,7 @@ import threading
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 FS = os.path.join(ROOT, 'tools/freestanding')
 WEB = os.path.join(ROOT, 'engine/web')
+REF = os.path.join(ROOT, 'tools/floor/opl3-ref/opl3.c')
 
 SLOT4 = '''        OPL3_SlotCalcFB (&chip->slot[ii]);
         OPL3_EnvelopeCalc (&chip->slot[ii]);
@@ -48,7 +55,7 @@ SLOT4 = '''        OPL3_SlotCalcFB (&chip->slot[ii]);
 
 def rep(s, old, new, count=1):
     if s.count(old) != count:
-        sys.exit('FAIL synth-savings: opl3.c no longer has the text variant edits expect: %r' % old[:70])
+        sys.exit('FAIL synth-savings: the reference opl3.c lacks the text variant edits expect: %r' % old[:70])
     return s.replace(old, new)
 
 
@@ -89,7 +96,8 @@ def var_d(s):
 
 EDITS = {'A': var_a, 'B': var_b, 'C': var_c, 'D': var_d}
 DEFAULT = ['base-O1', 'base-O1-nopie', 'C-O1', 'A-O1', 'AD-O1', 'ACD-O1', 'ACD-O1-nopie',
-           'base-O2', 'base-O2-nopie', 'ACD-O2-nopie', 'B-O1']
+           'shipped-O1', 'shipped-O1-nopie', 'base-O2', 'base-O2-nopie', 'ACD-O2-nopie',
+           'shipped-O2-nopie', 'B-O1']
 
 
 def make_flags():
@@ -104,8 +112,8 @@ def make_flags():
 
 def build(name, tmp, flags):
     edits, opt, *rest = name.split('-')
-    src = open(os.path.join(WEB, 'opl3.c')).read()
-    for e in '' if edits == 'base' else edits:
+    src = open(os.path.join(WEB, 'opl3.c') if edits == 'shipped' else REF).read()
+    for e in '' if edits in ('base', 'shipped') else edits:
         src = EDITS[e](src)
     d = os.path.join(tmp, name)
     os.makedirs(d)
