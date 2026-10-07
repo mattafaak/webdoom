@@ -18,7 +18,12 @@
 #                                            (FIXED=1), or both (FAST=1); each
 #                                            first passes cm-fasttest, the port
 #                                            against the engine input by input
-
+#            [--demos a,b]                   run and grade only these demos
+#                                            (red-proofs: one demo is enough)
+#            [--skip-fasttest]               red-proofs only (fast-check.sh): a
+#                                            wrong port must reach the demos to
+#                                            show the floor gate catches it too
+#
 #   armv6m  -mcpu=cortex-m0plus code on mps2-an385 (exact M0+ instruction
 #           counts; unaligned accesses trap as on an M0+)
 #   armv8m  -mcpu=cortex-m33 code on mps2-an505
@@ -64,6 +69,8 @@ CORRECT=0
 MISALIGN=0
 DRAWERS=0
 FIXED=0
+ONLY=""
+SKIPFT=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --opt) OPT="$2"; shift 2 ;;
@@ -80,6 +87,8 @@ while [ $# -gt 0 ]; do
         --drawers) DRAWERS=1; shift ;;
         --fixed) FIXED=1; shift ;;
         --fast) DRAWERS=1; FIXED=1; shift ;;
+        --demos) ONLY="$2"; shift 2 ;;
+        --skip-fasttest) SKIPFT=1; shift ;;
         *) echo "FAIL run-floor: unknown argument '$1'"; exit 2 ;;
     esac
 done
@@ -186,7 +195,9 @@ st semihost 0 '^PASS semihost: ' "$WADS/doom.wad"
 st memcpy 0 '^PASS memcpy: '
 # the port's code against the engine's, input by input (fasttest.c), before
 # any demo: a pass names how many cases each part checked
-if [ "$DRAWERS$FIXED" != 00 ]; then
+if [ "$DRAWERS$FIXED" != 00 ] && [ "$SKIPFT" = 1 ]; then
+    echo "  fasttest: SKIPPED (--skip-fasttest: a red-proof run)"
+elif [ "$DRAWERS$FIXED" != 00 ]; then
     rc=0
     timeout 1800 qemu-system-arm -M "$BOARD" -display none -monitor none -serial "file:$OUT/fasttest.uart" \
         -semihosting-config enable=on,target=native,arg=cm-fasttest,arg=1,arg=1 -kernel "$B/cm-fasttest.elf" || rc=$?
@@ -215,7 +226,17 @@ DEMOS=(
     "plutonia.wad plutonia.wad demo2 plutonia-demo2"
     "plutonia.wad plutonia.wad demo3 plutonia-demo3"
 )
-
+DEMOS_ARG=()
+if [ -n "$ONLY" ]; then
+    keep=()
+    for entry in "${DEMOS[@]}"; do
+        read -r _ _ _ name <<< "$entry"
+        case ",$ONLY," in *",$name,"*) keep+=("$entry") ;; esac
+    done
+    [ "${#keep[@]}" -gt 0 ] || { echo "FAIL run-floor: --demos '$ONLY' names none of the 13 demos"; exit 2; }
+    DEMOS=("${keep[@]}")
+    DEMOS_ARG=(--demos "$ONLY")
+fi
 MODES="A B"
 [ "$COUNT" = 1 ] && MODES="B"
 [ "$CORRECT" = 1 ] && MODES="A"
@@ -313,6 +334,6 @@ fi
 
 # ── 5. the verdict ───────────────────────────────────────────────────────────
 if [ "$CORRECT" = 1 ]; then
-    exec node "$ROOT/tools/floor/floor-gate.mjs" --correctness "${GOLDEN[@]}" "$OUT"/*.log
+    exec node "$ROOT/tools/floor/floor-gate.mjs" --correctness "${GOLDEN[@]}" "${DEMOS_ARG[@]}" "$OUT"/*.log
 fi
-exec node "$ROOT/tools/floor/floor-gate.mjs" "${GOLDEN[@]}" "$OUT"/*.log
+exec node "$ROOT/tools/floor/floor-gate.mjs" "${GOLDEN[@]}" "${DEMOS_ARG[@]}" "$OUT"/*.log
