@@ -61,6 +61,9 @@ void n64_register_wad(const byte* data, int len)
     debugf("N64 webdoom: registry name '%s'\n", n64_wad_name);
 }
 
+/* The registered blob, for the XPROF build's copy benchmark (n64_floor.c). */
+const byte* n64_wad_base(void) { return n64_wad_data; }
+
 byte* W_WebFile(const char* path, int* len)
 {
     if (n64_wad_data &&

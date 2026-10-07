@@ -11,6 +11,9 @@
 // accumulators count COP0 COUNT ticks (half the 93.75 MHz CPU clock:
 // 46,875,000 a second), and the "_us" in their names is historical.
 //
+// Under N64_XPROF the same calls also drive ares's emux profiler, so each
+// stage gets cycles and cache counts as well (n64_floor.c owns the slots).
+//
 // engine/core has no N64-specific changes; the port is tools/n64/.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <cop0.h>   /* C0_COUNT */
@@ -52,7 +55,14 @@ unsigned long long n64_count64(void)
     return count64_base;
 }
 
+#ifdef N64_XPROF
+void n64_xprof_stage_edge(void);   /* n64_floor.c */
+#endif
+
 double web_perf_now(void)
 {
+#ifdef N64_XPROF
+    n64_xprof_stage_edge();
+#endif
     return (double)n64_count64();
 }

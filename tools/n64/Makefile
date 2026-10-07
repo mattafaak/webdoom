@@ -133,6 +133,11 @@ COMMON_FLAGS += -DN64_CART_DMA=$(N64_CART_DMA)
 # either prints a FLOOR log (tools/floor/floor_log.h) after the demo.
 #   N64_FLOOR_NAME   the demo's graded name, e.g. doom-demo1 (required)
 #   N64_FLOOR_NODRAW 1 = put -nodraw back (the red-proof ROM)
+#   N64_XPROF        1 = drive ares's emux profiler (developer builds only:
+#                    the opcodes are not real VR4300 instructions)
+#   N64_XPROF_TICS   comma list of floor-log tic indices to profile per stage
+#   N64_XPROF_CAL_SKEW  extra calibration iterations outside the profiler
+#                    (the calibration red-proof; 0 normally)
 #   N64_BUILD        the build id the log carries (default: git short sha)
 # A floor build needs N64_TIMEDEMO.  Like N64_TIMEDEMO, these must be appended
 # above the two `:=` lines below.
@@ -151,6 +156,12 @@ ifneq ($(strip $(N64_FLOOR)),)
                   -DN64_FLOOR_NAME=\"$(N64_FLOOR_NAME)\" -DN64_BUILD=\"$(N64_BUILD)\"
   ifeq ($(N64_FLOOR_NODRAW),1)
     COMMON_FLAGS += -DN64_FLOOR_NODRAW=1
+  endif
+  ifeq ($(N64_XPROF),1)
+    COMMON_FLAGS += -DN64_XPROF=1 -DN64_XPROF_CAL_SKEW=$(or $(N64_XPROF_CAL_SKEW),0)
+    ifneq ($(strip $(N64_XPROF_TICS)),)
+      COMMON_FLAGS += -DN64_XPROF_TICS=$(N64_XPROF_TICS)
+    endif
   endif
 endif
 
@@ -213,6 +224,14 @@ LDLIBS   := -ldragon -lm -ldragonsys -lc
 # tic (n64_floor.c, as tools/freestanding/floor_wrap.c on the host).
 ifneq ($(strip $(N64_FLOOR)),)
 LDFLAGS  += -Wl,--wrap,P_SetupLevel -Wl,--wrap,WI_Start -Wl,--wrap,F_StartFinale
+# XPROF builds also time the drawers, which r_main.c and r_things.c reference
+# across an object boundary (colfunc = R_DrawColumn, ...), and the two r_segs.c
+# entry points r_bsp.c and r_things.c call.
+ifeq ($(N64_XPROF),1)
+LDFLAGS  += -Wl,--wrap,R_DrawColumn -Wl,--wrap,R_DrawSpan \
+            -Wl,--wrap,R_DrawFuzzColumn -Wl,--wrap,R_DrawTranslatedColumn \
+            -Wl,--wrap,R_StoreWallRange -Wl,--wrap,R_RenderMaskedSegRange
+endif
 endif
 
 CORE_DIR := ../../engine/core

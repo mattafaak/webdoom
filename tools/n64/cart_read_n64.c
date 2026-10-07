@@ -149,6 +149,14 @@ static void cart_dma(void* dest, const void* src, size_t n)
 }
 #endif
 
+#ifdef N64_XPROF
+/* The two paths by name, for the XPROF build's copy benchmark (n64_floor.c). */
+void n64_cart_copy_words(void* dest, const void* src, size_t n) { cart_read(dest, src, n); }
+#if N64_CART_DMA
+void n64_cart_copy_dma(void* dest, const void* src, size_t n)   { cart_dma(dest, src, n); }
+#endif
+#endif
+
 void* __wrap_memcpy(void* dest, const void* src, size_t n)
 {
     if (is_cart(src)) {

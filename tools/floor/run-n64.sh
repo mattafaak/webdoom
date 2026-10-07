@@ -22,7 +22,7 @@
 # usage: bash tools/floor/run-n64.sh [--correctness] [--filter RE] [--jobs N]
 #            [--out DIR] [--work DIR] [--nodraw] [--golden-dir DIR]
 #            [--cart-dma 0|1] [--expansion-pak] [--interpreter]
-#            [--regrade]
+#            [--xprof FILE [--no-homebrew] [--cal-skew N]] [--regrade]
 #            [--timing-once] [--zone-kb N]
 #   --filter RE      only demos whose <iwad>-<demo> matches (grep -E); the gate
 #                    then grades those alone and the run says it is FILTERED
@@ -33,6 +33,13 @@
 #   --expansion-pak  run with ares's 8 MB Expansion Pak (a data point only:
 #                    the graded configuration is the stock 4 MB console)
 #   --interpreter    ares Developer/ForceInterpreter (full I-cache emulation)
+#   --xprof FILE     profile builds: FILE lines "<iwad>-<demo> <tic,tic,...>";
+#                    mode B with N64_XPROF=1 under HomebrewMode, no gate; the
+#                    XPROF blocks land in OUT/<tag>.X.xprof
+#   --no-homebrew    with --xprof: run without HomebrewMode (the profiler's
+#                    red-proof: calibration must FAIL)
+#   --cal-skew N     with --xprof: N calibration iterations outside the
+#                    profiler (the calibration red-proof)
 #   --regrade        grade the logs already in OUT; build and run nothing
 #   --timing-once    mode B once per demo and floor-stats only (no mode A, no
 #                    gate): a timing comparison, e.g. --cart-dma 0 against 1
@@ -46,7 +53,7 @@ N64="$ROOT/tools/n64"
 OUT="$ROOT/tools/floor/out-n64"
 WORK="$N64/n64_floor_work"
 CORRECTNESS=0; FILTER=""; JOBS=""; NODRAW=0; GOLDEN=""; CART_DMA=1
-EXPAK=0; INTERP=0; REGRADE=0; ONCE=0; ZONE_KB=""
+EXPAK=0; INTERP=0; XPROF=""; HOMEBREW=1; CAL_SKEW=0; REGRADE=0; ONCE=0; ZONE_KB="" 
 while [ $# -gt 0 ]; do
     case "$1" in
         --correctness)   CORRECTNESS=1; shift ;;
@@ -59,6 +66,9 @@ while [ $# -gt 0 ]; do
         --cart-dma)      CART_DMA="$2"; shift 2 ;;
         --expansion-pak) EXPAK=1; shift ;;
         --interpreter)   INTERP=1; shift ;;
+        --xprof)         XPROF="$2"; shift 2 ;;
+        --no-homebrew)   HOMEBREW=0; shift ;;
+        --cal-skew)      CAL_SKEW="$2"; shift 2 ;;
         --regrade)       REGRADE=1; shift ;;
         --timing-once)   ONCE=1; shift ;;
         --zone-kb)       ZONE_KB="$2"; shift 2 ;;
@@ -74,6 +84,7 @@ case "$CART_DMA" in 0|1) ;; *) echo "run-n64: --cart-dma takes 0 or 1" >&2; exit
 WORK="$(realpath -m -- "$WORK")"
 OUT="$(realpath -m -- "$OUT")"
 [ -n "$GOLDEN" ] && GOLDEN="$(realpath -m -- "$GOLDEN")"
+[ -n "$XPROF" ] && XPROF="$(realpath -m -- "$XPROF")"
 
 if [ -f "$HOME/toolchains/env.sh" ]; then
     # shellcheck source=/dev/null
@@ -106,16 +117,25 @@ ALL_DEMOS=(
     "plutonia-demo2 plutonia.wad plutonia.wad demo2"
     "plutonia-demo3 plutonia.wad plutonia.wad demo3"
 )
+declare -A XTICS=()
+if [ -n "$XPROF" ]; then
+    [ -f "$XPROF" ] || { echo "run-n64: --xprof $XPROF: no such file" >&2; exit 2; }
+    while read -r tag tics; do
+        [ -n "$tag" ] && [ "${tag:0:1}" != "#" ] && XTICS[$tag]="$tics"
+    done < "$XPROF"
+fi
 DEMOS=()
 for e in "${ALL_DEMOS[@]}"; do
     read -r tag _ <<< "$e"
+    if [ -n "$XPROF" ]; then [ -n "${XTICS[$tag]:-}" ] || continue; fi
     if [ -n "$FILTER" ] && ! grep -qE -- "$FILTER" <<< "$tag"; then continue; fi
     DEMOS+=("$e")
 done
-[ "${#DEMOS[@]}" -gt 0 ] || { echo "FAIL floor-n64: filter '${FILTER}' selected none of the 13 demos"; exit 2; }
+[ "${#DEMOS[@]}" -gt 0 ] || { echo "FAIL floor-n64: filter '${FILTER}' ${XPROF:+and --xprof $XPROF }selected none of the 13 demos"; exit 2; }
 NAMES=$(for e in "${DEMOS[@]}"; do read -r tag _ <<< "$e"; printf '%s,' "$tag"; done); NAMES="${NAMES%,}"
 
-if [ "$CORRECTNESS" = 1 ]; then MODES=(A); RUNS=(1)
+if [ -n "$XPROF" ]; then MODES=(X); RUNS=(1)
+elif [ "$CORRECTNESS" = 1 ]; then MODES=(A); RUNS=(1)
 elif [ "$ONCE" = 1 ]; then MODES=(B); RUNS=(1)
 else MODES=(A B); RUNS=(1 2); fi
 
@@ -130,6 +150,7 @@ ZONE_ARG=()
 SETTINGS=(--setting Audio/Blocking=false --setting Video/Blocking=false)
 [ "$EXPAK" = 1 ]  && SETTINGS+=(--setting Nintendo64/ExpansionPak=true)
 [ "$INTERP" = 1 ] && SETTINGS+=(--setting Developer/ForceInterpreter=true)
+[ -n "$XPROF" ] && [ "$HOMEBREW" = 1 ] && SETTINGS+=(--setting Developer/HomebrewMode=true)
 
 T0=$(date +%s)
 if [ "$REGRADE" = 0 ]; then
@@ -145,6 +166,7 @@ if [ "$REGRADE" = 0 ]; then
     fi
     build_one() {   # tag wad name demo mode
         local tag=$1 wad=$2 name=$3 demo=$4 mode=$5 floor=$5 extra=()
+        [ "$mode" = X ] && { floor=B; extra=(N64_XPROF=1 "N64_XPROF_TICS=${XTICS[$tag]}" "N64_XPROF_CAL_SKEW=$CAL_SKEW"); }
         [ "$mode" = A ] && [ "$NODRAW" = 1 ] && extra=(N64_FLOOR_NODRAW=1)
         make -C "$N64" CORE_OBJ_DIR="$WORK/core" OBJ_DIR="$WORK/obj/$tag.$mode" \
              N64_WAD="$ROOT/wads/lib/$wad" N64_WAD_NAME="$name" N64_TIMEDEMO="$demo" \
@@ -196,6 +218,7 @@ if [ "$REGRADE" = 0 ]; then
     run_one() {   # tag mode k index
         local tag=$1 mode=$2 k=$3 n=$4 log="$WORK/$1.$2$3.ares.log" want="N64_FLOOR_END" t pid try disp
         [ "$mode" = B ] && want="N64_STAGES_END"
+        [ "$mode" = X ] && want="N64_XPROF_END"
         for try in 1 2; do
             disp=$(( DISP_BASE + n * 2 + try - 1 ))
             while [ -e "/tmp/.X$disp-lock" ]; do disp=$(( disp + 128 )); done
@@ -252,7 +275,7 @@ if [ "$REGRADE" = 0 ]; then
             for k in "${RUNS[@]}"; do
                 [ "$mode" = A ] && [ "$k" != 1 ] && continue
                 log="$WORK/$tag.$mode$k.ares.log"
-                # B1 and B2; A runs once and keeps a bare name.  (Not a
+                # B1 and B2; A and X run once and keep a bare name.  (Not a
                 # `$([ … ] && echo)` substitution: under set -e its failing
                 # status would end the script, silently, on every mode A run.)
                 if [ "$mode" = B ]; then dst="$OUT/$tag.B$k.log"; else dst="$OUT/$tag.$mode.log"; fi
@@ -282,6 +305,11 @@ if [ "$REGRADE" = 0 ]; then
                     awk '/^N64_STAGES_BEGIN /{f=1} f; /^N64_STAGES_END /{f=0}' "$log" > "${dst%.log}.stages"
                     grep -h "^N64_FLOOR_INFO " "$log" > "${dst%.log}.info"
                 fi
+                if [ "$mode" = X ]; then
+                    grep -h "^N64_XPROF_DETECT\|^N64_XPROF_CAL" "$log" > "$OUT/$tag.X.cal"
+                    grep -h "^N64_COPY_BENCH" "$log" > "$OUT/$tag.X.copy" || true
+                    awk '/^N64_XPROF_BEGIN /{f=1} f; /^N64_XPROF_END /{f=0}' "$log" > "$OUT/$tag.X.xprof"
+                fi
             done
         done
     done
@@ -293,6 +321,12 @@ FILTERED=""
 GARGS=(--demos "$NAMES")
 [ -n "$GOLDEN" ] && GARGS+=(--golden-dir "$GOLDEN")
 
+if [ -n "$XPROF" ]; then
+    # Profile runs are evidence, not a verdict: the calibration is checked and
+    # the profile printed; floor-stats.mjs fails on a calibration that
+    # disagrees with COUNT.
+    exec node "$ROOT/tools/floor/floor-stats.mjs" --xprof "$OUT"
+fi
 if [ "$ONCE" = 1 ]; then
     echo "floor-n64: one timing run per demo, no gate$FILTERED"
     exec node "$ROOT/tools/floor/floor-stats.mjs" "$OUT"
