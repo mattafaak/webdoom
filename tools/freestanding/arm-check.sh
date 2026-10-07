@@ -38,8 +38,12 @@ for need in zig qemu-arm-static; do
     }
 done
 
+# Its own out dir: be-check.sh's default is out-be, be-cross's, and under
+# `run-tests.sh --jobs` the two legs run side by side, so each read the other's
+# half-written per-demo JSON (arm-cross failed "Expecting ',' delimiter" on
+# plutonia-demo3 that way, 2026-10-07).
 BE_TARGET="${ARM_TARGET:-arm-linux-musleabihf}" \
 BE_BIN="${ARM_BIN:-$SCRIPT_DIR/fs-doom-arm}" \
 QEMU_BE="${QEMU_ARM:-qemu-arm-static}" \
 CROSS_LABEL="ARM32" \
-    exec bash "$SCRIPT_DIR/be-check.sh" "$@"
+    exec bash "$SCRIPT_DIR/be-check.sh" "${1:-$SCRIPT_DIR/../../wads/lib}" "${2:-$SCRIPT_DIR/out-arm}"
