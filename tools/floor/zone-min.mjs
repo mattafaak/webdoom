@@ -131,8 +131,12 @@ async function probe(kb) {
         }
     }
     const r = CORTEXM
+        // its own build directory (--variant zonemin): every probe rebuilds at
+        // its zone size, and the armv6m-zc / armv8m-zc legs build the same
+        // ISA beside it under --jobs; sharing one directory, each relinked
+        // the other's objects mid-run
         ? spawnSync('bash', [join(root, 'tools/cortexm/run-floor.sh'), CORTEXM, ...(ZC ? ['--zero-copy'] : []),
-                             '--correctness', '--zone', String(kb), '--out', out], { encoding: 'utf8' })
+                             '--variant', 'zonemin', '--correctness', '--zone', String(kb), '--out', out], { encoding: 'utf8' })
         : spawnSync('bash', [join(root, 'tools/floor/run-x86.sh'), out],
                     { env: { ...process.env, WD_ZONE_KB: String(kb) }, encoding: 'utf8' });
     const last = (PLAY ? `play: ${SCEN.length} scenarios identical to 8 MiB; ` : '') + (r.stdout ?? '').trim().split('\n').at(-1);
