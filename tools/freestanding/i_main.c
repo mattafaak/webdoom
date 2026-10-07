@@ -50,8 +50,6 @@
 extern int detailLevel;
 extern int screenblocks;
 
-extern int prndindex;        /* m_random.c — hashed per tic (fs_state_hash) */
-extern thinker_t thinkercap; /* p_tick.c — thinker list sentinel */
 #include "perf.h" /* fs_perf_instr_fd, web_perf_*_us — for attribution */
 #include "floor_log.h"
 
@@ -77,39 +75,8 @@ volatile unsigned fs_floor_load;
 volatile unsigned fs_floor_mbytes;
 const unsigned char* fs_floor_blob;
 size_t fs_floor_blob_len;
-// ── Sim hash: identical algorithm to web_state_hash() and nat_state_hash() ───
-// Every field in exactly the same order — required for bit-identical
-// comparison.
-static int fs_state_hash (void)
-{
-    unsigned h = 0x9e3779b9u ^ (unsigned) gametic;
-    int i;
-
-    h = (h ^ (unsigned) prndindex) * 0x01000193u;
-    for (i = 0; i < MAXPLAYERS; i++)
-        if (playeringame[i] && players[i].mo)
-        {
-            h = (h ^ (unsigned) players[i].mo->x) * 0x01000193u;
-            h = (h ^ (unsigned) players[i].mo->y) * 0x01000193u;
-            h = (h ^ (unsigned) players[i].mo->angle) * 0x01000193u;
-            h = (h ^ (unsigned) players[i].health) * 0x01000193u;
-        }
-    // sector floor/ceiling heights — catches moving floors/ceilings.
-    for (i = 0; i < numsectors; i++)
-    {
-        h = (h ^ (unsigned) sectors[i].floorheight) * 0x01000193u;
-        h = (h ^ (unsigned) sectors[i].ceilingheight) * 0x01000193u;
-    }
-    // thinker count — catches spawn/despawn of active thinkers.
-    {
-        thinker_t* th;
-        unsigned cnt = 0;
-        for (th = thinkercap.next; th != &thinkercap; th = th->next)
-            cnt++;
-        h = (h ^ cnt) * 0x01000193u;
-    }
-    return (int) h;
-}
+// ── Sim hash: fs_state_hash.h, one copy shared with tools/cortexm ─────────────
+#include "fs_state_hash.h"
 
 // ── Byte-out helpers (no libc I/O — fs_putc only) ────────────────────────────
 static void fs_putu (unsigned u)
