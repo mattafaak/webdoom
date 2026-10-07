@@ -1,0 +1,6 @@
+/* tools/pico/ld/psram-zone/webdoom_psram_screens.incl — for the "psram-zone"
+ * variants: nothing.  screens[0] stays in .bss, in SRAM; only the zone (and
+ * fs_audio.c's harness buffers) go to PSRAM.  Included inside .psram_noload by
+ * ld/psram/sections_psram.incl.
+ * Copyright (C) 2026, GPL-2.0-or-later.
+ */

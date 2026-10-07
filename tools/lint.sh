@@ -11,6 +11,7 @@
 #
 # Scope:
 #   C:  engine/web/*.{c,h}  tools/archaeology/*.c  tools/floor/*.{c,h}
+#       tools/cortexm/*.{c,h}  tools/pico/*.c
 #   JS: client/js/*.js  client/sw.js  server/*.js
 #       tools/*.mjs  tools/fuzz/*.mjs  tools/archaeology/*.mjs
 #       tools/floor/*.mjs  tools/cortexm/*.mjs
@@ -80,6 +81,7 @@ else
             tools/floor/*.h
             tools/cortexm/*.c
             tools/cortexm/*.h
+            tools/pico/*.c
         )
 
         if [ "$FIX" = "1" ]; then
@@ -105,9 +107,9 @@ else
 
             # ── what clang-format does NOT cover, said out loud ──────────────
             #
-            # C_FILES is engine/web, tools/archaeology, tools/floor and
-            # tools/cortexm. Six other trees hold tracked C and were outside
-            # the gate with nothing saying so --
+            # C_FILES is engine/web, tools/archaeology, tools/floor,
+            # tools/cortexm and tools/pico. Six other trees hold tracked C and
+            # were outside the gate with nothing saying so --
             # scope that is narrow by accident reads exactly like scope that is
             # narrow by decision.
             #
@@ -128,7 +130,7 @@ else
             )
             UNDECLARED=()
             while IFS= read -r f; do
-                case "$f" in engine/web/*|tools/archaeology/*|tools/floor/*|tools/cortexm/*) continue ;; esac
+                case "$f" in engine/web/*|tools/archaeology/*|tools/floor/*|tools/cortexm/*|tools/pico/*) continue ;; esac
                 declared=0
                 for d in "${C_EXEMPT_DIRS[@]}"; do
                     case "$f" in "$d"/*) declared=1; break ;; esac

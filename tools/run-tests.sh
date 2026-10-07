@@ -94,6 +94,11 @@ have_n64()     { [ -x "${N64_INST:-$HOME/toolchains/n64}/bin/mips64-elf-gcc" ] &
                  command -v ares >/dev/null 2>&1 && \
                  command -v xvfb-run >/dev/null 2>&1; }
 have_gcc()     { command -v gcc >/dev/null 2>&1; }
+# pico-sdk and the build tools its CMake needs (tools/pico/link-check.sh
+# sources ~/toolchains/env.sh when PICO_SDK_PATH is unset)
+have_pico()    { command -v cmake >/dev/null 2>&1 && command -v ninja >/dev/null 2>&1 && \
+                 command -v arm-none-eabi-gcc >/dev/null 2>&1 && \
+                 [ -f "${PICO_SDK_PATH:-$HOME/toolchains/pico-sdk}/pico_sdk_init.cmake" ]; }
 # the same resolution order as tools/chrome-harness.mjs, so the probe and the
 # spawn cannot disagree; an explicit CHROME_BIN is the only answer when set
 have_browser() {
@@ -132,6 +137,7 @@ declare -A NEED=(
     [qemurv]='have_qemurv|qemu-riscv32-static not on PATH (needed for the RV32 leg)'
     [n64]='have_n64|N64 toolchain incomplete (need mips64-elf-gcc under $N64_INST, ares and xvfb-run; run: source ~/toolchains/env.sh)'
     [gcc]='have_gcc|gcc not on PATH'
+    [pico]='have_pico|pico-sdk, cmake, ninja and arm-none-eabi-gcc not all present (pico-sdk at $PICO_SDK_PATH or ~/toolchains/pico-sdk)'
     [systemd]='have_systemd|systemd-analyze not on PATH (the unit file cannot be validated here)'
     [xvfb]='have_xvfb|xvfb-run not on PATH (headless Firefox has NO WebGL here, so the frame gate needs a real X display)'
     [loadbudget]='have_loadbudget|no load-budget baseline for host HOST (record: node tools/load-budget-test.mjs --record)'
@@ -664,6 +670,14 @@ leg ram-floor-armv8m     qemucm,wad,slow,heavy "RAM floor on ARMv8-M (Cortex-M33
 # screens take.  Wipes are not graded: the verdict is REPORT, and the leg
 # fails only if it measured nothing.
 leg wipe-probe           gcc,wad       "a melt wipe's instructions and zone, lean build (reported, not graded)" -- node tools/floor/wipe-probe.mjs
+# The RP2350 and RP2040 at link time (tools/pico): the full diet linked with
+# pico-sdk for each chip's memory map (doom.wad's const texture tables in
+# flash), at the full diet's measured zone (604 KiB) and ARMv8-M heap and
+# stack peaks (301,496 and 5,200 B, rounded up to KiB); the zone,
+# screens[0] and the heap in the RP2350's PSRAM or not.  Nothing runs; every
+# variant must be measured, and the RP2350 with the zone, screens[0] and the
+# heap in PSRAM must fit its SRAM with sound.
+leg pico-link            pico          "RP2350/RP2040 link check, the full diet: what fits in SRAM, what needs PSRAM (link only)" -- env ZONE_KB=604 HEAP_KB=295 STACK_KB=6 OPTS=-O1 "REQUIRE_FIT=RP2350 psram-heap-sound -O1" bash tools/pico/link-check.sh
 # The ARM reference.  wasm is architecture-independent, so only a native build
 # tests ARM codegen, ABI and alignment; emulated cycles are not hardware
 # cycles, so this gates correctness, not timing.  zig cross-builds the

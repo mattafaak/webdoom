@@ -1,0 +1,47 @@
+/* tools/pico/ld/psram-heap/section_heap.incl — pico-sdk 2.3.0's own
+ * section_heap.incl (src/rp2_common/pico_standard_link/script_include) with
+ * newlib's heap in PSRAM instead of RAM.  It replaces the SDK's file for the
+ * "psram-heap" variants only (pico_add_linker_script_override_path in
+ * tools/pico/CMakeLists.txt).
+ *
+ * Why an override: the SDK's own knob, pico_set_linker_script_var HEAP_LOC,
+ * moves .heap's address but not its region, which the SDK fixes at "> RAM";
+ * HEAP_LOC=0x11200000 links to "address 0x11221000 of ... section `.heap' is
+ * not within region `RAM'" (tried, 2026-10-07).  So the one change is the
+ * region, and with it what the SDK's comment below already asks of
+ * __HeapLimit: the end of the heap, here the end of the reservation
+ * (crt0.S's .heap spacer, PICO_HEAP_SIZE = CMake's HEAP_KB).  The heap
+ * follows .psram_noload in PSRAM, and __psram_end__ is moved past it, so
+ * hardware_psram's runtime_init_setup_psram sizes the PSRAM it checks to
+ * include the heap.  pico-sdk's _sbrk grows to __StackLimit (the end of RAM),
+ * which bounds nothing at 0x11xxxxxx: tools/pico/pico_psram_heap.c's _sbrk
+ * grows from `end` to __HeapLimit instead.  NOLOAD: newlib hands the heap out
+ * uninitialised, and calloc zeroes its own.
+ * Copyright (C) 2026, GPL-2.0-or-later.
+ */
+
+/* Defines the following symbols for use by code:
+    __HeapLimit
+*/
+
+SECTIONS
+{
+    .dummy_pre_heap (NOLOAD):
+    {
+        /* Dummy section to make sure we're back in normal RAM for the heap when HEAP_LOC isn't defined */
+        . = .;
+    } > RAM
+    /* webdoom: no address (HEAP_LOC is not honoured here: "." is still in
+       RAM at this point of the script), and PSRAM, not RAM */
+    .heap (NOLOAD):
+    {
+        __end__ = .;
+        end = __end__;
+        KEEP(*(.heap*))
+    } > PSRAM
+    /* historically on GCC sbrk was growing past __HeapLimit to __StackLimit, however
+       to be more compatible, we now set __HeapLimit explicitly to where the end of the heap is */
+    __HeapLimit = DEFINED(HEAP_LIMIT) ? HEAP_LIMIT : __end__ + SIZEOF(.heap);
+    __psram_end__ = __HeapLimit;
+    ASSERT(__end__ >= ORIGIN(PSRAM) && __HeapLimit <= ORIGIN(PSRAM) + LENGTH(PSRAM), "the heap is not inside PSRAM")
+}

@@ -1,0 +1,56 @@
+/* tools/pico/ld/psram/sections_psram.incl — pico-sdk 2.3.0's own
+ * sections_psram.incl (src/rp2_common/pico_standard_link/script_include),
+ * unchanged, plus the engine's big buffers in its uninitialised part.  It
+ * replaces the SDK's file for the "psram" variants only
+ * (pico_add_linker_script_override_path in tools/pico/CMakeLists.txt), and
+ * each of those also gets one webdoom_psram_screens.incl: screens[0] here
+ * (ld/psram-screens, the "psram" variants) or left in .bss (ld/psram-zone,
+ * the "psram-zone" variants).
+ *
+ * The SDK includes this file before the .data/.bss sections, and ld puts an
+ * input section in the FIRST output section that names it, so these leave
+ * .bss for PSRAM.  They stay inside __psram_start__ .. __psram_end__, the
+ * span hardware_psram's runtime_init_setup_psram checks against the chip it
+ * finds.  NOLOAD, and crt0 zeroes none of it; each buffer is written by its
+ * owner before it is read:
+ *   fs_arena        the zone (tools/freestanding/i_system.c): Z_Init lays
+ *                   the zone out over it
+ *   fs_screenbufs   screens[0] (i_system.c): I_AllocLow memsets it on its
+ *                   first call
+ *   trace, st_*     fs_audio.c's WD_AUDIO_TRACE and WD_AUDIO_STAGES records,
+ *                   harness-only (getenv-gated), one entry each in this
+ *                   build (FS_AUDIO_HARNESS=0): trace_add memsets each
+ *                   entry, the stage arrays are written before they are read
+ * Each is named with its file: p_maputl.c has a .bss.trace of its own (the
+ * engine's divline_t trace, 16 B and hot), which must stay in SRAM.
+ * Copyright (C) 2026, GPL-2.0-or-later.
+ */
+
+/* Defines the following symbols for use by code:
+    __psram_start__, __psram_end__
+    __psram_load_start__, __psram_load_end__, __psram_load_source__
+*/
+
+SECTIONS
+{
+    .psram_load : {
+        __psram_start__ = .;
+        __psram_load_start__ = .;
+        *(SORT(.psram_initialised.*))
+        . = ALIGN(4);
+        __psram_load_end__ = .;
+    } > PSRAM AT> PSRAM_STORE
+    __psram_load_source__ = LOADADDR(.psram_load);
+
+    .psram_noload (NOLOAD) : {
+        *(SORT(.psram_uninitialised.*))
+        . = ALIGN(4);
+        __webdoom_psram_start__ = .;
+        */freestanding/i_system.c.o(.bss.fs_arena)
+        INCLUDE "webdoom_psram_screens.incl"
+        */freestanding/fs_audio.c.o(.bss.trace .bss.st_mus .bss.st_sfx .bss.st_sum .bss.st_live)
+        . = ALIGN(4);
+        __webdoom_psram_end__ = .;
+        __psram_end__ = .;
+    } > PSRAM
+}

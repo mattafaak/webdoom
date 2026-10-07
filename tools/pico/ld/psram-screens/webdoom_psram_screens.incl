@@ -1,0 +1,7 @@
+/* tools/pico/ld/psram-screens/webdoom_psram_screens.incl — for the "psram"
+ * variants: screens[0] (tools/freestanding/i_system.c's fs_screenbufs, the
+ * 64,000-byte LEAN_SCREENS block) joins the zone in PSRAM.  Included inside
+ * .psram_noload by ld/psram/sections_psram.incl.
+ * Copyright (C) 2026, GPL-2.0-or-later.
+ */
+*/freestanding/i_system.c.o(.bss.fs_screenbufs)

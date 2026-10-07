@@ -1,0 +1,19 @@
+/* tools/pico/ld/all/section_extra_post_end.incl — the WAD's place in XIP
+ * flash.  It replaces pico-sdk's empty hook of this name (searched first, by
+ * pico_add_linker_script_override_path in tools/pico/CMakeLists.txt), which
+ * the SDK includes after section_end.incl for custom symbols and asserts.
+ *
+ * The WAD is not in this link.  It is flashed on its own at __wad_start, a
+ * fixed offset into flash (PICO_WAD_OFFSET: CMake's WAD_OFFSET_KB), so a new
+ * build of the code never moves it, and pico_main.c registers it there; the
+ * engine reads every lump in place (WEB_LUMPS_IN_PLACE).  The linker checks
+ * that the binary, load images included (__flash_binary_end), ends below it.
+ * Copyright (C) 2026, GPL-2.0-or-later.
+ */
+SECTIONS
+{
+    __wad_start = ORIGIN(FLASH) + PICO_WAD_OFFSET;
+    __wad_end = ORIGIN(FLASH) + LENGTH(FLASH);
+    ASSERT(__flash_binary_end <= __wad_start, "the binary reaches past PICO_WAD_OFFSET into the WAD")
+    ASSERT(__wad_start < __wad_end, "PICO_WAD_OFFSET leaves no flash for the WAD")
+}
