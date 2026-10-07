@@ -85,6 +85,8 @@ have_clangfmt(){ command -v clang-format >/dev/null 2>&1 && \
                  [ "$(clang-format --version | grep -oE '[0-9]+' | head -1)" = "23" ]; }
 have_qemuarm() { command -v qemu-arm-static >/dev/null 2>&1; }
 have_qemuppc() { command -v qemu-ppc-static >/dev/null 2>&1 || command -v qemu-ppc >/dev/null 2>&1; }
+# the Cortex-M boards (system emulation) and the bare-metal compiler, together
+have_qemucm()  { command -v qemu-system-arm >/dev/null 2>&1 && command -v arm-none-eabi-gcc >/dev/null 2>&1; }
 have_qemurv()  { command -v qemu-riscv32-static >/dev/null 2>&1; }
 # the cross compiler, the ares emulator and an X server, together
 have_n64()     { [ -x "${N64_INST:-$HOME/toolchains/n64}/bin/mips64-elf-gcc" ] && \
@@ -124,6 +126,7 @@ declare -A NEED=(
     [clangfmt]='have_clangfmt|clang-format 23 not present'
     [qemuarm]='have_qemuarm|qemu-arm-static not on PATH'
     [qemuppc]='have_qemuppc|qemu-ppc-static not on PATH (needed for the BIG-ENDIAN leg)'
+    [qemucm]='have_qemucm|qemu-system-arm and arm-none-eabi-gcc not both on PATH (needed for the Cortex-M floor legs)'
     [qemurv]='have_qemurv|qemu-riscv32-static not on PATH (needed for the RV32 leg)'
     [n64]='have_n64|N64 toolchain incomplete (need mips64-elf-gcc under $N64_INST, ares and xvfb-run; run: source ~/toolchains/env.sh)'
     [gcc]='have_gcc|gcc not on PATH'
@@ -537,6 +540,14 @@ leg zone-min        fs,wad     "smallest zone with rendering is still 1200 KiB" 
 # renders, byte for byte, on the 13 demos' songs, and its register streams and
 # samples match tools/floor/synth-ref.json, which every port is graded on.
 leg synth-native    gcc,build,wad,heavy "native OPL synth == synth.wasm on 13 demo songs (OPL2/OPL3, 3 rates, -O1/-O2); L1/L2 references" -- node tools/synth-native-test.mjs
+# The same demand on the floor's candidate ISAs (tools/cortexm): engine/core
+# with newlib on qemu's Cortex-M boards, no OS, the WAD read by semihosting.
+# Each run first proves its instrument on the board (1e6/2e6-instruction
+# loops, the unaligned trap, the WAD window's BusFault, the painted stack),
+# then grades 13 demos, sim + render, through the floor gate.  Instructions
+# under -icount are demand, not time: the verdict is DEMAND, never PASS.
+leg armv6m-qemu     qemucm,wad,heavy "Cortex-M0+ code (ARMv6-M, mps2-an385): 13 demos correct, instructions per tic" -- bash tools/cortexm/run-floor.sh armv6m
+leg armv8m-qemu     qemucm,wad,heavy "Cortex-M33 code (ARMv8-M, mps2-an505): 13 demos correct, instructions per tic" -- bash tools/cortexm/run-floor.sh armv8m
 # The ARM reference.  wasm is architecture-independent, so only a native build
 # tests ARM codegen, ABI and alignment; emulated cycles are not hardware
 # cycles, so this gates correctness, not timing.  zig cross-builds the

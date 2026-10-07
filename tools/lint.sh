@@ -13,6 +13,7 @@
 #   C:  engine/web/*.{c,h}  tools/archaeology/*.c  tools/floor/*.{c,h}
 #   JS: client/js/*.js  client/sw.js  server/*.js
 #       tools/*.mjs  tools/fuzz/*.mjs  tools/archaeology/*.mjs
+#       tools/floor/*.mjs  tools/cortexm/*.mjs
 #
 # The JS line named `client/game.js`, which does not exist, and omitted
 # tools/fuzz — a scope comment that described neither the code nor the globs.
@@ -163,6 +164,8 @@ JS_FILES=(
     tools/lib/*.mjs
     tools/fuzz/*.mjs
     tools/archaeology/*.mjs
+    tools/floor/*.mjs
+    tools/cortexm/*.mjs
 )
 
 if [ "$FIX" = "1" ]; then
