@@ -54,6 +54,10 @@ extern int screenblocks;
 
 #include "perf.h" /* fs_perf_instr_fd, web_perf_*_us — for attribution */
 #include "floor_log.h"
+#include "g_game.h"  /* G_ExitLevel: -frames mode's scheduled level exit */
+#include "r_state.h" /* scaledviewwidth: -frames mode's record */
+#include "v_video.h" /* screens[]: -frames mode's record */
+#include "z_zone.h"  /* memblock_t: -frames mode's zone poison */
 
 unsigned fs_render_hash (void); /* i_video.c: the render goldens' hash */
 extern int fs_zone_bytes;       /* i_system.c: the zone actually handed out */
@@ -603,6 +607,146 @@ static void emit_tictrace (const char* path)
     fclose (f);
 }
 
+
+// ── -frames <path>: every frame recorded, wipes run to their end ─────────────
+// The lean-screens differential (tools/floor/lean-screens-test.mjs) drives the
+// paths the 13 demos never reach -- a melt wipe to its end, an intermission and
+// the level after it, a narrowed view's border, the status bar coming and
+// going -- and compares two builds frame by frame.  This mode has its own loop
+// (frames_run), so the demo loop below, and what the floor gate measures, are
+// untouched.  One line per D_DoomFrame call, wipe frames included:
+//   F <frame> <gametic> <gamestate> <wipeactive> <render> <sim> <held>
+//     <scaledviewwidth> <viewheight> <detailshift> <writes> <write hash>
+// <held> has bit n set while screens[n] is allocated (n = 1..4): a
+// LEAN_SCREENS build's evidence that it released what it borrowed.
+// Set from the environment:
+//   WD_WIPES=1              wipes run on the wipe clock (fs_wipe_clock), one
+//                           tic per frame while a wipe is active, to their end
+//   WD_EXIT_AT=t[,t...]     G_ExitLevel() at the first frame gametic >= t
+//   WD_VIEW_AT=t:blocks[:detail][,...]   R_SetViewSize likewise
+//   WD_SHOT_AT=t[,t...]     G_ScreenShot() likewise: the PCX it writes is in
+//                           the record's write count and hash (files.c)
+//   WD_POISON=1             after every frame, every free zone block's bytes
+//                           are 0xA5: memory read after it was freed shows
+//                           up in the pixels, whoever freed it
+//   WD_FREE_AT=f:n          (LEAN_SCREENS) release screens[n] after frame f,
+//                           whoever holds it: the red-proofs' wrong lean path
+static FILE* frames_file;
+static int   frames_n;
+static int   frames_poison;
+#define FRAMES_MAX_SCHED 16
+static struct { int tic, kind, blocks, detail, done; } frames_sched[FRAMES_MAX_SCHED];
+static int   frames_nsched;
+static int   frames_free_at = -1, frames_free_scrn;
+extern int      fs_write_count; /* files.c: what Web_FileWrite was given */
+extern unsigned fs_write_hash;
+
+static void frames_parse_sched (const char* env, int kind)
+{
+    const char* p = getenv (env);
+    while (p && *p && frames_nsched < FRAMES_MAX_SCHED)
+    {
+        int t = 0, b = 0, d = 0, n = 0;
+        if (kind != 1 ? sscanf (p, "%d%n", &t, &n) < 1
+                      : sscanf (p, "%d:%d%n", &t, &b, &n) < 2)
+            break;
+        p += n;
+        if (kind == 1 && *p == ':' && sscanf (p, ":%d%n", &d, &n) == 1)
+            p += n;
+        frames_sched[frames_nsched].tic = t;
+        frames_sched[frames_nsched].kind = kind;
+        frames_sched[frames_nsched].blocks = b;
+        frames_sched[frames_nsched].detail = d;
+        frames_nsched++;
+        if (*p == ',')
+            p++;
+    }
+}
+
+// The zone's own header, as z_zone.c declares it there (memzone_t is private
+// to that file).  The walk checks itself: the blocks must link both ways and
+// their sizes must add up to the zone, or the layout moved and the poison
+// would be writing blind.
+typedef struct
+{
+    int         size;
+    memblock_t  blocklist;
+    memblock_t* rover;
+} fs_memzone_t;
+extern fs_memzone_t* mainzone;
+
+static void frames_poison_zone (void)
+{
+    memblock_t* b;
+    long total = 0;
+    for (b = mainzone->blocklist.next; b != &mainzone->blocklist; b = b->next)
+    {
+        if (b->next->prev != b || b->size < (int) sizeof (memblock_t))
+            break;
+        total += b->size;
+        if (!b->user)
+            memset ((byte*) b + sizeof (memblock_t), 0xA5,
+                    (size_t) b->size - sizeof (memblock_t));
+    }
+    if (b != &mainzone->blocklist || total != mainzone->size - (long) sizeof (fs_memzone_t))
+    {
+        fprintf (stderr, "fs-doom: -frames: the zone walk does not add up (%ld of %d B): "
+                 "has memzone_t's layout changed?\n", total, mainzone->size);
+        exit (3);
+    }
+}
+
+static void frames_run (void)
+{
+    fprintf (frames_file, "FRAMES zone=%d wipes=%d poison=%d lean_screens=%d\n",
+             fs_zone_bytes, fs_wipe_clock >= 0, frames_poison,
+#ifdef LEAN_SCREENS
+             1
+#else
+             0
+#endif
+             );
+    for (;;)
+    {
+        int i, held = 0;
+        for (i = 0; i < frames_nsched; i++)
+            if (!frames_sched[i].done && gametic >= frames_sched[i].tic && !wipeactive)
+            {
+                frames_sched[i].done = 1;
+                if (frames_sched[i].kind == 0)
+                    G_ExitLevel ();
+                else if (frames_sched[i].kind == 2)
+                    G_ScreenShot ();
+                else
+                    R_SetViewSize (frames_sched[i].blocks, frames_sched[i].detail);
+            }
+        if (fs_wipe_clock >= 0)
+        {
+            if (wipeactive)
+                fs_wipe_clock++;
+        }
+        else
+            wipeactive = 0; /* as the demo loop does */
+
+        D_DoomFrame ();
+
+        for (i = 1; i <= 4; i++)
+            if (screens[i])
+                held |= 1 << i;
+        fprintf (frames_file, "F %d %d %d %d %u %u %d %d %d %d %d %u\n", frames_n, gametic,
+                 (int) gamestate, wipeactive ? 1 : 0, fs_render_hash (),
+                 (unsigned) fs_state_hash (), held, scaledviewwidth, viewheight,
+                 detailshift, fs_write_count, fs_write_hash);
+#ifdef LEAN_SCREENS
+        if (frames_n == frames_free_at)
+            V_ReleaseScreen (frames_free_scrn);
+#endif
+        if (frames_poison)
+            frames_poison_zone ();
+        frames_n++;
+    }
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────
 int main (int argc, char** argv)
 {
@@ -614,6 +758,7 @@ int main (int argc, char** argv)
     const char* floor_out = NULL;     /* floor gate log */
     const char* tictrace_out = NULL;  /* per-tic demand rows */
     const char* timedemo = NULL;      /* the demo lump, for the log's name */
+    const char* frames_out = NULL;    /* -frames: every frame recorded */
     char floor_mode = 'A';
     static const char* fwd[64];
     int fwd_argc = 0;
@@ -659,6 +804,11 @@ int main (int argc, char** argv)
         if (strcmp (argv[i], "-tictrace") == 0 && i + 1 < argc)
         {
             tictrace_out = argv[++i];
+            continue;
+        }
+        if (strcmp (argv[i], "-frames") == 0 && i + 1 < argc)
+        {
+            frames_out = argv[++i];
             continue;
         }
         if (strcmp (argv[i], "-timedemo") == 0 && i + 1 < argc)
@@ -748,6 +898,33 @@ int main (int argc, char** argv)
     }
     fs_perf_instr_fd = wd_cycles_fd; /* expose to perf.c's web_perf_now() */
 
+    if (frames_out)
+    {
+        frames_file = fopen (frames_out, "w");
+        if (!frames_file)
+        {
+            fprintf (stderr, "fs-doom: cannot write %s\n", frames_out);
+            return 1;
+        }
+        // a line at a time: a run that dies keeps every frame it finished
+        setvbuf (frames_file, NULL, _IOLBF, 0);
+        if (getenv ("WD_WIPES") && getenv ("WD_WIPES")[0] == '1')
+            fs_wipe_clock = 0;
+        frames_poison = getenv ("WD_POISON") && getenv ("WD_POISON")[0] == '1';
+        frames_parse_sched ("WD_EXIT_AT", 0);
+        frames_parse_sched ("WD_VIEW_AT", 1);
+        frames_parse_sched ("WD_SHOT_AT", 2);
+        if (getenv ("WD_FREE_AT"))
+            sscanf (getenv ("WD_FREE_AT"), "%d:%d", &frames_free_at, &frames_free_scrn);
+#ifndef LEAN_SCREENS
+        if (frames_free_at >= 0)
+        {
+            fprintf (stderr, "fs-doom: WD_FREE_AT needs a LEAN_SCREENS build\n");
+            return 1;
+        }
+#endif
+    }
+
     if (setjmp (fs_demo_jmp) != 0)
         goto done;
 
@@ -798,6 +975,9 @@ int main (int argc, char** argv)
     // that no tic copied
     fs_floor_load = 0;
     fs_floor_mbytes = 0;
+
+    if (frames_out)
+        frames_run (); /* returns only through the demo's end (fs_demo_jmp) */
 
     // Enable the instruction counter after init, before the demo loop.
     // Read the initial cumulative value so the first per-tic delta is correct.
@@ -889,6 +1069,12 @@ int main (int argc, char** argv)
 
 done:
     fs_timedemo_active = 0;
+    if (frames_file)
+    {
+        fprintf (frames_file, "END frames=%d gametics=%d\n", frames_n, fs_timedemo_gametics);
+        fclose (frames_file);
+        frames_file = NULL;
+    }
     wd_cycles_fd_was_open = wd_cycles_fd >= 0;
     // Stop and close the instruction counter before emitting output.
     if (wd_cycles_fd >= 0)

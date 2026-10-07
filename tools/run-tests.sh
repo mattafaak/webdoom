@@ -547,6 +547,16 @@ leg zone-min        fs,wad     "smallest zone with rendering is still 1216 KiB" 
 # instead of copying them into the zone, and the smallest zone that still runs
 # all 13 demos correctly with rendering and audio is 924 KiB (920 fails).
 leg zero-copy       fszc,wad   "zero-copy build: 13 demos correct through the floor gate; zone minimum still 924 KiB" -- env FS_DOOM=tools/freestanding/fs-doom-zc node tools/floor/zone-min.mjs --check 924
+# The lean build's LEAN_SCREENS (engine/core/v_video.h) moves the back screen
+# and the wipe's two screens into the zone and shrinks the status bar's to its
+# 32 rows, on paths the goldens never reach: the demos' wipes are cut short and
+# none reaches an intermission.  This builds the lean build with and without
+# it and compares them frame by frame (render and sim hash, wipe frames
+# included) with wipes run to their end, a level exit injected into two demos,
+# narrowed views and the status bar coming and going, freed zone memory
+# poisoned every frame, the lean side also at its 13-demo zone minimum; then
+# three wrong lean paths must each fail naming their frame.
+leg lean-screens    gcc,wad    "LEAN_SCREENS == vanilla screens, every frame: wipes, intermission, next level, narrowed view, status bar" -- node tools/floor/lean-screens-test.mjs
 # The floor's music reference off the web: the OPL synth compiled natively
 # (tools/freestanding/synth-bench, built by the leg) renders what synth.wasm
 # renders, byte for byte, on the 13 demos' songs, and its register streams and

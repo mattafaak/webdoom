@@ -91,9 +91,23 @@ void Web_FileCopyN(const char* path, byte* dest, int maxlen)
     (void)maxlen;
 }
 
+// Nothing is written (no file system below the shim line), but what would
+// have been is counted and hashed (FNV-1a over the name and the bytes):
+// i_main.c's -frames record carries both, so a screenshot or a savegame is
+// compared between two builds like a frame is.  A PCX's byte 64, its
+// header's `reserved`, is left out: m_misc.c's WritePCXfile never sets it,
+// so it is whatever its zone block held before (measured: 0xA5, the -frames
+// poison, in one build and 0x08 in another, the other 66,357 bytes equal).
+int      fs_write_count;
+unsigned fs_write_hash = 0x811c9dc5u;
 void Web_FileWrite(const char* path, byte* data, int len)
 {
-    (void)path;
-    (void)data;
-    (void)len;
+    int i, n = (int) strlen(path);
+    int pcx = n > 4 && strcasecmp(path + n - 4, ".pcx") == 0;
+    for (i = 0; path[i]; i++)
+        fs_write_hash = (fs_write_hash ^ (byte) path[i]) * 0x01000193u;
+    for (i = 0; i < len; i++)
+        if (!(pcx && i == 64))
+            fs_write_hash = (fs_write_hash ^ data[i]) * 0x01000193u;
+    fs_write_count++;
 }

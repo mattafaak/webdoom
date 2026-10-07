@@ -44,4 +44,9 @@ void D_DoomFrame(void);
 extern boolean smoothrender;
 extern boolean wipeactive;
 
+// The wipe clock (i_system.c I_GetTime): -1 is off; i_main.c's -frames mode
+// sets it to 0 before D_DoomMain when WD_WIPES=1, and steps it once per frame
+// while a wipe is active.
+extern int fs_wipe_clock;
+
 #endif

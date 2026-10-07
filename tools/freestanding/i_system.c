@@ -120,6 +120,11 @@ ticcmd_t* I_BaseTiccmd(void)
 //   pays.  On the virtual clock it is one iteration per tic, as on a target
 //   that runs at 35 Hz, and every count repeats.  WD_REAL_CLOCK=1 (where the
 //   port has an environment) restores the clock below.
+// - A run that lets wipes finish (i_main.c's -frames with WD_WIPES=1) adds
+//   fs_wipe_clock, which the harness steps once per frame while a wipe is
+//   active: the melt is paced by I_GetTime, and gametic stands still while it
+//   runs, so on the plain virtual clock a wipe would never advance.  The
+//   demos' clock above is untouched (fs_wipe_clock stays -1).
 // - A port with a free-running hardware counter defines FS_GET_TIME as the name
 //   of `int FS_GET_TIME (void)`, the time in 35 Hz tics.  NetUpdate calls
 //   I_GetTime about five times a tic, so the clock_gettime form, with its 64-bit
@@ -130,14 +135,18 @@ extern int gametic;
 #ifdef FS_GET_TIME
 int FS_GET_TIME (void);
 #endif
+int fs_wipe_clock = -1; /* -1: off; set before D_DoomMain (fs_platform.h) */
 
 int I_GetTime(void)
 {
     static int real = -1;
     if (real < 0)
-        real = getenv("WD_REAL_CLOCK") && getenv("WD_REAL_CLOCK")[0] == '1';
+        real = getenv("WD_REAL_CLOCK") && getenv("WD_REAL_CLOCK")[0] == '1' ? 1
+               : fs_wipe_clock >= 0 ? 2 : 0;
     if (fs_timedemo_active && !real)
         return gametic;
+    if (fs_timedemo_active && real == 2)
+        return gametic + fs_wipe_clock;
 #ifdef FS_GET_TIME
     return FS_GET_TIME ();
 #else
