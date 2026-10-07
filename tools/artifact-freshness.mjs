@@ -81,6 +81,15 @@ export const ARTIFACTS = {
         files:   ['tools/freestanding/Makefile'],
         rebuild: 'make -C tools/freestanding',
     },
+    // the zero-copy side build (lumps read in place, WEB_LUMPS_IN_PLACE), which
+    // `make -C tools/freestanding` builds beside fs-doom from objects of its own
+    'fs-doom-zc': {
+        desc:    'freestanding, lumps read in place (the zero-copy, ro-wad-zc legs)',
+        path:    'tools/freestanding/fs-doom-zc',
+        dirs:    [['engine/core', true], ['tools/freestanding', false]],
+        files:   ['tools/freestanding/Makefile'],
+        rebuild: 'make -C tools/freestanding',
+    },
     // ── the compile-time variants ────────────────────────────────────────────
     //
     // These were not registered, and the registry IS the contract -- so nothing

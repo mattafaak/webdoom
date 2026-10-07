@@ -195,7 +195,7 @@ void W_AddFile (char *filename)
 	I_Error ("Couldn't realloc lumpinfo");
 
     lump_p = &lumpinfo[startlump];
-
+    W_ADD_IN_PLACE (filename, data, length, fileinfo, startlump);
     for (i=startlump ; i<numlumps ; i++,lump_p++, fileinfo++)
     {
 	lump_p->handle = (int) (data + LONG(fileinfo->filepos));
@@ -403,7 +403,7 @@ W_CacheLumpNum
 
     if ((unsigned)lump >= numlumps)
 	I_Error ("W_CacheLumpNum: %i >= numlumps",lump);
-		
+    W_RETURN_IN_PLACE (lump);	// webdoom: no zone copy (w_wad.h)
     if (!lumpcache[lump])
     {
 	// read the lump in
@@ -497,3 +497,75 @@ void W_Profile (void)
 }
 
 
+#ifdef WEB_LUMPS_IN_PLACE
+//
+// webdoom: lumps read in place (w_wad.h).  One entry per file the platform
+// serves in place: its lumps, [first, last), and the bytes they span,
+// [lo, hi).  A file past the table's end is copied as vanilla copies it.
+//
+#define W_MAXINPLACE	8
+
+static struct
+{
+    int		first, last;
+    const byte	*lo, *hi;
+} w_inplace[W_MAXINPLACE];
+static int	w_ninplace;
+
+void
+W_AddInPlace
+( char*		filename,
+  byte*		data,
+  int		length,
+  filelump_t*	fileinfo,
+  int		startlump )
+{
+    const byte	*lo, *hi, *p;
+    int		i, n;
+
+    if (w_ninplace == W_MAXINPLACE
+	|| !W_WebFileInPlace (filename, data, length))
+	return;
+
+    // the span of the lumps alone: a port can serve the directory from a
+    // copy of its own (tools/cortexm), elsewhere in memory
+    n = numlumps - startlump;
+    if (n <= 0)
+	return;
+    lo = hi = data + LONG(fileinfo[0].filepos);
+    for (i=0 ; i<n ; i++)
+    {
+	p = data + LONG(fileinfo[i].filepos);
+	if (p < lo)
+	    lo = p;
+	if (p + LONG(fileinfo[i].size) > hi)
+	    hi = p + LONG(fileinfo[i].size);
+    }
+    w_inplace[w_ninplace].first = startlump;
+    w_inplace[w_ninplace].last = numlumps;
+    w_inplace[w_ninplace].lo = lo;
+    w_inplace[w_ninplace].hi = hi;
+    w_ninplace++;
+}
+
+void* W_LumpInPlace (int lump)
+{
+    int		i;
+
+    for (i=0 ; i<w_ninplace ; i++)
+	if (lump >= w_inplace[i].first && lump < w_inplace[i].last)
+	    return (void *) lumpinfo[lump].handle;
+    return NULL;
+}
+
+int W_IsInPlace (const void* p)
+{
+    int		i;
+
+    for (i=0 ; i<w_ninplace ; i++)
+	if ((const byte *) p >= w_inplace[i].lo
+	    && (const byte *) p <= w_inplace[i].hi)	// <=: an empty last lump
+	    return 1;
+    return 0;
+}
+#endif

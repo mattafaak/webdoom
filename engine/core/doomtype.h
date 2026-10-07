@@ -39,6 +39,18 @@ typedef enum {false, true} boolean;
 typedef unsigned char byte;
 #endif
 
+// webdoom: the structs that are read straight out of a lump (a patch, the map
+// records, the WAD header and directory).  With WEB_LUMPS_IN_PLACE a lump is
+// read where it lies in the WAD, at whatever offset the WAD gave it, so these
+// are byte-aligned and the compiler reads their fields in a way a
+// strict-alignment CPU (Cortex-M0+) accepts.  Their layout is unchanged: every
+// field already sits at its natural offset.  Off, this is nothing at all.
+#ifdef WEB_LUMPS_IN_PLACE
+#define LUMP_PACKED	__attribute__ ((packed))
+#else
+#define LUMP_PACKED
+#endif
+
 
 // Predefined with some OS.
 #ifdef LINUX

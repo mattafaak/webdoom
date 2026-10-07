@@ -24,6 +24,7 @@
 #include "z_zone.h"
 #include "i_system.h"
 #include "doomdef.h"
+#include "w_wad.h"	// W_IsInPlace (WEB_LUMPS_IN_PLACE)
 
 // render-ON zone HWM + purge-pressure counters.
 // All variables and tracking code are compiled only when -DWEB_PERF_ZONE_STATS
@@ -111,6 +112,10 @@ void Z_Free (void* ptr)
     memblock_t*		block;
     memblock_t*		other;
 	
+#ifdef WEB_LUMPS_IN_PLACE
+    if (Z_InPlace (ptr))
+	return;		// a lump read in place: not ours to free
+#endif
     block = (memblock_t *) ( (byte *)ptr - sizeof(memblock_t));
 
     if (block->id != ZONEID)
@@ -383,6 +388,10 @@ Z_ChangeTag2
 {
     memblock_t*	block;
 	
+#ifdef WEB_LUMPS_IN_PLACE
+    if (Z_InPlace (ptr))
+	return;		// a lump read in place has no tag
+#endif
     block = (memblock_t *) ( (byte *)ptr - sizeof(memblock_t));
 
     if (block->id != ZONEID)
@@ -416,6 +425,24 @@ Z_ChangeTag2
 
     block->tag = tag;
 }
+
+
+
+#ifdef WEB_LUMPS_IN_PLACE
+//
+// Z_InPlace
+// webdoom: nonzero for a lump read in place (w_wad.h): a pointer into a WAD
+// the platform serves in place.  A pointer inside the zone is always a block,
+// so a WAD whose lumps lie on both sides of the zone cannot claim one.
+//
+int Z_InPlace (void* ptr)
+{
+    if ((byte *)ptr >= (byte *)mainzone
+	&& (byte *)ptr < (byte *)mainzone + mainzone->size)
+	return 0;
+    return W_IsInPlace (ptr);
+}
+#endif
 
 
 

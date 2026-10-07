@@ -59,6 +59,15 @@ static inline int32_t read_le32(const void *p)
                    | ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24));
 }
 
+// LUMP_LONG(p): the int a lump holds at p.  A lump read in place
+// (WEB_LUMPS_IN_PLACE) can start at any offset, so the read is byte-safe;
+// off, it is vanilla's LONG(*p).
+#ifdef WEB_LUMPS_IN_PLACE
+#define LUMP_LONG(p)	read_le32 (p)
+#else
+#define LUMP_LONG(p)	LONG (*(p))
+#endif
+
 
 
 

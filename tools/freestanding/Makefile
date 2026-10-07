@@ -9,7 +9,12 @@
 # ensuring per-tic hash arithmetic is identical and hashes compare apples-to-apples.
 #
 # Usage:
-#   make               build fs-doom and synth-bench (the OPL synth, measured)
+#   make               build fs-doom, fs-doom-zc and synth-bench (the OPL
+#                      synth, measured)
+#   make ZERO_COPY=1 OBJDIR=obj-zc OUT=fs-doom-zc
+#                      fs-doom-zc alone: the zero-copy build, lumps read in
+#                      place out of the WAD blob instead of copied into the
+#                      zone (WEB_LUMPS_IN_PLACE, engine/core/w_wad.h)
 #   make check         run doom.wad demo3 vs golden (requires wads/lib/doom.wad)
 #   make check-all     run all available WADs vs goldens
 #   make imports       regenerate tools/freestanding/IMPORTS.md
@@ -25,6 +30,8 @@ EXTRA_CFLAGS ?=
 #   make OBJDIR=obj-fixed OUT=fs-doom-fixed EXTRA_CFLAGS="-include fixed_count.h"
 OPT     ?= -O1
 OBJDIR  ?= obj
+# ZERO_COPY=1: lumps are read in place (see Usage); its own OBJDIR and OUT
+ZERO_COPY ?= 0
 CFLAGS  := -m32 $(OPT) -g \
             -std=gnu89 -DNORMALUNIX \
             -Dalloca=__builtin_alloca \
@@ -40,6 +47,7 @@ CFLAGS  := -m32 $(OPT) -g \
             -I../../engine/core \
             -I. \
             -I../floor \
+            $(if $(filter 1,$(ZERO_COPY)),-DWEB_LUMPS_IN_PLACE,) \
             $(EXTRA_CFLAGS)
 
 # LEAN=1: the floor's lean memory build.  Vanilla's renderer limits (128
@@ -94,6 +102,16 @@ OBJ := $(patsubst $(CORE_DIR)/%.c,$(OBJDIR)/core/%.o,$(filter $(CORE_DIR)/%,$(SR
        $(OBJDIR)/floor/floor_log.o
 
 all: $(OUT) synth-bench synth-exact
+
+# The default build makes the zero-copy one beside it, from objects of its own,
+# so both exist after `make` (the zero-copy and ro-wad-zc legs read
+# fs-doom-zc).  Side builds (OUT=...) do not.
+ifeq ($(OUT)$(ZERO_COPY),fs-doom0)
+all: fs-doom-zc
+.PHONY: fs-doom-zc
+fs-doom-zc:
+	$(MAKE) ZERO_COPY=1 OBJDIR=obj-zc OUT=fs-doom-zc fs-doom-zc
+endif
 
 $(OUT): $(OBJ)
 	$(CC) $(LDFLAGS) $^ -o $@
@@ -241,7 +259,7 @@ imports: $(OUT)
 	@bash gen-imports.sh
 
 clean:
-	rm -rf obj obj-* fs-doom fs-doom-o2 fs-doom-fixed $(OUT_DIR) synth-bench-O1 synth-bench-O2 synth-bench-x87 synth-exact
+	rm -rf obj obj-* fs-doom fs-doom-o2 fs-doom-fixed fs-doom-zc fs-doom-lean $(OUT_DIR) synth-bench-O1 synth-bench-O2 synth-bench-x87 synth-exact
 
 # ro-wad-check: read-only-WAD proof (XIP feasibility).
 # Runs all 13 demos with WD_RO_WAD=1: WAD blob mprotect(PROT_READ) after load.

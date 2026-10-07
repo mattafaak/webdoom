@@ -79,6 +79,7 @@ have_build()   { [ -f build/doom.js ] && [ -f build/doom.wasm ]; }
 have_wad()     { local w; for w in "${IWADS[@]}"; do [ -f "wads/lib/$w" ] || return 1; done; }
 have_native()  { [ -x tools/native-sanitize/nat-doom ]; }
 have_fs()      { [ -x tools/freestanding/fs-doom ]; }
+have_fszc()    { [ -x tools/freestanding/fs-doom-zc ]; }
 have_zig()     { command -v zig >/dev/null 2>&1; }
 # the pinned major: output differs across majors
 have_clangfmt(){ command -v clang-format >/dev/null 2>&1 && \
@@ -122,6 +123,7 @@ declare -A NEED=(
     [wad]='have_wad|IWADs absent (run: tools/fetch-wads.sh)'
     [native]='have_native|nat-doom absent (run: make -C tools/native-sanitize)'
     [fs]='have_fs|fs-doom absent (run: make -C tools/freestanding)'
+    [fszc]='have_fszc|fs-doom-zc absent (run: make -C tools/freestanding)'
     [zig]='have_zig|zig not on PATH (needed to cross-build for ARM)'
     [clangfmt]='have_clangfmt|clang-format 23 not present'
     [qemuarm]='have_qemuarm|qemu-arm-static not on PATH'
@@ -535,6 +537,10 @@ leg floor-x86       fs,wad     "floor gate on the host: 13 demos correct, worst 
 # zone-min.mjs), must still be the boundary: 1216 passes, 1212 fails.
 leg floor-demand    fs,wad     "demand vector: same worst tic per demo, within 1%" -- node tools/floor/demand.mjs --check
 leg zone-min        fs,wad     "smallest zone with rendering is still 1216 KiB"     -- node tools/floor/zone-min.mjs --check 1216
+# The zero-copy build through the same gate: fs-doom-zc reads lumps in place
+# instead of copying them into the zone, and the smallest zone that still runs
+# all 13 demos correctly with rendering and audio is 924 KiB (920 fails).
+leg zero-copy       fszc,wad   "zero-copy build: 13 demos correct through the floor gate; zone minimum still 924 KiB" -- env FS_DOOM=tools/freestanding/fs-doom-zc node tools/floor/zone-min.mjs --check 924
 # The floor's music reference off the web: the OPL synth compiled natively
 # (tools/freestanding/synth-bench, built by the leg) renders what synth.wasm
 # renders, byte for byte, on the 13 demos' songs, and its register streams and

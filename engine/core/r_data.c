@@ -436,7 +436,7 @@ void R_InitTextures (void)
     // Load the patch names from pnames.lmp.
     name[8] = 0;	
     names = W_CacheLumpName ("PNAMES", PU_STATIC);
-    nummappatches = LONG ( *((int *)names) );
+    nummappatches = LUMP_LONG ((int *)names);
     name_p = names+4;
     patchlookup = alloca (nummappatches*sizeof(*patchlookup));
     
@@ -451,14 +451,14 @@ void R_InitTextures (void)
     // The data is contained in one or two lumps,
     //  TEXTURE1 for shareware, plus TEXTURE2 for commercial.
     maptex = maptex1 = W_CacheLumpName ("TEXTURE1", PU_STATIC);
-    numtextures1 = LONG(*maptex);
+    numtextures1 = LUMP_LONG(maptex);
     maxoff = W_LumpLength (W_GetNumForName ("TEXTURE1"));
     directory = maptex+1;
 	
     if (W_CheckNumForName ("TEXTURE2") != -1)
     {
 	maptex2 = W_CacheLumpName ("TEXTURE2", PU_STATIC);
-	numtextures2 = LONG(*maptex2);
+	numtextures2 = LUMP_LONG(maptex2);
 	maxoff2 = W_LumpLength (W_GetNumForName ("TEXTURE2"));
     }
     else
@@ -504,7 +504,7 @@ void R_InitTextures (void)
 	    directory = maptex+1;
 	}
 		
-	offset = LONG(*directory);
+	offset = LUMP_LONG(directory);
 
 	if (offset > maxoff)
 	    I_Error ("R_InitTextures: bad texture directory");

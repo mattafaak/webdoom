@@ -67,12 +67,26 @@ typedef struct memblock_s
 // This is used to get the local FILE:LINE info from CPP
 // prior to really call the function in question.
 //
+#ifdef WEB_LUMPS_IN_PLACE
+// webdoom: a lump read in place (w_wad.h) is not a zone block; Z_Free and
+// Z_ChangeTag leave it alone, and the id check never reads the WAD bytes in
+// front of it.
+int     Z_InPlace (void *ptr);
+#define Z_ChangeTag(p,t) \
+{ \
+      if (!Z_InPlace (p)) { \
+      if (( (memblock_t *)( (byte *)(p) - sizeof(memblock_t)))->id!=0x1d4a11) \
+	  I_Error("Z_CT at "__FILE__":%i",__LINE__); \
+	  Z_ChangeTag2(p,t); } \
+};
+#else
 #define Z_ChangeTag(p,t) \
 { \
       if (( (memblock_t *)( (byte *)(p) - sizeof(memblock_t)))->id!=0x1d4a11) \
 	  I_Error("Z_CT at "__FILE__":%i",__LINE__); \
 	  Z_ChangeTag2(p,t); \
 };
+#endif
 
 
 

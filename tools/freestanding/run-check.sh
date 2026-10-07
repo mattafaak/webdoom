@@ -12,6 +12,8 @@
 # Usage: bash run-check.sh [wad_dir] [out_dir]
 #   wad_dir defaults to the repo's wads/lib (resolved relative to THIS script,
 #   not the caller's CWD, so it runs from anywhere).
+#   FS_DOOM=<binary> checks a side build instead of fs-doom, e.g. fs-doom-zc
+#   (lumps read in place); the verdict names it.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -22,7 +24,9 @@ OUT_DIR="${2:-$SCRIPT_DIR/out}"
 GOLDEN_DIR="$REPO_ROOT/tools/golden"
 
 mkdir -p "$OUT_DIR"
-FS_DOOM="$SCRIPT_DIR/fs-doom"
+FS_DOOM="${FS_DOOM:-$SCRIPT_DIR/fs-doom}"
+[[ -x "$FS_DOOM" ]] || { echo "FAIL: $FS_DOOM not built (make -C tools/freestanding)"; exit 1; }
+BIN="$(basename "$FS_DOOM")"
 ABS_WAD_DIR="$(cd "$WAD_DIR" && pwd)"
 ABS_OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 
@@ -138,8 +142,11 @@ fi
 # They emitted the byte-identical headline, and run-tests.sh's summary shows a
 # leg's headline -- so the table printed the same sentence twice for two legs
 # that prove different things (baseline 2026-09-11, rows 196-197). Say which.
+# A side build is named, so two legs on two binaries never share a headline.
+WHO=""
+[[ "$BIN" != fs-doom ]] && WHO=" ($BIN)"
 if [[ "${WD_RO_WAD:-0}" == "1" ]]; then
-    echo "PASS: $PASSES/$EXPECTED demos bit-identical with the WAD blob mprotect(PROT_READ)'d — no write to the blob (XIP-viable)"
+    echo "PASS: $PASSES/$EXPECTED demos bit-identical with the WAD blob mprotect(PROT_READ)'d — no write to the blob (XIP-viable)$WHO"
 else
-    echo "PASS: $PASSES/$EXPECTED demos bit-identical — the freestanding core matches vanilla"
+    echo "PASS: $PASSES/$EXPECTED demos bit-identical — the freestanding core matches vanilla$WHO"
 fi

@@ -19,6 +19,14 @@
 //   node tools/floor/demand.mjs --check --against-view 11
 //                                          compare the view-11 run with the view-10
 //                                          golden (the red-proof: it must fail)
+//   node tools/floor/demand.mjs --compare fs-doom-zc
+//                                          o1-v10 twice, fs-doom and a side build
+//                                          of tools/freestanding, on the same host
+//                                          in one run (WD_ZONE_KB reaches both):
+//                                          per demo, the worst graded tic, the
+//                                          mean, and the graded tics that copied
+//                                          from the WAD.  A report: it writes
+//                                          nothing, and fails only if a run does
 // Copyright (C) 2026, GPL-2.0-or-later.
 import { spawn, execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, symlinkSync, existsSync, rmSync } from 'node:fs';
@@ -53,6 +61,11 @@ const CONFIGS = [
 const args = process.argv.slice(2);
 const CHECK = args.includes('--check');
 const againstView = args.includes('--against-view') ? args[args.indexOf('--against-view') + 1] : null;
+const COMPARE = args.includes('--compare') ? args[args.indexOf('--compare') + 1] : null;
+if (COMPARE !== null && (!COMPARE || COMPARE.startsWith('-') || COMPARE.includes('/') || !existsSync(join(FS, COMPARE)))) {
+    console.log(`FAIL demand: --compare takes a binary in tools/freestanding (${COMPARE || 'none given'} is not one)`);
+    process.exit(2);
+}
 
 // P-cores: the instruction counter does not count on an E-core
 const expand = s => s.trim().split(',').flatMap(r => { const [a, b = a] = r.split('-').map(Number); return Array.from({ length: b - a + 1 }, (_, k) => a + k); });
@@ -130,7 +143,8 @@ function summarise(file, name) {
     };
 }
 
-const configs = CHECK ? CONFIGS.filter(c => c.id === (againstView ? `o1-v${againstView}` : 'o1-v10')) : CONFIGS;
+const configs = COMPARE ? [CONFIGS[0], { id: COMPARE, bin: COMPARE, env: CONFIGS[0].env }]
+              : CHECK ? CONFIGS.filter(c => c.id === (againstView ? `o1-v${againstView}` : 'o1-v10')) : CONFIGS;
 let files;
 try { files = await runAll(configs); }
 catch (e) { console.log(`FAIL demand: ${e.message}`); process.exit(1); }
@@ -146,6 +160,23 @@ for (const cfg of configs) {
 }
 // the fixed build's own instruction counts include its counting: keep only its counts
 if (vec.configs.fixed) for (const d of Object.values(vec.configs.fixed.demos)) { delete d.stage; delete d.p50; delete d.p99; }
+
+if (COMPARE) {
+    const [a, b] = configs.map(c => vec.configs[c.id]);
+    const fmt = v => v.toLocaleString('en-US');
+    const pctd = (x, y) => `${x >= y ? '+' : ''}${((x - y) / y * 100).toFixed(2)}%`;
+    const misses = c => Object.values(c.demos).reduce((t, d) => [t[0] + d.miss_tics, Math.max(t[1], d.miss_bytes_max)], [0, 0]);
+    console.log(`demand --compare: o1-v10 (WD_AUDIO=0, zone ${process.env.WD_ZONE_KB ? process.env.WD_ZONE_KB + ' KiB' : 'the default'}), fs-doom vs ${COMPARE}`);
+    console.log('  demo             worst tic: fs-doom           ' + COMPARE.padEnd(20) + ' mean: fs-doom   ' + COMPARE);
+    for (const [, , , name] of MATRIX) {
+        const x = a.demos[name], y = b.demos[name];
+        console.log(`  ${name.padEnd(16)} ${String(x.worst.tic).padStart(5)} ${fmt(x.worst.whole).padStart(10)}   ${String(y.worst.tic).padStart(5)} ${fmt(y.worst.whole).padStart(10)} ${pctd(y.worst.whole, x.worst.whole).padStart(8)}   ${fmt(x.mean).padStart(10)} ${fmt(y.mean).padStart(10)} ${pctd(y.mean, x.mean).padStart(8)}`);
+    }
+    const [ma, mb] = [misses(a), misses(b)];
+    console.log(`  graded tics that copied from the WAD: fs-doom ${ma[0]} (worst ${fmt(ma[1])} B), ${COMPARE} ${mb[0]} (worst ${fmt(mb[1])} B)`);
+    console.log(`PASS demand --compare: worst graded tic ${fmt(a.worst.whole)} (${a.worst.demo} tic ${a.worst.tic}) -> ${fmt(b.worst.whole)} (${b.worst.demo} tic ${b.worst.tic}), ${pctd(b.worst.whole, a.worst.whole)}, over ${MATRIX.length} demos each`);
+    process.exit(0);
+}
 
 if (!CHECK) {
     writeFileSync(GOLDEN, JSON.stringify(vec, null, 1) + '\n');

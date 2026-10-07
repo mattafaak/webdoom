@@ -363,13 +363,33 @@ void P_LoadThings (int lump)
     mapthing_t*		mt;
     int			numthings;
     boolean		spawn;
+#ifdef WEB_LUMPS_IN_PLACE
+    mapthing_t*		rec;
+    mapthing_t		thing;
+#endif
 	
     data = W_CacheLumpNum (lump,PU_STATIC);
     numthings = W_LumpLength (lump) / sizeof(mapthing_t);
 	
+#ifdef WEB_LUMPS_IN_PLACE
+    // webdoom: the lump may be the WAD itself (w_wad.h), which is never
+    // written and can put a record at any offset: each thing is read
+    // byte-safely into a copy, already in host byte order, and spawned from
+    // that.  (Vanilla swapped each record over itself.)
+    rec = (mapthing_t *)data;
+    mt = &thing;
+    for (i=0 ; i<numthings ; i++, rec++)
+    {
+	thing.x = read_le16 (&rec->x);
+	thing.y = read_le16 (&rec->y);
+	thing.angle = read_le16 (&rec->angle);
+	thing.type = read_le16 (&rec->type);
+	thing.options = read_le16 (&rec->options);
+#else
     mt = (mapthing_t *)data;
     for (i=0 ; i<numthings ; i++, mt++)
     {
+#endif
 	spawn = true;
 
 	// Do not spawn cool, new monsters if !commercial
@@ -395,11 +415,13 @@ void P_LoadThings (int lump)
 	    break;
 
 	// Do spawn all other stuff. 
+#ifndef WEB_LUMPS_IN_PLACE
 	mt->x = SHORT(mt->x);
 	mt->y = SHORT(mt->y);
 	mt->angle = SHORT(mt->angle);
 	mt->type = SHORT(mt->type);
 	mt->options = SHORT(mt->options);
+#endif
 	
 	P_SpawnMapThing (mt);
     }
@@ -555,13 +577,34 @@ void P_LoadBlockMap (int lump)
     int		i;
     int		count;
     int		p;
+#ifdef WEB_LUMPS_IN_PLACE
+    boolean	inplace;
+#endif
 	
+#ifdef WEB_LUMPS_IN_PLACE
+    // webdoom: the playsim reads the blockmap as shorts, in its hottest
+    // loops, and vanilla swaps it in place below.  Read in place (w_wad.h) it
+    // must be usable exactly as it lies: at an even address, on a host whose
+    // SHORT() changes nothing.  Otherwise it gets a zone copy of its own.
+    blockmaplump = W_LumpInPlace (lump);
+    inplace = blockmaplump && !((size_t) blockmaplump & 1)
+	      && SHORT ((short) 0x0102) == 0x0102;
+    if (!inplace)
+    {
+	blockmaplump = Z_Malloc (W_LumpLength (lump), PU_LEVEL, 0);
+	W_ReadLump (lump, blockmaplump);
+    }
+#else
     blockmaplump = W_CacheLumpNum (lump,PU_LEVEL);
+#endif
     blockmap = blockmaplump+4;
     count = W_LumpLength (lump)/2;
     if (count < 4)
 	I_Error ("P_LoadBlockMap: BLOCKMAP has no header");
 
+#ifdef WEB_LUMPS_IN_PLACE
+    if (!inplace)	// in place, the swap is the identity
+#endif
     for (i=0 ; i<count ; i++)
 	blockmaplump[i] = SHORT(blockmaplump[i]);
 		

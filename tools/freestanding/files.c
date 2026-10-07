@@ -13,6 +13,7 @@
 
 #include "doomtype.h"
 #include "web.h"
+#include "w_wad.h" /* W_WebFileInPlace (WEB_LUMPS_IN_PLACE) */
 #include "fs_platform.h"
 
 // ── Single preloaded WAD blob ─────────────────────────────────────────────────
@@ -54,6 +55,18 @@ boolean W_WebFileExists(const char* path)
     int dummy;
     return W_WebFile(path, &dummy) != NULL;
 }
+
+#ifdef WEB_LUMPS_IN_PLACE
+// The zero-copy build (fs-doom-zc): the blob is loaded once, before
+// D_DoomMain, and never moves or goes away, so lumps are read in place
+// (engine/core/w_wad.h).  Under WD_RO_WAD=1 it is also mprotect'd read-only,
+// which is what proves the engine never writes one.
+int W_WebFileInPlace(char* filename, unsigned char* data, int length)
+{
+    (void)filename;
+    return data && data == fs_wad_data && length == fs_wad_len;
+}
+#endif
 
 // ── Small-file bridge (config, saves) — no-ops ───────────────────────────────
 // m_misc.c calls these for .doomrc and savegame files.  Timedemos do not need
