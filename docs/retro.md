@@ -409,17 +409,22 @@ iteration per tic, as on a target at 35 Hz).
 | build | worst graded tic | mean tic | leg |
 |---|---|---|---|
 | x86 (gcc -m32 -O1), game only | 3,450,250 instructions | ~1.38 M | `floor-demand` |
-| x86, with the exact OPL2 synth and 8-channel mixer | 18,265,778 instructions | ~15.8 M | `floor-x86` |
+| x86, with the exact OPL2 synth and 8-channel mixer | 10,485,508 instructions (18,265,778 before the synth's savings) | ~8.1 M | `floor-x86` |
 | ARMv6-M (Cortex-M0+ code, qemu mps2-an385), game | 4,922,520 instructions | ~1.80 M | `armv6m-qemu` |
 | ARMv8-M (Cortex-M33 code, qemu mps2-an505), game | 2,588,800 instructions | ~1.04 M | `armv8m-qemu` |
 | N64 VR4300 in ares, game | 11.27 M cycles (5,633,118 COUNT) | 4.65 M | `n64-floor`, section 2 |
 
 - The exact synth (byte-identical to `tools/floor/synth-ref.json`, the L2
-  grade) is 14.3 M x86 instructions per tic; exact savings measured on x86
-  bring it to 5.97 M mean, 6.44 M worst (`tools/floor/synth-savings.py`). On a
-  real OPL2 chip (the L1 grade, vanilla's own setup) the CPU only sequences.
-  ARM counts for the synth are **not measured**; below they are scaled from
-  x86 by the engine's own ratio (ARMv8-M/x86 0.75), an estimate.
+  grade) was 14.3 M x86 instructions per tic. Its exact savings are now in
+  `engine/web/opl3.c` (bank 1 skipped until it is written, the noise LFSR
+  stepped once a sample, no resampler at the chip's rate), and fs-doom builds
+  it position-dependent: 6.53 M mean, 6.98 M worst at fs-doom's -O1, 5.96 M
+  and 6.42 M at -O2 (OPL2, `tools/floor/synth-cost.mjs`). `synth-exact` holds
+  it sample-identical to the unmodified core on all 137 IWAD scores, both
+  modes, and on random register streams. On a real OPL2 chip (the L1 grade,
+  vanilla's own setup) the CPU only sequences. ARM counts for the synth are
+  **not measured**; below, the -O2 worst tic is scaled from x86 by the
+  engine's own ratio (ARMv8-M/x86 0.75), an estimate.
 - The M0+ calls software helpers up to 19,646 times a tic for 64-bit multiply
   (`__aeabi_lmul`) and 3,414 for divide; their instructions are in its count.
 - Memory: the smallest zone that runs all 13 demos correctly with audio is
