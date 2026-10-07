@@ -99,6 +99,9 @@ PLAT_SRC=(
     "$REPO_ROOT/engine/web/opl3.c"
 )
 
-echo "be-build.sh: target=$BE_TARGET out=$OUT"
-$ZIG_CC "${CFLAGS[@]}" "${CORE_SRC[@]}" "${PLAT_SRC[@]}" -lm -o "$OUT"
+# CROSS_EXTRA_CFLAGS comes after CFLAGS, so it can override one (a red-proof
+# builds with -funsigned-char and must diverge); empty by default.
+read -r -a EXTRA <<< "${CROSS_EXTRA_CFLAGS:-}"
+echo "be-build.sh: target=$BE_TARGET out=$OUT${EXTRA[*]:+ extra=${EXTRA[*]}}"
+$ZIG_CC "${CFLAGS[@]}" "${EXTRA[@]}" "${CORE_SRC[@]}" "${PLAT_SRC[@]}" -lm -o "$OUT"
 echo "be-build.sh: built $OUT ($(file "$OUT" | grep -o 'ELF.*'))"

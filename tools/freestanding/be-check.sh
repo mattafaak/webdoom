@@ -33,7 +33,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 WAD_DIR="${1:-$REPO_ROOT/wads/lib}"
 OUT_DIR="${2:-$SCRIPT_DIR/out-be}"
-GOLDEN_DIR="$REPO_ROOT/tools/golden"
+# CROSS_GOLDEN_DIR grades against other goldens (red-proofs); default the real ones
+GOLDEN_DIR="${CROSS_GOLDEN_DIR:-$REPO_ROOT/tools/golden}"
 CROSS_LABEL="${CROSS_LABEL:-BE}"
 
 mkdir -p "$OUT_DIR"
