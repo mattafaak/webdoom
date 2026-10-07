@@ -41,8 +41,9 @@ extern thinker_t thinkercap;   /* p_tick.c   */
 int n64_trace[N64_MAX_TRACE];
 int n64_trace_len = 0;
 
-/* Compute one state hash — identical algorithm to fs_state_hash(). */
-static int
+/* Compute one state hash — identical algorithm to fs_state_hash().  Exported
+   for the floor log (n64_floor.c), which hashes every tic in mode A. */
+int
 n64_state_hash (void)
 {
     unsigned h = 0x9e3779b9u ^ (unsigned) gametic;

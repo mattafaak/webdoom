@@ -99,6 +99,7 @@ COMMON_FLAGS := -mabi=o64 -march=vr4300 -mtune=vr4300 \
                 -Wno-pointer-to-int-cast \
                 -I../../engine/core \
                 -I../../tools/freestanding \
+                -I../floor \
                 -I$(N64_INST)/mips64-elf/include \
                 -I.
 
@@ -118,6 +119,35 @@ ifdef N64_TIMEDEMO
 COMMON_FLAGS += -DN64_TIMEDEMO=\"$(N64_TIMEDEMO)\"
 endif
 
+# ── Floor gate builds (tools/floor/run-n64.sh) ───────────────────────────────
+# N64_FLOOR=A   correctness: renders every tic (no -nodraw) and records each
+#               tic's sim and render hash;
+# N64_FLOOR=B   timing: renders every tic, records COUNT per tic and the
+#               engine's stage timers, hashes nothing inside the demo;
+# either prints a FLOOR log (tools/floor/floor_log.h) after the demo.
+#   N64_FLOOR_NAME   the demo's graded name, e.g. doom-demo1 (required)
+#   N64_FLOOR_NODRAW 1 = put -nodraw back (the red-proof ROM)
+#   N64_BUILD        the build id the log carries (default: git short sha)
+# A floor build needs N64_TIMEDEMO.  Like N64_TIMEDEMO, these must be appended
+# above the two `:=` lines below.
+N64_BUILD ?= $(shell git -C ../.. rev-parse --short HEAD 2>/dev/null || echo unknown)
+ifneq ($(strip $(N64_FLOOR)),)
+  ifeq ($(filter A B,$(N64_FLOOR)),)
+    $(error N64_FLOOR=$(N64_FLOOR): must be A (correctness) or B (timing))
+  endif
+  ifndef N64_TIMEDEMO
+    $(error N64_FLOOR=$(N64_FLOOR) needs N64_TIMEDEMO=demoN)
+  endif
+  ifeq ($(strip $(N64_FLOOR_NAME)),)
+    $(error N64_FLOOR=$(N64_FLOOR) needs N64_FLOOR_NAME=<iwad>-<demo>)
+  endif
+  COMMON_FLAGS += -DN64_FLOOR=1 -DN64_FLOOR_MODE=$(if $(filter A,$(N64_FLOOR)),65,66) \
+                  -DN64_FLOOR_NAME=\"$(N64_FLOOR_NAME)\" -DN64_BUILD=\"$(N64_BUILD)\"
+  ifeq ($(N64_FLOOR_NODRAW),1)
+    COMMON_FLAGS += -DN64_FLOOR_NODRAW=1
+  endif
+endif
+
 # engine/core: C89 (DOOM source uses implicit-int, pre-C99 declarations).
 CORE_CFLAGS := $(COMMON_FLAGS) -std=gnu89
 
@@ -130,6 +160,12 @@ PLAT_CFLAGS := $(COMMON_FLAGS) -std=gnu11
 # project's second-most-repeated defect shape, and the `:=` ordering above is
 # exactly how it happened here.  Red-proof: move the ifdef block back below
 # these two lines and `make N64_TIMEDEMO=demo1` must stop with this error.
+ifneq ($(strip $(N64_FLOOR)),)
+  ifeq (,$(findstring -DN64_FLOOR_MODE,$(PLAT_CFLAGS)))
+    $(error N64_FLOOR=$(N64_FLOOR) was requested but -DN64_FLOOR_MODE is absent \
+from PLAT_CFLAGS: the floor block must precede the `:=` assignments)
+  endif
+endif
 ifdef N64_TIMEDEMO
   ifeq (,$(findstring -DN64_TIMEDEMO,$(PLAT_CFLAGS)))
     $(error N64_TIMEDEMO=$(N64_TIMEDEMO) was requested but -DN64_TIMEDEMO is \
@@ -167,11 +203,20 @@ LDFLAGS  := -mabi=o64 -march=vr4300 -mtune=vr4300 \
              -Wl,--wrap,strncpy \
              -Wl,-T$(LDSCRIPT)
 LDLIBS   := -ldragon -lm -ldragonsys -lc
+# The floor log's L flag: a level load, intermission or finale started in the
+# tic (n64_floor.c, as tools/freestanding/floor_wrap.c on the host).
+ifneq ($(strip $(N64_FLOOR)),)
+LDFLAGS  += -Wl,--wrap,P_SetupLevel -Wl,--wrap,WI_Start -Wl,--wrap,F_StartFinale
+endif
 
 CORE_DIR := ../../engine/core
 OUT_ELF  ?= n64-doom.elf
 OUT_ROM  ?= n64-doom.z64
 OBJ_DIR  ?= obj
+# engine/core objects read none of the -D flags above, so builds that differ
+# only in those may share one core directory (run-n64.sh builds it once, then
+# links many ROMs in parallel, each with its own OBJ_DIR for the shim).
+CORE_OBJ_DIR ?= $(OBJ_DIR)/core
 
 # engine/core sources: same excludes as freestanding build (we provide shims).
 CORE_EXCLUDE := $(CORE_DIR)/i_main.c \
@@ -193,10 +238,17 @@ PLAT_SRC := n64_main.c \
             cart_read_n64.c \
             perf_n64.c \
             n64_hash.c
+ifneq ($(strip $(N64_FLOOR)),)
+PLAT_SRC += n64_floor.c
+endif
 
 SRC := $(CORE_SRC) $(PLAT_SRC)
-OBJ := $(patsubst $(CORE_DIR)/%.c,$(OBJ_DIR)/core/%.o,$(filter $(CORE_DIR)/%,$(SRC))) \
+CORE_OBJ := $(patsubst $(CORE_DIR)/%.c,$(CORE_OBJ_DIR)/%.o,$(filter $(CORE_DIR)/%,$(SRC)))
+OBJ := $(CORE_OBJ) \
        $(patsubst %.c,$(OBJ_DIR)/plat/%.o,$(PLAT_SRC))
+ifneq ($(strip $(N64_FLOOR)),)
+OBJ += $(OBJ_DIR)/floor/floor_log.o
+endif
 
 all: $(OUT_ELF) $(OUT_ROM) size
 
@@ -231,13 +283,21 @@ endif
 # the stale object would have linked and this gate would have tested code that is
 # no longer in the tree.  freestanding, native-sanitize and baremetal already did
 # this; n64 and rp2040 did not.
-$(OBJ_DIR)/core/%.o: $(CORE_DIR)/%.c
+$(CORE_OBJ_DIR)/%.o: $(CORE_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 
 $(OBJ_DIR)/plat/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(PLAT_CFLAGS) -MMD -MP -c $< -o $@
+
+$(OBJ_DIR)/floor/%.o: ../floor/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(PLAT_CFLAGS) -MMD -MP -c $< -o $@
+
+# Only the engine objects: run-n64.sh builds these once before linking ROMs in
+# parallel, so no two makes race to write the same object.
+core-objs: $(CORE_OBJ)
 
 -include $(OBJ:.o=.d)
 
@@ -293,4 +353,4 @@ clean:
 	rm -rf $(OBJ_DIR) $(OUT_ELF) $(OUT_ELF).stripped $(OUT_ROM) \
 	       ares-uart.tmp
 
-.PHONY: all size boot-log clean
+.PHONY: all size boot-log clean core-objs

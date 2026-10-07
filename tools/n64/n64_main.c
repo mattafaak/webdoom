@@ -41,7 +41,23 @@
  * (It is also what makes the run finish under ares in minutes rather than
  * hours: D_Display returns immediately at d_main.c:234, so the software
  * rasteriser never runs.  That is a side benefit, not the reason.) */
-#ifdef N64_TIMEDEMO
+#if defined(N64_TIMEDEMO) && defined(N64_FLOOR)
+/* The floor build (N64_FLOOR=A|B) renders every tic: the floor gate's mode A
+ * checks each tic's framebuffer against tools/golden/<demo>-render.json, which
+ * were recorded without -nodraw, and its timing is the cost of the full game.
+ * N64_FLOOR_NODRAW=1 puts -nodraw back: the red-proof ROM, whose frozen
+ * framebuffer the gate must refuse at a named tic. */
+static const char* n64_argv[] = {
+    "n64-doom",
+    "-timedemo",
+    N64_TIMEDEMO,
+#ifdef N64_FLOOR_NODRAW
+    "-nodraw",
+#endif
+    NULL
+};
+static const int n64_argc = (int)(sizeof(n64_argv) / sizeof(n64_argv[0])) - 1;
+#elif defined(N64_TIMEDEMO)
 static const char* n64_argv[] = {
     "n64-doom",
     "-timedemo",
@@ -157,12 +173,20 @@ int main(void)
     //   → stderr → ISViewer → ares UART): the first sign a ROM boots.
     if (setjmp(n64_demo_jmp) != 0) {
         // Demo completed via longjmp from I_Error — normal exit path.
+#ifdef N64_FLOOR
+        debugf("N64 webdoom: demo completed normally (floor mode %c)\n",
+               (char)N64_FLOOR_MODE);
+        // The FLOOR log, after the demo and never during it (n64_floor.c);
+        // tools/floor/run-n64.sh reads it out of ares's captured stdout.
+        n64_floor_emit();
+#else
         debugf("N64 webdoom: demo completed normally, trace len=%d\n",
                n64_trace_len);
         // Print the trace over the debug log channel; run-n64-demos.sh reads it
         // out of ares's captured stdout.  See n64_dump_trace() for why this is
         // the extraction path rather than a GDB memory dump.
         n64_dump_trace();
+#endif
         // Then spin in the named breakpoint target, so a debugger still has
         // somewhere to attach for a post-mortem.
         n64_demo_complete_halt();
@@ -184,6 +208,25 @@ int main(void)
     // Per-tic hash recording: n64_record_hash() appends
     // fs_state_hash()-equivalent to n64_trace[] once per unique gametic,
     // exactly mirroring the freestanding i_main.c gate loop.
+#ifdef N64_FLOOR
+    // The floor loop: tools/freestanding/i_main.c's demo loop, one record per
+    // tic boundary (n64_floor.c).  Nothing is skipped: the floor log's tic i is
+    // the golden's entry i.
+    {
+        int last_tic = -1;
+        n64_floor_begin ();
+        for (;;)
+        {
+            wipeactive = 0; /* suppress non-deterministic melt wipes */
+            D_DoomFrame ();
+            if (gametic != last_tic)
+            {
+                n64_floor_tic ();
+                last_tic = gametic;
+            }
+        }
+    }
+#else
     {
         int last_tic = -1;
         for (;;)
@@ -197,6 +240,7 @@ int main(void)
             }
         }
     }
+#endif
     return 0;
 }
 

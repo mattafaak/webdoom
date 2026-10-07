@@ -72,5 +72,32 @@ void n64_demo_complete_halt(void);
 // n64_dump_trace(): print the whole trace over the debug log channel, so the
 // harness can read it out of ares's captured stdout without a debugger.
 void n64_dump_trace(void);
+// n64_state_hash(): the per-tic simulation hash itself (fs_state_hash()).
+int n64_state_hash(void);
+
+// ── Timing (perf_n64.c) ──────────────────────────────────────────────────────
+// C0_COUNT extended to 64 bits.  COUNT runs at half the CPU clock (46,875,000
+// counts a second) and wraps every 91.6 s, so it is extended in software on
+// every read; it must be read at least that often, which every tic does.
+unsigned long long n64_count64(void);
+
+// realtics from the timedemo's own "timed %i gametics in %i realtics" message
+// (i_system_n64.c), -1 until the demo has ended.
+extern volatile int n64_timedemo_realtics;
+
+// Bytes copied out of cartridge space by the memcpy wrapper (cart_read_n64.c):
+// the WAD bytes a zone cache miss costs.  The floor log reads and clears it at
+// every tic boundary.
+extern volatile unsigned n64_cart_bytes;
+
+// ── Floor gate (n64_floor.c; built only with N64_FLOOR=A|B) ──────────────────
+#ifdef N64_FLOOR
+extern volatile unsigned n64_floor_load;   // set by the --wrap load hooks
+extern unsigned n64_palette_version;       // i_video_n64.c: I_SetPalette calls
+unsigned n64_render_hash(void);            // fs_render_hash() on screens[0]
+void n64_floor_begin(void);                // after D_DoomMain: start the clock
+void n64_floor_tic(void);                  // once per tic, at the boundary
+void n64_floor_emit(void);                 // after the demo: print the log
+#endif
 
 #endif /* __N64_PLATFORM_H__ */

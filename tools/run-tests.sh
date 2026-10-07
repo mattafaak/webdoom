@@ -569,6 +569,13 @@ leg rv32-cross      zig,qemurv,wad "freestanding core 13/13 on RV32IMAC (soft-fl
 # longest leg by a wide margin (--no-slow skips it) and it is in the suite
 # because a gate nobody runs rots.
 leg n64-demos       n64,wad,slow,heavy "13/13 demo sim-hashes on emulated N64 (~8 min)" -- bash tools/n64/run-n64-demos.sh
+# The N64 in render mode: the same 13 demos with the renderer running every
+# tic (no -nodraw), each tic's sim AND render hash held to the goldens through
+# floor-gate --correctness, which can only say CORRECT or FAIL.  n64-demos is
+# the simulation alone; floor-x86 is the host.  Its timing (mode B, COUNT per
+# tic) is evidence, not this leg: tools/floor/run-n64.sh without --correctness.
+# Own out and work directories, so a full floor run's logs are never wiped.
+leg n64-floor       n64,wad,slow,heavy "13/13 demos rendered on emulated N64: sim + render hash every tic" -- bash tools/floor/run-n64.sh --correctness --out tools/floor/out-n64-correct --work tools/n64/n64_floor_work-correct
 leg demo-verify-cli build,wad  "the shipped demo-verify CLI itself, --all mode" -- node tools/demo-verify.mjs --all
 
 # ── netcode determinism ──────────────────────────────────────────────────────

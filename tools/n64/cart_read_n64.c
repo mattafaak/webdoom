@@ -16,6 +16,9 @@
 // the real libc routine, so the common RAM→RAM path is unaffected apart from a
 // single range test.
 //
+// n64_cart_bytes counts every byte memcpy takes out of cartridge space: the
+// floor log's M:<bytes> flag, the WAD traffic of a zone cache miss.
+//
 // Correctness note: our WAD pointer is KSEG1 (0xB…, uncached), so the aligned
 // word reads here need no cache management. is_cart() masks to the physical
 // address and matches PI domain 1 (0x10000000–0x1FBFFFFF), covering both KSEG0
@@ -29,6 +32,8 @@
 
 extern void*  __real_memcpy(void* dest, const void* src, size_t n);
 extern char*  __real_strncpy(char* dest, const char* src, size_t n);
+
+volatile unsigned n64_cart_bytes;
 
 /* PI cartridge domain 1, physical. */
 #define CART_PHYS_LO 0x10000000u
@@ -68,6 +73,7 @@ static void cart_read(void* dest, const void* src, size_t n)
 void* __wrap_memcpy(void* dest, const void* src, size_t n)
 {
     if (is_cart(src)) {
+        n64_cart_bytes += (unsigned)n;
         cart_read(dest, src, n);
         return dest;
     }

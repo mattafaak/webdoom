@@ -61,6 +61,7 @@ void n64_putc(int c)
 // ── Timedemo exit state ───────────────────────────────────────────────────────
 volatile int n64_timedemo_active   = 0;
 volatile int n64_timedemo_gametics = 0;
+volatile int n64_timedemo_realtics = -1;
 jmp_buf      n64_demo_jmp;
 
 // ── (a) MEMORY: static zone arena ────────────────────────────────────────────
@@ -157,6 +158,7 @@ void I_Error(char* error, ...)
     va_list argptr;
     char    buf[512];
     int     tics;
+    int     realtics = -1;
     const char* p;
 
     va_start(argptr, error);
@@ -168,9 +170,13 @@ void I_Error(char* error, ...)
     n64_last_error[sizeof(n64_last_error) - 1] = '\0';
 
     // Timedemo-end detection: "timed %i gametics in %i realtics"
+    // (g_game.c, G_CheckDemoStatus).  realtics is I_GetTime() at the end minus
+    // at the start, the demo's whole wall time in 35 Hz tics; it used to be
+    // discarded.  The floor log prints it beside its own COUNT total.
     if (n64_timedemo_active &&
-        sscanf(buf, "timed %i gametics in", &tics) == 1) {
+        sscanf(buf, "timed %i gametics in %i realtics", &tics, &realtics) >= 1) {
         n64_timedemo_gametics = tics;
+        n64_timedemo_realtics = realtics;
         longjmp(n64_demo_jmp, 1);
     }
 

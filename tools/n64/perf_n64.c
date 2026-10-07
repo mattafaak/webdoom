@@ -1,16 +1,21 @@
-// tools/n64/perf_n64.c — N64 perf shim.
+// tools/n64/perf_n64.c — N64 perf shim: the engine's stage timers in COUNT.
 //
-// engine/core's d_main.c and r_main.c unconditionally include "perf.h"
-// and call web_perf_now().  This file provides the N64 implementation:
-// all counters are zero-initialized; web_perf_now() returns 0.0.
-// Stage attribution (BSP/planes/masked/frame us) won't work without a
-// hardware counter, but the engine compiles and runs correctly.
-//
-// Future: use get_ticks_us() from libdragon for per-stage timing.
+// engine/core's d_main.c and r_main.c bracket each stage with web_perf_now()
+// and accumulate the difference into web_perf_*_us:
+//     sim     G_Ticker                      (d_main.c)
+//     frame   R_SetupFrame + buffer clears  (r_main.c, R_RenderPlayerView)
+//     bsp     R_RenderBSPNode (walls)
+//     planes  R_DrawPlanes    (floors, ceilings, sky)
+//     masked  R_DrawMasked    (sprites, masked midtextures, the weapon)
+// Here web_perf_now() returns C0_COUNT extended to 64 bits, so those
+// accumulators count COP0 COUNT ticks (half the 93.75 MHz CPU clock:
+// 46,875,000 a second), and the "_us" in their names is historical.
 //
 // engine/core has no N64-specific changes; the port is tools/n64/.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
+#include <cop0.h>   /* C0_COUNT */
 #include "perf.h"
+#include "n64_platform.h"
 
 int fs_perf_instr_fd = -1;
 
@@ -32,9 +37,22 @@ long web_perf_zone_hwm_p        = 0;
 long web_perf_zone_purge_count  = 0;
 long web_perf_zone_purged_bytes = 0;
 
-// web_perf_now: return 0.0 — stage attribution stubs.
-// Future: return (double)get_ticks_us() for per-stage measurements.
+// COUNT is 32 bits and wraps every 2^32 / 46,875,000 = 91.6 s, well inside one
+// demo.  Each read adds the (modular) distance since the previous read, so the
+// sum is exact as long as two reads are never 91.6 s apart; every tic reads it
+// at least twice.  Not reentrant: nothing calls it from an interrupt.
+static unsigned long long count64_base;
+static unsigned           count64_last;
+
+unsigned long long n64_count64(void)
+{
+    unsigned now = C0_COUNT();
+    count64_base += (unsigned)(now - count64_last);
+    count64_last = now;
+    return count64_base;
+}
+
 double web_perf_now(void)
 {
-    return 0.0;
+    return (double)n64_count64();
 }
