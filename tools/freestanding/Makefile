@@ -54,7 +54,8 @@ endif
 # The floor gate's tic flags (floor_wrap.c): a level load, intermission or
 # finale starting, and the bytes a lump copy takes out of the WAD blob.
 FLOOR_WRAP := -Wl,--wrap=P_SetupLevel,--wrap=WI_Start,--wrap=F_StartFinale,--wrap=memcpy
-LDFLAGS := -m32 -lm $(FLOOR_WRAP)
+# -no-pie: the synth's objects are position-dependent (SYNTH_NOPIE, below)
+LDFLAGS := -m32 -no-pie -lm $(FLOOR_WRAP)
 
 CORE_DIR := ../../engine/core
 OUT      ?= fs-doom
@@ -110,6 +111,19 @@ $(OBJDIR)/plat/%.o: %.c
 AUDIO_OBJ := $(patsubst %.c,$(OBJDIR)/plat/%.o,$(AUDIO_SRC) fs_audio.c)
 $(AUDIO_OBJ): CFLAGS += $(SYNTH_FP) $(SYNTH_INC)
 $(AUDIO_OBJ): Makefile
+# The synth itself (opl3.c, and mus_opl.c through fs_mus.c) is built
+# position-dependent, as a bare-metal build is: gcc here defaults to PIE, and
+# i386 PIC code reaches every table and global through __x86.get_pc_thunk
+# (8.8% of the synth's profile in phase 1a).  -fno-pie takes the synth's
+# instructions 10.0% lower: 254.01 -> 228.69 M per second of audio, OPL2 -O1
+# (tools/floor/synth-savings.py, shipped-O1 against shipped-O1-nopie).  Only
+# those two objects: fs_audio.c, sfx_mix.c and the game run in a WD_AUDIO=0
+# tic too, and the game-only demand (tools/golden/floor-demand.json) must not
+# move.  On the other targets the flag is moot: wasm has no PIC unless asked,
+# and zig cc -static and arm-none-eabi-gcc emit position-dependent code by
+# default.
+SYNTH_NOPIE := -fno-pie
+$(patsubst %.c,$(OBJDIR)/plat/%.o,$(AUDIO_SRC)): CFLAGS += $(SYNTH_NOPIE)
 
 # the const tables (LEAN=1): the engine's own generator, run on the host,
 # checksum included; tables.o includes the result
@@ -135,7 +149,8 @@ $(OBJDIR)/floor/%.o: ../floor/%.c
 # where).  synth-bench-x87 is the -O1 build at gcc's default x87 code, kept for
 # that evidence.  stub/ supplies an empty EMSCRIPTEN_KEEPALIVE; --wrap taps the
 # register stream; -no-pie keeps the profile's sampled addresses the binary's
-# own.  See synth-bench.c.
+# own; -fno-pie is fs-doom's SYNTH_NOPIE (above), for all of synth-bench.
+# See synth-bench.c.
 SYNTH_SRC   := fs_mus.c $(WEB_DIR)/opl3.c $(WEB_DIR)/synth_main.c synth-bench.c
 SYNTH_LD    := -m32 -no-pie -Wl,--wrap=OPL3_WriteRegBuffered -lm
 SYNTH_OBJ_1 := $(addprefix obj/synth-O1/,$(notdir $(SYNTH_SRC:.c=.o)))
@@ -158,15 +173,15 @@ synth-bench-x87: $(SYNTH_OBJ_X)
 
 obj/synth-O1/%.o: %.c Makefile
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(SYNTH_FP) $(SYNTH_INC) -MMD -MP -c $< -o $@
+	$(CC) $(CFLAGS) $(SYNTH_NOPIE) $(SYNTH_FP) $(SYNTH_INC) -MMD -MP -c $< -o $@
 
 obj/synth-O2/%.o: %.c Makefile
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -O2 $(SYNTH_FP) $(SYNTH_INC) -MMD -MP -c $< -o $@
+	$(CC) $(CFLAGS) -O2 $(SYNTH_NOPIE) $(SYNTH_FP) $(SYNTH_INC) -MMD -MP -c $< -o $@
 
 obj/synth-x87/%.o: %.c Makefile
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(SYNTH_INC) -MMD -MP -c $< -o $@
+	$(CC) $(CFLAGS) $(SYNTH_NOPIE) $(SYNTH_INC) -MMD -MP -c $< -o $@
 
 -include $(SYNTH_OBJ_1:.o=.d) $(SYNTH_OBJ_2:.o=.d) $(SYNTH_OBJ_X:.o=.d)
 
@@ -190,11 +205,11 @@ $(SYNTH_EXACT_OUT): $(SYNTH_EXACT_OBJS)
 
 $(SYNTH_EXACT_OBJ)/opl3.o: $(SYNTH_EXACT_OPL3) Makefile
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -O2 $(SYNTH_FP) $(SYNTH_INC) -MMD -MP -c $< -o $@
+	$(CC) $(CFLAGS) -O2 $(SYNTH_NOPIE) $(SYNTH_FP) $(SYNTH_INC) -MMD -MP -c $< -o $@
 
 $(SYNTH_EXACT_OBJ)/%.o: %.c Makefile
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -O2 $(SYNTH_FP) $(SYNTH_INC) -MMD -MP -c $< -o $@
+	$(CC) $(CFLAGS) -O2 $(SYNTH_NOPIE) $(SYNTH_FP) $(SYNTH_INC) -MMD -MP -c $< -o $@
 
 -include $(SYNTH_EXACT_OBJS:.o=.d)
 

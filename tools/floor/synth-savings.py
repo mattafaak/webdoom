@@ -5,8 +5,9 @@
 # measured them; A, C and D are now made real in engine/web/opl3.c, D in an
 # exact-for-any-stream form, and tools/synth-exact-test.mjs holds it to this
 # reference).  Each variant is written to a temporary directory, built into a
-# synth-bench with the Makefile's flags, and run over the 13 demo songs in both
-# modes at 49,716 Hz.
+# synth-bench with the Makefile's flags (less its -fno-pie, which is the
+# `nopie` suffix here), and run over the 13 demo songs in both modes at
+# 49,716 Hz.
 # A variant is EXACT when every render's samples (L2) equal
 # tools/floor/synth-ref.json's, which tools/synth-native-test.mjs holds equal to
 # build/synth.wasm.  Counts are user-space instructions, pinned to P-cores.
@@ -106,7 +107,7 @@ def make_flags():
                          text=True, check=True).stdout
     line = next(l for l in out.splitlines() if l.startswith('gcc') and 'opl3.c' in l)
     flags = line.split()[1:]
-    flags = [f for f in flags if f not in ('-MMD', '-MP', '-c', '-o') and not f.endswith(('.c', '.o'))]
+    flags = [f for f in flags if f not in ('-MMD', '-MP', '-c', '-o', '-fno-pie') and not f.endswith(('.c', '.o'))]
     return [f if not f.startswith('-I') else '-I' + os.path.join(FS, f[2:]) for f in flags]
 
 
