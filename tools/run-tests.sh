@@ -565,6 +565,19 @@ leg synth-exact     gcc,wad,heavy "OPL synth == its pre-savings reference: 137 I
 # under -icount are demand, not time: the verdict is DEMAND, never PASS.
 leg armv6m-qemu     qemucm,wad,heavy "Cortex-M0+ code (ARMv6-M, mps2-an385): 13 demos correct, instructions per tic" -- bash tools/cortexm/run-floor.sh armv6m
 leg armv8m-qemu     qemucm,wad,heavy "Cortex-M33 code (ARMv8-M, mps2-an505): 13 demos correct, instructions per tic" -- bash tools/cortexm/run-floor.sh armv8m
+# The zero-copy builds (ZC=1): the WAD in the board's PSRAM as its flash would
+# be, every lump read where it lies.  A WAD longer than PSRAM's 16 MiB
+# (plutonia, tnt) continues in the ZONE SSRAM above a 2 MiB zone arena.
+leg armv6m-zc       qemucm,wad,heavy "Cortex-M0+ code, lumps read in place: 13 demos correct, instructions per tic" -- bash tools/cortexm/run-floor.sh armv6m --zero-copy
+leg armv8m-zc       qemucm,wad,heavy "Cortex-M33 code, lumps read in place: 13 demos correct, instructions per tic" -- bash tools/cortexm/run-floor.sh armv8m --zero-copy
+# The alignment proof: the four IWADs rewritten with every lump and the
+# directory at an odd offset (tools/floor/misalign-wad.mjs), on the board that
+# traps an unaligned access.  Only byte-safe lump reads (LUMP_PACKED,
+# LUMP_LONG) survive it; with LUMP_PACKED emptied all 13 demos fault UNALIGNED.
+leg armv6m-zc-misaligned qemucm,wad,heavy "Cortex-M0+, lumps read in place at odd addresses: 13 demos correct" -- bash tools/cortexm/run-floor.sh armv6m --zero-copy --misaligned --correctness
+# The zero-copy zone minimum on the board: 924 KiB, as on the host (ARMv8-M
+# measures the same; the copying build's is 1,200 KiB there, without audio).
+leg zone-min-armv6m-zc qemucm,wad,heavy "Cortex-M0+, lumps read in place: smallest zone is still 924 KiB" -- node tools/floor/zone-min.mjs --cortexm armv6m --zero-copy --check 924
 # The ARM reference.  wasm is architecture-independent, so only a native build
 # tests ARM codegen, ABI and alignment; emulated cycles are not hardware
 # cycles, so this gates correctness, not timing.  zig cross-builds the

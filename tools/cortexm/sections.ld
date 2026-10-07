@@ -2,8 +2,12 @@
  *
  *   CODE   vectors, text, rodata, data, the small .bss, and the stack at
  *          the top (CM_STACK_SIZE, painted at reset by crt0.S)
- *   ZONE   the 4 MiB zone arena, alone (i_system.c's fs_arena)
- *   PSRAM  the screens, the harness's per-tic arrays, newlib's heap
+ *   ZONE   the zone arena (i_system.c's fs_arena, 4 MiB by default: the
+ *          Makefile's ZONE_KB), then .wadtail, the rest of the region
+ *   BIG    the screens, the harness's per-tic arrays, newlib's heap: PSRAM
+ *          in the default build (an385.ld, an505.ld); CODE in the zero-copy
+ *          build (*-zc.ld), whose PSRAM holds the WAD itself, which then
+ *          continues in .wadtail if it is longer than 16 MiB (wad_semi.c)
  *
  * qemu loads the ELF at its link addresses, so .data needs no copy.  An input
  * section goes to the FIRST output section whose pattern matches it, which is
@@ -38,6 +42,11 @@ SECTIONS
     . = ALIGN(4);
     _ezone = .;
   } > ZONE
+  .wadtail (NOLOAD) : ALIGN(8) {
+    _swadtail = .;
+    . = ORIGIN(ZONE) + LENGTH(ZONE);
+    _ewadtail = .;
+  } > ZONE
 
   .big (NOLOAD) : ALIGN(8) {
     _sbig = .;
@@ -45,12 +54,12 @@ SECTIONS
     *(.bss.cm_big.*)
     . = ALIGN(4);
     _ebig = .;
-  } > PSRAM
+  } > BIG
   .heap (NOLOAD) : ALIGN(8) {
     _heap_start = .;
     . += CM_HEAP_SIZE;
     _heap_end = .;
-  } > PSRAM
+  } > BIG
 
   .bss (NOLOAD) : ALIGN(8) {
     _sbss = .;

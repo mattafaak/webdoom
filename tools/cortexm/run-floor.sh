@@ -6,6 +6,13 @@
 #            [--golden-dir DIR]              grade against other goldens
 #            [--cflags "..." --variant NAME] an extra-flags build, in its own
 #                                            build dir (red-proofs)
+#            [--zero-copy]                   the ZC=1 build: lumps read in place
+#                                            out of a WAD loaded into PSRAM
+#            [--zone KB]                     hand the engine a KB KiB zone
+#            [--correctness]                 mode A only, graded CORRECT/FAIL
+#            [--misaligned]                  with --zero-copy: every demo's WAD
+#                                            rewritten with each lump at an odd
+#                                            address (tools/floor/misalign-wad.mjs)
 #
 #   armv6m  -mcpu=cortex-m0plus code on mps2-an385 (exact M0+ instruction
 #           counts; unaligned accesses trap as on an M0+)
@@ -46,6 +53,10 @@ JOBS="$(nproc)"
 GOLDEN=()
 XCFLAGS=""
 VARIANT=""
+ZC=0
+ZONE=""
+CORRECT=0
+MISALIGN=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --opt) OPT="$2"; shift 2 ;;
@@ -55,9 +66,20 @@ while [ $# -gt 0 ]; do
         --golden-dir) GOLDEN=(--golden-dir "$2"); shift 2 ;;
         --cflags) XCFLAGS="$2"; shift 2 ;;
         --variant) VARIANT="$2"; shift 2 ;;
+        --zero-copy) ZC=1; shift ;;
+        --zone) ZONE="$2"; shift 2 ;;
+        --correctness) CORRECT=1; shift ;;
+        --misaligned) MISALIGN=1; shift ;;
         *) echo "FAIL run-floor: unknown argument '$1'"; exit 2 ;;
     esac
 done
+case "$ZONE" in ''|*[!0-9]*) [ -z "$ZONE" ] || { echo "FAIL run-floor: --zone takes KiB, not '$ZONE'"; exit 2; } ;; esac
+if [ "$MISALIGN" = 1 ] && [ "$ZC" != 1 ]; then
+    echo "FAIL run-floor: --misaligned needs --zero-copy (the default build copies every lump into the aligned zone)"; exit 2
+fi
+if [ "$COUNT" = 1 ] && [ "$CORRECT" = 1 ]; then
+    echo "FAIL run-floor: --count runs mode B only and --correctness mode A only"; exit 2
+fi
 case "$ISA" in
     armv6m) BOARD=mps2-an385; TARGET=armv6m-qemu ;;
     armv8m) BOARD=mps2-an505; TARGET=armv8m-qemu ;;
@@ -71,18 +93,22 @@ done
 
 SUF=""
 [ "$COUNT" = 1 ] && SUF=-count
+[ "$ZC" = 1 ] && SUF="$SUF-zc"
 if [ -n "$XCFLAGS" ]; then
     [ -n "$VARIANT" ] || { echo "FAIL run-floor: --cflags needs --variant NAME (its own build dir)"; exit 2; }
 fi
 [ -n "$VARIANT" ] && SUF="$SUF-$VARIANT"
 B="$CM/build/$ISA$OPT$SUF"
-OUT="${OUT:-$CM/out/$ISA$OPT$SUF}"
+OSUF="$SUF"
+[ -n "$ZONE" ] && OSUF="$OSUF-z$ZONE"
+[ "$MISALIGN" = 1 ] && OSUF="$OSUF-misaligned"
+OUT="${OUT:-$CM/out/$ISA$OPT$OSUF}"
 WADS="$ROOT/wads/lib"
 
 echo "run-floor: building $ISA $OPT${SUF:+ ($SUF)}"
 BLOG="$B.log"
 mkdir -p "$CM/build"
-make -s -C "$CM" ISA="$ISA" OPT="$OPT" COUNT="$COUNT" B="$B" EXTRA_CFLAGS="$XCFLAGS" > "$BLOG" 2>&1 ||
+make -s -C "$CM" ISA="$ISA" OPT="$OPT" COUNT="$COUNT" ZC="$ZC" B="$B" EXTRA_CFLAGS="$XCFLAGS" > "$BLOG" 2>&1 ||
     { tail -20 "$BLOG"; echo "FAIL run-floor: build failed"; exit 1; }
 grep -E '^(built|armv)' "$BLOG" || true
 ELF="$B/cm-doom.elf"
@@ -94,6 +120,19 @@ BUILD="$GITSHA$OPT$SUF"
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
+
+# --misaligned: the same WADs, each lump moved to an odd address (lump bytes,
+# names and order unchanged), so every multi-byte field the engine reads out of
+# a lump in place is unaligned: on the armv6m board, where an unaligned access
+# traps, only byte-safe reads survive (engine/core/w_wad.h)
+if [ "$MISALIGN" = 1 ]; then
+    mkdir -p "$OUT/wads"
+    for w in doom.wad doom2.wad tnt.wad plutonia.wad; do
+        node "$ROOT/tools/floor/misalign-wad.mjs" "$WADS/$w" "$OUT/wads/$w" ||
+            { echo "FAIL run-floor: could not write a misaligned $w"; exit 1; }
+    done
+    WADS="$OUT/wads"
+fi
 
 # qemu's -semihosting-config splits on commas: a path with one cannot pass
 for p in "$OUT" "$WADS"; do
@@ -151,12 +190,15 @@ DEMOS=(
 )
 MODES="A B"
 [ "$COUNT" = 1 ] && MODES="B"
+[ "$CORRECT" = 1 ] && MODES="A"
+ZARG=()
+[ -n "$ZONE" ] && ZARG=(-zone "$ZONE")
 
 run_demo () {   # run_demo <wad> <present-as> <demo> <name> <mode>
     local wad="$1" as="$2" demo="$3" name="$4" mode="$5" rc=0
     qemu "$ELF" "$OUT/$name.$mode.uart" cm-doom -wad "$WADS/$wad" -as "$as" -timedemo "$demo" \
         -floor "$OUT/$name.$mode.log" -mode "$mode" -name "$name" -build "$BUILD" \
-        -stats "$OUT/$name.$mode.stats" || rc=$?
+        -stats "$OUT/$name.$mode.stats" "${ZARG[@]}" || rc=$?
     echo "$rc" > "$OUT/$name.$mode.rc"
 }
 
@@ -206,6 +248,7 @@ if [ "$COUNT" = 1 ]; then
     # helpers: the same engine machine code, the same run to the same end.
     MB="$CM/build/$ISA$OPT"
     MO="$CM/out/$ISA$OPT"
+    [ "$ZC" = 1 ] && { MB="$MB-zc"; MO="$MO-zc"; }
     [ -n "$VARIANT" ] && { MB="$MB-$VARIANT"; MO="$MO-$VARIANT"; }
     [ -d "$MB" ] && [ -d "$MO" ] || { echo "FAIL run-floor: --count needs the measured build's run first ($MO)"; exit 1; }
     differ=0; nobj=0
@@ -227,5 +270,20 @@ if [ "$COUNT" = 1 ]; then
     echo "PASS run-floor: helper-counting build of $TARGET: $nobj of $nobj engine objects are the measured build's code, $same of ${#DEMOS[@]} demos end in its mode-A state (stats in $OUT/*.B.stats; not graded as timing)"
     exit 0
 fi
+# the zero-copy build: where the WAD was, and the heap it used (stats files)
+if [ "$ZC" = 1 ]; then
+    awk '/^WAD / { runs++; split("", w)
+                   for (i = 2; i <= NF; i++) { split($i, kv, "="); w[kv[1]] = kv[2] }
+                   if (w["in_place"] != 1 || w["reads"] != 0) bad++
+                   if (w["tail"] > 0) tails++ }
+         /^MEM / { split($3, h, "="); if (h[2] + 0 > hp) hp = h[2] + 0 }
+         END { printf "  zero-copy: %d of %d runs read every lump in place (%d with part of the WAD in .wadtail); heap peak %d B\n",
+                      runs - bad, runs, tails, hp; exit (bad || !runs) ? 1 : 0 }' "$OUT"/*.stats ||
+        { echo "FAIL run-floor: a zero-copy run did not read its WAD in place"; exit 1; }
+fi
+
 # ── 5. the verdict ───────────────────────────────────────────────────────────
+if [ "$CORRECT" = 1 ]; then
+    exec node "$ROOT/tools/floor/floor-gate.mjs" --correctness "${GOLDEN[@]}" "$OUT"/*.log
+fi
 exec node "$ROOT/tools/floor/floor-gate.mjs" "${GOLDEN[@]}" "$OUT"/*.log

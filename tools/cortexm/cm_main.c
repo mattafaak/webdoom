@@ -17,7 +17,13 @@
 //
 // The command line arrives by semihosting (qemu -semihosting-config ...,arg=):
 //   cm-doom -wad PATH -as NAME -timedemo demoN -floor LOG -mode A|B
-//           -name DEMO -build ID -stats FILE
+//           -name DEMO -build ID -stats FILE [-zone KB]
+// -zone hands the engine only the first KB KiB of the zone arena (as fs-doom's
+// WD_ZONE_KB does), so one binary can bisect the smallest zone that works.
+//
+// The zero-copy build (Makefile ZC=1, CM_ZERO_COPY) reads lumps in place
+// (WEB_LUMPS_IN_PLACE): the WAD is put in guest memory before the engine
+// starts (wad_semi.c's cm_wad_load) instead of being read through the window.
 //
 // Units.  qemu runs with -icount shift=0: one guest instruction is 1 ns of
 // virtual time.  A tic's instructions are (timer steps) x CM_INSN_PER_TICK, to
@@ -53,6 +59,12 @@ extern int screenblocks;        /* m_menu.c */
 unsigned fs_render_hash (void); /* tools/freestanding/i_video.c */
 unsigned cm_wad_open (const char* path, const char* present_as);
 extern unsigned cm_wad_reads;
+#ifdef CM_ZERO_COPY
+unsigned cm_wad_load (const char* path, const char* present_as);
+extern unsigned cm_wad_image, cm_wad_tail;
+#endif
+extern int fs_zone_bytes;     /* tools/freestanding/i_system.c */
+unsigned cm_heap_peak (void); /* syscalls.c */
 
 // ── floor_wrap.c's tic flags (it is linked with the same --wrap hooks) ───────
 volatile unsigned fs_floor_load;
@@ -172,6 +184,7 @@ void cm_start (void)
     int argc = 0;
     char* p;
     const char *wad, *as, *demo, *floor_path, *mode_s, *name, *build, *stats;
+    const char* zone_kb;
     char mode;
     unsigned stack_demo, last, k;
     int last_tic;
@@ -204,6 +217,19 @@ void cm_start (void)
     if ((mode_s[0] != 'A' && mode_s[0] != 'B') || mode_s[1])
         need (NULL, "-mode A or -mode B");
     mode = mode_s[0];
+    zone_kb = arg (argc, argv, "-zone");
+    if (zone_kb)
+    {
+        int kb = atoi (zone_kb);
+        if (kb <= 0 || (long) kb * 1024 > (long) FS_ZONE_SIZE)
+        {
+            cm_uart_puts ("FAIL cm-doom: -zone ");
+            cm_uart_puts (zone_kb);
+            cm_uart_puts (" is not inside the arena (Makefile ZONE_KB)\n");
+            sh_exit (2);
+        }
+        fs_zone_bytes = kb * 1024;
+    }
 
     cm_uart_puts ("cm-doom: " CM_TARGET " on " CM_BOARD_NAME ", ");
     cm_uart_puts (name);
@@ -211,7 +237,11 @@ void cm_start (void)
     cm_uart_putc (mode);
     cm_uart_puts ("\n");
 
+#ifdef CM_ZERO_COPY
+    cm_wad_load (wad, as);
+#else
     cm_wad_open (wad, as);
+#endif
 
     fwd[0] = "cm-doom";
     fwd[1] = "-timedemo";
@@ -335,7 +365,7 @@ done:
         h.build = build;
         h.view = screenblocks;
         h.detail = detailLevel;
-        h.zone = (unsigned) FS_ZONE_SIZE;
+        h.zone = (unsigned) fs_zone_bytes;
         h.precache = 0;
         h.mode = mode;
         floor_header (&h);
@@ -368,6 +398,18 @@ done:
         out_putu ((unsigned) ((char*) _stack_top - (char*) _stack_bottom));
         out_puts ("\nWAD reads=");
         out_putu (cm_wad_reads);
+#ifdef CM_ZERO_COPY
+        out_puts (" in_place=1 image=");
+        out_putu (cm_wad_image);
+        out_puts (" tail=");
+        out_putu (cm_wad_tail);
+#else
+        out_puts (" in_place=0");
+#endif
+        out_puts ("\nMEM zone=");
+        out_putu ((unsigned) fs_zone_bytes);
+        out_puts (" heap_peak=");
+        out_putu (cm_heap_peak ());
         out_puts ("\nHELPERS");
 #ifdef CM_COUNT_HELPERS
         {

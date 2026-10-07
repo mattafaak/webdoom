@@ -9,8 +9,16 @@
 #   COUNT=1            also wrap every libgcc helper the objects call with a
 #                      counter (helpers.S): exact calls per tic, at ~9 extra
 #                      instructions a call, so a counting build is never timed
+#   ZC=1               the zero-copy build: lumps are read in place
+#                      (WEB_LUMPS_IN_PLACE, engine/core/w_wad.h) out of a WAD
+#                      put in PSRAM at boot (wad_semi.c's cm_wad_load), with
+#                      the screens, per-tic arrays and heap moved to CODE
+#                      (an385-zc.ld, an505-zc.ld)
+#   ZONE_KB=N          the zone arena, KiB: 4096 by default, 2048 with ZC=1,
+#                      which leaves the rest of the ZONE SSRAM to .wadtail
+#                      (the part of a WAD longer than 16 MiB)
 #
-# Products, under build/<isa><opt>[-count]/:
+# Products, under build/<isa><opt>[-count][-zc]/ (run-floor.sh passes B):
 #   cm-doom.elf  cm-doom.map  helpers.txt (the libgcc helpers the objects call)
 #   cm-selftest.elf (the instrument's red-proof, selftest.c)
 #
@@ -18,15 +26,22 @@
 # built for size, and its memcpy/memset would not be what a port ships).
 # engine/core is compiled unmodified; the platform layer is
 # tools/freestanding's, with four port hooks passed in as macros:
-#   FS_ZONE_SIZE_OVERRIDE  the 4 MiB zone (alone in its own 4 MiB SRAM)
+#   FS_ZONE_SIZE_OVERRIDE  the zone arena, ZONE_KB (in its own 4 MiB SRAM)
 #   FS_PERF_COUNTER        web_perf_now() reads the board timer (perf.c)
-#   FS_WAD_READ            lump copies come from semihosting (floor_wrap.c)
+#   FS_WAD_READ            lump copies come from semihosting (floor_wrap.c);
+#                          not in a ZC=1 build, which copies no lump
 #   FS_GET_TIME            I_GetTime reads the board timer (i_system.c)
 # Copyright (C) 2026, GPL-2.0-or-later.
 
 ISA   ?= armv6m
 OPT   ?= -O1
 COUNT ?= 0
+ZC    ?= 0
+ifeq ($(ZC),1)
+ZONE_KB ?= 2048
+else
+ZONE_KB ?= 4096
+endif
 
 CC      := arm-none-eabi-gcc
 NM      := arm-none-eabi-nm
@@ -49,7 +64,23 @@ ifeq ($(filter -O1 -O2,$(OPT)),)
 $(error OPT must be -O1 or -O2, not '$(OPT)')
 endif
 
-SUFFIX := $(if $(filter 1,$(COUNT)),-count,)
+ifeq ($(filter 0 1,$(ZC)),)
+$(error ZC must be 0 or 1, not '$(ZC)')
+endif
+ifeq ($(ZC),1)
+LDS    := $(LDS:.ld=-zc.ld)
+ZC_FLAGS := -DWEB_LUMPS_IN_PLACE -DCM_ZERO_COPY
+WAD_READ :=
+# the heap holds lumpinfo, lumpcache and a long WAD's directory copy: the
+# stats file's heap_peak says how much of this it used
+ZC_LD  := -Wl,--defsym=CM_HEAP_SIZE=524288
+else
+ZC_FLAGS :=
+WAD_READ := -DFS_WAD_READ=cm_wad_read
+ZC_LD  :=
+endif
+
+SUFFIX := $(if $(filter 1,$(COUNT)),-count,)$(if $(filter 1,$(ZC)),-zc,)
 B      := build/$(ISA)$(OPT)$(SUFFIX)
 CORE   := ../../engine/core
 FS     := ../freestanding
@@ -62,8 +93,8 @@ CFLAGS := $(CPU) $(OPT) -g -std=gnu89 -DNORMALUNIX -Dalloca=__builtin_alloca \
           -fno-strict-aliasing -fsigned-char -fno-short-enums \
           -ffunction-sections -fdata-sections \
           -D_POSIX_TIMERS=1 -D_POSIX_MONOTONIC_CLOCK=1 \
-          '-DFS_ZONE_SIZE_OVERRIDE=(4*1024*1024)' \
-          -DFS_PERF_COUNTER=cm_ticks -DFS_WAD_READ=cm_wad_read -DFS_GET_TIME=cm_get_time \
+          '-DFS_ZONE_SIZE_OVERRIDE=($(ZONE_KB)*1024)' $(ZC_FLAGS) \
+          -DFS_PERF_COUNTER=cm_ticks $(WAD_READ) -DFS_GET_TIME=cm_get_time \
           $(BOARD) -DCM_TARGET='"$(TARGET)"' \
           -DCM_BUILD_DESC='"gcc$(shell $(CC) -dumpversion)$(OPT)-newlib$(SUFFIX)"' \
           $(if $(filter 1,$(COUNT)),-DCM_COUNT_HELPERS,) \
@@ -96,7 +127,7 @@ ST_OBJ := $(B)/crt0.o $(addprefix $(B)/cm/,board.o fault.o semihost.o syscalls.o
           $(B)/loops.o
 
 FLOOR_WRAP := -Wl,--wrap=P_SetupLevel,--wrap=WI_Start,--wrap=F_StartFinale,--wrap=memcpy
-LDFLAGS := $(CPU) -nostartfiles -T $(LDS) -Wl,--gc-sections -Wl,--no-enum-size-warning
+LDFLAGS := $(CPU) -nostartfiles -T $(LDS) -Wl,--gc-sections -Wl,--no-enum-size-warning $(ZC_LD)
 LIBS    := -Wl,--start-group -lc -lm -lgcc -Wl,--end-group
 
 all: $(B)/cm-doom.elf $(B)/cm-selftest.elf
@@ -104,7 +135,7 @@ all: $(B)/cm-doom.elf $(B)/cm-selftest.elf
 # Every object depends on the flags it was compiled with: make tracks files,
 # not command lines, so without this a changed -D or OPT leaves stale objects
 # that link cleanly and measure the old build.
-FLAGS_NOW := $(CC) $(CPU) $(CFLAGS)
+FLAGS_NOW := $(CC) $(CPU) $(CFLAGS) $(LDS) $(ZC_LD)
 $(B)/flags.txt: FORCE
 	@mkdir -p $(B)
 	@echo '$(subst ','\'',$(FLAGS_NOW))' | cmp -s - $@ || echo '$(subst ','\'',$(FLAGS_NOW))' > $@
@@ -131,12 +162,12 @@ HELPER_WRAP = $(shell sed 's/^/-Wl,--wrap=/' $(B)/helpers.txt 2>/dev/null)
 $(B)/cm-doom.elf: $(B)/helpers.o
 endif
 
-$(B)/cm-doom.elf: $(OBJ) $(LDS) sections.ld $(B)/helpers.txt
+$(B)/cm-doom.elf: $(OBJ) $(LDS) sections.ld $(B)/helpers.txt $(B)/flags.txt
 	@$(CC) $(LDFLAGS) $(FLOOR_WRAP) $(HELPER_WRAP) -Wl,-Map=$(B)/cm-doom.map \
 	    $(OBJ) $(HELPER_OBJ) $(LIBS) -o $@
 	@$(SIZE) $@ | tail -1 | awk '{printf "built %s: text %d data %d bss %d (B)\n", "$@", $$1, $$2, $$3}'
 
-$(B)/cm-selftest.elf: $(ST_OBJ) $(LDS) sections.ld
+$(B)/cm-selftest.elf: $(ST_OBJ) $(LDS) sections.ld $(B)/flags.txt
 	@$(CC) $(LDFLAGS) -Wl,-Map=$(B)/cm-selftest.map $(ST_OBJ) $(LIBS) -o $@
 
 $(B)/crt0.o: crt0.S $(B)/flags.txt

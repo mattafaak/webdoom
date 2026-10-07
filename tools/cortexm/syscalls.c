@@ -37,9 +37,11 @@ int _write (int fd, const char* buf, int n)
     return n;
 }
 
+static char* brk = _heap_start;
+static char* brk_peak = _heap_start;
+
 void* _sbrk (ptrdiff_t incr)
 {
-    static char* brk = _heap_start;
     char* prev = brk;
     if (incr > _heap_end - brk || incr < _heap_start - brk)
     {
@@ -47,7 +49,15 @@ void* _sbrk (ptrdiff_t incr)
         return (void*) -1;
     }
     brk += incr;
+    if (brk > brk_peak)
+        brk_peak = brk;
     return prev;
+}
+
+// the most of the heap ever handed out, for the stats file (RAM accounting)
+unsigned cm_heap_peak (void)
+{
+    return (unsigned) (brk_peak - _heap_start);
 }
 
 void _exit (int code)
