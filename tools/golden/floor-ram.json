@@ -4,7 +4,7 @@
   "Builds: default, zc (ZERO_COPY=1), lean (LEAN=1), leanzc (LEAN=1 ZERO_COPY=1), full (LEAN=1 ZERO_COPY=1 LEAN_LEVELS=1, the full memory diet).",
   "engine, screens, audio, platform, libc: .data + .bss of the engine and the port by the source file that defines each static (nm -S -l), the measuring harness and the zone arena left out; align: the link's padding in those sections.",
   "zone: the build's play-inclusive zone minimum, zone_kb x 1024 (zone-min.mjs --build <b> --play --scan: <kb> passes, <kb> - 4 fails, every 4 KiB step from <kb> to 92 KiB or more above it passes); every ram-floor run re-runs the play set at it on every ISA.",
-  "stack, heap: the peaks over the play set at that zone (x86: below main's frame, and the bytes the engine and port requested; Cortex-M: from the top of the stack region, and newlib's sbrk high-water, which on tnt.wad and plutonia.wad includes the qemu board's 49-50 KB copy of their WAD directory, wad_semi.c).",
+  "stack, heap: the peaks over the play set at that zone (x86: below main's frame, and the bytes the engine and port requested; Cortex-M: from the top of the stack region, and newlib's sbrk high-water with an 8-byte page (tools/cortexm/syscalls.c's sysconf: no page rounding, so it does not move with where the heap starts), which on tnt.wad and plutonia.wad includes the qemu board's 49-50 KB copy of their WAD directory, wad_semi.c).",
   "A copying Cortex-M build (default, lean) is statics only (statics_only says why); its sum is its statics.",
   "Re-record: node tools/floor/ram-floor.mjs --record [--isa x86|armv6m|armv8m|cortexm] [--zone b=K,...]."
  ],
@@ -99,9 +99,9 @@
    "libc": 2100,
    "align": 59,
    "zone": 1355776,
-   "stack": 5600,
-   "heap": 301824,
-   "sum": 2526380
+   "stack": 5608,
+   "heap": 288264,
+   "sum": 2512828
   },
   "armv6m/lean": {
    "engine": 264722,
@@ -124,9 +124,9 @@
    "libc": 2100,
    "align": 69,
    "zone": 942080,
-   "stack": 5648,
-   "heap": 302536,
-   "sum": 1654555
+   "stack": 5656,
+   "heap": 288264,
+   "sum": 1640291
   },
   "armv6m/full": {
    "engine": 264858,
@@ -136,9 +136,9 @@
    "libc": 2100,
    "align": 73,
    "zone": 618496,
-   "stack": 5648,
-   "heap": 301496,
-   "sum": 1329939
+   "stack": 5656,
+   "heap": 288264,
+   "sum": 1316715
   },
   "armv8m/default": {
    "engine": 467621,
@@ -161,9 +161,9 @@
    "libc": 2100,
    "align": 59,
    "zone": 1355776,
-   "stack": 5168,
-   "heap": 301584,
-   "sum": 2525708
+   "stack": 5176,
+   "heap": 288264,
+   "sum": 2512396
   },
   "armv8m/lean": {
    "engine": 264722,
@@ -186,9 +186,9 @@
    "libc": 2100,
    "align": 69,
    "zone": 942080,
-   "stack": 5200,
-   "heap": 302552,
-   "sum": 1654123
+   "stack": 5208,
+   "heap": 288264,
+   "sum": 1639843
   },
   "armv8m/full": {
    "engine": 264858,
@@ -198,9 +198,9 @@
    "libc": 2100,
    "align": 73,
    "zone": 618496,
-   "stack": 5200,
-   "heap": 301496,
-   "sum": 1329491
+   "stack": 5208,
+   "heap": 288264,
+   "sum": 1316267
   }
  }
 }
