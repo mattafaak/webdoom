@@ -44,14 +44,6 @@ owner):
 - RAM: `mobj_t` (94 KB on plutonia MAP28) is held by the savegame format;
   sector line lists and line sector pointers as indices would save about
   15 KB more.
-- **The ARM RAM floor's heap figure moves with code size.** On the qemu boards
-  the heap follows `.text`, and newlib keeps its break on a 4 KiB boundary, so
-  `cm_heap_peak` (measured from `_heap_start`) moves by up to 4 KiB when code
-  grows or shrinks, with the allocations unchanged: the 2026-10-08 changes
-  moved it by −392 to −1,616 B (NOTEs, not failures). The golden's tolerance is
-  1,024 B, so a code change can make `ram-floor-armv6m`/`-armv8m` fail without
-  any change in what the game allocates. Measuring the peak of what malloc
-  handed out, not of the break, would remove it.
 - **386-class:** no harness. Measuring id's DOS binary would give the atlas a
   baseline, but nothing in this codebase could move it.
 
