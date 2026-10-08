@@ -58,6 +58,13 @@ These are ours, and they appear throughout the repository.
 | **the cascade** | What an engine or Makefile change drags with it: reformat, then rebuild the wasm trees and the native references before the full suite runs. The `freshness` leg fails when a build is older than its sources. |
 | **the ledger** | [optimization-ledger.md](optimization-ledger.md): every optimisation considered, with its mechanism, its measurement, the rule it was judged against, and whether it landed or was killed. A killed candidate with a number is worth as much as a landed one. |
 | **the fleet** | The machines measurements are taken on, named in `spec.md`. A figure without a host is not a measurement. |
+| **the floor** | Two meanings; say which. The *perf floor* is wbox, the slowest host in the fleet, which optimisations target first. The *bare-metal floor* is the least powerful board that runs the game uncrippled at full speed, the question [retro.md](retro.md) §5 answers and `tools/floor/` grades. |
+| **graded tic** | A tic the bare-metal floor gate grades: any tic in which no level load, intermission or finale started. The *worst graded tic* must fit 1/35 s. |
+| **DEMAND / PREDICTED / PASS** | The floor gate's verdicts by source: a host log measures demand, an emulator log predicts, and only a hardware log can pass or fail. |
+| **the memory diet** | The opt-in defines that shrink a bare-metal build's RAM, each tic-exact; the *full diet* is all of them (`LEAN=1 ZERO_COPY=1 LEAN_LEVELS=1`). [bare-metal.md](bare-metal.md) §4.6. |
+| **play-inclusive** | A zone or RAM minimum measured over real play (level exits, all 132 IWAD maps, a game saved and loaded) as well as the 13 demos, which need less. |
+| **L1 / L2 music** | The two music grades for a floor verdict: L1, a real OPL2 chip fed the exact register stream (vanilla's own setup); L2, software synthesis sample-identical to the reference. Not the ledger's `L` candidates. |
+| ***F*** | In [retro.md](retro.md), an estimated cycles-per-instruction factor for a target. Not the `F` identifiers below. |
 
 ---
 
@@ -76,4 +83,5 @@ Several schemes reuse the same letters, which is why this section exists.
 | `N.M`, round numbers | [Plans.md](../Plans.md), `git log` | a task, or a working pass over the repository. History; the reference documents do not cite them |
 
 **Watch the `F`.** `F1`–`F8` in the divergence atlas are behavioural forks;
-`F1`–`F4` in the optimization ledger are candidates. They are unrelated.
+`F1`–`F4` in the optimization ledger are candidates; italic *F* in
+retro.md is a cycles-per-instruction factor. They are unrelated.

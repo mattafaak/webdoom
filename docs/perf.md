@@ -12,7 +12,8 @@ core-to-platform contract a no-OS port needs is in [bare-metal.md](bare-metal.md
 
 Hosts: **alder** (i9-12900K, the development host; fast here proves nothing),
 **tank** (i5-8350U) and **wbox** (AMD G-T56N Bobcat, 1.65 GHz, in-order: the
-floor, where a regression blocks).
+perf floor, where a regression blocks; not the bare-metal floor of
+[retro.md](retro.md) §5).
 
 ---
 
@@ -213,6 +214,10 @@ still match the goldens.
 Render (frame setup, bsp+segs, planes, masked) is 85–91% of a tic and the sim
 4–6%. These are x86 instructions from a `-O1` build, not wasm and not any
 target ISA; [retro.md](retro.md) converts them with its own stated factors.
+They are game only, and they predate fs-doom's virtual clock (`201c4ff`),
+which since runs one NetUpdate iteration a tic and adds about 17 K
+instructions to each; [tools/floor/demand.mjs](../tools/floor/demand.mjs) and
+`tools/golden/floor-demand.json` are the maintained per-demo figures.
 
 ---
 
@@ -331,7 +336,7 @@ records a new baseline — do that only on purpose, with the reason in the commi
 
 ```sh
 d=$(mktemp -d); ln -s "$PWD/wads/lib/doom.wad" "$d/doomu.wad"
-WD_CYCLES=1 tools/freestanding/fs-doom "$d/doomu.wad" -timedemo demo3 \
+WD_AUDIO=0 WD_CYCLES=1 taskset -c 2 tools/freestanding/fs-doom "$d/doomu.wad" -timedemo demo3 \
     -cycles cycles.json -attrib attrib.json -sim "$d/doom-demo3.json"
 python3 tools/native-sanitize/compare.py tools/golden "$d" sim
 ```
@@ -340,7 +345,11 @@ python3 tools/native-sanitize/compare.py tools/golden "$d" sim
 `-sim` the per-tic hash stream. doom.wad goes in under the name `doomu.wad`, as
 `tools/freestanding/run-check.sh` does it: demo4 exists only in the Ultimate
 IWAD, and the goldens were recorded that way. The other IWADs need no rename.
-`WD_DETAIL=1` measures the low-detail renderer.
+`WD_DETAIL=1` measures the low-detail renderer. fs-doom plays sound effects
+and OPL music unless `WD_AUDIO=0`, and with them the mean tic costs about six
+times as much (~8.1 M against ~1.38 M instructions, [retro.md](retro.md) §5);
+the figures in §5 are without. On a hybrid CPU pin the run to a
+performance core (`taskset`): alder's E-cores count zero instructions.
 
 **Zone and renderer-limit peaks.** These counters compile in only on request.
 Make does not track flags, so clean before and after:
@@ -348,7 +357,7 @@ Make does not track flags, so clean before and after:
 ```sh
 make -C tools/freestanding clean
 make -C tools/freestanding EXTRA_CFLAGS="-DWEB_PERF_ZONE_STATS -DFS_ZONE_SIZE_OVERRIDE='(4*1024*1024)'"
-tools/freestanding/fs-doom wads/lib/tnt.wad -timedemo demo2 -zonestats zone.json
+WD_AUDIO=0 tools/freestanding/fs-doom wads/lib/tnt.wad -timedemo demo2 -zonestats zone.json
 make -C tools/freestanding clean && make -C tools/freestanding
 ```
 

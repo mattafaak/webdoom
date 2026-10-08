@@ -2,7 +2,7 @@
 
 A slim, modern DOOM port for the browser, built directly from the
 [id-Software/DOOM](https://github.com/id-Software/DOOM) `linuxdoom-1.10`
-source. Under 300 KB of wasm, zero client install, zero-config multiplayer.
+source. Under 300 KiB of wasm, zero client install, zero-config multiplayer.
 
 - Runs in stock Chrome and Firefox (WASM + WebGL2 + WebAudio), and in Edge,
   which is Chromium and is therefore not separately tested (`spec.md`,
@@ -100,9 +100,11 @@ Three legs deserve a sentence the registry cannot give them:
 - **render goldens**: per-tic framebuffer hashes over the same 13 demos, so a
   renderer change that moves a pixel fails at the exact tic.
 - **cross-architecture**: the freestanding core replays the same goldens on
-  32-bit ARM under qemu and on an emulated Nintendo 64, bit-identical.
+  32-bit ARM, big-endian PowerPC and RV32 under qemu, on Cortex-M0+ and
+  Cortex-M33 code under qemu's bare-metal boards, and on an emulated Nintendo
+  64, bit-identical.
 
 ## License
 
-GPL-2.0-or-later (the id Software source re-license; Nuked OPL3 is
-GPL-2). Game data (WADs) is not distributed with this repository.
+GPL-2.0-or-later (the id Software source re-license; Nuked OPL3, in
+`engine/web/opl3.c`, is GPL-2.0-or-later too). Game data (WADs) is not distributed with this repository.

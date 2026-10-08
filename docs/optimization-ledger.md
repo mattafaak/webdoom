@@ -40,7 +40,9 @@ the renderer stages named here are described in [renderer.md](renderer.md).
 | NC3 | inline `R_GetColumn`'s single-patch path | LANDED | doom demo3 −4,398 instr/tic (−0.39%), demo1 −5,423; wasm render and sim inside noise, +353 B (2026-09-17) | clears its 2,000 instr/tic threshold; a cycle-floor win, invisible in the browser |
 | NC4 | `R_DrawColumn` 8-wide unroll | KILLED | doom demo3 +84,524 instr/tic (+7.5% worse), demo1 +75,745; wasm flat (2026-09-17) | more step arithmetic and a longer tail on 47.9-pixel columns; at `-O3` the compiler already unrolls |
 | NC5 | `R_DrawSpan` 4-wide unroll, separate accumulators | LANDED | doom demo3 −47,707 instr/tic (−4.2% whole, −11.9% planes), 2026-07-23 | 5.3× its 9,000 instr/tic threshold; same carry behaviour as the scalar loop, so pixel-identical |
-| NC6 | OPL synth in the AudioWorklet (`build/synth.wasm`) | LANDED | takes a 1.84 / 4.09 / 19.7 ms p99 call every 100 ms (alder / tank / wbox) off the main thread (measured 2026-09-16, built 2026-09-17); the module is 21,395 B | on wbox the main-thread call dropped every sixth frame; see [perf.md](perf.md#why-the-synth-runs-in-the-audioworklet) |
+| NC6 | OPL synth in the AudioWorklet (`build/synth.wasm`) | LANDED | takes a 1.84 / 4.09 / 19.7 ms p99 call every 100 ms (alder / tank / wbox) off the main thread (measured 2026-09-16, built 2026-09-17); the module was 21,395 B (21,693 B since NC7) | on wbox the main-thread call dropped every sixth frame; see [perf.md](perf.md#why-the-synth-runs-in-the-audioworklet) |
+| NC7 | OPL synth (`engine/web/opl3.c`): bank 1 skipped until a bank-1 register is written, the noise LFSR stepped nine at a time, no resampler at the chip's 49,716 Hz | LANDED | OPL2 -O1 14.32 → 7.26 M instr/tic (−49.3%), OPL3 14.47 → 10.89 M (26f87f8); with the synth objects built `-fno-pie`, 6.53 M OPL2 (e450fbe). doom.wasm and synth.wasm rebuilt, output unchanged (2026-10-07) | each saving is exact for any register stream, not only the streams `mus_opl.c` writes; `synth-exact` holds every frame of 137 IWAD scores × OPL2/OPL3 × 2 rates, plus random register streams, to the unmodified core (596/596) |
+| NC8 | OPL synth: skip a slot that is keyed off and fully released | KILLED | not exact: "NOT exact (1/13)" over the 13 demo songs, where the landed savings read "exact 13/13" (3d1185e) | not exact: a released slot still outputs 0 or −1, the sign of its advancing phase, so an OPL voice's silence is a 1-LSB square wave |
 | F1a | flat floors and ceilings beyond 512 units (FastDoom-style) | KILLED | +2.4% (+26,658 instr/tic) on doom demo3 (2026-07-23) | the distance test costs every span and few spans qualify |
 | F1 | solid-colour flats, compile-time option | KILLED | −249,890 instr/tic (−22.5%) on doom demo3 (2026-07-23) | a visual change no player could select; removed with the other three |
 | F2 | skip the status-bar redraw when nothing changed | KILLED | p50 −1.7%, mean +0.9% on doom demo3 (2026-07-23) | a net loss under a timedemo; the static-HUD case it targets was never measured |
@@ -85,7 +87,7 @@ predicted effect with its arithmetic, and the threshold. Then measure both
 sides on one host, with the same flags, demos and reps, and state all of them.
 
 1. **Instructions.** `make -C tools/freestanding`, then
-   `WD_CYCLES=1 tools/freestanding/fs-doom <doomu.wad> -timedemo demo3 -cycles c.json -attrib a.json`
+   `WD_AUDIO=0 WD_CYCLES=1 taskset -c 2 tools/freestanding/fs-doom <doomu.wad> -timedemo demo3 -cycles c.json -attrib a.json`
    before and after, and quote p50 for demo3 and demo1. Repeat runs agree
    within 0.2% at p50 on alder. The full recipe, including why doom.wad runs
    as `doomu.wad`, is in [perf.md](perf.md#7-how-to-measure).
@@ -99,6 +101,7 @@ sides on one host, with the same flags, demos and reps, and state all of them.
 4. **Correctness.** `tools/run-tests.sh` with `--only` once per leg (it takes
    one id each): `sim-goldens`, `render-goldens`, `render-low`,
    `sim-freelook`, `sim-invariants`, `freestanding-sim`, `native-asan` and
-   `fuzz-diff`, plus `opl-mode` for anything that touches the synth.
+   `fuzz-diff`, plus `opl-mode`, `synth-native` and `synth-exact` for
+   anything that touches the synth or its sequencer.
 
 Record the numbers in the row, land or kill, and keep the row either way.

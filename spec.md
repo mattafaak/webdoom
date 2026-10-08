@@ -89,14 +89,16 @@ fails when a leg named here does not exist.
   20% band (leg `perf-fleet`, opt-in with `--perf` because it reaches other
   machines). The check never writes its own baseline.
 - **Cross-architecture:** the freestanding core replays all 13 demos
-  bit-identically on 32-bit ARM and big-endian PowerPC under qemu
-  (`arm-cross`, `be-cross`) and on an emulated N64 (`n64-demos`).
+  bit-identically on 32-bit ARM, big-endian PowerPC and RV32 under qemu
+  (`arm-cross`, `be-cross`, `rv32-cross`), on Cortex-M0+ and Cortex-M33 code
+  under qemu's bare-metal boards (`armv6m-qemu`, `armv8m-qemu`), and on an
+  emulated N64 (`n64-demos`; `n64-floor` also renders every tic).
 
 ## Reference hardware
 
 | host | CPU | role |
 |------|-----|------|
-| wbox | AMD G-T56N (Bobcat) | the floor; optimizations target it first |
+| wbox | AMD G-T56N (Bobcat) | the slowest host (the perf floor); optimizations target it first |
 | tank | i5-8350U (Kaby Lake) | slow 64-bit idiv |
 | alder | i9-12900K | development host; fast here proves nothing; runs the cross-architecture legs |
 
@@ -207,7 +209,7 @@ context: browsers withhold `navigator.serviceWorker` and
 No hardware target is attempted before its row in
 [docs/retro.md](docs/retro.md) exists, with arithmetic.
 
-A target is graded by the floor gate ([tools/floor/floor-gate.mjs](tools/floor/floor-gate.mjs)):
+A target is graded by the bare-metal floor gate ([tools/floor/floor-gate.mjs](tools/floor/floor-gate.mjs)):
 all 13 IWAD demos tic-exact in sim and render, music and sound effects
 running, and the worst graded tic within 1/35 s. Only a hardware log can
 PASS; an emulator log is a prediction.
@@ -216,7 +218,7 @@ PASS; an emulator log is a prediction.
 |--------|--------|
 | N64 (VR4300) | **test bed; out on its CPU.** `n64-demos` and `n64-floor` gate correctness (13/13 in ares, rendering included). ares predicts the worst tic at 4.21× the budget; a hardware run on the Analogue 3D is optional (Plans.md). |
 | RP2350 (2× Cortex-M33) | **predicted floor with an OPL2 chip; untested.** One core 0.61–0.88× of the budget with the fast drawers; PSRAM needed. |
-| RP2040 (2× Cortex-M0+) | **predicted marginal; untested.** About 0.81–1.13× of core 0 split over two cores at 133 MHz; RAM short even after the memory diet. |
+| RP2040 (2× Cortex-M0+) | **predicted marginal; untested.** 0.96–1.28× of one core, 0.84–1.15× of core 0 split over two cores, at 133 MHz; RAM 4.97× short even after the memory diet (link only). |
 | EFR32MG24 (Cortex-M33, 78 MHz) | **predicted fail.** 1.17–1.70× one core. |
 | Teensy 4.1 (Cortex-M7) | **predicted pass**, the upper bracket. |
 | 386-class | **no harness.** Nothing here measures this code on one. |

@@ -10,15 +10,15 @@ platform contract a no-OS port implements is [bare-metal.md](bare-metal.md).
 
 | target | status | basis |
 |---|---|---|
-| Freestanding core (x86-32, ARM32, PowerPC) | **runs**, 13/13 demos tic-exact | legs `freestanding-sim`, `ro-wad`, `arm-cross`, `be-cross` |
+| Freestanding core (x86-32, ARM32, PowerPC, RV32, Cortex-M0+/M33) | **runs**, 13/13 demos tic-exact | legs `freestanding-sim`, `ro-wad`, `ro-wad-zc`, `arm-cross`, `be-cross`, `rv32-cross`, `armv6m-qemu`, `armv8m-qemu` |
 | N64 (VR4300, emulated) | **runs, rendering every tic**, 13/13 demos, 44,580 tics bit-identical in simulation and framebuffer; 4.21× over the 35 Hz budget in ares | legs `n64-demos`, `n64-floor`; no display, input or sound yet |
-| RP2040 | **parked** | SRAM: 1,082,104 B needed vs 270,336 B, 4.00× over |
+| RP2040 (2× Cortex-M0+, 133 MHz) | **predicted marginal on CPU, short on RAM** | section 5: 0.96–1.28× one core, 0.84–1.15× of core 0 split; the full memory diet links 4.97× over its SRAM |
 | 386-class | **no harness** | about 3× short of 35 Hz; nothing here measures this code on one |
 | Sega 32X | **open** | simulation fits one SH-2; render 1.5–3.4× over both |
 | ESP32-S3 | **plausible, untested** | CPU 0.28–0.54× of one core (mean tic, section 4); needs PSRAM |
 | RP2350 (2× Cortex-M33, 150 MHz) | **predicted: game fits one core; exact music does not fit the other** | section 5; worst tic measured on ARMv8-M in qemu, cycles estimated; PSRAM needed |
-| Teensy 4.1 (Cortex-M7, 600 MHz) | **predicted pass, the upper bracket** | section 5; cycles estimated; PSRAM or the memory diet needed |
-| EFR32MG24 (Cortex-M33, 78 MHz) | **predicted fail** | section 5: 1.28–1.86× one core on the worst tic |
+| Teensy 4.1 (Cortex-M7, 600 MHz) | **predicted pass, the upper bracket** | section 5; cycles estimated; PSRAM needed (the diet's 1.33 MB floor exceeds its 1 MB) |
+| EFR32MG24 (Cortex-M33, 78 MHz) | **predicted fail** | section 5: 1.17–1.70× one core on the worst tic |
 | Genesis + Sega CD | **infeasible** | CPU 13.5–30.6× over the combined budget |
 | GBA | **infeasible** | CPU 5.4–12.3× over; RAM 5.9× short |
 | SNES, SNES + Super FX 2 | **infeasible** | CPU 254–1,438× over (stock), 8.7–19.6× (Super FX 2) |
@@ -36,21 +36,25 @@ make -C tools/freestanding                       # needs gcc with 32-bit multili
 ./tools/freestanding/fs-doom wads/lib/doom2.wad -timedemo demo1 -sim out.json
 ```
 
-It exists to prove that the core is a platform-layer-only port target. Four
-legs hold it to the same 13 golden demos the browser build is graded on:
+It exists to prove that the core is a platform-layer-only port target. These
+legs hold it to the same 13 golden demos the browser build is graded on (the
+Cortex-M legs, `armv6m-qemu` and `armv8m-qemu`, are in section 5):
 
 | leg | what it proves | needs |
 |---|---|---|
 | `freestanding-sim` | fs-doom's per-tic hashes equal the goldens, 13/13 ([run-check.sh](../tools/freestanding/run-check.sh)) | `fs-doom`, IWADs |
 | `ro-wad` | the engine never writes the WAD: the blob is `mprotect(PROT_READ)` and any write faults with its address, so the WAD can execute in place from ROM or flash | `fs-doom`, IWADs |
+| `ro-wad-zc` | the same with lumps read in place (`WEB_LUMPS_IN_PLACE`): no lump is ever written | `fs-doom-zc`, IWADs |
 | `arm-cross` | the core cross-built for `arm-linux-musleabihf` by zig and run under `qemu-arm-static` is 13/13 | zig ≥ 0.16, `qemu-arm-static` |
-| `be-cross` | the same on big-endian `powerpc-linux-musleabi` under `qemu-ppc-static`, with `-fsigned-char`; the cheapest big-endian cover in the suite | zig ≥ 0.16, `qemu-ppc-static` |
+| `be-cross` | the same on big-endian `powerpc-linux-musleabi` under `qemu-ppc-static`, with `-fsigned-char`; the cheapest big-endian cover in the suite. It also plays doom-demo4 with audio and requires its synth and mixer hashes to equal the x86 reference | zig ≥ 0.16, `qemu-ppc-static` |
+| `rv32-cross` | the same on RV32IMAC (soft-float) and RV32GC under `qemu-riscv32-static` | zig ≥ 0.16, `qemu-riscv32-static` |
 
 Two details a porter needs. First, the doom.wad demos must be presented as
 `doomu.wad`: `IdentifyVersion()` tries `doomu.wad` before `doom.wad`, the
 goldens were recorded as Ultimate DOOM, and `demo4` desyncs from tic 0
 otherwise. Second, these legs check correctness only. Emulated cycles are not
-hardware cycles, so no timing comes from qemu.
+hardware cycles, so no timing comes from qemu (the Cortex-M legs count
+instructions, not time).
 
 [IMPORTS.md](../tools/freestanding/IMPORTS.md) lists every libc symbol fs-doom
 imports: the checklist of what a bare-metal port must provide or remove.
@@ -90,11 +94,11 @@ Not done:
   No RDP path exists.
 - **Input.** No controller support (libdragon `joypad.h` is the route).
 - **Sound.** `i_sound_n64.c` is all stubs.
-- **Real hardware.** A SummerCart64 and an Analogue 3D are owned (per
-  [spec.md](../spec.md)); the emulator leg is the gate, and hardware runs would
-  be evidence, not the gate.
+- **Real hardware.** Not run. The emulator legs are the gate; a run on a
+  SummerCart64 in an Analogue 3D, and then on a real console, is listed in
+  [Plans.md](../Plans.md) as blocked on hardware.
 - **Speed.** Measured in ares only (the next section): 4.21× over the 35 Hz
-  budget on the worst graded tic. Hardware timing is Phase 3.
+  budget on the worst graded tic. No hardware timing exists.
 
 ### The `n64-demos` leg
 
@@ -165,7 +169,7 @@ bash tools/floor/run-n64.sh --correctness   # the n64-floor leg: CORRECT or FAIL
 bash tools/floor/run-n64.sh                 # A + B + B, the gate, floor-stats
 ```
 
-Measured on alder, 2026-10-07, at `cc67a30`, ares e1b0d47 (recompiler),
+Measured on alder, 2026-10-07, at `75ae491`, ares e1b0d47 (recompiler),
 stock 4 MB:
 
 - Correctness: CORRECT on all 13 demos (44,580 tics), sim and render.
@@ -177,21 +181,21 @@ stock 4 MB:
 - `n64-floor` takes 76 s on alder (13 ROMs at a time); `n64-demos` 6 m 15 s.
 - Against the host tic for tic, 3.41 N64 cycles per x86 instruction over all
   graded tics (2.97–3.72 per demo): section 4's *F*, measured in an emulator.
-- ares's own profiler (`--xprof`, at `1ef6fa5`, ForceInterpreter, all 13
+- ares's own profiler (`--xprof`, at `190ce86`, ForceInterpreter, all 13
   demos; the profile build reads 8–10% more COUNT than plain mode B): CPI 3.73,
   and 63.6% of all cycles are cache fills and writebacks at ares's charges
   (40 cycles a D-cache line, 48 an I-cache line). `R_DrawSpan` alone is 30%
   of all cycles: 83 cycles a pixel, with 0.92 D-cache misses and 0.70
   writebacks a pixel, because the framebuffer is column-major and a span walks
   across it. Wall columns cost 25 cycles a pixel.
-- Under ForceInterpreter (full I-cache emulation, at `1ef6fa5`) graded tics
+- Under ForceInterpreter (full I-cache emulation, at `190ce86`) graded tics
   read 2.9% lower (median; 1st–99th percentile −7.2% to +1.9%); the worst
   tic 5,405,025 against 5,625,078.
 - Lump copies use PI DMA (`cart_read_n64.c`): 9.2 counts a byte against the
-  word path's 41.0. With the word path (`fb67fb2`) the worst graded tic is a
+  word path's 41.0. With the word path (`fed05c4`) the worst graded tic is a
   cache-miss tic, tnt-demo2 tic 113 (106,902 B), at 6,483,742 counts; with
-  DMA (`67ea0ea`) that tic takes 3,114,892.
-- With the Expansion Pak and a 6 MB zone (`67ea0ea`; a data point, not
+  DMA (`4449135`) that tic takes 3,114,892.
+- With the Expansion Pak and a 6 MB zone (`4449135`; a data point, not
   graded), the tics that copy from the WAD fall from 2,663 to 259 and the
   worst tic is 5,528,612 counts (4.13×): the zone is not what limits it.
 
@@ -266,7 +270,12 @@ density and memory system. The verdict is demand ÷ budget.
 
 The inputs below were measured on alder at `7f5c682`, 2026-10-05, with fs-doom
 (`gcc -m32 -O1`, user-space retired instructions from `perf_event_open`) over
-the 13 demos. Two passes agreed within 3% per demo.
+the 13 demos, without audio. Each IWAD's figure is the mean of its demos'
+per-tic means, load tics included. Two passes agreed within 3% per demo. They
+predate fs-doom's virtual clock (`201c4ff`), which adds about 17 K
+instructions a tic; [tools/floor/demand.mjs](../tools/floor/demand.mjs) and
+its golden (`tools/golden/floor-demand.json`) are the maintained per-demo
+figures, graded tics only.
 
 | IWAD | mean instr/tic | `-nodraw` mean (simulation only) | share |
 |---|---|---|---|
@@ -291,14 +300,16 @@ To re-measure:
 
 ```sh
 make -C tools/freestanding
-WD_CYCLES=1 ./tools/freestanding/fs-doom <wad> -timedemo demoN -cycles cyc.json           # whole program
-WD_CYCLES=1 ./tools/freestanding/fs-doom <wad> -timedemo demoN -nodraw -cycles cyc.json   # simulation only
+WD_AUDIO=0 WD_CYCLES=1 taskset -c 2 ./tools/freestanding/fs-doom <wad> -timedemo demoN -cycles cyc.json           # whole program
+WD_AUDIO=0 WD_CYCLES=1 taskset -c 2 ./tools/freestanding/fs-doom <wad> -timedemo demoN -nodraw -cycles cyc.json   # simulation only
 make -C tools/freestanding EXTRA_CFLAGS="-DWEB_PERF_ZONE_STATS -DFS_ZONE_SIZE_OVERRIDE=33554432"
-./tools/freestanding/fs-doom <wad> -timedemo demoN -zonestats zs.json                     # zone peaks
+WD_AUDIO=0 ./tools/freestanding/fs-doom <wad> -timedemo demoN -zonestats zs.json                                  # zone peaks
 ```
 
 (Present doom.wad as `doomu.wad`, and build the zone-stats binary into a
-separate copy so it does not replace the gated one.)
+separate copy so it does not replace the gated one. fs-doom plays sound and
+OPL music unless `WD_AUDIO=0`; the figures above are without it. On a hybrid
+CPU, pin to a performance core: alder's E-cores count nothing.)
 
 **F is an estimate, not a measurement.** The one real-world anchor is id's DOS
 binary on a 486DX2-66: about 21.5 fps at full detail (FastDoom's published
@@ -322,8 +333,10 @@ estimates in that spirit; treat their low ends as optimistic.
 | SNES | 3.58 MHz | 102,286 | 20–100 | 26.0 M–147 M | **254–1,438×** | 128 KB; 13× short |
 
 Each range pairs the lightest IWAD (doom.wad) with the low *F* and the
-heaviest (plutonia.wad) with the high *F*. RAM shortfalls are against the
-1.65 MiB floor in section 3.
+heaviest (plutonia.wad) with the high *F*. RAM shortfalls are against
+section 3's 1.65 MiB, a demos-only estimate for the default build. Section 5
+measures the floor with real play included: 3,023,193 B for the default build,
+and 1,329,939 B with the memory diet on Cortex-M.
 
 **N64.** The simulation and the renderer are proven tic-exact (`n64-demos`,
 `n64-floor`). The estimate above said the full game was 0.58–1.10× of the
@@ -332,24 +345,24 @@ and 1.73× on the mean, because *F* came out at 3.41, not 1.2–2 (section 2's
 floor runs). The 8 KB data cache is most of it: 63.6% of all cycles are line
 fills and writebacks at ares's charges, and `R_DrawSpan` over a column-major
 framebuffer misses about once a pixel. Emulated cycles are not hardware
-cycles; the SummerCart64 runs decide. The RDP rasterizes textured primitives
-in hardware, which could take most of the render off the CPU; it is the open
-work. Prior art: jnmartin84's 64doom runs linuxdoom on the
+cycles, and no hardware run exists. The RDP rasterizes textured primitives in
+hardware and could take much of the render off the CPU, but only if its output
+were pixel-identical to the software renderer's, which nothing here has
+attempted; section 5 treats the N64 as out on its CPU. Prior art: jnmartin84's 64doom runs linuxdoom on the
 N64, playable, with demo compatibility not verified.
 
-**RP2040 (parked).** A Cortex-M0+ link of the core (arm-none-eabi-gcc 16.1,
-`-O1`, 320-wide, a 256 KB token zone), measured 2026-07-23, needs 1,082,104 B
-of SRAM against 270,336 B: **4.00× over**. The token zone is below the
-1,081,972 B non-purgeable peak, so the real deficit is larger. Today's N64 link
-makes the same point on the current tree: its statics outside the zone are
-751,628 B, 2.8× the RP2040's entire SRAM. Flash fails too: doom.wad
-gzip-compressed is 5,536 KB against the 1,761 KB a 2 MB Pico has left after
-code. The CPU would fit (0.51–0.95× of one core at 270 MHz). kilograham's
-rp2040-doom runs on this chip by replacing the asset pipeline (WHD) and the
-memory layout; this code would need the same plus external PSRAM, and buying a
-board does not change that. The build is no longer in the tree. The sanctioned
-sub-100 MHz MCU floor measurement depended on it and is parked with it; at
-100 MHz one core is 1.4–2.6× short by the same arithmetic.
+**RP2040 (link only).** Section 5 measures it on the current tree: ARMv6-M
+code under qemu, and the full memory diet linked with pico-sdk 2.3.0. The
+diet's play-inclusive RAM floor is 1,329,939 B, and the link is 1,065,236 B
+over the 268,288 B of SRAM pico-sdk's linker script gives it (4.97×). A 2 MB
+Pico cannot hold the code and tables (about 1.75 MB) and the WAD. On the CPU,
+at the stock 133 MHz, the worst graded tic is 0.96–1.28× of one core, and
+0.84–1.15× of core 0 with the frame split over both cores. kilograham's
+rp2040-doom runs on this chip at 270 MHz by replacing the asset pipeline (WHD)
+and the memory layout; this code would need the same plus external PSRAM.
+(The first link, of the default build on 2026-07-23, needed 1,082,104 B
+against 270,336 B, 4.00×; that build is gone.) Below 100 MHz, section 5
+predicts the EFR32MG24 (78 MHz) at 1.17–1.70× of its one core.
 
 **386-class (no harness).** A 386DX-40 has 1,142,857 cycles per tic and no
 on-chip cache. At the 486's ~2.4 cycles per instruction the doom.wad demand is
@@ -464,18 +477,20 @@ byte-identical. Measured on the 13 demos, all tic-exact in sim and render:
 - The zone that is left is the engine's own data: the texture tables
   `R_InitTextures` builds (about 340 KB for tnt.wad), the level (`PU_LEVEL`)
   and the composite textures.
-- RAM a Cortex-M port needs, from the ARMv6-M map file and the runs' stats
-  (harness buffers excluded): zone + engine `.data`/`.bss` (467,737 B) +
+- RAM a Cortex-M port needs before the memory diet (the next subsection), with
+  the 13 demos only, from the ARMv6-M map file and the runs' stats (harness
+  buffers excluded): zone + engine `.data`/`.bss` (467,737 B) +
   screens (320,000 B) + audio state (71,676 B) + heap peak + stack peak
   (5,576 B) + newlib and platform (3,900 B). Copying: 2,232,213 B (its
   1,200 KiB zone, heap peak 134,656 B); in place: **1,948,737 B** (1.86 MiB,
   heap peak 133,672 B), 13% less. Still 3.7× the RP2350's 520 KB: PSRAM stays
   necessary.
-- The WAD: tools/cortexm's zero-copy build loads it into the board's 16 MiB
-  PSRAM at boot, as flash would hold it. doom.wad and doom2.wad fit;
-  plutonia.wad and tnt.wad are 645,760 B and 1,422,076 B too long, and those
-  bytes come from the ZONE SSRAM above a 2 MiB arena. A board with 16 MiB of
-  flash would run neither without trimming the WAD.
+- The WAD: tools/cortexm's zero-copy build loads it into the qemu board's
+  16 MiB PSRAM at boot, as flash would hold it. doom.wad and doom2.wad fit
+  there; plutonia.wad and tnt.wad are 645,760 B and 1,422,076 B too long, and
+  those bytes come from the ZONE SSRAM above a 2 MiB arena. A real board's
+  flash also holds the code and tables: on a 16 MiB board with the WAD at
+  3 MiB only doom.wad fits (the RAM floor's flash note below).
 - Alignment is proven on the board that traps: `armv6m-zc-misaligned` replays
   the 13 demos from WADs rewritten with every lump at an odd offset.
 
@@ -571,11 +586,13 @@ Two exact levers (`FAST=1` in tools/cortexm):
 - **The result:** core 0 still carries 83–90% of the worst tic (by ISA and by
   how plane and masked overheads split), because the simulation and the BSP
   walk are serial. The board figures below are the highest core-0 load over
-  all 44,567 graded tics.
+  all 44,567 graded tics, measured on the FAST builds that copy lumps (6707ebc);
+  the zero-copy FAST builds the design assumes differ by under 0.4% at the
+  worst tic (3,410,225 and 2,360,468 instructions, 0add728).
 - **Status:** a costed model from measured stage counts. Its queue and
   barrier costs are estimates.
 
-### Predicted verdicts### Predicted verdicts
+### Predicted verdicts
 
 *F* here is cycles per instruction **of that ISA's own build** (not of x86),
 estimated from the core's pipeline: Cortex-M33 1.1–1.6 (3-stage, single

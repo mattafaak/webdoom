@@ -37,9 +37,12 @@ owner):
   instructions); the RP2040's hardware divider is only estimated.
 - The Cortex-M33's FixedDiv still calls libgcc (99 K instructions at the worst
   tic); a UDIV-based exact divide is untried.
-- A pipelined two-core split (next tic's simulation beside this tic's drawing)
-  would reach about 71% of one core, but no proof yet covers all the shared
-  state it would have to snapshot.
+- A pipelined two-core split (next tic's simulation on core 0 while core 1
+  draws this tic's planes and masked) would take the worst tic to 71% of one
+  core on ARMv6-M and 68% on ARMv8-M (instructions, zero-copy FAST builds,
+  `tools/cortexm/dualcore.mjs`, 0add728), against 86% and 83% for the exact
+  split. It is not argued exact: no proof yet covers all the shared state it
+  would have to snapshot.
 - RAM: `mobj_t` (94 KB on plutonia MAP28) is held by the savegame format;
   sector line lists and line sector pointers as indices would save about
   15 KB more.

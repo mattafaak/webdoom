@@ -6,13 +6,14 @@ document plus [engine-archaeology.md](engine-archaeology.md),
 [renderer.md](renderer.md), [playsim.md](playsim.md),
 [formats.md](formats.md) and [perf.md](perf.md) before reading the source.
 
-Three platform layers in the repo implement the contract. Each is a reference
+Four platform layers in the repo implement the contract. Each is a reference
 implementation a port can copy from:
 
 | Layer | Where | What it shows |
 |---|---|---|
 | Browser | `engine/web/` | the shipped port (wasm32) |
-| Hosted freestanding (`fs-doom`) | `tools/freestanding/` | the core on a static arena, a byte-out and a preloaded WAD blob, with no OS file I/O below the shim. 13/13 golden demos bit-identical on x86 `-m32` (leg `freestanding-sim`), 32-bit ARM under qemu (`arm-cross`) and big-endian PowerPC under qemu (`be-cross`) |
+| Hosted freestanding (`fs-doom`) | `tools/freestanding/` | the core on a static arena, a byte-out and a preloaded WAD blob, with no OS file I/O below the shim, plus sound effects and OPL music (`fs_audio.c`). 13/13 golden demos bit-identical on x86 `-m32` (leg `freestanding-sim`), and under qemu-user on 32-bit ARM (`arm-cross`), big-endian PowerPC (`be-cross`) and RV32 (`rv32-cross`) |
+| Bare-metal Cortex-M | `tools/cortexm/` | no OS at all: qemu's mps2-an385 (Cortex-M0+ code) and mps2-an505 (Cortex-M33) boards, a vector table, a UART byte-out, the WAD read by semihosting. 13/13 (`armv6m-qemu`, `armv8m-qemu`), instructions counted per tic; `tools/pico/` links the same core for the RP2350 and RP2040 with pico-sdk (link only). See [retro.md](retro.md) §5 |
 | Nintendo 64 | `tools/n64/` | OS-less on libdragon: 93.75 MHz big-endian MIPS, 4 MiB RDRAM, the IWAD read in place from cartridge space. 13/13 (`n64-demos`; see [retro.md](retro.md) §2) |
 
 Code is cited by function name where a line number would go stale.
@@ -306,12 +307,15 @@ fire, use, run.
 
 ### 1.8 Sound — MAY fully stub; MAY partially implement
 
-Audio is optional and the simulation never reads it. Every simulation gate in
-this repo runs with sound stubbed. `I_Init` (§1.6) needs to call
-`I_InitSound()` only if sound is implemented.
+Audio is optional and the simulation never reads it: the sim goldens hold
+with sound off or on. fs-doom plays sound effects (an 8-channel mixer) and OPL
+music (the web build's own sequencer and synth) by default, and its `AUDIO`
+line is checked against `tools/floor/audio-ref.json`; `WD_AUDIO=0` turns it
+back into a stub, and the Cortex-M builds link it switched off. `I_Init`
+(§1.6) needs to call `I_InitSound()` only if sound is implemented.
 
-**Full stub** (no audio, correct simulation), as in
-`tools/freestanding/i_sound.c`:
+**Full stub** (no audio, correct simulation), what `tools/freestanding/i_sound.c`
+reduces to under `WD_AUDIO=0`:
 
 ```c
 void I_InitSound(void) { I_InitMusic(); }
@@ -441,8 +445,8 @@ screen buffers (250 KiB) are not in BSS; `I_AllocLow` places them (§1.5).
 stack, plus the 250 KiB screen block. One MiB of stack is proven enough:
 `make check-stack-1m` in `tools/freestanding/` replays all 13 demos, rendering,
 under `ulimit -s 1024`. The true requirement is lower but not measured. With
-a 1 MiB stack the floor is **1.52 MiB** (`__heap_base`), and **~1.76 MiB**
-with the screen buffers. That is before the zone and the WAD. The budget
+a 1 MiB stack the static minimum is **1.52 MiB** (`__heap_base`), and
+**~1.76 MiB** with the screen buffers. That is before the zone and the WAD. The budget
 tables below use these figures.
 
 The N64 build, measured with its toolchain, puts `.data + .bss` at 3,458,164
@@ -451,26 +455,25 @@ screen block ([retro.md](retro.md) §2, Memory).
 
 ### 2.2 Zone (heap)
 
-Peak non-purgeable zone use, from the wasm build's attract demos
-(perf.md §2):
+Peak non-purgeable zone use over the 13 demos, measured with `fs-doom` built
+with `-DWEB_PERF_ZONE_STATS` (the same `engine/core`, rendering on, sound off,
+a 32 MiB zone) and run with `-zonestats <file>`, on alder at `f3fe0ff`,
+2026-10-08:
 
-| IWAD | Peak zone used (non-purgeable) |
-|------|-------------------------------|
-| doom.wad | 0.91 MiB |
-| doom2.wad | 1.00 MiB |
-| tnt.wad | 1.29 MiB |
-| plutonia.wad | **1.36 MiB** (worst: demo3) |
+| IWAD | Peak zone used (non-purgeable) | Total high-water mark |
+|------|-------------------------------|-----------------------|
+| doom.wad | 815,436 B (demo2) | 5,973,652 B |
+| doom2.wad | 749,420 B (demo3) | 8,816,732 B |
+| tnt.wad | **1,081,972 B** (demo2) | **11,048,348 B** (demo3) |
+| plutonia.wad | 894,112 B (demo3) | 10,266,972 B |
 
 That is live `PU_STATIC` and `PU_LEVEL` data. Purgeable cache blocks
 (composite textures, flats, sprite patches) come on top and are reclaimed
-under pressure.
-
-`fs-doom` built with `-DWEB_PERF_ZONE_STATS` and run with `-zonestats <file>`
-measures the same thing with rendering on. Its non-purgeable peak is
-0.981 MiB (tnt demo2), its total high-water mark in a 32 MiB zone is
-10.485 MiB (tnt demo3), and at 4 MiB the demos evict 248 to 1,397 `PU_CACHE`
-blocks each with all 13 simulation hashes unchanged. The two instruments
-disagree on the non-purgeable peak; size from the larger.
+under pressure: at 4 MiB the demos evict 251 to 1,428 `PU_CACHE` blocks each
+with all 13 simulation hashes unchanged ([perf.md](perf.md) §3, whose 32 MiB
+figures these repeat exactly). The demos are not the whole game: a level
+change, an intermission and the largest maps need more (§2.3e, and
+[retro.md](retro.md) §5's play-inclusive minima).
 
 **What degrades under pressure**: when `Z_Malloc` cannot satisfy a request it
 purges `PU_CACHE` blocks and the data is regenerated on next use: textures
@@ -486,9 +489,10 @@ non-purgeable allocation cannot be satisfied, `Z_Malloc` calls
 - **4 MiB is what ships.** The browser build's zone is 4 MiB (`ZONESIZE` in
   `engine/web/web.h`); every sim, render and net leg runs on it. The worst
   attract-demo peak is 34% of it.
-- **2.5 MiB passes the simulation gate** on N64 (`N64_ZONE_KB = 2560`, sim
-  only: the N64 gate runs `-nodraw`). 512 KiB fills during the first attract
-  demo and `Z_Malloc` fails at gametic 171.
+- **2.5 MiB passes on the N64** (`N64_ZONE_KB = 2560`) with rendering on:
+  `n64-floor` checks the sim and render hashes of every tic, 13/13
+  (`n64-demos` runs the same zone with `-nodraw`). 512 KiB fills during the
+  first attract demo and `Z_Malloc` fails at gametic 171.
 - Pathological PWAD maps (many large textures, many monsters) may need 8 MiB,
   which is what `fs-doom` uses.
 
@@ -618,12 +622,15 @@ browser build, whose `doom.wasm` is byte-identical with or without this code.
 Measured over the 13 demos (`zero-copy`, `armv6m-zc`, `armv8m-zc` legs):
 `fs-doom-zc` copies exactly one lump, COLORMAP, at startup; the smallest zone
 that runs all 13 correctly with rendering and audio falls from 1,216 KiB to
-924 KiB. What the zone still holds at that minimum is the texture tables built
-at startup (`R_InitTextures`: about 340 KB for tnt.wad), the level's own data
-(`PU_LEVEL`) and composites. tools/cortexm's zero-copy build puts the WAD in
-its board's 16 MiB PSRAM; plutonia.wad and tnt.wad are longer than that, and
-their last 0.65 MB and 1.42 MB come from a second region. A board with 16 MiB
-of flash would hold doom.wad and doom2.wad and neither of those.
+924 KiB; with real play included (level exits, all 132 IWAD maps, a game saved
+and loaded) the minimum falls from 1,764 KiB to 1,324 KiB. What the zone still
+holds is the texture tables built at startup (`R_InitTextures`: about 340 KB
+for tnt.wad), the level's own data (`PU_LEVEL`) and composites; §4.6 moves
+those too. tools/cortexm's zero-copy build puts the WAD in its qemu board's
+16 MiB PSRAM; plutonia.wad and tnt.wad are longer than that, and their last
+0.65 MB and 1.42 MB come from a second region. A real board's flash also holds
+the code and tables: linked for an RP2350 with 16 MiB of flash and the WAD at
+3 MiB, doom.wad fits and doom2.wad does not ([retro.md](retro.md) §5).
 
 ### 2.4 Palette and framebuffer summary
 
@@ -750,8 +757,11 @@ Boot cost is 16,385 libm calls plus the correction pass. Estimated: at ~50
 cycles per `sin` on a 240 MHz FPU core, ~3 ms, once.
 
 **Alternative for flash-rich targets where boot time matters**: ship the
-64 KiB of final values as `const` (from `tables-canon.json`) and skip
-generation. On XIP flash the tables then cost no RAM.
+64 KiB of final values as `const` and skip generation. On XIP flash the tables
+then cost no RAM. `TABLES_CONST` builds exactly this: the tables are
+generated at build time by the engine's own `T_GenerateTables`
+(`tools/floor/gen-const-tables.c`) and checked against `TABLES_CRC` at boot
+(§4.6).
 
 ### 4.2 Irreducible tables — ship as ROM data
 
@@ -803,6 +813,31 @@ They hold live pointers, so they go in RAM.
 **Never replace a table lookup with a runtime transcendental in the render
 loop** (engine-archaeology.md §7). A cached lookup is a few cycles; `sin` is
 tens. Generate once, look up always.
+
+The 4 MiB zone is the safe bring-up size, not the minimum. Measured minima
+with real play included are 1,764 KiB for the default build and 604 KiB with
+the memory diet (§4.6).
+
+### 4.6 The memory diet: opt-in levers, each tic-exact
+
+None of the defines below is set in the browser build (adding them to the
+source left its `doom.wasm` byte-identical), and each is proven tic-exact on
+all 13 demos by its own leg. tools/freestanding and tools/cortexm build them with `LEAN=1`
+(the first four) and `ZERO_COPY=1 LEAN_LEVELS=1`:
+
+| define | what it moves | leg |
+|---|---|---|
+| `MAXVISPLANES`, `MAXVISSPRITES` at vanilla's 128 | −138,752 B of BSS | `floor-lean` |
+| `TABLES_CONST` | the trig tables to `const` (−65,568 B of BSS) | `floor-lean` |
+| `LEAN_SCREENS` | `screens[1..3]` borrowed from the zone; a 32-row status-bar background (−254,712 B of BSS) | `lean-screens` |
+| `TEXTURES_CONST`, `COMPOSITES_CONST` | one IWAD's texture tables and composites to `const`, checked at boot; any other WAD builds them as vanilla does | `textures-const` |
+| `WEB_LUMPS_IN_PLACE` | lumps read where they lie (§2.3e) | `zero-copy`, `ro-wad-zc` |
+| `LEAN_LEVELS` | the level read in place and narrowed | `lean-levels` |
+
+With all of them, a Cortex-M port's whole RAM, with real play included, is
+1,329,939 B on ARMv6-M (statics, a 604 KiB zone, heap and stack peaks), against
+3,023,193 B for the default build on x86. [retro.md](retro.md) §5 has the
+per-lever figures and the RP2350 and RP2040 links.
 
 ---
 
@@ -952,7 +987,14 @@ is faster on its hardware.
 
 **The 64-bit divide problem**: Cortex-M0/M3/M4, LX7 and the N64's R4300 have
 no 64-by-32 divide. `((long long)a << 16) / b` becomes a library call
-(`__aeabi_ldivmod` on ARM), roughly 40 to 80 cycles. `FixedDiv` runs in
+(`__aeabi_ldivmod` on ARM). Measured on Cortex-M0+ code in qemu, it is about
+470 instructions a call plus an `__aeabi_lmul` for the remainder it throws
+away (`b1e76f5`); at the worst graded tic the M0+ makes 1,516 such calls and
+17,400 to `__aeabi_lmul`. `FIXED=1` in tools/cortexm replaces both through
+`m_fixed.h`'s `WEB_FIXED_PORT` hook with exact code: FixedMul from three
+16-bit `MULS`, FixedDiv as a 30-step restoring division after the clamp
+(about 150 instructions a call), 31% off the M0+'s worst tic with the port's
+drawers ([retro.md](retro.md) §5). `FixedDiv` runs in
 `R_ScaleFromGlobalAngle` for every wall segment, in sprite projection and in
 `P_PathTraverse`.
 
@@ -1000,12 +1042,12 @@ N64 and freestanding layers do exactly that.
 
 `tools/demo-test.mjs` replays demos with `-nodraw`, empty `I_FinishUpdate`
 and no audio installed. The freestanding layer has no display or audio
-device at all, and the N64 gate runs headless too. All of them replay the
+device unless audio is switched on (§1.8), and the N64 gate runs headless too. All of them replay the
 13 demos (44,580 tics) bit-identically, so **the simulation is independent of
 the display and audio layers**. A port can bring up the simulation first and
 add display and audio later.
 
-On wbox (AMD G-T56N Bobcat, ~1 GHz), the headless wasm simulation runs at an
+On wbox (AMD G-T56N Bobcat, 1.65 GHz), the headless wasm simulation runs at an
 average of 19,994 tics per second over the three doom.wad attract demos
 (`tools/golden/bench-baseline.json`, `simFpsNodraw`). Real time needs 35, so
 the simulation uses about 0.2% of that CPU. The renderer is the workload.
@@ -1104,7 +1146,7 @@ from flash instead (§2.3c, §2.3d), or use a 32 MiB PSRAM part.
 
 ### 7.3 Expected bottleneck
 
-On wbox (AMD G-T56N Bobcat, ~1 GHz) the wasm renderer averages 0.52 ms per
+On wbox (AMD G-T56N Bobcat, 1.65 GHz) the wasm renderer averages 0.52 ms per
 frame over the three doom.wad attract demos (0.49 to 0.57 ms), and the
 simulation 0.086 ms per tic (`tools/golden/bench-baseline.json`, `perStage`).
 Against the 28.57 ms tic that is 1.8% of the CPU for rendering and 0.3% for
@@ -1112,8 +1154,8 @@ the simulation.
 
 **Scaling is speculative.** wasm on an x86 core does not translate directly
 to LX7: instruction sets, caches, the FPU and memory latency all differ.
-Scaling by clock alone (240 MHz is about 0.24 of 1 GHz) puts rendering near
-2.2 ms per frame, leaving most of the 28.57 ms budget. That suggests 35 Hz is
+Scaling by clock alone (240 MHz is about 0.15 of 1.65 GHz) puts rendering
+near 3.6 ms per frame, leaving most of the 28.57 ms budget. That suggests 35 Hz is
 reachable **if memory latency on `screens[0]` is tolerable**.
 
 **Memory latency, not compute, is the likely limit.** Because `screens[0]` is
@@ -1145,9 +1187,11 @@ with detail 1, as `WD_DETAIL=1` does in `fs-doom`; renderer.md §7.2);
 
 **2. FixedDiv's software 64-bit divide** (significant)
 
-LX7 has no hardware 64-bit divide. At an estimated ~200 divides per frame and
-40 to 80 cycles each, that is 8,000 to 16,000 cycles, about 35 to 70 µs at
-240 MHz: measurable, manageable. §5.3 covers the `double` alternative; on the
+LX7 has no hardware 64-bit divide. Measured on Cortex-M0+ code (§5.3), the
+worst graded tic makes 1,516 FixedDiv calls into libgcc at about 470
+instructions each, plus 17,400 64-bit multiplies: 712,910 and 488,004
+instructions, a quarter of that 4.92 M-instruction tic ([retro.md](retro.md)
+§5). An exact replacement (tools/cortexm's `FIXED=1`) removes most of it. §5.3 covers the `double` alternative; on the
 ESP32-S3 `double` is also software. Profile both.
 
 **3. WAD streaming latency for cold textures** (manageable)
