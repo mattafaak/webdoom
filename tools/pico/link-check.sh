@@ -4,6 +4,12 @@
 # for each chip's real memory map: nothing is run, no board is needed.
 #
 #   bash tools/pico/link-check.sh [BUILD_DIR]
+#   bash tools/pico/link-check.sh --probe
+#
+# --probe resolves pico-sdk and checks every tool exactly as a run does, then
+# exits 0 without configuring or linking anything: tools/run-tests.sh's
+# pico-link need is this, so the suite's SKIP and this script's own
+# "measured nothing" can never disagree about what is present.
 #
 # Configures one pico-sdk build tree per chip and optimisation level under
 # BUILD_DIR (default tools/pico/build, this checkout's own: a tree another
@@ -48,6 +54,8 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
+PROBE=0
+if [ "${1:-}" = "--probe" ]; then PROBE=1; shift; fi
 BUILD="${1:-$HERE/build}"
 ZONE_KB="${ZONE_KB:-604}"
 HEAP_KB="${HEAP_KB:-295}"
@@ -72,6 +80,10 @@ done
 }
 sdk_version="$(sed -n 's/^ *set(PICO_SDK_VERSION_\(MAJOR\|MINOR\|REVISION\) \([0-9]*\))/\2/p' \
     "$PICO_SDK_PATH/pico_sdk_version.cmake" | paste -sd.)"
+if [ "$PROBE" = 1 ]; then
+    echo "link-check: probe: pico-sdk ${sdk_version:-?} at $PICO_SDK_PATH, every tool present"
+    exit 0
+fi
 
 # the IWADs, if this checkout has them, to set against the WAD's room in flash
 IWADS=()

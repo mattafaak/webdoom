@@ -94,11 +94,12 @@ have_n64()     { [ -x "${N64_INST:-$HOME/toolchains/n64}/bin/mips64-elf-gcc" ] &
                  command -v ares >/dev/null 2>&1 && \
                  command -v xvfb-run >/dev/null 2>&1; }
 have_gcc()     { command -v gcc >/dev/null 2>&1; }
-# pico-sdk and the build tools its CMake needs (tools/pico/link-check.sh
-# sources ~/toolchains/env.sh when PICO_SDK_PATH is unset)
-have_pico()    { command -v cmake >/dev/null 2>&1 && command -v ninja >/dev/null 2>&1 && \
-                 command -v arm-none-eabi-gcc >/dev/null 2>&1 && \
-                 [ -f "${PICO_SDK_PATH:-$HOME/toolchains/pico-sdk}/pico_sdk_init.cmake" ]; }
+# pico-sdk and the build tools its CMake needs, asked of tools/pico/link-check.sh
+# itself (--probe: no build), so the probe resolves PICO_SDK_PATH the way the
+# leg does (sourcing ~/toolchains/env.sh when it is unset) and checks the same
+# tools and the same SDK file; it used to assume ~/toolchains/pico-sdk, which
+# a host with that directory and no env.sh met while the leg then failed
+have_pico()    { bash tools/pico/link-check.sh --probe >/dev/null 2>&1; }
 # the same resolution order as tools/chrome-harness.mjs, so the probe and the
 # spawn cannot disagree; an explicit CHROME_BIN is the only answer when set
 have_browser() {
@@ -137,7 +138,7 @@ declare -A NEED=(
     [qemurv]='have_qemurv|qemu-riscv32-static not on PATH (needed for the RV32 leg)'
     [n64]='have_n64|N64 toolchain incomplete (need mips64-elf-gcc under $N64_INST, ares and xvfb-run; run: source ~/toolchains/env.sh)'
     [gcc]='have_gcc|gcc not on PATH'
-    [pico]='have_pico|pico-sdk, cmake, ninja and arm-none-eabi-gcc not all present (pico-sdk at $PICO_SDK_PATH or ~/toolchains/pico-sdk)'
+    [pico]='have_pico|pico-sdk or a build tool absent (bash tools/pico/link-check.sh --probe says which; pico-sdk from PICO_SDK_PATH, else ~/toolchains/env.sh)'
     [systemd]='have_systemd|systemd-analyze not on PATH (the unit file cannot be validated here)'
     [xvfb]='have_xvfb|xvfb-run not on PATH (headless Firefox has NO WebGL here, so the frame gate needs a real X display)'
     [loadbudget]='have_loadbudget|no load-budget baseline for host HOST (record: node tools/load-budget-test.mjs --record)'
