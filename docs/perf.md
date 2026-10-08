@@ -50,19 +50,19 @@ Two consequences shape every optimization decision:
 
 ## 2. The shipped artifacts
 
-Measured with `node tools/size-budget.mjs` on alder, emsdk 6.0.2, at 7f5c682,
-2026-10-05:
+Measured with `node tools/size-budget.mjs` on alder, emsdk 6.0.2, at 87a7fb2,
+2026-10-08:
 
 | figure | measured | ceiling ([`size-budget.json`](../tools/size-budget.json)) |
 |---|---|---|
-| `build/doom.wasm` | 300,698 B | 307,200 B |
-| `build/synth.wasm` (the AudioWorklet synth) | 21,395 B | 24,576 B |
-| `__heap_base` (stack + DATA + BSS) | 1,512,512 B | 1,572,864 B |
-| cold page load, gzip -9 of the 25 `SHELL_FILES` | 229,486 B | 250,000 B |
-| the same without the engine (JS + CSS + HTML) | 82,220 B | 88,000 B |
+| `build/doom.wasm` | 304,371 B | 307,200 B |
+| `build/synth.wasm` (the AudioWorklet synth) | 21,725 B | 24,576 B |
+| `__heap_base` (stack + DATA + BSS) | 1,599,136 B | 1,638,400 B |
+| cold page load, gzip -9 of the 25 `SHELL_FILES` | 231,658 B | 250,000 B |
+| the same without the engine (JS + CSS + HTML) | 82,604 B | 88,000 B |
 
-`build/doom.js`, the ES module wrapper, is 8,774 B. doom.wasm compresses to
-133,762 B with gzip -9 and 123,172 B with brotli at quality 6 (node zlib, same
+`build/doom.js`, the ES module wrapper, is 8,592 B. doom.wasm compresses to
+135,538 B with gzip -9 and 124,652 B with brotli at quality 6 (node zlib, same
 date). The ceilings are not exact figures: a change that fits needs no edit,
 and raising one needs its reason in the commit message. The `size-budget` leg
 fails past any of them.
@@ -98,13 +98,13 @@ measurement that decided it.
 ## 3. Linear memory
 
 The wasm memory is a flat 32 MiB (33,554,432 B) with growth off. Layout on the
-current build (2026-10-06, 256 visplanes):
+current build (2026-10-08, 256 visplanes):
 
 | region | size | source |
 |---|---|---|
 | C shadow stack, at the start of memory | 1 MiB | `STACK_SIZE` |
-| static data (DATA + BSS) | 550,176 B (537 KiB) | `__heap_base` − 1 MiB |
-| `__heap_base` | 1,598,752 B (1.52 MiB) | read from the wasm by `size-budget.mjs` |
+| static data (DATA + BSS) | 550,560 B (538 KiB) | `__heap_base` − 1 MiB |
+| `__heap_base` | 1,599,136 B (1.53 MiB) | read from the wasm by `size-budget.mjs` |
 | zone pool, one `malloc` | 4 MiB | `ZONESIZE` in `engine/web/web.h` |
 | WAD copies, one `malloc` each | IWAD + optional PWAD | |
 
@@ -266,23 +266,36 @@ output device. Stages (d) and (f) read nothing there. On a desktop session,
 ### Why the synth runs in the AudioWorklet
 
 The music synth used to run on the main thread from a 100 ms timer. Measured in
-node with the same wasm, `mus_intro`, 300 calls of 4,800 frames at 48 kHz after
-10 discarded (2026-09-16):
+node with [tools/synth-timing.mjs](../tools/synth-timing.mjs): `synth.wasm`
+(which links the same `mus_opl.o` and `opl3.o` as doom.wasm), doom.wad's
+`D_INTRO` in OPL2 mode, 300 calls of 4,800 frames at 48 kHz after 10
+discarded, two runs on each host, 2026-10-08. "Before" is the synth as built
+at `4eba931`, ahead of the exact savings (optimization-ledger NC7); "now" is
+the one this tree ships:
 
-| host | per 100 ms call, p50 / p99 | share of wall time |
-|---|---|---|
-| alder | 1.76 / 1.84 ms | 1.8% |
-| tank | 3.98 / 4.09 ms | 4.0% |
-| wbox | 18.5 / 19.7 ms | 18.6% |
+| host | before, per 100 ms call p50 / p99 | now, p50 / p99 | now, share of wall time |
+|---|---|---|---|
+| alder | 1.77–1.80 / 1.87–1.89 ms | 0.92–0.93 / 1.00–1.01 ms | 0.9% |
+| wbox | 19.45–19.55 / 19.94–20.11 ms | 10.17–10.29 / 10.46–10.67 ms | 10.2% |
 
-The share was not the problem; the shape was. One synchronous 19 ms call every
-100 ms drops a frame every sixth frame on wbox. `build/synth.wasm` links the
-same `mus_opl.c` and `opl3.c` objects as the engine and renders each 128-frame
-quantum inside the worklet, so none of that is on the main thread now. The
-main-thread path remains only for insecure origins, which have no
-`audioWorklet`. The `opl-mode` leg drives the shipped `client/js/music-worklet.js`
-in node, 128 frames at a time, and requires its output byte-identical to the
-engine's, because no browser here will run `process()` unattended.
+tank was offline and was not re-measured; on 2026-09-16, before the savings,
+it read 3.98 / 4.09 ms. The "before" rows reproduce that day's alder and wbox
+figures (1.76 / 1.84 ms and 18.5 / 19.7 ms) within 6%, on today's node.
+
+```sh
+node tools/synth-timing.mjs                      # build/synth.wasm, D_INTRO, OPL2
+node tools/synth-timing.mjs --mode 1 --json      # OPL3, one JSON line
+```
+
+The share was never the problem; the shape was. One synchronous 19 ms call
+every 100 ms dropped a frame every sixth frame on wbox, and even the 10 ms the
+synth takes now is most of a 16.7 ms frame there. `build/synth.wasm` renders
+each 128-frame quantum inside the worklet, so none of that is on the main
+thread now. The main-thread path remains only for insecure origins, which
+have no `audioWorklet`. The `opl-mode` leg drives the shipped
+`client/js/music-worklet.js` in node, 128 frames at a time, and requires its
+output byte-identical to the engine's, because no browser here will run
+`process()` unattended.
 
 ### Page load
 
