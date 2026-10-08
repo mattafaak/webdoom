@@ -745,6 +745,15 @@ leg n64-demos       n64,wad,slow,heavy "13/13 demo sim-hashes on emulated N64 (~
 # tic) is evidence, not this leg: tools/floor/run-n64.sh without --correctness.
 # Own out and work directories, so a full floor run's logs are never wiped.
 leg n64-floor       n64,wad,slow,heavy "13/13 demos rendered on emulated N64: sim + render hash every tic" -- bash tools/floor/run-n64.sh --correctness --out tools/floor/out-n64-correct --work tools/n64/n64_floor_work-correct
+# The N64 showing its frames (opt-in N64_DISPLAY=1): each tic converts
+# screens[0] through the palette into a 320x240 32-bit framebuffer the VI scans
+# out.  Every tic's framebuffer, read back out of RDRAM, is held to a host
+# conversion of the same frames by the browser build's own palette path
+# (tools/n64/display-check.mjs), with the sim and render hashes graded too.
+# Two short demos with damage and pickup flashes; all 13 is the same command
+# without --filter.  What the display costs is evidence, not this leg:
+# run-n64.sh --timing-once --display 1 --against <a --zone-kb 2224 run>.
+leg n64-display     n64,wad,build,slow,heavy "N64 32-bit framebuffer == host conversion of the same frames, every tic, 2 demos" -- bash tools/floor/run-n64.sh --correctness --display 1 --filter '^(doom-demo4|doom2-demo1)$' --out tools/floor/out-n64-display --work tools/n64/n64_floor_work-display
 leg demo-verify-cli build,wad  "the shipped demo-verify CLI itself, --all mode" -- node tools/demo-verify.mjs --all
 
 # ── netcode determinism ──────────────────────────────────────────────────────
