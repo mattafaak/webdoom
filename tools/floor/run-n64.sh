@@ -12,6 +12,16 @@
 #                  PREDICTED line from floor-stats are the timing evidence.
 #   --correctness  mode A only, graded with floor-gate --correctness: every
 #                  tic's sim and render hash on all 13 demos (the n64-floor leg).
+#   --display N    show every frame (tools/n64 N64_DISPLAY=N; 1 = through the
+#                  D-cache, 2 = uncached stores, 3 = 1 without Create Dirty
+#                  Exclusive): the ROMs convert screens[0] into a 320x240
+#                  32-bit VI framebuffer inside each tic.  Mode
+#                  A then also prints the framebuffer's hash every tic, which
+#                  tools/n64/display-check.mjs compares with a host conversion
+#                  of the same frames; mode B prints the display COUNT per tic,
+#                  which floor-stats.mjs reports.  The zone defaults to 2,224
+#                  KB here (the framebuffer needs 307,200 B of heap), so a
+#                  comparison without the display needs --zone-kb 2224 too.
 #
 # The time unit is COP0 COUNT (unit=count, unit_hz=46875000: half of the
 # VR4300's 93.75 MHz), so the 35 Hz budget is 1,339,285 counts per tic.  ares
@@ -23,7 +33,8 @@
 #            [--out DIR] [--work DIR] [--nodraw] [--golden-dir DIR]
 #            [--cart-dma 0|1] [--expansion-pak] [--interpreter]
 #            [--xprof FILE [--no-homebrew] [--cal-skew N]] [--regrade]
-#            [--timing-once] [--zone-kb N]
+#            [--timing-once] [--zone-kb N] [--display 1|2|3 [--display-fault N]]
+#            [--against DIR]
 #   --filter RE      only demos whose <iwad>-<demo> matches (grep -E); the gate
 #                    then grades those alone and the run says it is FILTERED
 #   --nodraw         build the mode A ROMs with -nodraw (the red-proof: the
@@ -43,8 +54,14 @@
 #   --regrade        grade the logs already in OUT; build and run nothing
 #   --timing-once    mode B once per demo and floor-stats only (no mode A, no
 #                    gate): a timing comparison, e.g. --cart-dma 0 against 1
-#   --zone-kb N      the zone size (default 2560); above ~3,000 the ROM needs
-#                    --expansion-pak
+#   --zone-kb N      the zone size (default 2560, 2224 with --display); above
+#                    ~3,000 the ROM needs --expansion-pak
+#   --display-fault N  with --display: a deliberately wrong conversion
+#                    (i_video_n64.c: 1 blue+1, 2 wrong palette index, 3 the LUT
+#                    never rebuilt, 4 no writeback to RDRAM); display-check.mjs
+#                    must FAIL on it
+#   --against DIR    with --timing-once: floor-stats compares every tic with
+#                    the mode B logs in DIR (e.g. the same zone, no display)
 #
 # Copyright (C) 2026, GPL-2.0-or-later.
 set -euo pipefail
@@ -53,7 +70,8 @@ N64="$ROOT/tools/n64"
 OUT="$ROOT/tools/floor/out-n64"
 WORK="$N64/n64_floor_work"
 CORRECTNESS=0; FILTER=""; JOBS=""; NODRAW=0; GOLDEN=""; CART_DMA=1
-EXPAK=0; INTERP=0; XPROF=""; HOMEBREW=1; CAL_SKEW=0; REGRADE=0; ONCE=0; ZONE_KB="" 
+EXPAK=0; INTERP=0; XPROF=""; HOMEBREW=1; CAL_SKEW=0; REGRADE=0; ONCE=0; ZONE_KB=""
+DISPLAY=""; DFAULT=0; AGAINST=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --correctness)   CORRECTNESS=1; shift ;;
@@ -72,11 +90,26 @@ while [ $# -gt 0 ]; do
         --regrade)       REGRADE=1; shift ;;
         --timing-once)   ONCE=1; shift ;;
         --zone-kb)       ZONE_KB="$2"; shift 2 ;;
+        --display)       DISPLAY="$2"; shift 2 ;;
+        --display-fault) DFAULT="$2"; shift 2 ;;
+        --against)       AGAINST="$2"; shift 2 ;;
         -h|--help)       sed -n '/^# usage:/,/^# Copyright/p' "$0"; exit 0 ;;
         *) echo "run-n64: unknown argument '$1' (see --help)" >&2; exit 2 ;;
     esac
 done
 case "$CART_DMA" in 0|1) ;; *) echo "run-n64: --cart-dma takes 0 or 1" >&2; exit 2 ;; esac
+case "$DISPLAY" in ""|1|2|3) ;; *) echo "run-n64: --display takes 1 (cached, CDE), 2 (uncached) or 3 (cached, no CDE)" >&2; exit 2 ;; esac
+case "$DFAULT" in 0|1|2|3|4) ;; *) echo "run-n64: --display-fault takes 1, 2, 3 or 4" >&2; exit 2 ;; esac
+[ "$DFAULT" = 0 ] || [ -n "$DISPLAY" ] || { echo "run-n64: --display-fault needs --display" >&2; exit 2; }
+[ -z "$AGAINST" ] || [ "$ONCE" = 1 ] || { echo "run-n64: --against goes with --timing-once" >&2; exit 2; }
+# The framebuffer (307,200 B) comes out of libdragon's heap, which the default
+# 2,560 KB zone leaves too small in every floor build (i_video_n64.c refuses
+# by name).  2,224 KB leaves the heap what it has today (mode B: the
+# framebuffer plus the 32 KB per-tic display array).
+if [ -n "$DISPLAY" ] && [ -z "$ZONE_KB" ]; then
+    ZONE_KB=2224
+    echo "run-n64: --display: zone 2,224 KB (the framebuffer needs the heap); compare against --zone-kb 2224"
+fi
 # Absolute, because make runs in tools/n64 (-C): a relative OUT_ROM there
 # names a different file from the one ares is then handed.  Measured: with a
 # relative --work, every ROM landed under tools/n64/tools/n64/... and all 26
@@ -144,8 +177,14 @@ BUILD="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 [ "$CART_DMA" = 0 ] && BUILD="$BUILD+wordcopy"
 [ "$NODRAW" = 1 ] && BUILD="$BUILD+nodraw"
 [ -n "$ZONE_KB" ] && BUILD="$BUILD+zone${ZONE_KB}k"
+[ "$DISPLAY" = 1 ] && BUILD="$BUILD+display"
+[ "$DISPLAY" = 2 ] && BUILD="$BUILD+display-uncached"
+[ "$DISPLAY" = 3 ] && BUILD="$BUILD+display-nocde"
+[ "$DFAULT" != 0 ] && BUILD="$BUILD+dfault$DFAULT"
 ZONE_ARG=()
 [ -n "$ZONE_KB" ] && ZONE_ARG=(N64_ZONE_KB="$ZONE_KB")
+DISP_ARG=()
+[ -n "$DISPLAY" ] && DISP_ARG=(N64_DISPLAY="$DISPLAY" N64_DISPLAY_FAULT="$DFAULT")
 
 SETTINGS=(--setting Audio/Blocking=false --setting Video/Blocking=false)
 [ "$EXPAK" = 1 ]  && SETTINGS+=(--setting Nintendo64/ExpansionPak=true)
@@ -171,7 +210,7 @@ if [ "$REGRADE" = 0 ]; then
         make -C "$N64" CORE_OBJ_DIR="$WORK/core" OBJ_DIR="$WORK/obj/$tag.$mode" \
              N64_WAD="$ROOT/wads/lib/$wad" N64_WAD_NAME="$name" N64_TIMEDEMO="$demo" \
              N64_FLOOR="$floor" N64_FLOOR_NAME="$tag" N64_BUILD="$BUILD" N64_CART_DMA="$CART_DMA" \
-             "${extra[@]}" "${ZONE_ARG[@]}" OUT_ELF="$WORK/$tag.$mode.elf" OUT_ROM="$WORK/$tag.$mode.z64" \
+             "${extra[@]}" "${ZONE_ARG[@]}" "${DISP_ARG[@]}" OUT_ELF="$WORK/$tag.$mode.elf" OUT_ROM="$WORK/$tag.$mode.z64" \
              > "$WORK/$tag.$mode.build.log" 2>&1
     }
     pids=(); what=()
@@ -218,6 +257,9 @@ if [ "$REGRADE" = 0 ]; then
     run_one() {   # tag mode k index
         local tag=$1 mode=$2 k=$3 n=$4 log="$WORK/$1.$2$3.ares.log" want="N64_FLOOR_END" t pid try disp
         [ "$mode" = B ] && want="N64_STAGES_END"
+        # the display records come after the log and the stage table
+        [ -n "$DISPLAY" ] && [ "$mode" = A ] && want="N64_FB32_END"
+        [ -n "$DISPLAY" ] && [ "$mode" = B ] && want="N64_DISPLAY_END"
         [ "$mode" = X ] && want="N64_XPROF_END"
         for try in 1 2; do
             disp=$(( DISP_BASE + n * 2 + try - 1 ))
@@ -311,6 +353,22 @@ if [ "$REGRADE" = 0 ]; then
                     awk '/^N64_STAGES_BEGIN /{f=1} f; /^N64_STAGES_END /{f=0}' "$log" > "${dst%.log}.stages"
                     grep -h "^N64_FLOOR_INFO " "$log" > "${dst%.log}.info"
                 fi
+                if [ -n "$DISPLAY" ]; then
+                    # the VI as read back, then the per-tic records
+                    if [ "$mode" = A ]; then
+                        { grep -h "^N64_DISPLAY_VI " "$log" || true
+                          awk '/^N64_FB32_BEGIN /{f=1} f; /^N64_FB32_END /{f=0}' "$log"; } > "${dst%.log}.fb32"
+                        dend="N64_FB32_END"; dfile="${dst%.log}.fb32"
+                    else
+                        { grep -h "^N64_DISPLAY_VI " "$log" || true
+                          awk '/^N64_DISPLAY_BEGIN /{f=1} f; /^N64_DISPLAY_END /{f=0}' "$log"; } > "${dst%.log}.display"
+                        dend="N64_DISPLAY_END"; dfile="${dst%.log}.display"
+                    fi
+                    if ! grep -q "^N64_DISPLAY_VI " "$dfile" || ! grep -q "^$dend " "$dfile"; then
+                        echo "FAIL floor-n64: $tag.$mode$k: a --display ROM printed no complete display records (see $log)"
+                        xfail=$((xfail + 1)); continue
+                    fi
+                fi
                 if [ "$mode" = X ]; then
                     grep -h "^N64_XPROF_DETECT\|^N64_XPROF_CAL" "$log" > "$OUT/$tag.X.cal"
                     grep -h "^N64_COPY_BENCH" "$log" > "$OUT/$tag.X.copy" || true
@@ -335,14 +393,26 @@ if [ -n "$XPROF" ]; then
 fi
 if [ "$ONCE" = 1 ]; then
     echo "floor-n64: one timing run per demo, no gate$FILTERED"
-    exec node "$ROOT/tools/floor/floor-stats.mjs" "$OUT"
+    SARGS=()
+    [ -n "$AGAINST" ] && SARGS=(--against "$(realpath -m -- "$AGAINST")")
+    exec node "$ROOT/tools/floor/floor-stats.mjs" "${SARGS[@]}" "$OUT"
 fi
+# With --display, mode A's framebuffer hashes are held to a host conversion of
+# the same frames (the browser build's own palette path, tools/n64/display-check.mjs).
+display_check() {
+    [ -n "$DISPLAY" ] || return 0
+    node "$ROOT/tools/n64/display-check.mjs" --demos "$NAMES" "$OUT"
+}
 if [ "$CORRECTNESS" = 1 ]; then
     echo "floor-n64: grading ${#DEMOS[@]} mode A log(s) for correctness$FILTERED"
-    exec node "$ROOT/tools/floor/floor-gate.mjs" --correctness "${GARGS[@]}" "$OUT"/*.A.log
+    rc=0
+    node "$ROOT/tools/floor/floor-gate.mjs" --correctness "${GARGS[@]}" "$OUT"/*.A.log || rc=$?
+    display_check || rc=1
+    exit "$rc"
 fi
 echo "floor-n64: grading A + B + B for ${#DEMOS[@]} demo(s)$FILTERED"
 rc=0
 node "$ROOT/tools/floor/floor-gate.mjs" "${GARGS[@]}" "$OUT"/*.A.log "$OUT"/*.B[12].log || rc=$?
 node "$ROOT/tools/floor/floor-stats.mjs" "$OUT" || rc=1
+display_check || rc=1
 exit "$rc"

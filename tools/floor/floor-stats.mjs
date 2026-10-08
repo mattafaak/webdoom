@@ -12,6 +12,10 @@
 //       left out, which the gate itself never prints while audio is missing.
 //       --against DIR compares every tic with the same tic in DIR (same demos,
 //       another build), e.g. PI DMA against the word-by-word copy.
+//       Display ROMs (run-n64.sh --display) also leave <demo>.B1.display: the
+//       COUNT the display path took in each tic (the 32-bit conversion and
+//       any palette LUT build, bracketed in i_video_n64.c), reported per
+//       graded tic and at the worst tic.
 //       Writes OUT_DIR/xprof-tics.txt: the worst tics, as run-n64.sh --xprof
 //       takes them.
 //
@@ -57,7 +61,17 @@ function readRuns(d, re) {
                 if (m) stages[+m[1]] = m.slice(2).map(Number);
             }
         }
-        out.push({ name, run, log, demo: log.demos[0], stages });
+        const df = join(d, f.replace(/\.log$/, '.display'));
+        let disp = null, vi = null;
+        if (existsSync(df)) {
+            disp = [];
+            for (const l of readFileSync(df, 'utf8').split('\n')) {
+                const m = /^D (\d+) (\d+)$/.exec(l);
+                if (m) disp[+m[1]] = +m[2];
+                else if (l.startsWith('N64_DISPLAY_VI ')) vi = l;
+            }
+        }
+        out.push({ name, run, log, demo: log.demos[0], stages, disp, vi });
     }
     return out;
 }
@@ -92,7 +106,7 @@ for (const [name, rs] of byName) {
         agree = diffs.every(d => d === 0) ? `${rs.length} runs identical` : `${rs.length} runs, ${Math.max(...diffs)} tics differ`;
     }
     console.log(`  ${name.padEnd(15)} ${String(g.length).padStart(6)} ${fmt(mean).padStart(10)} ${fmt(quantile(el, 0.99)).padStart(10)} ${fmt(w.elapsed).padStart(10)}  ${String(w.i).padStart(9)}  ${(over + ' ' + pct(over, g.length)).padStart(13)}  ${agree}`);
-    for (const x of g) all.push({ ...x, name, st: r.stages ? r.stages[x.i] : null });
+    for (const x of g) all.push({ ...x, name, st: r.stages ? r.stages[x.i] : null, disp: r.disp ? r.disp[x.i] : null });
 }
 
 const allSorted = [...all].sort((a, b) => b.elapsed - a.elapsed);
@@ -114,6 +128,23 @@ console.log(`    ${'demo'.padEnd(15)} ${'tic'.padStart(5)} ${'elapsed'.padStart(
 for (const x of allSorted.slice(0, top)) {
     const st = x.st ? x.st.map(v => fmt(v).padStart(9)).join(' ') + ' ' + fmt(x.elapsed - x.st.reduce((a, b) => a + b, 0)).padStart(8) : '(no stage table)';
     console.log(`    ${x.name.padEnd(15)} ${String(x.i).padStart(5)} ${fmt(x.elapsed).padStart(10)} ${(x.elapsed / budget).toFixed(2).padStart(8)} ${st}  ${x.mbytes || '-'}`);
+}
+
+// the display path's own COUNT (display ROMs only)
+const runsWithDisp = runs.filter(r => r.run === 'B1' && r.disp);
+if (runsWithDisp.length) {
+    const g = all.filter(x => runsWithDisp.some(r => r.name === x.name));
+    const missing = g.filter(x => typeof x.disp !== 'number').length;
+    const dsum = g.reduce((a, x) => a + (x.disp || 0), 0), tot = g.reduce((a, x) => a + x.elapsed, 0);
+    const dmax = g.reduce((a, x) => ((x.disp || 0) > (a.disp || 0) ? x : a));
+    const dmin = g.reduce((a, x) => ((x.disp ?? Infinity) < (a.disp ?? Infinity) ? x : a));
+    const w = [...g].sort((a, b) => b.elapsed - a.elapsed)[0];
+    console.log(`\n  display path (N64_DISPLAY: the 32-bit conversion and palette LUT builds, COUNT bracketed in i_video_n64.c), ` +
+        `${g.length} graded tics over ${runsWithDisp.length} demo(s)${missing ? `, ${missing} with no record` : ''}:`);
+    console.log(`    mean ${fmt(dsum / g.length)} ${h.unit} per tic (${pct(dsum / g.length, budget)} of the budget, ${pct(dsum, tot)} of graded time); ` +
+        `min ${fmt(dmin.disp)} (${dmin.name} tic ${dmin.i}); max ${fmt(dmax.disp)} (${dmax.name} tic ${dmax.i}, ${pct(dmax.disp, budget)} of the budget)`);
+    console.log(`    at the worst graded tic (${w.name} tic ${w.i}): ${fmt(w.disp)} of ${fmt(w.elapsed)} ${h.unit}; without it ${fmt(w.elapsed - w.disp)} (${((w.elapsed - w.disp) / budget).toFixed(2)}x the budget)`);
+    for (const r of runsWithDisp.slice(0, 1)) console.log(`    ${r.vi || 'no N64_DISPLAY_VI line'}`);
 }
 
 // tics that copied bytes out of the WAD (zone cache misses)
@@ -225,7 +256,7 @@ function xprofReport(d) {
             const title = tic < 0 ? `${name}: every tic of the demo (aggregate)` : `${name} tic ${tic}: COUNT ${fmt(+t.elapsed)} (2x = ${fmt(2 * t.elapsed)} cycles), XPROF ${fmt(whole)} cycles, calls ${W.calls}`;
             console.log(`\n  ${title}`);
             console.log(`    ${'slot'.padEnd(12)} ${'cycles'.padStart(13)} ${'share'.padStart(6)} ${'D-miss'.padStart(10)} ${'D-wb'.padStart(9)} ${'I-miss'.padStart(8)} ${'miss cyc'.padStart(7)} ${'RDRAM B'.padStart(12)} ${'calls'.padStart(8)} ${'px/cols'.padStart(9)} ${'cyc/px'.padStart(7)}`);
-            const order = ['whole', 'sim', 'frame', 'bsp', 'bsp.wall', 'bsp.col', 'planes', 'planes.span', 'planes.col', 'masked', 'masked.seg', 'masked.col', 'masked.fuzz', 'bsp.fuzz', 'other.draw'];
+            const order = ['whole', 'sim', 'frame', 'bsp', 'bsp.wall', 'bsp.col', 'planes', 'planes.span', 'planes.col', 'masked', 'masked.seg', 'masked.col', 'masked.fuzz', 'bsp.fuzz', 'other.draw', 'display'];
             for (const s of order) {
                 const v = t.slots[s];
                 if (!v || (+v.cycles === 0 && s !== 'whole')) continue;
