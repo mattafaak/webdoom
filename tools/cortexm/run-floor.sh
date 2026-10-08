@@ -23,6 +23,10 @@
 #            [--skip-fasttest]               red-proofs only (fast-check.sh): a
 #                                            wrong port must reach the demos to
 #                                            show the floor gate catches it too
+#            [--audio]                       the sound on in every tic (cm-doom
+#                                            -audio 1: the OPL synth and the
+#                                            mixer), its AUDIO line in each log;
+#                                            out directory suffix -audio
 #
 #   armv6m  -mcpu=cortex-m0plus code on mps2-an385 (exact M0+ instruction
 #           counts; unaligned accesses trap as on an M0+)
@@ -72,6 +76,7 @@ DRAWERS=0
 FIXED=0
 ONLY=""
 SKIPFT=0
+AUDIO=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --opt) OPT="$2"; shift 2 ;;
@@ -90,6 +95,7 @@ while [ $# -gt 0 ]; do
         --fast) DRAWERS=1; FIXED=1; shift ;;
         --demos) ONLY="$2"; shift 2 ;;
         --skip-fasttest) SKIPFT=1; shift ;;
+        --audio) AUDIO=1; shift ;;
         *) echo "FAIL run-floor: unknown argument '$1'"; exit 2 ;;
     esac
 done
@@ -99,6 +105,9 @@ if [ "$MISALIGN" = 1 ] && [ "$ZC" != 1 ]; then
 fi
 if [ "$COUNT" = 1 ] && [ "$CORRECT" = 1 ]; then
     echo "FAIL run-floor: --count runs mode B only and --correctness mode A only"; exit 2
+fi
+if [ "$COUNT" = 1 ] && [ "$AUDIO" = 1 ]; then
+    echo "FAIL run-floor: --count compares with the measured build's run, which has no audio"; exit 2
 fi
 case "$ISA" in
     armv6m) BOARD=mps2-an385; TARGET=armv6m-qemu ;;
@@ -125,6 +134,7 @@ B="$CM/build/$ISA$OPT$SUF"
 OSUF="$SUF"
 [ -n "$ZONE" ] && OSUF="$OSUF-z$ZONE"
 [ "$MISALIGN" = 1 ] && OSUF="$OSUF-misaligned"
+[ "$AUDIO" = 1 ] && OSUF="$OSUF-audio"
 OUT="${OUT:-$CM/out/$ISA$OPT$OSUF}"
 WADS="$ROOT/wads/lib"
 
@@ -247,14 +257,15 @@ fi
 MODES="A B"
 [ "$COUNT" = 1 ] && MODES="B"
 [ "$CORRECT" = 1 ] && MODES="A"
-ZARG=()
-[ -n "$ZONE" ] && ZARG=(-zone "$ZONE")
+RUNARGS=()
+[ -n "$ZONE" ] && RUNARGS=(-zone "$ZONE")
+[ "$AUDIO" = 1 ] && RUNARGS+=(-audio 1)
 
 run_demo () {   # run_demo <wad> <present-as> <demo> <name> <mode>
     local wad="$1" as="$2" demo="$3" name="$4" mode="$5" rc=0
     qemu "$ELF" "$OUT/$name.$mode.uart" cm-doom -wad "$WADS/$wad" -as "$as" -timedemo "$demo" \
         -floor "$OUT/$name.$mode.log" -mode "$mode" -name "$name" -build "$BUILD" \
-        -stats "$OUT/$name.$mode.stats" "${ZARG[@]}" || rc=$?
+        -stats "$OUT/$name.$mode.stats" "${RUNARGS[@]}" || rc=$?
     echo "$rc" > "$OUT/$name.$mode.rc"
 }
 

@@ -11,7 +11,8 @@
 //          port hands its DAC.
 // All of that is the platform's work and is counted.  The two hashes are this
 // harness's: when fs-doom counts instructions (WD_CYCLES=1) the counter is
-// paused around them, so a tic's count is the audio a target would run.
+// paused around them, and tools/cortexm takes them off its tics the same way
+// (FS_AUDIO_PAUSE), so a tic's count is the audio a target would run.
 //
 // The AUDIO line (tools/floor/floor_log.h):
 //   samples       frames rendered (one frame = one L and one R sample)
@@ -134,11 +135,19 @@ static long long rd (void)
 }
 
 // ── the instruction counter, paused around the harness's own work ────────────
+// A port that counts with its own clock names, in FS_AUDIO_PAUSE, a function
+// called with 0 before the harness's work and 1 after it (tools/cortexm's
+// cm_audio_pause takes that span off the tic it falls in).
+#if !defined(__linux__) && defined(FS_AUDIO_PAUSE)
+void FS_AUDIO_PAUSE (int run);
+#endif
 static void count (int run)
 {
 #ifdef __linux__
     if (fs_perf_instr_fd >= 0)
         ioctl (fs_perf_instr_fd, run ? PERF_EVENT_IOC_ENABLE : PERF_EVENT_IOC_DISABLE, 0);
+#elif defined(FS_AUDIO_PAUSE)
+    FS_AUDIO_PAUSE (run);
 #else
     (void) run;
 #endif
@@ -190,7 +199,13 @@ static void render_tic (void)
         t2 = rd ();
     for (k = 0; k < 2 * n; k++)
     {
-        int m = (int) (mus_f[k] * 16384.0f), o = m + sfx_s[k];
+        int m = (int) (mus_f[k] * 16384.0f), o;
+#ifdef FS_AUDIO_REDPROOF_SYNTH
+        // a red-proof build's wrong music (tools/cortexm/audio-check.mjs):
+        // one sample in 4,096 one step off
+        m += (((unsigned) (samples * 2) + (unsigned) k) & 0xfffu) == 0x5a5u;
+#endif
+        o = m + sfx_s[k];
         mus_s[k] = (short) m;
         fs_audio_dac[k] = (short) (o > 32767 ? 32767 : o < -32768 ? -32768 : o);
     }

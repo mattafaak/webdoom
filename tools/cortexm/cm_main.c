@@ -17,9 +17,16 @@
 //
 // The command line arrives by semihosting (qemu -semihosting-config ...,arg=):
 //   cm-doom -wad PATH -as NAME -timedemo demoN -floor LOG -mode A|B
-//           -name DEMO -build ID -stats FILE [-zone KB]
+//           -name DEMO -build ID -stats FILE [-zone KB] [-audio 1]
 // -zone hands the engine only the first KB KiB of the zone arena (as fs-doom's
 // WD_ZONE_KB does), so one binary can bisect the smallest zone that works.
+// -audio 1 runs the sound in every tic, as fs-doom does by default: the OPL
+// synth and the 8-channel mixer (tools/freestanding/fs_audio.c), and the
+// floor log's AUDIO line is theirs.  Without it (the Makefile's
+// FS_AUDIO_DEFAULT=0) the sound is off and the AUDIO line reads 0.
+// The AUDIO line's two hashes are the harness's work: fs_audio.c calls
+// cm_audio_pause around them (FS_AUDIO_PAUSE), and the timer steps between
+// are taken off the tic, as fs-doom pauses its counter.
 //
 // The play mode (tools/floor/play-set.mjs's runCm, run by
 // tools/floor/ram-floor.mjs) is fs-doom's -frames mode on the board:
@@ -33,7 +40,7 @@
 // (what the zone holds), and at the end a MEM line: the peak stack (from the
 // top of the stack region, init and play together) and newlib's heap
 // high-water.  -audio 1 runs the sound (the OPL synth and the mixer) as fs-doom
-// does; the floor log mode leaves it off.  -save-at, -load-at and -end-at are
+// does, as in the floor log mode.  -save-at, -load-at and -end-at are
 // fs-doom's WD_SAVE_AT, WD_LOAD_AT and WD_END_AT in slot 0: the game saved
 // (an S line: frame, gametic, slot, the save's bytes), kept by files.c in a
 // buffer in .big (fs_keep_alloc), loaded back, the run ended.  No floor log
@@ -46,7 +53,8 @@
 // Units.  qemu runs with -icount shift=0: one guest instruction is 1 ns of
 // virtual time.  A tic's instructions are (timer steps) x CM_INSN_PER_TICK, to
 // within one step (40 instructions on the an385, 50 on the an505); selftest.c
-// is the proof.
+// is the proof.  With -audio 1 the hashes' span is read with the same timer,
+// so such a tic is within two steps.
 //
 // The stats file carries what the floor log has no field for, one line per
 // tic: the engine's own stage brackets (web_perf_now() returns the timer, via
@@ -95,6 +103,7 @@ extern char** environ;
 void G_DoSaveGame (void);
 extern void* (*fs_keep_alloc) (size_t n);
 extern void (*fs_keep_release) (void* p);
+void fs_audio_floor (floor_audio_t* a); /* fs_audio.c: the AUDIO line */
 
 // ── floor_wrap.c's tic flags (it is linked with the same --wrap hooks) ───────
 volatile unsigned fs_floor_load;
@@ -135,6 +144,21 @@ static unsigned t_helper[CM_MAX_TICS][NH_MAX] BIG (helper);
 static volatile int ntics;
 static volatile int overflow;
 static volatile unsigned stack_init;
+
+// ── the AUDIO line's hashes, charged to no tic ───────────────────────────────
+// fs_audio.c hashes every tic's samples for the AUDIO line (synthhash,
+// mixhash) between cm_audio_pause (0) and cm_audio_pause (1), the Makefile's
+// FS_AUDIO_PAUSE: the timer steps between are added up here and taken off the
+// tic (or the play mode's frame) they fell in.  Not called with the sound off.
+static unsigned audio_pause_t0, audio_paused;
+void cm_audio_pause (int run);
+void cm_audio_pause (int run)
+{
+    if (!run)
+        audio_pause_t0 = cm_ticks ();
+    else
+        audio_paused += cm_ticks () - audio_pause_t0;
+}
 
 // ── output through semihosting, buffered ─────────────────────────────────────
 static int out_fd = -1;
@@ -351,6 +375,7 @@ static void play_run (int exit_at, int save_at, int load_at, int end_at)
         if (wipeactive)
             fs_wipe_clock++;
         wiping = wipeactive ? 1 : 0;
+        audio_paused = 0;
         t0 = cm_ticks ();
         D_DoomFrame ();
         t1 = cm_ticks ();
@@ -371,7 +396,7 @@ static void play_run (int exit_at, int save_at, int load_at, int end_at)
         out_putc (' ');
         out_putu ((unsigned) gamemap);
         out_putc (' ');
-        out_putu ((t1 - t0) * k);
+        out_putu ((t1 - t0 - audio_paused) * k);
         out_putc (' ');
         out_putu ((unsigned) wiping);
         out_putc ('\n');
@@ -419,10 +444,9 @@ void cm_start (void)
     save_at_s = arg (argc, argv, "-save-at");
     load_at_s = arg (argc, argv, "-load-at");
     end_at_s = arg (argc, argv, "-end-at");
-    if (!play &&
-        (exit_at_s || lmp || audio || save_at_s || load_at_s || end_at_s))
-        need (NULL, "-frames (-exit-at, -lmp, -audio, -save-at, -load-at and "
-                    "-end-at are the play mode's)");
+    if (!play && (exit_at_s || lmp || save_at_s || load_at_s || end_at_s))
+        need (NULL, "-frames (-exit-at, -lmp, -save-at, -load-at and -end-at "
+                    "are the play mode's)");
     if (play)
     {
         floor_path = mode_s = name = build = stats = 0;
@@ -522,6 +546,7 @@ void cm_start (void)
     last_tic = -1;
     fs_floor_load = 0;
     fs_floor_mbytes = 0;
+    audio_paused = 0;
     last = cm_ticks ();
     for (;;)
     {
@@ -539,7 +564,7 @@ void cm_start (void)
             if (n < CM_MAX_TICS)
             {
                 double s;
-                t_elapsed[n] = (now - last) * k;
+                t_elapsed[n] = (now - last - audio_paused) * k;
                 t_gametic[n] = (unsigned) gametic;
                 t_flags[n] =
                     (unsigned char) (fs_floor_load ? FLOOR_TIC_LOAD : 0);
@@ -580,6 +605,7 @@ void cm_start (void)
             for (h = 0; h < cm_nhelpers; h++)
                 hlast[h] = cm_hcount[h];
 #endif
+            audio_paused = 0;
             last = cm_ticks ();
         }
     }
@@ -647,7 +673,7 @@ done:
         for (i = 0; i < ntics; i++)
             floor_tic ((unsigned) i, t_gametic[i], t_elapsed[i], t_flags[i],
                        t_mbytes[i], mode == 'A', t_sim[i], t_render[i]);
-        memset (&a, 0, sizeof (a)); /* no audio in this build yet */
+        fs_audio_floor (&a); /* all 0 unless -audio 1 */
         floor_audio (&a);
         floor_demo_end (name, final_sim, final_render);
         out_close ();

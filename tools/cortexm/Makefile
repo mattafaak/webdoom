@@ -173,14 +173,20 @@ CFLAGS := $(CPU) $(OPT) -g -std=gnu89 -DNORMALUNIX -Dalloca=__builtin_alloca \
           -Wall -Wno-unused-variable -Wno-unused-but-set-variable \
           -Wno-dangling-else -Wno-parentheses -Wno-missing-braces \
           -Wno-unused-value -Wno-pointer-sign -Wno-implicit-function-declaration \
-          -DFS_AUDIO_DEFAULT=0 $(PORT_CFLAGS) $(LEAN_FLAGS) \
+          -DFS_AUDIO_DEFAULT=0 -DFS_AUDIO_PAUSE=cm_audio_pause \
+          $(PORT_CFLAGS) $(LEAN_FLAGS) \
           -I$(CORE) -I$(FS) -I../floor -I. $(EXTRA_CFLAGS)
 
 # The audio (tools/freestanding/fs_audio.c): built, and off unless WD_AUDIO
-# says otherwise (there is no environment here, so off).  Under qemu the OPL
-# synth costs more than the game, so the 13-demo legs run without it.  Its
-# sources need the web layer's headers and an empty <emscripten.h>, and no
-# fused multiply-add (the synth's reference is IEEE double, as in synth.wasm).
+# says otherwise (FS_AUDIO_DEFAULT=0; cm-doom's -audio 1 sets WD_AUDIO=1, in
+# the floor log mode and the play mode).  Under qemu the OPL synth costs more
+# than the game, so the 13-demo legs run without it; cortexm-audio runs
+# doom-demo4 with it on both boards.  FS_AUDIO_PAUSE: cm_main.c's
+# cm_audio_pause, around the AUDIO line's hashes, which are charged to no tic.
+# Its sources need the web layer's headers and an empty <emscripten.h>, and no
+# fused multiply-add (the synth's reference is IEEE double, as in synth.wasm;
+# both boards' builds are -mfloat-abi=soft, so float and double are libgcc's
+# IEEE soft-float).
 WEB := ../../engine/web
 AUDIO_CFLAGS := -ffp-contract=off -I$(FS)/stub -I$(WEB)
 

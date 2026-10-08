@@ -49,8 +49,9 @@
 // FS_DOOM=<binary> probes a side build on the host, as run-x86.sh does
 // (tools/freestanding/fs-doom-zc: lumps read in place).  --cortexm ISA probes
 // the Cortex-M build under qemu instead: tools/cortexm/run-floor.sh ISA
-// --correctness --zone <n> (mode A, sim and render hashes, no timing run and
-// no audio: that build has none), with --zero-copy passed on; its arena is the
+// --correctness --zone <n> (mode A, sim and render hashes, no timing run, and
+// the sound off: the build links it, off unless run-floor.sh --audio, which
+// this does not pass), with --zero-copy passed on; its arena is the
 // Makefile's ZONE_KB, so hi_kb must not exceed it.
 // Copyright (C) 2026, GPL-2.0-or-later.
 import { spawnSync } from 'node:child_process';

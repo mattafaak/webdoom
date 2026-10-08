@@ -670,6 +670,15 @@ leg zone-min-armv6m-zc qemucm,wad,heavy "Cortex-M0+, lumps read in place: smalle
 # demo and tic.
 leg armv6m-fast     qemucm,wad,heavy "Cortex-M0+, the port's drawers, FixedMul, FixedDiv: 13 demos correct, instructions per tic; 4 wrong variants caught" -- bash tools/cortexm/fast-check.sh armv6m
 leg armv8m-fast     qemucm,wad,heavy "Cortex-M33, the port's drawers, FixedDiv: 13 demos correct, instructions per tic; 3 wrong variants caught" -- bash tools/cortexm/fast-check.sh armv8m
+# The sound on the boards (tools/cortexm/audio-check.mjs): doom-demo4 on both
+# ISAs' zero-copy builds, with and without the exact OPL synth and the
+# 8-channel mixer (cm-doom -audio 1), both correct through the floor gate; the
+# AUDIO line of every run with the sound equals tools/floor/audio-ref.json,
+# the x86 reference (the sequencer's double is soft-float on both boards), and
+# the sound's own instructions per graded tic are the difference, tic by tic.
+# Red-proofs: a reference one digit off, and a build whose music is one step
+# off on one sample in 4,096 (FS_AUDIO_REDPROOF_SYNTH), must both be caught.
+leg cortexm-audio   qemucm,wad,heavy "Cortex-M0+ and M33, doom-demo4 with the OPL synth and mixer: AUDIO == the x86 reference, the sound's instructions per tic; 4 red-proofs" -- node tools/cortexm/audio-check.mjs
 # The play-inclusive zone minimum.  The 13 demos never change level and their
 # wipes are cut short, so their minimum is not a game's.  zone-min.mjs --play
 # adds the play set (tools/floor/play-set.mjs): each demo with a level exit

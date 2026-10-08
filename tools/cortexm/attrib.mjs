@@ -141,6 +141,10 @@ export function events(elf) {
             else if (/\blast\s*=\s*cm_ticks/.test(t)) ev.push({ addr: s.addr, kind: 'B', stage: 0, at: `${f}:${s.line}` });
             // play_run's frame timer: play mode only, and attrib runs demos
             else if (/\bt[01]\s*=\s*cm_ticks/.test(t)) continue;
+            // cm_audio_pause, around the AUDIO line's hashes: only with -audio
+            // 1, which attrib does not pass (a run with it would fail check 2:
+            // the guest timer leaves the hashes out, the plugin counts them)
+            else if (/\baudio_pause(_t0|d)\b.*cm_ticks/.test(t)) continue;
             else throw new Error(`unclassified cm_ticks call at ${f}:${s.line}: ${t.trim()}`);
             continue;
         }
