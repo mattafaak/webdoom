@@ -77,11 +77,36 @@ families:
 | Sidedef sector index and linedef sidenum checked at load, `I_Error` on out-of-range | `P_LoadSideDefs`, `P_LoadLineDefs`, p_setup.c | out-of-bounds read |
 | A co-op level with no player start at all | `P_SetupLevel`, p_setup.c | NULL dereference in `P_PlayerThink` |
 | A loaded monster's or missile's cleared `target` read through: a zeroed `mobj_t` stands in | `P_SpawnMissile` (p_mobj.c), `A_SpawnFly` (p_enemy.c), `A_BFGSpray` (p_pspr.c), via `P_ZeroMobj` | NULL dereference (DOS read low memory) |
-| A two-sided line with no back side (the glass hack) read by a hitscan or aim: a zeroed `sector_t` stands in | `PTR_AimTraverse`, `PTR_ShootTraverse` (p_map.c), via `P_ZeroSector` | NULL dereference (DOS read its interrupt vector table) |
+| A two-sided line with no back side (the glass hack) read by a hitscan or aim: DOS 6.22's null sector stands in, the one its segs already get | `PTR_AimTraverse`, `PTR_ShootTraverse` (p_map.c), via `P_NullSector` (p_setup.c) | NULL dereference (DOS read its interrupt vector table, whose first eight bytes are that sector's heights) |
+| `EV_BuildStairs` skips a two-sided line with no back side (PrBoom+'s rule, `jff 5/7/98`) | `EV_BuildStairs`, p_floor.c | an index taken from NULL and the next step's flat read through it; Chocolate and Crispy keep the read. What DOS did is not known: by vanilla's layout it would have read flat 22 there, which nothing can check |
+| The boss shooter's target list is rebuilt when a game loads | `G_DoLoadGame` (g_game.c) via `P_BrainTargets` (p_enemy.c) | the list is not saved: a game loaded in the same session kept pointers to the previous level's freed mobjs, one loaded at boot had none and divided by zero in `A_BrainSpit` |
 
-The two stand-ins change nothing the browser build does: doom.wasm always read
+`P_ZeroMobj` changes nothing the browser build does: doom.wasm always read
 zeros at address 0 there, and the armed build asserts the stand-in equals
-address 0 at every use. They stop native builds faulting.
+address 0 at every use. It stops native builds faulting.
+
+The glass sites changed what the browser does on purpose (the owner's call,
+2026-10-08). They read zeros until then, and now read DOS 6.22's null sector,
+so a line and its segs see the same back sector. The two differ only where a
+crossed glass line's front floor or ceiling is 0. None of the 243 maps in the
+29 WADs of `wads/lib`, IWADs included, has a glass line (scanned 2026-10-08),
+so no golden demo reaches either site.
+- Chocolate, Crispy, PrBoom+ and dsda all treat the missing back sector here
+  as different in both heights. The null sector gives the same answer
+  wherever no front floor is `0x00199257` and no front ceiling `0x007006f4`.
+  The armed build asserts that at both sites.
+- Sector heights are not provably multiples of `0x2000`, which would make
+  that always true. A door's top in a sector with no neighbour is
+  `0x7ffbffff`, and raise-to-texture's `floorheight + MAXINT` wraps. Neither
+  reaches those two values in one step.
+- CLNJ-506 is a DOS v1.9 demo of challenj.wad E1M2 that crosses a glass line
+  (dsdarchive.com). It plays to its exit in sync, before and after: 186 of
+  186 kills, 3 of 3 secrets, leveltime 10740 (5:06.86, as DSDA lists it).
+- Chocolate Doom cannot judge this. Its `P_CrossSubsector` treats a glass
+  line as blocking sight, where webdoom's sight reads the seg's null sector
+  as vanilla's code does. On the synthetic glass map in
+  `tools/floor/lean-levels-test.mjs` with demo 1's input, every webdoom build
+  leaves Chocolate's trace at tic 315 for that reason.
 
 ---
 

@@ -52,18 +52,6 @@ owner):
   1,024 B, so a code change can make `ram-floor-armv6m`/`-armv8m` fail without
   any change in what the game allocates. Measuring the peak of what malloc
   handed out, not of the break, would remove it.
-- **Glass in the browser is not DOS vanilla.** A two-sided line with no back
-  side now reads a zeroed back sector (`P_ZeroSector`, 3099e83), which is what
-  doom.wasm always read at address 0. DOS read its interrupt vector table
-  there, the values `P_NullSector` already uses for segs; on E1M5 nine glass
-  lines have floor 0, where the two differ. Matching DOS would move behaviour
-  and need a regold against an external reference: the owner's call.
-  `EV_BuildStairs` (p_floor.c) also reads a glass line's NULL back sector, but
-  only beside a stair sector, which no tested map has.
-- **A_BrainSpit after a load is a vanilla use-after-free.** `braintargets[]`
-  still points into the previous level when a game is loaded in the same
-  session, and a game loaded at boot has none, so the boss stops with
-  "A_BrainSpit: numbraintargets was 0" (doom2 MAP30 loaded at boot, at tic 76).
 - **386-class:** no harness. Measuring id's DOS binary would give the atlas a
   baseline, but nothing in this codebase could move it.
 

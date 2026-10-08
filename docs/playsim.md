@@ -944,7 +944,9 @@ blockmap area; a thing that no longer fits takes 10 damage every fourth tic
 finds each next step by scanning the current step sector's lines for a
 two-sided line whose front sector is the current one and whose back sector has
 the same floor texture. That makes stair building depend on linedef order and
-direction in the map.
+direction in the map. A two-sided line with no back side (the glass hack) is
+skipped (webdoom, PrBoom+'s rule): vanilla took the next step's index and flat
+from a NULL sector. The `stairs-glass` case in `crafted-maps` gates it.
 
 ### 10.8 Teleportation — p_telept.c
 
@@ -1155,6 +1157,17 @@ On load (`P_UnArchiveThinkers`):
 - `info`, `floorz` and `ceilingz` are recomputed, the thing is relinked with
   `P_SetThingPosition`, and (webdoom) `old*` is snapped to the position so a
   loaded game shows no interpolation streak.
+
+The boss shooter's target list (`braintargets[]`) is not in the save either.
+Vanilla built it only when the shooter woke (`A_BrainAwake`), so a game
+loaded in the same session kept pointers to the previous level's freed mobjs,
+and one loaded at boot had none: `A_BrainSpit` divided by zero. webdoom
+rebuilds it after `P_UnArchiveThinkers` with the same scan (`P_BrainTargets`).
+The saved thinkers keep their list order, so the list is the one the shooter
+built, but the cycle restarts at its first spot: Crispy and PrBoom+ save the
+index, and this save format has no room for it. The `brain-load` leg loads
+one doom2 MAP30 save in the session that wrote it and in a fresh one, and
+requires the two games to stay identical for 2,400 tics.
 
 `mobj->tracer` is cleared too (webdoom; vanilla left the stale pointer, and
 Chocolate Doom drops it as well), so a Revenant's homing missile saved in
@@ -1900,7 +1913,7 @@ place).
 | `solidsegs[MAXSEGS = 64]` | Wrote past the array (vanilla limit 32) | After `R_StoreWallRange`, the clip entry is dropped when full; the wall is still drawn. The array has one slot past the cap, because the crunch copies the entry at `newend` (`crafted-maps.mjs` solidsegs-full) | No: render-only, never read by the sim | `R_ClipSolidWallSegment`, r_bsp.c; [renderer.md](renderer.md) §3.4, §10 |
 | `openings[MAXOPENINGS = SCREENWIDTH*64]` | Pointer overrun in a non-`RANGECHECK` build; `I_Error` in `R_DrawPlanes` with `RANGECHECK` | Each `lastopening +=` in `R_StoreWallRange` is checked first; when full, the masked midtexture is dropped (its columns too, when the sprite clips did not fit after them) or the silhouette bit cleared, never leaving a NULL clip pointer behind (`crafted-maps.mjs` masked-openings) | No: render-only | `R_StoreWallRange`, r_segs.c; [renderer.md](renderer.md) §4.3, §10 |
 | save buffer | Vanilla built the save at `screens[1]+0x4000`, 175,616 bytes from the end of the screen block, with no check; big levels wrote past it | malloc'd at `P_ArchiveSize()`, a bound computed from the level, before anything is written | No: demos never save | `G_DoSaveGame`, g_game.c; `P_ArchiveSize`, p_saveg.c; §13.1 |
-| `braintargets[MAXBRAINTARGETS = 32]` | No check; a map with more than 32 `MT_BOSSTARGET` things overwrote `numbraintargets` and `braintargeton` | Only the first 32 are stored; `A_BrainSpit` cycles through those | No: no golden demo plays MAP30 (which has 8) | `A_BrainAwake`, p_enemy.c |
+| `braintargets[MAXBRAINTARGETS = 32]` | No check; a map with more than 32 `MT_BOSSTARGET` things overwrote `numbraintargets` and `braintargeton` | Only the first 32 are stored; `A_BrainSpit` cycles through those | No: no golden demo plays MAP30. At ultra-violence the scan finds 13 targets on Doom II's, 4 on TNT's and 9 on Plutonia's | `P_BrainTargets` (`A_BrainAwake`, and `G_DoLoadGame` on a load), p_enemy.c |
 | `EV_DoDonut` `s2`/`s3` | NULL dereference when the ring or outer sector is missing (one-sided first line, or a bad two-sided line) | Skips that sector (`if (!s2) continue;`, `if (!s3) continue;`), as PrBoom does | No: no golden demo uses line special 9 | `EV_DoDonut`, p_spec.c; §10.3 |
 | `activeplats[MAXPLATS = 30]` | Vanilla already `I_Error`s | Unchanged: `I_Error("P_AddActivePlat: no more plats!")` | No | `P_AddActivePlat`, p_plats.c; §10.5 |
 | `buttonlist[MAXBUTTONS = 16]` | Vanilla already `I_Error`s | Unchanged: `I_Error("P_StartButton: no button slots left!")` | No | `P_StartButton`, p_switch.c |
