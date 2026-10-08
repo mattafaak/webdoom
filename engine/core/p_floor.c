@@ -523,6 +523,10 @@ EV_BuildStairs
 		    continue;
 
 		tsec = (sec->lines[i])->backsector;
+		// webdoom: a two-sided line with no back side (the glass hack) has
+		// no next step.  Vanilla took its index and read its floorpic
+		// through NULL, as Chocolate and Crispy still do.
+		if (!tsec) continue;  // webdoom: PrBoom+'s rule (jff 5/7/98)
 		newsecnum = tsec - sectors;
 
 		if (tsec->floorpic != texture)
