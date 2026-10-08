@@ -1,6 +1,8 @@
 // Headless Chrome over raw CDP, the way every browser leg did it by hand.
 // launchChrome() spawns, allocates a port, waits for /json/version; tab()
-// opens a page with the JSON-RPC demux and the helpers the legs share.
+// opens a page with the JSON-RPC demux and the helpers the legs share, and
+// window() the same in a window of its own (a page that must keep running
+// while another is open: see openWindow).
 import { spawn } from 'node:child_process';
 import { chromeBin, chromeProfile, reapOnExit } from '../chrome-harness.mjs';
 import { sleep, freePort } from './util.mjs';
@@ -29,11 +31,44 @@ export async function launchChrome({ gpu = 'swiftshader', flags = [], port = nul
         if (Date.now() > deadline) { kill(); throw new Error(`chrome did not answer CDP on ${port} in ${readyMs} ms`); }
         await sleep(200);
     }
-    return { port, proc, kill, tab: url => openTab(port, url) };
+    return { port, proc, kill, tab: url => openTab(port, url), window: url => openWindow(port, url) };
 }
 
 async function openTab(port, url = 'about:blank') {
     const target = await (await fetch(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' })).json();
+    return attach(port, target);
+}
+
+// A page in a window of its own.  Chrome shows one tab per window: a tab
+// opened beside another hides it (document.visibilityState 'hidden'), and a
+// hidden page gets no requestAnimationFrame, which is what runs the game
+// (client/js/main.js).  So players sharing a window stop playing as soon as
+// another tab opens, and the server drops a player silent for its DROP_MS
+// (server/game.js).  Measured headless, a co-op host at gametic 32: with a
+// second tab opened beside it, it read 'hidden' and stopped at 33, and 7 s
+// later "the connection to the game server was lost" (the server: "dropped
+// (unresponsive)"); with the second page in a new window it stayed 'visible'
+// and went on at 35 tics a second.  The page opens on about:blank and is
+// attached before it navigates, so it misses no event of the load.
+async function openWindow(port, url = 'about:blank') {
+    const { webSocketDebuggerUrl } = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
+    const bws = new WebSocket(webSocketDebuggerUrl);
+    await new Promise((res, rej) => { bws.onopen = res; bws.onerror = rej; });
+    const reply = await new Promise(res => {
+        bws.onmessage = ev => res(JSON.parse(ev.data));
+        bws.send(JSON.stringify({ id: 1, method: 'Target.createTarget', params: { url: 'about:blank', newWindow: true } }));
+    });
+    bws.close();
+    const id = reply.result?.targetId;
+    if (!id) throw new Error(`Target.createTarget (newWindow) failed: ${JSON.stringify(reply.error ?? reply)}`);
+    const target = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(t => t.id === id);
+    if (!target) throw new Error(`the new window's page ${id} is not in /json/list`);
+    const tab = await attach(port, target);
+    if (url !== 'about:blank') await tab.cdp('Page.navigate', { url });
+    return tab;
+}
+
+async function attach(port, target) {
     const ws = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
     let id = 0;
