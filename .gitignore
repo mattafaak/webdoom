@@ -42,3 +42,6 @@ __pycache__/
 # floor gate logs (tools/floor/run-x86.sh)
 tools/floor/out-x86/
 tools/floor/out-n64*/
+# and any other out dir a floor run is pointed at (run-x86.sh's first argument,
+# run-n64.sh --out), named out-<what> as the two above are
+tools/floor/out-*/
