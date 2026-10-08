@@ -25,10 +25,11 @@ const shot = async (tab, file) => {
 };
 const onLobby = tab => tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`);
 
-// A window each: a tab opened beside another hides it, a hidden page gets no
-// requestAnimationFrame (which runs the game), and the server drops a player
-// silent for 5 s (tools/lib/cdp.mjs openWindow).  In one window this test
-// passed only because it finished before that drop.
+// A window each, as real players have: a tab opened beside another hides it,
+// and a hidden page draws nothing and reads no input; it plays on main.js's
+// Worker clock (tools/lib/cdp.mjs openWindow, browser-net-hidden).  In one
+// window, before that clock, the hidden player stopped and the server dropped
+// it after 5 s, and this test passed only because it finished first.
 const A = await chrome.window(url);
 const B = await chrome.window(url);
 // A page that stops answering CDP must end the test, not hang the suite.

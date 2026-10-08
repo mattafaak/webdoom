@@ -41,15 +41,18 @@ async function openTab(port, url = 'about:blank') {
 
 // A page in a window of its own.  Chrome shows one tab per window: a tab
 // opened beside another hides it (document.visibilityState 'hidden'), and a
-// hidden page gets no requestAnimationFrame, which is what runs the game
-// (client/js/main.js).  So players sharing a window stop playing as soon as
-// another tab opens, and the server drops a player silent for its DROP_MS
-// (server/game.js).  Measured headless, a co-op host at gametic 32: with a
-// second tab opened beside it, it read 'hidden' and stopped at 33, and 7 s
-// later "the connection to the game server was lost" (the server: "dropped
-// (unresponsive)"); with the second page in a new window it stayed 'visible'
-// and went on at 35 tics a second.  The page opens on about:blank and is
-// attached before it navigates, so it misses no event of the load.
+// hidden page gets no requestAnimationFrame, which is what draws the game
+// and reads its input (client/js/main.js).  A hidden netplay page plays on
+// main.js's Worker clock instead, with drawing off (browser-net-hidden opens
+// a tab beside one on purpose); single player pauses.  So a player that must
+// draw, take input or keep a single-player game running needs a window of
+// its own, as each real player has.  Before that clock, a hidden player
+// stopped altogether: measured headless, a co-op host at gametic 32 with a
+// second tab opened beside it read 'hidden', stopped at 33, and 7 s later
+// read "the connection to the game server was lost" (the server: "dropped
+// (unresponsive)"); in a new window it stayed 'visible' and went on at 35
+// tics a second.  The page opens on about:blank and is attached before it
+// navigates, so it misses no event of the load.
 async function openWindow(port, url = 'about:blank') {
     const { webSocketDebuggerUrl } = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
     const bws = new WebSocket(webSocketDebuggerUrl);

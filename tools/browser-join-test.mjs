@@ -41,6 +41,9 @@
 // passed only while C's whole drop-in fit in those 5 s; under load (load
 // average ~60) it once did not: C reached the game, then C and A read "the
 // connection to the game server was lost" and D found no game to spectate.
+// That was before main.js's hidden-page clock: a hidden netplay page now
+// plays on a Worker's 28 ms clock (browser-net-hidden), but it draws nothing
+// and takes no input, so each player keeps its window.
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { launchChrome } from './lib/cdp.mjs';
