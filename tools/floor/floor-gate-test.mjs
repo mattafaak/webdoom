@@ -8,10 +8,18 @@
 // The control comes first: that log must PASS, so every FAIL below is the
 // mutation's, not a broken base.
 //
+// The same synthetic logs then drive tools/floor/floor-stats.mjs, the evidence
+// tools/floor/run-n64.sh prints beside the verdict (after its timing runs, and
+// alone for --timing-once and --xprof), which no leg ran before: two timing
+// runs (B1, B2) with their stage tables, and the profiler's calibration
+// (.X.cal).
+//
 // usage: node tools/floor/floor-gate-test.mjs
 // Copyright (C) 2026, GPL-2.0-or-later.
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseLog, grade, DEMOS } from './floor-gate.mjs';
 import { check, summary } from '../lib/report.mjs';
@@ -139,4 +147,126 @@ mustFail('a tic that took 0 units (a counter that did not count)',
              '--correctness grades mode A logs only');
 }
 
-summary('the floor gate passes a well-formed run and fails each way a log can lie, naming the cause', { min: 27 });
+// ── floor-stats.mjs: the evidence beside the verdict ─────────────────────────
+// Output directories laid out as run-n64.sh leaves them (<demo>.B1.log,
+// <demo>.B2.log, <demo>.B1.stages; <demo>.X.cal, <demo>.X.xprof), floor-stats
+// run on each as a child, its exit code and its lines read back.  Two demos;
+// doom-demo1's tic 10 is the worst graded tic, 1,500 units, and copied 4,096
+// WAD bytes (M:4096); every tic's stage table reads sim 100, frame 200, bsp
+// 300, planes 100, masked 100.
+{
+    const STATS = join(root, 'tools/floor/floor-stats.mjs');
+    const tmp = mkdtempSync(join(tmpdir(), 'floor-stats-test-'));
+    process.on('exit', () => rmSync(tmp, { recursive: true, force: true }));
+    let nd = 0;
+    const dirOf = files => {
+        const d = join(tmp, `d${nd++}`);
+        mkdirSync(d);
+        for (const [f, text] of Object.entries(files)) writeFileSync(join(d, f), text);
+        return d;
+    };
+    const stats = (...argv) => {
+        const r = spawnSync(process.execPath, [STATS, ...argv], { encoding: 'utf8' });
+        return { code: r.status, text: `${r.stdout ?? ''}${r.stderr ?? ''}` };
+    };
+    const lastLine = t => t.trim().split('\n').at(-1);
+    const TWO = DEMOS.slice(0, 2);
+    const [D1, D2] = TWO;
+    const stages = name => [`N64_STAGES_BEGIN ${name} ${G[name].sim.length} sim frame bsp planes masked`,
+        ...G[name].sim.map((_, i) => `S ${i} 100 200 300 100 100`), `N64_STAGES_END ${name}`].join('\n') + '\n';
+    const base = (r, n) => (n === D1 && r.i === 10 ? { ...r, elapsed: 1500, flags: 'M:4096' } : r);
+    const and = f => (r, n) => f(base(r, n), n);
+    // one log per demo per run, as run-n64.sh extracts them
+    const timing = ({ b1 = base, b2 = base, withStages = true } = {}) => {
+        const files = {};
+        for (const n of TWO) {
+            files[`${n}.B1.log`] = makeLog({ mode: 'B', demos: [n], row: b1 });
+            files[`${n}.B2.log`] = makeLog({ mode: 'B', demos: [n], row: b2 });
+            if (withStages) files[`${n}.B1.stages`] = stages(n);
+        }
+        return files;
+    };
+    const graded = TWO.reduce((a, n) => a + G[n].sim.length - 1, 0);
+
+    // the control: two identical timing runs, every tic under budget
+    const dir = dirOf(timing());
+    const c = stats(dir);
+    check('floor-stats CONTROL: two identical timing runs read "2 runs identical" for each demo, exit 0',
+          c.code === 0 && TWO.every(n => new RegExp(`^  ${n} .* 2 runs identical$`, 'm').test(c.text)), c.text.slice(0, 400));
+    check('floor-stats CONTROL: the CPU-only PREDICTED PASS names the worst graded tic and the budget',
+          new RegExp(`CPU-only PREDICTED PASS .*worst graded tic 1,500 of 2,000 count .*${D1} tic 10;.* 0 of ${graded} graded tics over`).test(c.text),
+          lastLine(c.text));
+    const share = (100 * 100 * graded / (1000 * graded + 500)).toFixed(1);
+    check(`floor-stats CONTROL: the stage share is the tables' (sim ${share}% of ${graded} graded tics)`,
+          new RegExp(`stage share over all ${graded} graded tics: sim ${share.replace('.', '\\.')}%`).test(c.text),
+          c.text.split('\n').find(l => /stage share/.test(l)) ?? 'no stage share line');
+    check('floor-stats CONTROL: the one tic that copied WAD bytes is counted and named',
+          new RegExp(`WAD copies in graded tics: 1 of ${graded} tics .* the largest: ${D1} tic 10, 4,096 B, 1,500 count`).test(c.text),
+          c.text.split('\n').find(l => /WAD copies/.test(l)) ?? 'no WAD copies line');
+    const tics = existsSync(join(dir, 'xprof-tics.txt')) ? readFileSync(join(dir, 'xprof-tics.txt'), 'utf8') : '';
+    check('floor-stats CONTROL: xprof-tics.txt names the worst tic for run-n64.sh --xprof',
+          new RegExp(`^${D1} (\\d+,)*10$`, 'm').test(tics) && new RegExp(`^${D2} \\d`, 'm').test(tics), JSON.stringify(tics));
+
+    // the two timing runs disagree on three of doom-demo2's tics
+    const d2 = stats(dirOf(timing({ b2: and((r, n) => (n === D2 && r.i >= 5 && r.i <= 7 ? { ...r, elapsed: 1001 } : r)) })));
+    check('floor-stats: timing runs that differ on 3 tics say so, for that demo only',
+          new RegExp(`^  ${D2} .* 2 runs, 3 tics differ$`, 'm').test(d2.text) && new RegExp(`^  ${D1} .* 2 runs identical$`, 'm').test(d2.text),
+          d2.text.split('\n').filter(l => /runs/.test(l)).join(' | '));
+
+    // a graded tic over the budget: PREDICTED FAIL, and still exit 0 (evidence, not a verdict)
+    const over = and((r, n) => (n === D2 && r.i === 20 ? { ...r, elapsed: 2500 } : r));
+    const o = stats(dirOf(timing({ b1: over, b2: over })));
+    check('floor-stats: a graded tic over budget reads PREDICTED FAIL, naming it, and exits 0 (not a verdict)',
+          o.code === 0 && new RegExp(`CPU-only PREDICTED FAIL .*worst graded tic 2,500 of 2,000 count .*\\(1\\.25x the budget\\), ${D2} tic 20;.* 1 of ${graded} graded tics over`).test(o.text),
+          `exit ${o.code}: ${lastLine(o.text)}`);
+
+    // --against: the same tics in another build, where the WAD copy costs 2 count a byte
+    const dear = and((r, n) => (n === D1 && r.i === 10 ? { ...r, elapsed: 1500 + 2 * 4096 } : r));
+    const other = dirOf(timing({ b1: dear, b2: dear, withStages: false }));
+    const ag = stats('--against', other, dir);
+    check('floor-stats --against: the other build\'s extra cost over the copying tics, per byte',
+          ag.code === 0 && /graded tics with a WAD copy: 1, 4,096 B; that build took 8,192 count more over them, 2\.00 count\/byte/.test(ag.text) &&
+          new RegExp(`graded tics with no copy: ${graded - 1}, that build took 0 count more in all`).test(ag.text),
+          ag.text.split('\n').filter(l => /graded tics with/.test(l)).join(' | ') || lastLine(ag.text));
+
+    const none = stats(dirOf({}));
+    check('floor-stats: a directory with no timing runs exits 1, saying so',
+          none.code === 1 && /no mode B logs/.test(none.text), `exit ${none.code}: ${lastLine(none.text)}`);
+
+    // --xprof: the profiler's calibration against COUNT.  The loop is three
+    // instructions an iteration; a run that agrees is within a cycle or two
+    // of 2 x COUNT, and a skew of 1,000 iterations outside the profiler is
+    // 3,000 cycles that COUNT saw and XPROF did not.
+    const DETECT = x => `N64_XPROF_DETECT mask_hi=00000300 xprof=${x}`;
+    const CAL = (iters, skew, cycles, count) =>
+        `N64_XPROF_CAL iters=${iters} skew=${skew} count=${count} cycles=${cycles} insns=${3 * iters} icache_hits=0 icache_misses=0 dcache_misses=0`;
+    const goodCal = [DETECT(1), CAL(10000, 0, 30001, 15000), CAL(100000, 0, 300002, 150000), CAL(1000000, 0, 3000001, 1500000)];
+    const slot = (k, tic, s, cycles) => `${k} ${tic} ${s} calls=1 prim_calls=0 prim_px=0 cycles=${cycles} cycles_exc=0 ` +
+        'icache_hits=900 icache_misses=10 icache_wb=0 dcache_hits=500 dcache_misses=20 dcache_wb=5 rsp_cycles=100 rsp_halted=40 ' +
+        'icache_rd=320 icache_wr=0 dcache_rd=640 dcache_wr=80 uncached_rd=0 uncached_wr=0 spdma_rd=0 spdma_wr=0 ' +
+        'pidma_rd=0 pidma_wr=0 vidma_rd=0 dpdraw_rd=0 dpdraw_wr=0';
+    const profile = [`N64_XPROF_BEGIN ${D1} ok=1 profiled=1`, 'XT 10 elapsed=1500 flags=0 mbytes=4096',
+                     slot('P', 10, 'whole', 3000), slot('P', 10, 'sim', 1000), slot('P', 10, 'bsp', 1200), `N64_XPROF_END ${D1}`];
+    const xp = stats('--xprof', dirOf({ [`${D1}.X.cal`]: goodCal.join('\n') + '\n', [`${D1}.X.xprof`]: profile.join('\n') + '\n' }));
+    check('floor-stats --xprof CONTROL: 3 calibration loops agree with COUNT, the profiled tic is printed, exit 0',
+          xp.code === 0 && /PASS xprof: 3 calibration loop\(s\) agree with COUNT within 64 cycles/.test(xp.text) &&
+          new RegExp(`${D1} tic 10: COUNT 1,500 \\(2x = 3,000 cycles\\), XPROF 3,000 cycles`).test(xp.text) &&
+          /^ {4}other +800 +26\.7%/m.test(xp.text),
+          `exit ${xp.code}: ${xp.text.split('\n').filter(l => /xprof|tic 10|other/.test(l)).join(' | ')}`);
+    const skewed = stats('--xprof', dirOf({ [`${D1}.X.cal`]: [...goodCal.slice(0, 3), CAL(1000000, 1000, 3000001, 1501500)].join('\n') + '\n' }));
+    check('floor-stats --xprof: a calibration skewed by 1,000 iterations (3,000 cycles) FAILs, exit 1',
+          skewed.code === 1 && /FAIL calibration .*\+1000 outside the profiler.*difference -2999/.test(skewed.text) && /FAIL xprof: 1 problem\(s\)/.test(skewed.text),
+          `exit ${skewed.code}: ${skewed.text.split('\n').filter(l => /FAIL|PASS/.test(l)).join(' | ')}`);
+    const absent = stats('--xprof', dirOf({ [`${D1}.X.cal`]: [DETECT(0), ...goodCal.slice(1)].join('\n') + '\n' }));
+    check('floor-stats --xprof: the profiler absent (xprof=0) FAILs, exit 1',
+          absent.code === 1 && /the profiler is absent/.test(absent.text), `exit ${absent.code}: ${lastLine(absent.text)}`);
+    const nocal = stats('--xprof', dirOf({ [`${D1}.X.xprof`]: profile.join('\n') + '\n' }));
+    check('floor-stats --xprof: no calibration file FAILs, exit 1',
+          nocal.code === 1 && /FAIL xprof: no calibration \(\.X\.cal\)/.test(nocal.text), `exit ${nocal.code}: ${lastLine(nocal.text)}`);
+    const cut = stats('--xprof', dirOf({ [`${D1}.X.cal`]: goodCal.join('\n') + '\n', [`${D1}.X.xprof`]: profile.slice(0, -1).join('\n') + '\n' }));
+    check('floor-stats --xprof: a profile with no END line FAILs as truncated, exit 1',
+          cut.code === 1 && new RegExp(`FAIL xprof: ${D1}\\.X\\.xprof is truncated`).test(cut.text), `exit ${cut.code}: ${lastLine(cut.text)}`);
+}
+
+summary('the floor gate passes a well-formed run and fails each way a log can lie, naming the cause; floor-stats reads the timing runs, the stage tables and the profiler calibration',
+        { min: 45 });
