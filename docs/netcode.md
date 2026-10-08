@@ -126,13 +126,15 @@ stalls followed by jumps.
 
 ## Stalls, drops and the end of a session
 
-On the relay, a sweep runs every 50 ms. It keeps two times per player:
-`lastHeard`, when any well-formed frame last came from it, and `lastSeen`, when
-it last filled the tic the relay is waiting on (the seal tic).
+On the relay, a sweep runs every 50 ms, each time just after the relay has
+read every frame that arrived. It keeps two times per player: `lastHeard`,
+when any well-formed frame last came from it, and `lastSeen`, when it last
+filled the tic the relay is waiting on (the seal tic) or had a tic sealed
+with its own cmd.
 
 | condition | what the relay does |
 |---|---|
-| a live player has sent nothing for 250 ms, through five sweeps that ran on time and in which another live player was heard: it is *silent* | stops waiting for it: each tic the others fill is sealed at their own 35 tics/s, with its last cmd repeated and its fabricated bit set, until its next frame |
+| a live player has sent nothing for 250 ms, and through five sweeps since in each of which another live player was heard: it is *silent* | stops waiting for it: each tic the others fill is sealed at their own 35 tics/s, with its last cmd repeated and its fabricated bit set, until its next frame |
 | every live player is quiet at once, or the player owing the seal tic is still heard but has filled nothing for 250 ms | repeats the missing cmds, sets their fabricated bits, and seals one tic per sweep |
 | a player has not filled the seal tic for 5 s | drops the player: its ingame bit clears, everyone else plays on, and its socket is closed with code 4000 and "dropped by the server: no input from this player for 5 seconds" |
 | a launched player never connects within 10 s | drops that slot |
@@ -151,16 +153,24 @@ sealed without it and are discarded. Measured from `lastSeen`, it would never
 fill a tic, would stay silent, and would be dropped while sending: `net-hidden`
 reads exactly that when the rule is changed. Progress is measured from
 `lastSeen`: only cmds that fill the seal tic count, so a peer sending other
-tics cannot keep itself inside the drop window (`net-fuzz`).
+tics cannot keep itself inside the drop window (`net-fuzz`). A tic sealed with
+a player's own cmd counts too: when a seat that never connected held the seal
+for 10 s, the others waited with their lead sent, and the first sweep after
+the release found them 10 s stale and dropped every one whose reply took
+longer than that sweep (50 ms) to arrive. That was true at 7349c27 as well;
+`net-fuzz` checks it with players 150 ms away.
 
-Silence is counted only in sweeps that ran on time and in which someone else
-was heard. When everyone goes quiet at once (the opening melt, a stall of the
-relay or of its link), their frames come back as bursts, read one socket at a
-time. Judged by the clock alone, the second player would look silent while
-its burst was still unread, and the first player's whole burst would be
-sealed with the second fabricated: 13–14 tics for one player with the relay
-stopped for 400 ms, against 0–1 for each under the rule, as before it
-(`net-fuzz` checks both cases).
+Silence is counted only in sweeps in which someone else was heard since the
+sweep before. When everyone goes quiet at once (the opening melt, a stall of
+the relay, of its link or of a host running several clients), their frames
+come back as bursts, read one socket at a time. Judged by the clock alone, the
+second player would look silent while its burst was still unread, and the
+first player's whole burst would be sealed with the second fabricated: 13–14
+tics for one player with the relay stopped for 400 ms (`net-fuzz` checks a
+relay stall and a quiet of both players). Counted this way the rule also
+works on a loaded host, whose sweeps come late but still come; an earlier
+form that skipped every sweep more than 100 ms late, and required someone to
+have been heard in the last 100 ms, switched itself off there.
 
 On the client, the session ends and the player returns to the launcher with a
 reason on the status line whenever the game socket closes or errors, the relay
@@ -195,10 +205,10 @@ resumes.
 The clock is a dedicated Worker because Chrome throttles a hidden page's own
 timers and, by its documentation, not a Worker's; what is measured is that
 the Worker's messages reached the hidden page on time. Measured in
-headless Chrome on alder (`browser-net-hidden`, four runs, 2026-10-08), the
+headless Chrome on alder (`browser-net-hidden`, five runs, 2026-10-08), the
 hidden player ran at 34.9–35.1 tics/s for 12 s and was fabricated on 0 of
-420–421 bundles; its 428–429 steps came at p50 28.0 ms, p99 29.9–30.5 ms and
-max 30.0–31.3 ms apart.
+420–421 bundles; its 428–429 steps came at p50 28.0 ms, p99 29.9–31.1 ms and
+max 30.0–31.8 ms apart.
 
 Accepted, not solved:
 
@@ -219,7 +229,7 @@ Risks left open:
   missed at 35 tics/s instead of 20, so there are more to catch up. Node
   clients on alder loopback (2026-10-08, one run per length) survived 3.5 s
   of silence and were dropped at 3.75 s, against 4.0 s and 4.25 s before.
-  Catching up after 3 s took 0.81–0.95 s (seven runs) instead of 0.24–0.28 s
+  Catching up after 3 s took 0.81–0.95 s (nine runs) instead of 0.24–0.28 s
   (four), while the others ran at the sweep's pace.
 - A page hidden for more than 5 minutes, Chrome's Energy Saver freezing a
   page, Firefox and mobile browsers are not measured. Each one that stops the
@@ -337,10 +347,10 @@ scope.
 |---|---|---|
 | tic-arrival gaps on loopback after the history moved to slabs | p50 28.68 ms, p99 29.08 ms, max 41.96 ms (n = 441) | alder, 2026-09-17 |
 | survivors' stall after a peer closes its socket | mean 26 ms, max 33 ms (n = 5, 2 players) | alder loopback, 2026-07-19 |
-| survivors' stall after a peer goes silent without closing | about 250–300 ms (five on-time sweeps, the last at least 250 ms after its last frame), then 35 tics/s | derived from `server/game.js` |
-| survivors' tic rate while a peer is silent for 3 s, from 0.5 s in | 34.7–35.6 tics/s (5 runs); 19.4–20.0 (3 runs) before a silent peer stopped holding the seal | Node clients, alder loopback, 2026-10-08 (`net-hidden`) |
-| a hidden netplay tab on the Worker clock, 12 s | 34.9–35.1 tics/s; steps p50 28.0 ms, p99 29.9–30.5 ms, max 30.0–31.3 ms apart (n = 428–429); fabricated on 0 of 420–421 bundles (4 runs) | headless Chrome on alder, 2026-10-08 (`browser-net-hidden`) |
-| fabrication after the relay process is stopped for 400 ms | 0–1 tics per player, as before the silent-player rule; 13–14 for one player when silence was judged by the clock alone | alder loopback, SIGSTOP, 2026-10-08 |
+| survivors' stall after a peer goes silent without closing | about 250–300 ms (five sweeps, the last at least 250 ms after its last frame), then 35 tics/s | derived from `server/game.js` |
+| survivors' tic rate while a peer is silent for 3 s, from 0.5 s in | 34.7–35.7 tics/s (6 runs); 19.4–20.0 (3 runs) before a silent peer stopped holding the seal | Node clients, alder loopback, 2026-10-08 (`net-hidden`) |
+| a hidden netplay tab on the Worker clock, 12 s | 34.9–35.1 tics/s; steps p50 28.0 ms, p99 29.9–31.1 ms, max 30.0–31.8 ms apart (n = 428–429); fabricated on 0 of 420–421 bundles (5 runs) | headless Chrome on alder, 2026-10-08 (`browser-net-hidden`) |
+| fabrication after the relay process is stopped for 400 ms | 0 in 4 runs with the sweep after the relay's reads; 1 tic, once for one player only, in 3 of 4 with the sweep straight from its timer (and at 7349c27, 1 each); 13–14 for one player when silence was judged by the clock alone | alder loopback, SIGSTOP, 2026-10-08 |
 | drop-in replay of 436–505 tics | 125–149 ms, about 100× real time (n = 3) | joiner on wbox, server on alder, 2026-07-19 |
 | history memory at the 63,000-tic cap | 8.1 MB RSS in slabs, against 28.8 MB as one Buffer per tic | Node, after GC, 2026-09-16 |
 
