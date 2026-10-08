@@ -47,10 +47,23 @@ if (!await tab.bootSP(30).catch(e => fatal(e.message))) fatal('never reached a r
 // A trusted key event: arm() only runs on a real user gesture.
 await sleep(1500);
 await tab.key('w', 87);
-await sleep(3000);
 
-const armed = await evaluate(`window.doomAudio?.armed?.() ?? false`);
-if (!armed) fatal('the AudioContext never armed — nothing below would mean anything');
+// Two waits with deadlines, not one fixed sleep.  armed() is the AudioContext
+// existing, which arm() creates before its first await (client/js/audio.js),
+// so it answers at once; the sink and synthLive() are decided later in arm(),
+// after the worklet module loads, synth.wasm is transferred and the worklet
+// answers `ready` or the client's SYNTH_READY_MS (2 s) runs out.  arm() has
+// finished when the worklet owns the synth (synthLive), or when it fell back:
+// a BufferSink, or the main-thread pump rendering (__wd_perf.opl filling).
+// A settle that never comes falls through to the checks, which say which part
+// is missing.
+const t0 = Date.now();
+if (!await tab.waitFor(() => evaluate(`window.doomAudio?.armed?.() ?? false`), { timeout: 20000, every: 100 }))
+    fatal('the AudioContext never armed within 20 s — nothing below would mean anything');
+const settled = await tab.waitFor(() => evaluate(`(() => { const a = window.doomAudio;
+        return !!a && (a.synthLive() || a.sinkKind() === 'buffer' || (window.__wd_perf?.opl?.length ?? 0) > 0); })()`),
+    { timeout: 20000, every: 100 });
+console.log(settled ? `arm() settled ${Date.now() - t0} ms after the key` : 'arm() had not settled after 20 s');
 
 console.log('secure origin: the worklet owns the synth');
 checkWith('sink is the worklet', (await evaluate(`window.doomAudio.sinkKind()`)) === 'worklet',
