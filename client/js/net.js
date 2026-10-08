@@ -124,7 +124,9 @@ export function connectLobby(baseUrl, WS = WebSocket) {
 //                        is still bit-identical, verified by _web_state_hash)
 //
 // Bundles queue here and reach the engine in tic order, no faster than its
-// 35-tic ring can hold them: a hidden tab stops the sim but not the socket.
+// 35-tic ring can hold them: a page whose game loop stops (a frozen page, or
+// a hidden one with no Worker for main.js's clock) stops the sim but not the
+// socket.
 // The relay sends every tic once and in order, so a gap, or a backlog past
 // BACKLOG_MAX, cannot be recovered from; the session ends with that reason
 // (`lose`) instead of desyncing.

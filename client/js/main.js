@@ -307,11 +307,14 @@ export async function bootDoom({ wads, saves = null, args = [], net = null, onQu
 
     doom.onQuit = () => endSession(null);   // I_Quit: a clean exit, no reason
 
-    const frame = (rafTime) => {
-        if (!running) return;
-        perfMarks.begin(rafTime);
+    // One step of the game, with its one exit on a throw.  step(true) is an
+    // animation frame: input, the bundles the engine's ring has room for, one
+    // D_DoomFrame, the draw.  step(false) is a tick of the hidden-page clock
+    // below: the bundles and D_DoomFrame only, with drawing off in the engine
+    // and no input.  Returns false once the session has ended.
+    const step = (draw) => {
         try {
-            if (seekPending !== null) {
+            if (draw && seekPending !== null) {
                 // re-sim from tic 0 with drawing off, clear any pending wipe,
                 // then one drawn frame at the sought tic
                 const n = seekPending;
@@ -323,31 +326,90 @@ export async function bootDoom({ wads, saves = null, args = [], net = null, onQu
                     scrubberHandle?.onFrame?.();
                 }
             } else {
-                input.frame();
+                if (draw) input.frame();
                 relay?.offer();             // bundles the engine's ring has room for now
                 doom._web_frame();
-                scrubberHandle?.onFrame?.();
+                if (draw) scrubberHandle?.onFrame?.();
             }
             // INSIDE the same try as the engine call, deliberately: a throw
             // from the frame hook, the palette read or the GL draw must reach
-            // endSession like an engine throw, or the rAF loop dies with the
+            // endSession like an engine throw, or the loop dies with the
             // canvas up, input attached and the relay socket holding its
             // server slot.  browser-rafdeath-draw injects here, and
             // browser-rafdeath into _web_frame.
             window._doomFrameHook?.();      // test seam: per-frame hash collection
-            const v = doom._web_palette_version();
-            renderer.draw(fbView, palView, v !== palVersion);
-            palVersion = v;
+            if (draw) {
+                const v = doom._web_palette_version();
+                renderer.draw(fbView, palView, v !== palVersion);
+                palVersion = v;
+            }
         } catch (err) {
             // onDoomError may already have ended the session before the throw
             // propagated here
             if (running) endSession(`engine error: ${err?.message ?? String(err)}`);
-            return;
+            return false;
         }
-        perfMarks.end();
-        if (running) requestAnimationFrame(frame);
+        return true;
     };
-    requestAnimationFrame(frame);
+
+    let rafId = 0;
+    const frame = (rafTime) => {
+        if (!running) return;
+        perfMarks.begin(rafTime);
+        if (!step(true)) return;
+        perfMarks.end();
+        if (running) rafId = requestAnimationFrame(frame);
+    };
+    rafId = requestAnimationFrame(frame);
+
+    // A hidden page gets no requestAnimationFrame.  In single player that is
+    // a pause, as it should be.  In netplay it would stop this player's
+    // commands, so the relay would play on without them and drop the player
+    // after 5 s (server/game.js).  So a netplay page, a spectator's too, runs
+    // on a Worker's clock while hidden: step(false) every 28 ms, one tic of
+    // the 35 Hz game, the engine's drawing off and held input released.  A
+    // dedicated worker's timers are not throttled the way a hidden page's own
+    // are.  Exactly one driver runs at a time: the clock takes over only once
+    // its Worker exists, cancelling the pending frame, and hands back by
+    // requesting one.  Where no Worker can be made the page freezes while
+    // hidden, as it did before the clock.
+    if (relay) {
+        const CLOCK_SRC = 'setInterval(() => postMessage(0), 28);';
+        let clock = null;           // {w, url} while the clock drives the game
+        const stopClock = () => {
+            if (!clock) return false;
+            clock.w.terminate();
+            URL.revokeObjectURL(clock.url);
+            clock = null;
+            return true;
+        };
+        // back to the frame loop: on becoming visible, or a clock that failed
+        const toFrames = () => {
+            if (!stopClock() || !running) return;
+            doom._web_set_nodraw(0);
+            rafId = requestAnimationFrame(frame);
+        };
+        const startClock = () => {
+            if (clock || !running) return;
+            const url = URL.createObjectURL(new Blob([CLOCK_SRC], { type: 'text/javascript' }));
+            let w;
+            try { w = new Worker(url); }
+            catch { URL.revokeObjectURL(url); return; }
+            clock = { w, url };
+            cancelAnimationFrame(rafId);
+            input.release();
+            doom._web_set_nodraw(1);
+            w.onmessage = () => { if (running && clock?.w === w) step(false); };
+            w.onerror = () => { if (clock?.w === w) toFrames(); };
+        };
+        const onVisibility = () => (document.visibilityState === 'hidden' ? startClock() : toFrames());
+        document.addEventListener('visibilitychange', onVisibility);
+        disposers.push(() => {
+            document.removeEventListener('visibilitychange', onVisibility);
+            stopClock();
+        });
+        if (document.visibilityState === 'hidden') startClock();    // booted while hidden
+    }
     console.log(`webdoom up — renderer: ${renderer.kind}, ${net ? `netplay slot ${net.slot}/${net.numplayers}` : 'single player'}`);
     return doom;
 }

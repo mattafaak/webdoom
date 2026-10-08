@@ -788,7 +788,7 @@ leg spectate-inject build,wad  "spectator injection is a no-op"        -- node t
 leg spectate-fuzz   build,wad  "hostile clients against /ws/spectate" -- node tools/spectate-fuzz-test.mjs
 leg edge            build,wad  "drop-in edge cases"                    -- node tools/edge-test.mjs
 leg churn           build,wad  "connect/disconnect churn"              -- node tools/churn-test.mjs
-leg net-hidden      build,wad  "a hidden tab survives 3 s in lockstep; told when dropped" -- node tools/net-hidden-test.mjs
+leg net-hidden      build,wad  "a player on the hidden-tab clock plays on; one silent costs the others nothing; dropped, it is told why" -- node tools/net-hidden-test.mjs
 leg net-reborn      build,wad  "a drop-in after a level change spawns as a first spawn" -- node tools/net-reborn-test.mjs
 leg launch-args     build,wad  "RULES reach the engine; hostile launch params are refused" -- node tools/launch-args-test.mjs
 
@@ -843,6 +843,12 @@ if [ "${#ONLY[@]}" -eq 0 ] || printf '%s\n' "${ONLY[@]}" | grep -q '^browser-\|^
     leg browser-sp            browser,build,wad,shared "title -> menu -> new game -> movement" -- node tools/browser-test.mjs "$U"
     leg browser-net           browser,build,wad,shared "2 tabs through the lobby into co-op"   -- node tools/browser-net-test.mjs "$U"
     leg browser-join          browser,build,wad,shared "browser drop-in"                       -- node tools/browser-join-test.mjs "$U"
+        # A page really hidden (a tab opened beside it in its window) gets no
+        # requestAnimationFrame; main.js runs a netplay page on a Worker's
+        # clock instead.  Phase 1 is the clock (red with startClock disabled),
+        # 2 a frozen page dropped with its reason, 3 a spectator booted hidden
+        # and a throw on the clock, 4 single player still pausing.
+    leg browser-net-hidden    browser,build,wad,shared "a hidden netplay tab plays on its Worker clock; a frozen one is dropped and told why" -- node tools/browser-net-hidden-test.mjs "$U"
     leg persist               browser,build,wad,shared "settings/keybind persistence"          -- node tools/persist-test.mjs "$U"
         # The third direction of tenet 4: localStorage and the rebind UI are
         # user input.

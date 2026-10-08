@@ -383,6 +383,14 @@ export function createInput(doom, canvas, settings) {
     return {
         frame,
         settings,
+        // Let go of everything held, keys, mouse buttons and the pad's
+        // sticks, for when this page stops reading input but the game runs
+        // on (main.js: a hidden netplay page on its clock).  A stick's last
+        // reading stays applied every tic until the next poll otherwise.
+        release() {
+            releaseAll();
+            doom._web_gamepad(0, 0, 0, 0);
+        },
         destroy() { _teardownAll(); },
     };
 }
