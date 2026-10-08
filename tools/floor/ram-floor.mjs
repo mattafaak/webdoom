@@ -32,7 +32,7 @@
 //            includes its allocator's overhead)
 //
 // The play set (play-set.mjs) is the 13 demos with a level exit and every map of
-// the four IWADs (129 of them then saved and loaded back: the save is heap
+// the four IWADs (each then saved and loaded back: the save is heap
 // while it is written, zone while it is read), with the sound on in every run (it allocates in the zone:
 // s_sound.c's channels, and in a copying build GENMIDI and each song; so a
 // run without it lays the zone out differently, and near the minimum that

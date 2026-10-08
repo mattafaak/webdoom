@@ -22,7 +22,7 @@
 // --build default|zc|lean|leanzc builds that host build (tools/freestanding,
 // its own objects: play-set.mjs X86_BUILDS) and probes it, as FS_DOOM would.
 //
-// The play set includes a game saved and loaded back on 129 of its maps
+// The play set includes a game saved and loaded back on each of its maps
 // (play-set.mjs); --no-saveload leaves that out, for comparison.
 //
 // --play: the play-inclusive minimum.  A probe must also run the play set

@@ -15,11 +15,11 @@
 //          SCRIPT_TICS of running, turning, strafing, firing, switching
 //          weapons and pressing use (doors, lifts, switches; and when the
 //          player has died, the level reloads), the opening wipe run to its end;
-//          and then, on 129 of them (SAVELOAD_CRASHES has the other three),
-//          the game is saved (SAVE_AT) and loaded back (LOAD_AT): the save is
-//          heap while it is written (G_DoSaveGame) and zone while it is read
-//          (M_ReadFile holds it, PU_STATIC, while the level loads around it),
-//          and a loaded game is no longer a demo, so the run idles to END_AT.
+//          and then, on every map, the game is saved (SAVE_AT) and loaded
+//          back (LOAD_AT): the save is heap while it is written
+//          (G_DoSaveGame) and zone while it is read (M_ReadFile holds it,
+//          PU_STATIC, while the level loads around it), and a loaded game is
+//          no longer a demo, so the run idles to END_AT.
 //          Where the save lands splits the zone the level then loads into, so
 //          in the copying builds the smallest zone that survives it is far
 //          less regular (measured, the default build: 1,604 KiB, a
@@ -111,16 +111,9 @@ export const SCRIPT_SKILL = 3;   // sk_hard: ultra-violence, as the IWAD demos
 // the save, the load and the end, in gametics (i_main.c's WD_SAVE_AT,
 // WD_LOAD_AT, WD_END_AT; cm_main.c's -save-at, -load-at, -end-at)
 export const SAVE_AT = 1900, LOAD_AT = 2000, END_AT = 2350;
-// Three maps play their script without the save and load, because loading
-// that save crashes the engine at any zone size, vanilla's way: a monster
-// saved mid-attack comes back with no target (P_UnArchiveThinkers clears
-// mobj->target) and its next action dereferences it.  Measured at 8 MiB:
-//   doom2 MAP07, plutonia MAP32  a mancubus: A_FatAttack2/3 -> P_SpawnMissile
-//                                with dest NULL (p_mobj.c:947), SIGSEGV
-//   doom2 MAP30                  a boss cube: A_SpawnFly reads its NULL
-//                                target (p_enemy.c:1964), SIGSEGV
-// (engine/core's to fix; the floor only needs the RAM the other 129 show)
-export const SAVELOAD_CRASHES = ['doom2.wad:MAP07', 'doom2.wad:MAP30', 'plutonia.wad:MAP32'];
+// (Until 30dae24, doom2 MAP07 and MAP30 and plutonia MAP32 skipped the save
+// and load: the loaded game's mancubus or boss cube read its NULL target and
+// the engine faulted.  P_ZeroMobj, p_mobj.c, stands in for it now.)
 
 // A demo (v1.9 format, version 109 as the IWADs' own) on map (e, m): a full
 // turn on the spot, then segments of scripted movement, firing most tics,
@@ -172,9 +165,8 @@ export function scenarios(dir, { exits = true, maps = null, tics = SCRIPT_TICS, 
             const id = `map-${iwad.file.replace('.wad', '')}-${name}`;
             const lmp = join(dir, `${id}.lmp`);
             if (!existsSync(lmp)) writeFileSync(lmp, scriptedDemo(`${iwad.file}:${name}`, e, m, tics));
-            const sl = saveload && !SAVELOAD_CRASHES.includes(`${iwad.file}:${name}`);
-            out.push({ id, kind: 'map', wad: iwad.file, as: iwad.as, demo: 'demo1', lmp, map: name, saveload: sl,
-                       env: sl ? { WD_SAVE_AT: `${SAVE_AT}:0`, WD_LOAD_AT: `${LOAD_AT}:0`, WD_END_AT: String(END_AT) } : {} });
+            out.push({ id, kind: 'map', wad: iwad.file, as: iwad.as, demo: 'demo1', lmp, map: name, saveload,
+                       env: saveload ? { WD_SAVE_AT: `${SAVE_AT}:0`, WD_LOAD_AT: `${LOAD_AT}:0`, WD_END_AT: String(END_AT) } : {} });
         }
     return out;
 }

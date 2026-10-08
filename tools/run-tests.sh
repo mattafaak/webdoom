@@ -685,8 +685,8 @@ leg cortexm-audio   qemucm,wad,heavy "Cortex-M0+ and M33, doom-demo4 with the OP
 # injected (the melt run to its end, the intermission, the next level loaded
 # into the zone the first one left, played by the rest of the demo), and a
 # scripted demo on every map of the four IWADs (132: running, turning, firing,
-# switching weapons, pressing use, reloading after a death; then, on 129 of
-# them, the game saved and loaded back, which holds the save in the zone while
+# switching weapons, pressing use, reloading after a death; then, on every
+# one, the game saved and loaded back, which holds the save in the zone while
 # the level loads around it), every frame of every run identical (render and
 # sim hash) to the same scenario at 8 MiB.  Whether a run fits is not
 # monotone in the zone's size (the default build passes at 1,604 and 1,728
