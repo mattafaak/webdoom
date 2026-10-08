@@ -84,7 +84,8 @@ full gamestate hashes on every common tic between real wasm clients.
 
 ## The client's bundle queue
 
-A hidden tab stops `requestAnimationFrame`, and with it the simulation, but the
+A page whose game loop stops (a frozen page, or a hidden one where no Worker
+can be made; see [A hidden tab](#a-hidden-tab)) stops the simulation, but the
 socket keeps delivering. So bundles wait in a queue in `net.js` and reach the
 engine in tic order, no faster than its ring can hold them:
 
@@ -94,9 +95,9 @@ engine in tic order, no faster than its ring can hold them:
 - The queue holds at most 1,050 tics (30 s). Past that the session ends with
   "fell too far behind the game".
 - `offer()` hands the engine every queued bundle its ring has room for. It runs
-  on every arriving message and, from `main.js`, before every frame, so a
-  backlog drains as the sim catches up. A `0` from the engine leaves the bundle
-  queued; a `-1` ends the session.
+  on every arriving message and, from `main.js`, before every frame and every
+  tick of the hidden-page clock, so a backlog drains as the sim catches up. A
+  `0` from the engine leaves the bundle queued; a `-1` ends the session.
 
 ## Jitter buffer and pacing
 
@@ -116,7 +117,7 @@ stalls followed by jumps.
   grow past twice the depth, it runs one extra tic per frame until the margin
   is back, so input lag cannot creep up on a bad link.
 - **Building cmds.** `NetUpdate` builds at most 16 tics ahead of the sim. After
-  more than a second without frames (a hidden tab) it resumes instead of
+  more than a second without frames (a frozen page) it resumes instead of
   fast-forwarding, and it builds from the tic the sim is on rather than for
   tics the relay sealed without this client.
 - **Rendering.** Frames are uncapped. The view and sprites interpolate between
@@ -125,27 +126,104 @@ stalls followed by jumps.
 
 ## Stalls, drops and the end of a session
 
-On the relay, a sweep runs every 50 ms:
+On the relay, a sweep runs every 50 ms. It keeps two times per player:
+`lastHeard`, when any well-formed frame last came from it, and `lastSeen`, when
+it last filled the tic the relay is waiting on (the seal tic).
 
 | condition | what the relay does |
 |---|---|
-| a live player's cmd for the seal tic is more than 250 ms late | repeats that player's last cmd, sets its fabricated bit, and seals |
-| a player has not filled the seal tic for 5 s | drops the player: ingame bit clears, everyone else plays on |
+| a live player has sent nothing for 250 ms, through five sweeps that ran on time and in which another live player was heard: it is *silent* | stops waiting for it: each tic the others fill is sealed at their own 35 tics/s, with its last cmd repeated and its fabricated bit set, until its next frame |
+| every live player is quiet at once, or the player owing the seal tic is still heard but has filled nothing for 250 ms | repeats the missing cmds, sets their fabricated bits, and seals one tic per sweep |
+| a player has not filled the seal tic for 5 s | drops the player: its ingame bit clears, everyone else plays on, and its socket is closed with code 4000 and "dropped by the server: no input from this player for 5 seconds" |
 | a launched player never connects within 10 s | drops that slot |
 | any live player has not sent a cmd yet, within 10 s of launch | fabricates nothing (wasm boot times differ) |
 | every player is gone | ends the session and reopens the lobby |
 
-Only cmds that fill the tic the relay is waiting on count as progress. A peer
-sending other tics cannot keep itself inside the grace window.
+A repeated cmd carries none of its one-tic events: its chat character is 0,
+and its buttons are 0 when `BT_SPECIAL` makes them a pause or a savegame,
+which repeated would toggle the pause, or save, on every fabricated tic. The
+sweep never fabricates while any player missing the seal tic has filled one
+within the 250 ms: that player's next cmd is in flight.
+
+Silence is measured from `lastHeard`. A player that comes back holds the seal
+again with its first frame, even though its first cmds are for tics already
+sealed without it and are discarded. Measured from `lastSeen`, it would never
+fill a tic, would stay silent, and would be dropped while sending: `net-hidden`
+reads exactly that when the rule is changed. Progress is measured from
+`lastSeen`: only cmds that fill the seal tic count, so a peer sending other
+tics cannot keep itself inside the drop window (`net-fuzz`).
+
+Silence is counted only in sweeps that ran on time and in which someone else
+was heard. When everyone goes quiet at once (the opening melt, a stall of the
+relay or of its link), their frames come back as bursts, read one socket at a
+time. Judged by the clock alone, the second player would look silent while
+its burst was still unread, and the first player's whole burst would be
+sealed with the second fabricated: 13–14 tics for one player with the relay
+stopped for 400 ms, against 0–1 for each under the rule, as before it
+(`net-fuzz` checks both cases).
 
 On the client, the session ends and the player returns to the launcher with a
 reason on the status line whenever the game socket closes or errors, the relay
 skips a tic, the backlog overflows, or the engine refuses a tic as invalid.
 The reason is the socket's close reason when the server gave one, otherwise
 "the connection to the game server was lost". Quitting from the game menu
-closes the socket deliberately and shows no reason. The `net-hidden` leg checks
-both sides of the 5 s line: a tab hidden for 3 s stays in the game and catches
-up, and one hidden for 7 s is dropped and told so.
+closes the socket deliberately and shows no reason. `net-hidden` checks both
+sides of the 5 s line with Node clients: one silent for 3 s stays in the game
+and catches up while the other plays on at 35 tics/s, and one silent for 7 s
+is dropped and told why. `browser-net-hidden` does the same in real tabs for a
+page frozen for 7 s.
+
+## A hidden tab
+
+A hidden page gets no `requestAnimationFrame`, which is what drives the game
+in `main.js`. In single player that is a pause. A netplay page, a spectator's
+included, switches to a clock instead. On `visibilitychange` to hidden it
+creates an inline blob Worker that posts every 28 ms; once the Worker exists
+it cancels the pending frame, releases held keys, mouse buttons and the pad's
+sticks (`input.release()`), and turns the engine's drawing off
+(`_web_set_nodraw(1)`). Each message runs `relay.offer()` and `_web_frame()`,
+and the engine's own pacing runs one tic of the 35 Hz game per step. Visible
+again, the Worker is terminated, drawing comes back on, and the frame loop
+resumes.
+
+- One driver runs at a time.
+- A session booted while hidden starts on the clock.
+- The session's teardown removes the listener and the Worker, and a throw on
+  the clock ends the session like a throw in a frame.
+- Where no Worker can be made, the page freezes while hidden, as before.
+
+The clock is a dedicated Worker because Chrome throttles a hidden page's own
+timers and, by its documentation, not a Worker's; what is measured is that
+the Worker's messages reached the hidden page on time. Measured in
+headless Chrome on alder (`browser-net-hidden`, four runs, 2026-10-08), the
+hidden player ran at 34.9–35.1 tics/s for 12 s and was fabricated on 0 of
+420–421 bundles; its 428–429 steps came at p50 28.0 ms, p99 29.9–30.5 ms and
+max 30.0–31.3 ms apart.
+
+Accepted, not solved:
+
+- A tab that comes back after the game state changed while it was hidden (a
+  level ended) melts from the last picture it drew, with its sim paused,
+  which the relay handles as a short silence. (The opening melt held gametic
+  0 for 1.0–1.2 s in the Node harness.)
+- The reverse, inferred from the rule and not measured: while one player is
+  hidden it does not melt at a level change, so the visible players' melts
+  are silences, and the hidden player plays on while their last cmds repeat.
+- Sound is left alone: the engine goes on starting sound effects on the
+  clock, and whether they are heard while hidden is up to the browser and
+  `audio.js`'s pump, a page timer (not measured).
+
+Risks left open:
+
+- A frozen page has less time to come back. The relay now seals the tics it
+  missed at 35 tics/s instead of 20, so there are more to catch up. Node
+  clients on alder loopback (2026-10-08, one run per length) survived 3.5 s
+  of silence and were dropped at 3.75 s, against 4.0 s and 4.25 s before.
+  Catching up after 3 s took 0.81–0.95 s (seven runs) instead of 0.24–0.28 s
+  (four), while the others ran at the sweep's pace.
+- A page hidden for more than 5 minutes, Chrome's Energy Saver freezing a
+  page, Firefox and mobile browsers are not measured. Each one that stops the
+  clock still ends in the drop, with its reason.
 
 ## Drop-in
 
@@ -234,9 +312,11 @@ refuses a `launch` whose params or player count it could not have produced
 
 ## Measured
 
-These are the figures behind keeping TCP. Each was taken with a Node wasm
-client that polled `_web_gametic()` after every `_web_frame()` on a 14 ms loop,
-so they are tic-arrival times as the game loop sees them, not TCP timestamps.
+These are the figures behind keeping TCP, and behind the stall rules above.
+The tic-arrival gaps were taken with a Node wasm client that polled
+`_web_gametic()` after every `_web_frame()` on a 14 ms loop, so they are
+tic-arrival times as the game loop sees them, not TCP timestamps; each other
+figure names how it was taken.
 
 **Tic arrival gaps, 2026-07-19, server on alder:**
 
@@ -257,7 +337,10 @@ scope.
 |---|---|---|
 | tic-arrival gaps on loopback after the history moved to slabs | p50 28.68 ms, p99 29.08 ms, max 41.96 ms (n = 441) | alder, 2026-09-17 |
 | survivors' stall after a peer closes its socket | mean 26 ms, max 33 ms (n = 5, 2 players) | alder loopback, 2026-07-19 |
-| survivors' stall after a peer goes silent without closing | at most 300 ms: the 250 ms grace plus one 50 ms sweep | derived from `server/game.js` |
+| survivors' stall after a peer goes silent without closing | about 250–300 ms (five on-time sweeps, the last at least 250 ms after its last frame), then 35 tics/s | derived from `server/game.js` |
+| survivors' tic rate while a peer is silent for 3 s, from 0.5 s in | 34.7–35.6 tics/s (5 runs); 19.4–20.0 (3 runs) before a silent peer stopped holding the seal | Node clients, alder loopback, 2026-10-08 (`net-hidden`) |
+| a hidden netplay tab on the Worker clock, 12 s | 34.9–35.1 tics/s; steps p50 28.0 ms, p99 29.9–30.5 ms, max 30.0–31.3 ms apart (n = 428–429); fabricated on 0 of 420–421 bundles (4 runs) | headless Chrome on alder, 2026-10-08 (`browser-net-hidden`) |
+| fabrication after the relay process is stopped for 400 ms | 0–1 tics per player, as before the silent-player rule; 13–14 for one player when silence was judged by the clock alone | alder loopback, SIGSTOP, 2026-10-08 |
 | drop-in replay of 436–505 tics | 125–149 ms, about 100× real time (n = 3) | joiner on wbox, server on alder, 2026-07-19 |
 | history memory at the 63,000-tic cap | 8.1 MB RSS in slabs, against 28.8 MB as one Buffer per tic | Node, after GC, 2026-09-16 |
 
@@ -270,8 +353,9 @@ where an unmeasured change becomes a desync.
 
 `net-2p` and `net-4p` compare per-tic state hashes between real wasm clients
 through the relay; `join-coop`, `join-dm` and `edge` do the same for drop-in;
-`spectate`, `spectate-inject` and `spectate-fuzz` cover spectators; `churn` and
-`net-hidden` cover connections that come and go; `net-fuzz`, `hostile-server`,
+`spectate`, `spectate-inject` and `spectate-fuzz` cover spectators; `churn`
+covers connections that come and go; `net-hidden` and `browser-net-hidden`
+cover a player whose page is hidden or stops; `net-fuzz`, `hostile-server`,
 `hostile-lobby` and `launch-args` send hostile frames both ways;
 `wire-constants` checks that the two sides agree on shared constants; and
 `browser-net` and `browser-join` run the same flows in real tabs.

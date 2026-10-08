@@ -100,7 +100,7 @@ slot nobody can see.
 | T23 | MP-COUNTDOWN | LANDING | lobby socket closes mid-countdown; the overlay is reset |
 | T24 | MP-PARAMS | LANDING | lobby socket closes while a picker is open |
 | T25 | MP-COUNTDOWN | LANDING | ESC → `toLauncher()`; the overlay is reset |
-| T32 | IN-GAME-MP | LANDING | the game socket closes or errors, the relay skips a tic, or the bundle backlog overflows; the reason is shown |
+| T32 | IN-GAME-MP | LANDING | the game socket closes or errors (the relay's drop of a player whose input stopped for 5 s gives its reason), the relay skips a tic, or the bundle backlog overflows; the reason is shown |
 | T33 | IN-GAME-SP, IN-GAME-MP | LANDING | engine error (`I_Error`) or a throw in the frame loop; "engine error: …" is shown |
 | T34 | MP-COUNTDOWN | LANDING | the `launch` carries params the client refuses; the refusal is shown |
 
@@ -174,13 +174,14 @@ stateDiagram-v2
 | T14, T15, T17 | `browser-net` |
 | T18, T19, T31 | `browser-join` |
 | T26–T29 | `browser-options` |
-| T32 | `net-hidden` (Node clients: a client the relay drops is told the session is over) |
+| T32 | `net-hidden` (Node clients: a client the relay drops is told why), `browser-net-hidden` (a frozen tab is dropped and its status line gives the reason) |
 | T33 | `browser-ierror`, `browser-rafdeath` |
 | T34 | `launch-args`, `hostile-lobby` (the refusal, below the UI) |
 
 T20 is driven through the same catch as T16; the drop-in entry point is not
-driven separately. T32 and T34 are checked at the client library, not by
-clicking through the launcher.
+driven separately. T34 is checked at the client library, not by clicking
+through the launcher; T32 is checked there and in a real tab, which reaches
+the game through the launcher's MULTIPLAYER screen.
 
 ## Boundary note
 

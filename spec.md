@@ -24,7 +24,8 @@ fails when a leg named here does not exist.
 | Drop-in: join a running game, re-simulated to the frontier | `join-coop`, `join-dm`, `churn`, `edge`, `browser-join` |
 | A seat bound to the lobby socket it was given to | `net-fuzz` |
 | Spectators: receive-only observers, unable to inject | `spectate`, `spectate-inject` |
-| A session that loses its relay, or ends while loading, says so and leaves nothing running | `net-hidden`, `browser-boot-abort` |
+| A session that loses its relay, or ends while loading, says so and leaves nothing running | `net-hidden`, `browser-net-hidden`, `browser-boot-abort` |
+| A hidden multiplayer tab keeps playing; a player whose page stops holds the others up for about 0.3 s, not until it returns, and after 5 s is dropped and told why | `net-hidden`, `browser-net-hidden` |
 | Demo recording, share permalinks and replay | `browser-demo`, `demo-verify`, `demo-replay`, `demo-store-fuzz` |
 | A demo scrubber: seek within a replay, re-simulated from tic 0 | `demo-seek` |
 | A demo-verify CLI for checking a demo against an engine | `demo-verify-cli` |
@@ -112,7 +113,11 @@ has only been built 32-bit, and 64-bit cleanliness is unexplored.
 Deterministic lockstep over a server tic relay
 ([docs/netcode.md](docs/netcode.md) is the protocol reference). The jitter
 buffer, drop-in and fabricated-cmd grace never touch the simulation: clients
-execute sealed bundles only, so a desync is impossible by construction.
+execute sealed bundles only, so a desync is impossible by construction. A
+hidden page keeps playing on a Worker's clock with drawing off, and a player
+the relay stops hearing stops holding the others back after about 250 ms: its
+last cmd is repeated, without its one-tic events, until it returns or, at
+5 s, is dropped with the reason.
 Transport is one WebSocket port. WebRTC/UDP is out of scope: the measured
 inter-bundle gap and loss on LAN and tailnet are bounded by the relay's own
 pacing, not by TCP retransmits ([docs/netcode.md](docs/netcode.md#measured)).

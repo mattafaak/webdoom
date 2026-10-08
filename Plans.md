@@ -64,10 +64,6 @@ owner):
   still points into the previous level when a game is loaded in the same
   session, and a game loaded at boot has none, so the boss stops with
   "A_BrainSpit: numbraintargets was 0" (doom2 MAP30 loaded at boot, at tic 76).
-- **Multiplayer: a hidden tab is dropped after 5 s.** The simulation runs on
-  requestAnimationFrame, which a hidden page does not get, and the server drops
-  a player silent for `DROP_MS`. A product decision: keep, or tick from a
-  timer while hidden.
 - **386-class:** no harness. Measuring id's DOS binary would give the atlas a
   baseline, but nothing in this codebase could move it.
 
