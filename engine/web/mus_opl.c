@@ -20,6 +20,7 @@
 
 #include "doomdef.h"
 #include "doomtype.h"
+#include "m_swap.h"
 #include "w_wad.h"
 #include "z_zone.h"
 #include "opl3.h"
@@ -484,7 +485,7 @@ static int run_event_group (void)
 static void load_bank (void)
 {
     byte* g;
-    int lump;
+    int lump, i;
 
     if (bank_loaded || W_CheckNumForName ("GENMIDI") < 0)
         return;
@@ -499,6 +500,13 @@ static void load_bank (void)
     if (memcmp (g, "#OPL_II#", 8) == 0)
     {
         memcpy (bank, g + 8, sizeof bank);
+        // the lump's 16-bit fields are little-endian, as every WAD's are
+        for (i = 0; i < (int) (sizeof bank / sizeof bank[0]); i++)
+        {
+            bank[i].flags = (unsigned short) SHORT (bank[i].flags);
+            bank[i].voice[0].offset = SHORT (bank[i].voice[0].offset);
+            bank[i].voice[1].offset = SHORT (bank[i].voice[1].offset);
+        }
         bank_loaded = true;
     }
 }

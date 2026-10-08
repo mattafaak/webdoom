@@ -165,7 +165,8 @@ fi
 # The audio, on this target: one demo with music and sound effects, whose
 # AUDIO line (tools/freestanding/fs_audio.c) must be the x86 reference's to the
 # hash -- the synth's samples (synthhash) and the mixer's (mixhash).  On the
-# big-endian target this is the check that GENMIDI is read right (fs_mus.c).
+# big-endian target this is the check that GENMIDI is read right (mus_opl.c's
+# load_bank).
 AUDIO_DEMO=doom-demo4
 AUDIO_REF="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' \
              "$SCRIPT_DIR/../floor/audio-ref.json" "$AUDIO_DEMO")"

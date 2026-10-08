@@ -29,7 +29,6 @@
 
 extern int numChannels; // s_sound.c, read when S_Init allocates its channels
 void fs_mus_preinit (void);     // fs_mus.c
-void fs_mus_bank_endian (void); // fs_mus.c
 
 // ── I_Sound interface ─────────────────────────────────────────────────────────
 void I_InitSound (void)
@@ -99,7 +98,6 @@ void I_InitMusic (void)
         return;
     fs_mus_preinit (); // see fs_mus.c: every voice free before the first call
     mus_init (FS_AUDIO_RATE);
-    fs_mus_bank_endian (); // and a big-endian target's GENMIDI (fs_mus.c)
 }
 
 void I_ShutdownMusic (void)
