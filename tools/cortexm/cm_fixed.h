@@ -7,12 +7,15 @@
 // any divide, so gcc turns m_fixed.h's int64 forms into calls to libgcc:
 // __aeabi_lmul (a 64x64 multiply, ~28 instructions a call plus the call) and
 // __aeabi_ldivmod (~380 instructions a call, and its remainder costs another
-// __aeabi_lmul).  The forms here need neither.
+// __aeabi_lmul).  The forms here need neither.  ARMv8-M (Cortex-M33) has
+// SMULL, so its FixedMul is m_fixed.h's own; but it has only a 32-bit divide,
+// and m_fixed.h's 64-bit one is libgcc's __aeabi_ldivmod there too (~65
+// instructions a call), so its FixedDiv is this one.
 //
-// FixedMul: write a = ah*2^16 + al and b = bh*2^16 + bl, with ah = a >> 16
-// and bh = b >> 16 (arithmetic shifts: signed, in [-2^15, 2^15)) and
-// al = a & 0xffff, bl = b & 0xffff (unsigned, in [0, 2^16)).  Then exactly,
-// as integers,
+// FixedMul, ARMv6-M: write a = ah*2^16 + al and b = bh*2^16 + bl, with
+// ah = a >> 16 and bh = b >> 16 (arithmetic shifts: signed, in
+// [-2^15, 2^15)) and al = a & 0xffff, bl = b & 0xffff (unsigned, in
+// [0, 2^16)).  Then exactly, as integers,
 //     a*b = 2^16 * (a*bh + ah*bl) + al*bl,       0 <= al*bl < 2^32,
 // so floor(a*b / 2^16) = a*bh + ah*bl + floor(al*bl / 2^16).  m_fixed.h's
 // value is that floor (an int64 product, exact since |a*b| <= 2^62, then an
@@ -21,18 +24,21 @@
 // (MULS) and al*bl exactly (it fits in 32 bits), so the result is the same
 // integer mod 2^32: equal for every one of the 2^64 inputs.  Three MULS.
 //
-// FixedDiv: m_fixed.h's clamp, (abs(a) >> 14) >= abs(b), evaluated without
-// its overflow: abs(MININT) is MININT as gcc computes it (and undefined in C,
-// which lets gcc fold a later "a == MININT" away, so this form never calls
-// abs).  So b == MININT always clamps; a == MININT (b not) never clamps and
-// takes m_fixed.h's own int64 expression, its quotient not fitting 30 bits;
-// otherwise n = |a| and d = |b| are below 2^31 and the clamp is (n >> 14) >= d.
-// Past it d >= 1 and floor(n / 2^14) < d, i.e. n < 2^14 * d, so the quotient
-// q = floor(n * 2^16 / d) < 2^30 and (n * 2^16) >> 30 = n >> 14 < d.
-// cm_udiv30 (fixed_v6m.S) is restoring division over the 30 low bits of
-// n * 2^16, starting from the remainder n >> 14: exact.  m_fixed.h's int64
-// division truncates toward zero, i.e. sign(a)*sign(b)*q, which is what is
-// returned.  (FixedDiv (MININT, 0) divides by zero in m_fixed.h too.)
+// FixedDiv, both ISAs: m_fixed.h's clamp, (abs(a) >> 14) >= abs(b), evaluated
+// without its overflow: abs(MININT) is MININT as gcc computes it (and
+// undefined in C, which lets gcc fold a later "a == MININT" away, so this form
+// never calls abs).  So b == MININT always clamps; a == MININT (b not) never
+// clamps and takes m_fixed.h's own int64 expression, its quotient not fitting
+// 30 bits; otherwise n = |a| and d = |b| are below 2^31 and the clamp is
+// (n >> 14) >= d.  Past it d >= 1 and floor(n / 2^14) < d, i.e. n < 2^14 * d,
+// so the quotient q = floor(n * 2^16 / d) < 2^30 and (n * 2^16) >> 30 =
+// n >> 14 < d.  cm_udiv30 computes q exactly: on ARMv6-M (fixed_v6m.S)
+// restoring division over the 30 low bits of n * 2^16, starting from the
+// remainder n >> 14; on ARMv8-M (fixed_v8m.S) long division in two 16-bit
+// digits with UDIV, the second digit estimated and corrected (each file has
+// its proof).  m_fixed.h's int64 division truncates toward zero, i.e.
+// sign(a)*sign(b)*q, which is what is returned.  (FixedDiv (MININT, 0)
+// divides by zero in m_fixed.h too.)
 // Copyright (C) 2026, GPL-2.0-or-later.
 #ifndef CM_FIXED_H
 #define CM_FIXED_H
@@ -51,7 +57,16 @@ static inline fixed_t FixedMul (fixed_t a, fixed_t b)
     return (fixed_t) r;
 }
 
-unsigned cm_udiv30 (unsigned n, unsigned d); /* fixed_v6m.S */
+#else /* ARMv8-M: SMULL, m_fixed.h's own form */
+
+static inline fixed_t FixedMul (fixed_t a, fixed_t b)
+{
+    return (fixed_t) (((long long) a * (long long) b) >> FRACBITS);
+}
+
+#endif
+
+unsigned cm_udiv30 (unsigned n, unsigned d); /* fixed_v6m.S, fixed_v8m.S */
 
 static inline fixed_t FixedDiv (fixed_t a, fixed_t b)
 {
@@ -72,19 +87,4 @@ static inline fixed_t FixedDiv (fixed_t a, fixed_t b)
     return (a ^ b) < 0 ? -(fixed_t) q : (fixed_t) q;
 }
 
-#else /* ARMv8-M: SMULL and libgcc's UDIV-based 64-bit divide; m_fixed.h's */
-
-static inline fixed_t FixedMul (fixed_t a, fixed_t b)
-{
-    return (fixed_t) (((long long) a * (long long) b) >> FRACBITS);
-}
-
-static inline fixed_t FixedDiv (fixed_t a, fixed_t b)
-{
-    if ((abs (a) >> 14) >= abs (b))
-        return (a ^ b) < 0 ? MININT : MAXINT;
-    return (fixed_t) (((long long) a << FRACBITS) / b);
-}
-
-#endif
 #endif

@@ -660,14 +660,16 @@ leg armv6m-zc-misaligned qemucm,wad,heavy "Cortex-M0+, lumps read in place at od
 # measures the same; the copying build's is 1,200 KiB there, without audio).
 leg zone-min-armv6m-zc qemucm,wad,heavy "Cortex-M0+, lumps read in place: smallest zone is still 924 KiB" -- node tools/floor/zone-min.mjs --cortexm armv6m --zero-copy --check 924
 # The port's faster code (tools/cortexm/fast-check.sh, Makefile FAST=1): its
-# R_DrawColumn and R_DrawSpan in Thumb-1 and Thumb-2, and on ARMv6-M its
-# FixedMul and FixedDiv without libgcc's 64-bit helpers.  cm-fasttest holds
-# them to the engine's, case by case, then the 13 demos go through the floor
-# gate, sim + render, with the worst tic as DEMAND.  Then each deliberately
-# wrong variant (a column a row low, a span a column right, a product or a
-# quotient off by one) must fail both, naming its input and its demo and tic.
+# R_DrawColumn and R_DrawSpan in Thumb-1 and Thumb-2, its FixedDiv without
+# libgcc's 64-bit divide (restoring division on ARMv6-M, UDIV digits on
+# ARMv8-M), and on ARMv6-M its FixedMul without libgcc's 64-bit multiply.
+# cm-fasttest holds them to the engine's, case by case, then the 13 demos go
+# through the floor gate, sim + render, with the worst tic as DEMAND.  Then
+# each deliberately wrong variant (a column a row low, a span a column right,
+# a product or a quotient off by one) must fail both, naming its input and its
+# demo and tic.
 leg armv6m-fast     qemucm,wad,heavy "Cortex-M0+, the port's drawers, FixedMul, FixedDiv: 13 demos correct, instructions per tic; 4 wrong variants caught" -- bash tools/cortexm/fast-check.sh armv6m
-leg armv8m-fast     qemucm,wad,heavy "Cortex-M33, the port's drawers: 13 demos correct, instructions per tic; 2 wrong variants caught" -- bash tools/cortexm/fast-check.sh armv8m
+leg armv8m-fast     qemucm,wad,heavy "Cortex-M33, the port's drawers, FixedDiv: 13 demos correct, instructions per tic; 3 wrong variants caught" -- bash tools/cortexm/fast-check.sh armv8m
 # The play-inclusive zone minimum.  The 13 demos never change level and their
 # wipes are cut short, so their minimum is not a game's.  zone-min.mjs --play
 # adds the play set (tools/floor/play-set.mjs): each demo with a level exit

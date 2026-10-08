@@ -23,7 +23,9 @@
 #                      case they do not take goes to the engine's own
 #   FIXED=1            the port's FixedMul and FixedDiv (cm_fixed.h, through
 #                      m_fixed.h's WEB_FIXED_PORT; on ARMv6-M MULS pieces and
-#                      fixed_v6m.S's divide instead of libgcc's 64-bit helpers)
+#                      fixed_v6m.S's divide instead of libgcc's 64-bit helpers,
+#                      on ARMv8-M SMULL as m_fixed.h has it and fixed_v8m.S's
+#                      UDIV-based divide instead of libgcc's 64-bit divide)
 #   FAST=1             both
 #   LEAN=1             the lean memory build, tools/freestanding's LEAN=1:
 #                      vanilla's renderer limits, the lookup tables, texture
@@ -112,9 +114,7 @@ PORT_WRAP += -Wl,--wrap=R_DrawColumn,--wrap=R_DrawSpan
 endif
 ifeq ($(FIXED),1)
 PORT_CFLAGS := '-DWEB_FIXED_PORT="cm_fixed.h"'
-ifeq ($(ISA),armv6m)
-PORT_OBJ += fixed_v6m.o
-endif
+PORT_OBJ += fixed_$(ISA_S).o
 else
 PORT_CFLAGS :=
 endif

@@ -11,7 +11,13 @@
 //           m_fixed.h (libgcc's __aeabi_lmul on ARMv6-M)
 //   div     FixedDiv: the same boundary pairs, then random log-uniform pairs,
 //           most of them past the clamp (the divide is what the port
-//           replaces), against m_fixed.h's (__aeabi_ldivmod)
+//           replaces), then "near" pairs, all past the clamp: a divisor of
+//           every magnitude and a dividend q1*d + r with r uniform or within 4
+//           of d, where a digit-estimating divide is most often off; against
+//           m_fixed.h's (__aeabi_ldivmod).  On ARMv8-M the counts also say how
+//           many pairs had fixed_v8m.S's estimated digit off by 1 and by 2
+//           (computed here from the pair, not read from the port), so a pass
+//           is evidence of both corrections; none must be off by 3
 //   column  R_DrawColumn (DRAWERS=1): random columns into two screens, one
 //           by r_draw.c's function, one by __wrap_R_DrawColumn, compared on
 //           the column and both neighbours every case and whole every 1,024:
@@ -172,6 +178,24 @@ static const int edge[] = {0,
                            (int) 0xaaaaaaaau,
                            0x01000000};
 #define NEDGE ((int) (sizeof (edge) / sizeof (edge[0])))
+
+// fixed_v8m.S's second-digit estimate for a pair past the clamp, minus the
+// true digit: 0, 1 or 2 by its proof (step 4).  The test's own arithmetic.
+#ifdef CM_ARMV8M
+static unsigned est_off[4];
+static void estimate_class (int a, int b)
+{
+    unsigned n = a < 0 ? 0u - (unsigned) a : (unsigned) a,
+             d = b < 0 ? 0u - (unsigned) b : (unsigned) b, r, s, qh, q0;
+    if (a == (int) 0x80000000u || b == (int) 0x80000000u || (n >> 14) >= d)
+        return;
+    r = n % d;
+    s = (unsigned) __builtin_clz (d);
+    qh = (r << s) / ((d << s) >> 16);
+    q0 = (unsigned) (((unsigned long long) r << 16) / d);
+    est_off[qh - q0 > 3 ? 3 : qh - q0]++;
+}
+#endif
 
 static void check_pair (int a, int b, int which)
 {
@@ -398,13 +422,60 @@ void cm_start (void)
             int x = logrnd (), y = logrnd ();
             if ((abs (x) >> 14) < abs (y))
                 divpath++;
+#ifdef CM_ARMV8M
+            estimate_class (x, y);
+#endif
             check_pair (x, y, 1);
         }
         cm_uart_puts ("  div:");
         say ("edge_pairs", NEDGE * NEDGE);
         say ("random_pairs", n);
         say ("past_the_clamp", divpath);
+        // the near pairs draw from a copy of the generator, so the drawers'
+        // cases below are the ones they always were
+        {
+            unsigned keep[4];
+            keep[0] = s0, keep[1] = s1, keep[2] = s2, keep[3] = s3;
+            n = 200000 * scale;
+            for (i = 0; i < n; i++)
+            {
+                unsigned bits, d, qmax, q1, r;
+                int x, y;
+                bits = 1 + below (31); // d in [2^(bits-1), 2^bits)
+                d = (1u << (bits - 1)) | (rnd () & ((1u << (bits - 1)) - 1));
+                qmax = 0x7fffffffu / d;
+                if (qmax > 16383)
+                    qmax = 16383;
+                q1 = below (qmax + 1);
+                r = (rnd () & 1) ? d - 1 - below (d < 4 ? d : 4) : below (d);
+                if (q1 * d > 0x7fffffffu - r) // n < 2^31
+                    q1--;
+                x = (int) (q1 * d + r), y = (int) d;
+                if (rnd () & 1)
+                    x = -x;
+                if (rnd () & 1)
+                    y = -y;
+#ifdef CM_ARMV8M
+                estimate_class (x, y);
+#endif
+                check_pair (x, y, 1);
+            }
+            s0 = keep[0], s1 = keep[1], s2 = keep[2], s3 = keep[3];
+        }
+        say ("near_pairs", n);
+#ifdef CM_ARMV8M
+        say ("estimate_off_by_1", est_off[1]);
+        say ("by_2", est_off[2]);
+#endif
         cm_uart_puts ("\n");
+#ifdef CM_ARMV8M
+        if (est_off[3])
+            fail ("FixedDiv: fixed_v8m.S's estimated digit was below the true "
+                  "one or 3 or more above it (its proof says 0 to 2 above)");
+        if (!est_off[1] || !est_off[2])
+            fail ("FixedDiv: no pair needed fixed_v8m.S's second correction: "
+                  "the pass is not evidence of it");
+#endif
     }
 
 #if CM_FT_DRAWERS

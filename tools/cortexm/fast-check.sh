@@ -4,17 +4,17 @@
 #
 # usage: bash tools/cortexm/fast-check.sh armv6m|armv8m
 #
-# 1. run-floor.sh <isa> --fast: the port's drawers (drawers_<isa>.S) and, on
-#    ARMv6-M, its FixedMul and FixedDiv (cm_fixed.h, fixed_v6m.S).  It passes
-#    cm-fasttest (the port against the engine, case by case, the counts
-#    printed) and then all 13 demos, every tic's sim and render hash, and
-#    reports the worst graded tic as DEMAND.
+# 1. run-floor.sh <isa> --fast: the port's drawers (drawers_<isa>.S) and its
+#    FixedDiv (cm_fixed.h over fixed_v6m.S or fixed_v8m.S), and on ARMv6-M its
+#    FixedMul (cm_fixed.h).  It passes cm-fasttest (the port against the
+#    engine, case by case, the counts printed) and then all 13 demos, every
+#    tic's sim and render hash, and reports the worst graded tic as DEMAND.
 # 2. Red-proofs, each a build with one deliberate defect, built and run side by
 #    side (own build and out directories):
 #      redcol   R_DrawColumn draws the column at x = 100 one row low
 #      redspan  R_DrawSpan draws the span on row 100 one column right
 #      redmul   FixedMul is off by one on 1 product in 4,096   (ARMv6-M)
-#      reddiv   FixedDiv is off by one on 1 quotient in 256    (ARMv6-M)
+#      reddiv   FixedDiv is off by one on 1 quotient in 256
 #    Each must FAIL twice: cm-fasttest must name the input, and the floor gate
 #    on doom-demo1 (run without cm-fasttest, --skip-fasttest) must name the
 #    demo and the tic whose hash differs.  A red that passes either is a FAIL
@@ -28,7 +28,7 @@ CM="$ROOT/tools/cortexm"
 ISA="${1:-}"
 case "$ISA" in
     armv6m) BOARD=mps2-an385; REDS="redcol redspan redmul reddiv" ;;
-    armv8m) BOARD=mps2-an505; REDS="redcol redspan" ;;
+    armv8m) BOARD=mps2-an505; REDS="redcol redspan reddiv" ;;
     *) echo "FAIL fast-check: first argument must be armv6m or armv8m"; exit 2 ;;
 esac
 [ $# -eq 1 ] || { echo "FAIL fast-check: one argument, the ISA"; exit 2; }
