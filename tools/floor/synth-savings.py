@@ -38,6 +38,7 @@ import concurrent.futures
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -151,43 +152,48 @@ def main():
     ref = json.load(open(os.path.join(ROOT, 'tools/floor/synth-ref.json')))['demos']
     flags = make_flags()
     tmp = tempfile.mkdtemp(prefix='synth-savings-')
-    exes = {n: build(n, tmp, flags) for n in names}
-    cpus, lock = pcores(), threading.Lock()
+    # every variant's sources, objects and binary: removed however the run ends
+    # (a failed build, a FAIL from a render, an interrupt), not left in $TMPDIR
+    try:
+        exes = {n: build(n, tmp, flags) for n in names}
+        cpus, lock = pcores(), threading.Lock()
 
-    def run(job):
-        n, key = job
-        r = ref[key]
-        with lock:
-            cpu = cpus.pop()
-        try:
-            o = subprocess.run(['taskset', '-c', str(cpu), exes[n], '--wad', os.path.join(ROOT, 'wads/lib', r['wad']),
-                                '--song', r['song'], '--mode', '1' if key.endswith('opl3') else '0',
-                                '--tics', str(r['tics']), '--count'], capture_output=True, text=True)
-        finally:
+        def run(job):
+            n, key = job
+            r = ref[key]
             with lock:
-                cpus.append(cpu)
-        if o.returncode:
-            sys.exit('FAIL synth-savings: %s %s: %s' % (n, key, o.stderr.strip()))
-        f = lambda k: re.search(r'\b%s=(\S+)' % k, o.stdout).group(1)
-        return n, key, f('l2') == r['l2'], int(f('instr')), int(f('worst_block')), r['frames']
+                cpu = cpus.pop()
+            try:
+                o = subprocess.run(['taskset', '-c', str(cpu), exes[n], '--wad', os.path.join(ROOT, 'wads/lib', r['wad']),
+                                    '--song', r['song'], '--mode', '1' if key.endswith('opl3') else '0',
+                                    '--tics', str(r['tics']), '--count'], capture_output=True, text=True)
+            finally:
+                with lock:
+                    cpus.append(cpu)
+            if o.returncode:
+                sys.exit('FAIL synth-savings: %s %s: %s' % (n, key, o.stderr.strip()))
+            f = lambda k: re.search(r'\b%s=(\S+)' % k, o.stdout).group(1)
+            return n, key, f('l2') == r['l2'], int(f('instr')), int(f('worst_block')), r['frames']
 
-    jobs = [(n, k) for n in names for k in ref]
-    with concurrent.futures.ThreadPoolExecutor(len(cpus)) as ex:
-        res = list(ex.map(run, jobs))
-    base = {}
-    print('%-14s %-5s %-9s %10s %10s %14s %8s' % ('variant', 'mode', 'exact', 'M instr/s', 'M per tic', 'worst tic (M)', 'vs base'))
-    for n in names:
-        for m in ('opl2', 'opl3'):
-            rs = [r for r in res if r[0] == n and r[1].endswith(m)]
-            ok = sum(r[2] for r in rs)
-            secs = sum(r[5] for r in rs) / 49716.0
-            per_s = sum(r[3] for r in rs) / secs
-            base.setdefault(m, per_s if n == names[0] else None)
-            rel = '%+.1f%%' % (100.0 * (per_s / base[m] - 1)) if base[m] else ''
-            print('%-14s %-5s %2d/%-6d %10.2f %10.2f %14.2f %8s' % (n, m, ok, len(rs), per_s / 1e6, per_s / 35e6,
-                                                                    max(r[4] for r in rs) / 1e6, rel))
-    print('synth-savings: %d pinned runs, %d variants x %d renders; "exact" = L2 equals tools/floor/synth-ref.json'
-          % (len(jobs), len(names), len(ref)))
+        jobs = [(n, k) for n in names for k in ref]
+        with concurrent.futures.ThreadPoolExecutor(len(cpus)) as ex:
+            res = list(ex.map(run, jobs))
+        base = {}
+        print('%-14s %-5s %-9s %10s %10s %14s %8s' % ('variant', 'mode', 'exact', 'M instr/s', 'M per tic', 'worst tic (M)', 'vs base'))
+        for n in names:
+            for m in ('opl2', 'opl3'):
+                rs = [r for r in res if r[0] == n and r[1].endswith(m)]
+                ok = sum(r[2] for r in rs)
+                secs = sum(r[5] for r in rs) / 49716.0
+                per_s = sum(r[3] for r in rs) / secs
+                base.setdefault(m, per_s if n == names[0] else None)
+                rel = '%+.1f%%' % (100.0 * (per_s / base[m] - 1)) if base[m] else ''
+                print('%-14s %-5s %2d/%-6d %10.2f %10.2f %14.2f %8s' % (n, m, ok, len(rs), per_s / 1e6, per_s / 35e6,
+                                                                        max(r[4] for r in rs) / 1e6, rel))
+        print('synth-savings: %d pinned runs, %d variants x %d renders; "exact" = L2 equals tools/floor/synth-ref.json'
+              % (len(jobs), len(names), len(ref)))
 
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 main()
