@@ -27,6 +27,7 @@ LIBDRAGON   ?= $(HOME)/toolchains/libdragon
 
 CC      := $(N64_INST)/bin/mips64-elf-gcc
 SIZE    := $(N64_INST)/bin/mips64-elf-size
+NM      := $(N64_INST)/bin/mips64-elf-nm
 STRIP   := $(N64_INST)/bin/mips64-elf-strip
 N64TOOL := $(LIBDRAGON)/tools/n64tool
 
@@ -42,18 +43,24 @@ $(N64TOOL):
 	@echo "n64tool built"
 
 # Zone heap. 512 KB filled during the attract demo and Z_Malloc failed at
-# gametic 171; the N64 has 4 MB RDRAM and non-zone static is ~466 KB, so 2.5 MB
-# leaves ~1 MB for stack and dynamic allocation while giving the sim 5x the
-# room. Override with `make N64_ZONE_KB=…`.
+# gametic 171; 2,560 KB gives the 13 demos room to spare.  The rest of the
+# 4 MB is not all free: the whole image (code and rodata as well as .data and
+# .bss) is loaded into RDRAM, then comes libdragon's heap, then its 64 KB
+# stack.  `make N64_WAD= size` (the footprint build): code and rodata
+# 398,156 B, statics outside the zone 840,860 B, image 3,861,104 B to
+# __bss_end, leaving 267,664 B of heap on a stock console.  The floor builds'
+# per-tic arrays take most of that (`make size` prints each build's heap).
+# Override with `make N64_ZONE_KB=…`.
 N64_ZONE_KB ?= 2560
 
 # ── WAD embedding ────────────────────────────────────────────────────────────
 # The IWAD is appended into the ROM at N64_WAD_OFFSET and read IN PLACE from
 # cartridge address space.  It cannot be copied to RDRAM: doom.wad is
 # 12,408,292 B while the N64 has 4 MB (8 MB with Expansion Pak), of which the
-# engine already uses ~990 KB.
+# loaded image already takes 3,861,104 B (`make N64_WAD= size`).
 #
-# The offset must clear the ELF payload (~360 KB); 2 MiB leaves generous room.
+# The offset must clear the ELF payload (the footprint ROM is 475,136 B);
+# 2 MiB leaves generous room.
 # Cartridge domain 1 is physical 0x10000000, addressed by the CPU through
 # KSEG1 (uncached) at 0xB0000000 — so the WAD's virtual address is
 # 0xB0000000 + N64_WAD_OFFSET.  Uncached is required: the CPU must not cache
@@ -326,23 +333,29 @@ core-objs: $(CORE_OBJ)
 
 -include $(OBJ:.o=.d)
 
+# What is left of RDRAM: the whole image (code, rodata, data, bss: everything
+# up to __bss_end) is loaded into RDRAM, libdragon's heap runs from there to
+# 64 KB below the top, and the stack has those 64 KB (STACK_SIZE in libdragon's
+# system.c).  .data+.bss alone is not what is in use: code and rodata are
+# there too.
 size: $(OUT_ELF)
 	@echo "=== mips64-elf-size $(OUT_ELF) ==="
 	@$(SIZE) $(OUT_ELF)
 	@echo ""
 	@echo "=== N64 RDRAM budget vs actual ==="
-	@$(SIZE) $(OUT_ELF) | awk 'NR==2 { \
-	    rdram_used=$$2+$$3; \
-	    rdram_4mb=4194304; rdram_8mb=8388608; \
+	@img=$$(( 0x$$($(NM) $(OUT_ELF) | awk '$$3 == "__bss_end" { print $$1 }') - 0x80000000 )); \
+	$(SIZE) $(OUT_ELF) | awk -v img="$$img" 'NR==2 { \
+	    rdram_used=$$2+$$3; stack=65536; \
 	    printf "  RDRAM in-use (.data+.bss):  %7d B  (%6.1f KB)\n", rdram_used, rdram_used/1024.0; \
-	    printf "  4 MB RDRAM headroom:        %7d B  (%6.1f KB)\n", rdram_4mb-rdram_used, (rdram_4mb-rdram_used)/1024.0; \
-	    printf "  8 MB RDRAM headroom:        %7d B  (%6.1f KB)\n", rdram_8mb-rdram_used, (rdram_8mb-rdram_used)/1024.0; \
+	    printf "  RDRAM image (to __bss_end): %7d B  (%6.1f KB, code and rodata included)\n", img, img/1024.0; \
+	    printf "  heap left, stock 4 MB:      %7d B  (%6.1f KB, after the %d B stack)\n", 4194304-img-stack, (4194304-img-stack)/1024.0, stack; \
+	    printf "  heap left, 8 MB:            %7d B  (%6.1f KB)\n", 8388608-img-stack, (8388608-img-stack)/1024.0; \
 	    printf "  Zone arena (N64_ZONE_KB):   %7d KB\n", $(N64_ZONE_KB); \
 	}'
 	@echo ""
 	@echo "=== Top BSS contributors (RDRAM static) ==="
-	@$(N64_INST)/bin/mips64-elf-nm --size-sort --print-size $(OUT_ELF) 2>/dev/null | \
-	    grep " [bB] " | sort -k2 -rn | head -10 || true
+	@$(NM) --size-sort --print-size $(OUT_ELF) 2>/dev/null | \
+	    grep " [bB] " | tail -10 | tac || true
 
 # Boot-log target: run ares headless and capture ISViewer UART to
 # ares-boot-raw.log (untracked).

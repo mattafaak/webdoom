@@ -9,12 +9,14 @@
 //   On real hardware this is accurate.  In ares (35 Hz emulated), close enough
 //   for timedemo playback.
 //
-// MEMORY BUDGET (docs/retro.md, "Memory"):
-//   4 MB RDRAM total.
+// MEMORY BUDGET (docs/retro.md, "Memory"; `make size` prints it per build):
+//   4 MB RDRAM total, and the whole image is loaded into it: code and rodata
+//   as well as .data and .bss.  libdragon's heap follows the image, and its
+//   stack has the top 64 KB.
 //   Zone arena (N64_ZONE_SIZE): 2,560 KB, set by the Makefile.
-//   Screen buffers (N64_ALLOCLOW_SIZE): 256 KB.
-//   .data + .bss measured at 3,373,068 bytes in all, the WAD read in place
-//   from ROM.
+//   Screen buffers (N64_ALLOCLOW_SIZE): 256,000 B.
+//   Footprint build: .data + .bss 3,462,300 B, image 3,861,104 B to
+//   __bss_end, 267,664 B of heap left; the WAD is read in place from ROM.
 //
 // engine/core has no N64-specific changes; the port is tools/n64/.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).

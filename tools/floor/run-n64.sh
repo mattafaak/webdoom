@@ -196,7 +196,7 @@ if [ "$REGRADE" = 0 ]; then
             [ -s "$WORK/$tag.$mode.z64" ] || { echo "FAIL floor-n64: make succeeded but $WORK/$tag.$mode.z64 is absent"; exit 1; }
         done
     done
-    RAM=$(grep -h "RDRAM in-use" "$WORK"/*.build.log | sort -u | tr -s ' ' | sed 's/^ //' | paste -sd'|' -)
+    RAM=$(grep -h "RDRAM in-use\|heap left, stock" "$WORK"/*.build.log | sort -u | tr -s ' ' | sed 's/^ //' | paste -sd'|' -)
     echo "floor-n64: built $(( ${#DEMOS[@]} * ${#MODES[@]} )) ROMs ($BUILD) in $(( $(date +%s) - T0 )) s; ${RAM}"
 
     # ── run: every ROM under ares, $JOBS at a time ──────────────────────────

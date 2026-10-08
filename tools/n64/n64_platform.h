@@ -46,8 +46,9 @@ void n64_putc(int c);
 void n64_debug_init(void);
 
 // ── WAD blob registry ─────────────────────────────────────────────────────────
-// On real hardware, the WAD lives in ROM and is DMA-read via libdragon DFS.
-// For the footprint build, pass NULL / len 0 to suppress WAD access.
+// The WAD is appended to the ROM and read in place from cartridge space
+// (n64_main.c finds it; cart_read_n64.c copies lumps out of it).  The
+// footprint build passes NULL / 0: no WAD access.
 void n64_register_wad(const byte* data, int len);
 
 // ── Timedemo exit mechanism ───────────────────────────────────────────────────

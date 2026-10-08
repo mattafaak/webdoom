@@ -4,15 +4,17 @@
 //   1. libdragon's _start (entrypoint.S) sets up CPU, FPU, cache, interrupts.
 //   2. libdragon calls main() from the C runtime.
 //   3. main() initialises the ISViewer UART channel (ares debugf output).
-//   4. main() registers the WAD blob (NULL for footprint build).
+//   4. main() finds the WAD in cartridge space and registers it (nothing in
+//      the footprint build, N64_WAD=).
 //   5. main() calls D_DoomMain() — engine entry point.
 //
 // The D_DoomMain startup banner is printed via printf() → stderr →
 // ISViewer → ares UART pane: the first sign a ROM boots.
 //
-// WAD: libdragon DFS (DragonFS) or baked blob in ROM are both viable paths.
-//   This build uses a NULL blob to verify the engine reaches D_DoomMain.
-//   Real deployment: mount DFS, open doom1.wad via dragonfs, pass pointer.
+// WAD: n64tool appends the IWAD to the ROM (Makefile, N64_WAD_OFFSET) and the
+//   engine reads it IN PLACE through uncached KSEG1: step 2 below scans
+//   cartridge space for its header, and cart_read_n64.c copies each lump out
+//   (PI DMA, aligned word reads at the edges).  No filesystem (DFS) is used.
 //
 // Software rasterizer only; there is no RDP path.
 // engine/core has no N64-specific changes; the port is tools/n64/.
@@ -93,7 +95,8 @@ int main(void)
     // The IWAD is appended into the ROM image by n64tool at N64_WAD_OFFSET and
     // read IN PLACE from cartridge space — it is far too large to copy into
     // RDRAM (doom.wad is 12,408,292 B; the console has 4 MB, 8 MB with an
-    // Expansion Pak, and the engine already holds ~990 KB of that).
+    // Expansion Pak, and the loaded image alone takes 3,861,104 B of it:
+    // `make N64_WAD= size`).
     //
     // Cartridge domain 1 is physical 0x10000000. We address it through KSEG1
     // (0xA0000000 + physical), which is UNCACHED — mandatory here, because the
