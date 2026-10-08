@@ -35,8 +35,6 @@ owner):
 **Open without hardware:**
 - The Cortex-M0+'s 32-bit divides are 12% of its worst tic (413 K
   instructions); the RP2040's hardware divider is only estimated.
-- The Cortex-M33's FixedDiv still calls libgcc (99 K instructions at the worst
-  tic); a UDIV-based exact divide is untried.
 - A pipelined two-core split (next tic's simulation on core 0 while core 1
   draws this tic's planes and masked) would take the worst tic to 71% of one
   core on ARMv6-M and 68% on ARMv8-M (instructions, zero-copy FAST builds,
@@ -46,21 +44,30 @@ owner):
 - RAM: `mobj_t` (94 KB on plutonia MAP28) is held by the savegame format;
   sector line lists and line sector pointers as indices would save about
   15 KB more.
-- A two-sided linedef with no back side (the "glass" hack) makes
-  `PTR_ShootTraverse` (p_map.c) read a NULL `backsector` when a hitscan
-  crosses it: a fault on a native build, a read of address 0 in wasm. It is
-  vanilla behaviour, and the IWAD demos never reach it.
-- **Loading a save can dereference a NULL `target`.** P_UnArchiveThinkers
-  (p_saveg.c) clears every `mobj->target`, as vanilla does, so a monster
-  saved mid-attack acts on NULL in its next action: a mancubus's
-  A_FatAttack2/3 calls P_SpawnMissile with no `dest` (p_mobj.c:947), and a boss
-  cube's A_SpawnFly reads its target (p_enemy.c:1964). Native builds fault
-  (SIGSEGV, measured on doom2 MAP07 and MAP30 and plutonia MAP32 by the floor's
-  scripted saves); in wasm the read does not trap and reads near address 0.
-  The play set skips the save and load on those three maps
-  (`SAVELOAD_CRASHES`, tools/floor/play-set.mjs). A fix is a choice between
-  guarding each action and keeping targets in the savegame, which changes its
-  format.
+- **The ARM RAM floor's heap figure moves with code size.** On the qemu boards
+  the heap follows `.text`, and newlib keeps its break on a 4 KiB boundary, so
+  `cm_heap_peak` (measured from `_heap_start`) moves by up to 4 KiB when code
+  grows or shrinks, with the allocations unchanged: the 2026-10-08 changes
+  moved it by −392 to −1,616 B (NOTEs, not failures). The golden's tolerance is
+  1,024 B, so a code change can make `ram-floor-armv6m`/`-armv8m` fail without
+  any change in what the game allocates. Measuring the peak of what malloc
+  handed out, not of the break, would remove it.
+- **Glass in the browser is not DOS vanilla.** A two-sided line with no back
+  side now reads a zeroed back sector (`P_ZeroSector`, 30dae24), which is what
+  doom.wasm always read at address 0. DOS read its interrupt vector table
+  there, the values `P_NullSector` already uses for segs; on E1M5 nine glass
+  lines have floor 0, where the two differ. Matching DOS would move behaviour
+  and need a regold against an external reference: the owner's call.
+  `EV_BuildStairs` (p_floor.c) also reads a glass line's NULL back sector, but
+  only beside a stair sector, which no tested map has.
+- **A_BrainSpit after a load is a vanilla use-after-free.** `braintargets[]`
+  still points into the previous level when a game is loaded in the same
+  session, and a game loaded at boot has none, so the boss stops with
+  "A_BrainSpit: numbraintargets was 0" (doom2 MAP30 loaded at boot, at tic 76).
+- **Multiplayer: a hidden tab is dropped after 5 s.** The simulation runs on
+  requestAnimationFrame, which a hidden page does not get, and the server drops
+  a player silent for `DROP_MS`. A product decision: keep, or tick from a
+  timer while hidden.
 - **386-class:** no harness. Measuring id's DOS binary would give the atlas a
   baseline, but nothing in this codebase could move it.
 

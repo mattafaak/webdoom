@@ -1156,8 +1156,18 @@ On load (`P_UnArchiveThinkers`):
   `P_SetThingPosition`, and (webdoom) `old*` is snapped to the position so a
   loaded game shows no interpolation streak.
 
-`mobj->tracer` is not cleared. A Revenant's homing missile saved in flight
-restores with a stale pointer, a vanilla defect kept as is.
+`mobj->tracer` is cleared too (webdoom; vanilla left the stale pointer, and
+Chocolate Doom drops it as well), so a Revenant's homing missile saved in
+flight stops homing.
+
+Vanilla goes on to read through the cleared `target` in three places: a
+mancubus saved mid-volley (`P_SpawnMissile` with no `dest`), a boss cube in
+flight (`A_SpawnFly`) and a BFG ball in flight (`A_BFGSpray` aims with
+`P_AimLineAttack(mo->target)`). DOS read low memory there and a native build
+faults. webdoom reads a static zeroed `mobj_t` instead (`P_ZeroMobj`,
+p_mobj.c), which is exactly what the browser build always read at address 0:
+nothing lives below wasm address 1024. The armed build
+(`WEBDOOM_INVARIANTS`) compares the stand-in with address 0 at every use.
 
 ### 13.4 What breaks saves
 

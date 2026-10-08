@@ -927,7 +927,9 @@ Total: 11,908 bytes
 ```
 
 `load_bank` copies only the instruments: `memcpy(bank, g + 8, sizeof bank)`,
-with `sizeof bank` = 175 × 36 = 6,300. The names are not used. A lump shorter
+with `sizeof bank` = 175 × 36 = 6,300, then converts each instrument's
+16-bit `flags` and both voices' `offset` with `SHORT()` (the identity on a
+little-endian host). The names are not used. A lump shorter
 than 8 + 6,300 bytes, or without the magic, is not loaded; a PWAD's GENMIDI
 overrides the IWAD's, so a short one would otherwise be over-read. With no
 bank loaded, `mus_play` refuses every song.
@@ -1177,7 +1179,10 @@ big-endian). What a big-endian port needs:
 4. Savegames hold `player_t`, `mobj_t` and the thinker structs in native byte
    order. A save is not portable between hosts of different endianness or
    pointer width.
-5. `mus_opl.c` is little-endian only as written. The MUS header is parsed byte
-   by byte and is host-independent, but the GENMIDI bank is `memcpy`'d and its
-   16-bit `flags` and `offset` are read natively. No big-endian build compiles
-   it: the freestanding and N64 builds use their own sound stubs.
+5. `mus_opl.c` is byte-order safe. The MUS header is parsed byte by byte, and
+   `load_bank` reads GENMIDI's 16-bit `flags` and `offset` through `SHORT()`
+   (§8.1; until 2026-10-08 they were read natively and
+   `tools/freestanding/fs_mus.c` swapped them after the fact). `be-cross`
+   compiles it for PowerPC through `fs_mus.c` and requires doom-demo4's synth
+   and mixer hashes to equal the x86 reference; with the swap removed it
+   fails. The N64 build still stubs sound.

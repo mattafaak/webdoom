@@ -860,7 +860,8 @@ long  SwapLONG(long);
 ```
 
 Every map-lump read and directory parse goes through `SHORT()` and `LONG()`
-(`P_Load*` in p_setup.c, `W_AddFile` in w_wad.c). A big-endian port needs:
+(`P_Load*` in p_setup.c, `W_AddFile` in w_wad.c), and so does the GENMIDI
+bank (`load_bank` in engine/web/mus_opl.c). A big-endian port needs:
 
 1. **`__BIG_ENDIAN__` defined.** clang (and `zig cc`) predefines it on
    big-endian targets; GCC does not, so a GCC build passes
@@ -873,8 +874,11 @@ Every map-lump read and directory parse goes through `SHORT()` and `LONG()`
 4. **Savegames are not portable.** `player_t` and `mobj_t` are archived with
    `memcpy` and hold native-endian values and pointers; a save from one byte
    order does not load on the other (formats.md §11.4).
-5. **MUS is already safe**: `mus_opl.c` parses its header with explicit
-   `m[4] | (m[5] << 8)` arithmetic.
+5. **MUS is safe**: `mus_opl.c` parses its header with explicit
+   `m[4] | (m[5] << 8)` arithmetic, and `load_bank` reads GENMIDI's 16-bit
+   `flags` and `offset` through `SHORT()` (formats.md §8.1). `be-cross` checks
+   it: doom-demo4's synth and mixer hashes on PowerPC equal the x86
+   reference.
 6. **Signed `char` is required: compile with `-fsigned-char`.** The engine
    relies on x86's signed `char`; PowerPC, ARM and MIPS ABIs default to
    unsigned, which changes demo-byte and table arithmetic and diverges the
@@ -991,10 +995,12 @@ no 64-by-32 divide. `((long long)a << 16) / b` becomes a library call
 470 instructions a call plus an `__aeabi_lmul` for the remainder it throws
 away (`b1e76f5`); at the worst graded tic the M0+ makes 1,516 such calls and
 17,400 to `__aeabi_lmul`. `FIXED=1` in tools/cortexm replaces both through
-`m_fixed.h`'s `WEB_FIXED_PORT` hook with exact code: FixedMul from three
-16-bit `MULS`, FixedDiv as a 30-step restoring division after the clamp
-(about 150 instructions a call), 31% off the M0+'s worst tic with the port's
-drawers ([retro.md](retro.md) §5). `FixedDiv` runs in
+`m_fixed.h`'s `WEB_FIXED_PORT` hook with exact code: on ARMv6-M FixedMul
+from three 16-bit `MULS` and FixedDiv as a 30-step restoring division after
+the clamp (about 150 instructions a call), 31% off the M0+'s worst tic with
+the port's drawers; on ARMv8-M FixedDiv from two `UDIV` digits (15.5 a call
+against libgcc's 65), 11.4% off the M33's with the drawers
+([retro.md](retro.md) §5). `FixedDiv` runs in
 `R_ScaleFromGlobalAngle` for every wall segment, in sprite projection and in
 `P_PathTraverse`.
 

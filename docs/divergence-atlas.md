@@ -76,6 +76,12 @@ families:
 | Icon of Sin target list capped at `MAXBRAINTARGETS` (32) | `A_BrainAwake`, p_enemy.c | writes past `braintargets[]` |
 | Sidedef sector index and linedef sidenum checked at load, `I_Error` on out-of-range | `P_LoadSideDefs`, `P_LoadLineDefs`, p_setup.c | out-of-bounds read |
 | A co-op level with no player start at all | `P_SetupLevel`, p_setup.c | NULL dereference in `P_PlayerThink` |
+| A loaded monster's or missile's cleared `target` read through: a zeroed `mobj_t` stands in | `P_SpawnMissile` (p_mobj.c), `A_SpawnFly` (p_enemy.c), `A_BFGSpray` (p_pspr.c), via `P_ZeroMobj` | NULL dereference (DOS read low memory) |
+| A two-sided line with no back side (the glass hack) read by a hitscan or aim: a zeroed `sector_t` stands in | `PTR_AimTraverse`, `PTR_ShootTraverse` (p_map.c), via `P_ZeroSector` | NULL dereference (DOS read its interrupt vector table) |
+
+The two stand-ins change nothing the browser build does: doom.wasm always read
+zeros at address 0 there, and the armed build asserts the stand-in equals
+address 0 at every use. They stop native builds faulting.
 
 ---
 

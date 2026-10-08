@@ -11,14 +11,14 @@ platform contract a no-OS port implements is [bare-metal.md](bare-metal.md).
 | target | status | basis |
 |---|---|---|
 | Freestanding core (x86-32, ARM32, PowerPC, RV32, Cortex-M0+/M33) | **runs**, 13/13 demos tic-exact | legs `freestanding-sim`, `ro-wad`, `ro-wad-zc`, `arm-cross`, `be-cross`, `rv32-cross`, `armv6m-qemu`, `armv8m-qemu` |
-| N64 (VR4300, emulated) | **runs, rendering every tic**, 13/13 demos, 44,580 tics bit-identical in simulation and framebuffer; 4.21× over the 35 Hz budget in ares | legs `n64-demos`, `n64-floor`; no display, input or sound yet |
+| N64 (VR4300, emulated) | **runs, rendering every tic**, 13/13 demos, 44,580 tics bit-identical in simulation and framebuffer; 4.21× over the 35 Hz budget in ares, 4.64× showing the frame in exact colour | legs `n64-demos`, `n64-floor`, `n64-display`; no input or sound yet |
 | RP2040 (2× Cortex-M0+, 133 MHz) | **predicted marginal on CPU, short on RAM** | section 5: 0.96–1.28× one core, 0.84–1.15× of core 0 split; the full memory diet links 4.97× over its SRAM |
 | 386-class | **no harness** | about 3× short of 35 Hz; nothing here measures this code on one |
 | Sega 32X | **open** | simulation fits one SH-2; render 1.5–3.4× over both |
 | ESP32-S3 | **plausible, untested** | CPU 0.28–0.54× of one core (mean tic, section 4); needs PSRAM |
 | RP2350 (2× Cortex-M33, 150 MHz) | **predicted: game fits one core; exact music does not fit the other** | section 5; worst tic measured on ARMv8-M in qemu, cycles estimated; PSRAM needed |
 | Teensy 4.1 (Cortex-M7, 600 MHz) | **predicted pass, the upper bracket** | section 5; cycles estimated; PSRAM needed (the diet's 1.33 MB floor exceeds its 1 MB) |
-| EFR32MG24 (Cortex-M33, 78 MHz) | **predicted fail** | section 5: 1.17–1.70× one core on the worst tic |
+| EFR32MG24 (Cortex-M33, 78 MHz) | **predicted fail** | section 5: 1.13–1.65× one core on the worst tic |
 | Genesis + Sega CD | **infeasible** | CPU 13.5–30.6× over the combined budget |
 | GBA | **infeasible** | CPU 5.4–12.3× over; RAM 5.9× short |
 | SNES, SNES + Super FX 2 | **infeasible** | CPU 254–1,438× over (stock), 8.7–19.6× (Super FX 2) |
@@ -88,10 +88,11 @@ every tic, and every tic's framebuffer hash matches the render goldens on all
 
 Not done:
 
-- **Display.** `i_video_n64.c` is headless. The `n64-demos` build copies each
-  frame into a 64,000-byte shadow buffer; the floor builds have none (a display
-  would expand `screens[0]` into the VI framebuffer, a cost not yet measured).
-  No RDP path exists.
+- **Display, beyond measuring it.** The `n64-demos` build is headless (it
+  copies each frame into a 64,000-byte shadow buffer). The floor builds can
+  show the frame (`N64_DISPLAY=1`, below), but only to measure its cost: one
+  buffer, never synchronised to the vertical blank, so it may tear. No RDP
+  path exists.
 - **Input.** No controller support (libdragon `joypad.h` is the route).
 - **Sound.** `i_sound_n64.c` is all stubs.
 - **Real hardware.** Not run. The emulator legs are the gate; a run on a
@@ -199,6 +200,49 @@ stock 4 MB:
   graded), the tics that copy from the WAD fall from 2,663 to 259 and the
   worst tic is 5,528,612 counts (4.13×): the zone is not what limits it.
 
+### Showing the frame: `N64_DISPLAY=1` and the `n64-display` leg
+
+The floor's bar (decided 2026-10-07) is exact colour: every palette entry
+shown as its 8:8:8 value, with the conversion inside the timed tic. The RDP cannot do that, because its
+palette (TLUT) entries are 16-bit (libdragon `rdpq_mode.h`: `TLUT_RGBA16` is
+5:5:5:1), so the CPU converts. Each tic, `I_FinishUpdate` turns the
+column-major `screens[0]` into a 320×240 32-bit VI framebuffer (the 200 rows
+letterboxed in rows 20..219) through a 256-entry table rebuilt only when the
+palette changes, by the web build's rule (`gammatable[usegamma][PLAYPAL]`;
+gamma 0 is not the identity in vanilla's table). Each output line is one
+D-cache line: Create Dirty Exclusive, four stores, Hit Writeback Invalidate
+(`fdf18a1`).
+
+Exactness: the `n64-display` leg hashes the framebuffer every tic, read
+uncached out of RDRAM, against the browser build's own frames converted on
+the host (2 demos, 2,023 tics; all 13 demos, 44,580 tics, 8,647 of them under
+a damage or pickup palette, pass by hand). Four wrong conversions fail it:
+blue +1, a wrong palette index, a table never rebuilt (exactly the palette
+flash tics) and a missing writeback (`a44b3fc`).
+
+Cost, ares e1b0d47, all 13 demos (COUNT, half the CPU clock):
+
+| build (zone) | worst graded tic | mean | display bracket per tic |
+|---|---|---|---|
+| no display (2,560 KB, as above) | 5,633,118 (**4.21×**) | 2,323,029 | — |
+| no display (2,224 KB) | 5,590,814 (4.17×) | 2,339,238 | — |
+| display (2,224 KB) | 6,209,424 (**4.64×**, 132.47 ms) | 3,075,973 | 672,595 mean, 687,191 max (50.2% of the budget) |
+
+The framebuffer is 307,200 B of libdragon's heap, which is why a display ROM
+needs the smaller zone. Tic for tic the display build is 736,733 counts
+slower, 64,138 more than the bracket (the VI interrupt and the engine data
+the conversion evicts). In ares's profiler 62% of the conversion is D-cache
+writebacks and fills at 40 cycles a line, so about 400,000 counts a frame is
+the floor for any cached path here. ares does not model VI scanout's RDRAM
+bandwidth (320×240×4 B at 60 Hz, 18.4 MB/s on a console) nor the VR4300's
+uncached write path, so both are unmeasured.
+
+```sh
+bash tools/floor/run-n64.sh --correctness --display 1       # exactness, all 13 (n64-display: 2)
+bash tools/floor/run-n64.sh --timing-once --zone-kb 2224 --out A
+bash tools/floor/run-n64.sh --timing-once --display 1 --against A
+```
+
 ### Building by hand
 
 ```sh
@@ -224,14 +268,17 @@ gone: statics are 3,358,304 B before the floor log's own per-tic arrays
 `.bss.info` section and `--gc-sections` drops it with the unused `W_Profile`.
 
 Footprint build (`N64_WAD=`, default zone) with 256 visplanes, measured on
-alder 2026-10-06 with `mips64-elf-size` and `mips64-elf-nm`:
+alder 2026-10-08 with `mips64-elf-size` and `mips64-elf-nm` (`make size`,
+`3a8dda5`). The whole image is in RDRAM, code included, and libdragon's
+stack takes the top 64 KB:
 
 | item | bytes |
 |---|---|
-| `.text` (code + rodata) | 396,116 |
-| `.data` | 57,032 |
-| `.bss` | 3,401,132 |
-| **RDRAM in use (`.data` + `.bss`)** | **3,458,164** of 4,194,304 (736,140 free on a stock console) |
+| `.text` (code + rodata) | 398,156 |
+| `.data` | 57,040 |
+| `.bss` | 3,405,260 |
+| **the image, 0x80000400 to `__bss_end`** | **3,861,104** of 4,194,304 |
+| heap left after the 64 KB stack | 267,664 (n64-demos ROM 267,392; floor A 195,184; floor B 96,448) |
 | of which `n64_arena`, the zone | 2,621,440 |
 | `n64_screenbufs` (four 320×200 screens) | 256,000 |
 | `visplanes` | 169,984 |
@@ -362,7 +409,7 @@ rp2040-doom runs on this chip at 270 MHz by replacing the asset pipeline (WHD)
 and the memory layout; this code would need the same plus external PSRAM.
 (The first link, of the default build on 2026-07-23, needed 1,082,104 B
 against 270,336 B, 4.00×; that build is gone.) Below 100 MHz, section 5
-predicts the EFR32MG24 (78 MHz) at 1.17–1.70× of its one core.
+predicts the EFR32MG24 (78 MHz) at 1.13–1.65× of its one core.
 
 **386-class (no harness).** A 386DX-40 has 1,142,857 cycles per tic and no
 on-chip cache. At the 486's ~2.4 cycles per instruction the doom.wad demand is
@@ -430,8 +477,11 @@ iteration per tic, as on a target at 35 Hz).
 | ARMv8-M, lumps read in place | 2,583,150 instructions | ~1.04 M | `armv8m-zc` |
 | N64 VR4300 in ares, game | 11.27 M cycles (5,633,118 COUNT) | 4.65 M | `n64-floor`, section 2 |
 | ARMv6-M, fast drawers + FixedMul/FixedDiv without libgcc (below) | 3,398,520 instructions | ~1.32 M | `armv6m-fast` |
-| ARMv8-M, fast drawers (below) | 2,366,150 instructions | ~0.94 M | `armv8m-fast` |
+| ARMv8-M, fast drawers + FixedDiv without libgcc (below) | 2,293,850 instructions | ~0.93 M | `armv8m-fast` |
 | x86, the full memory diet, with audio | 10,535,074 instructions | — | `floor-lean` |
+| ARMv6-M fast, lumps in place, with the exact synth and mixer | 12,634,240 instructions | ~10.11 M | `cortexm-audio` (doom-demo4); all 13 by `audio-check.mjs --demos all` |
+| ARMv8-M fast, lumps in place, with the exact synth and mixer | 8,580,950 instructions | ~6.95 M | the same |
+| N64 in ares, game + the exact 32-bit display (2,224 KB zone) | 12.42 M cycles (6,209,424 COUNT) | 6.15 M | section 2 |
 
 - The exact synth (byte-identical to `tools/floor/synth-ref.json`, the L2
   grade) was 14.3 M x86 instructions per tic. Its exact savings are now in
@@ -441,9 +491,18 @@ iteration per tic, as on a target at 35 Hz).
   and 6.42 M at -O2 (OPL2, `tools/floor/synth-cost.mjs`). `synth-exact` holds
   it sample-identical to the unmodified core on all 137 IWAD scores, both
   modes, and on random register streams. On a real OPL2 chip (the L1 grade,
-  vanilla's own setup) the CPU only sequences. ARM counts for the synth are
-  **not measured**; below, the -O2 worst tic is scaled from x86 by the
-  engine's own ratio (ARMv8-M/x86 0.75), an estimate.
+  vanilla's own setup) the CPU only sequences.
+- The sound on ARM, measured (`e806675`): the synth, the mixer and the
+  channels cost, per graded tic over the 13 demos at -O1, 8,785,826 mean and
+  9,341,360 max instructions on ARMv6-M, 6,020,706 and 6,434,200 on ARMv8-M
+  (5,307,997 and 5,733,750 at -O2), against 6,707,493 and 7,250,166 on x86.
+  So ARMv8-M is about 0.90 of x86 here, not the 0.75 the game shows; both
+  boards build soft-float (the M33 build has no VFP instructions), and the
+  sequencer's doubles are about 6.5% of the sound on ARMv8-M. The `AUDIO`
+  line equals `tools/floor/audio-ref.json` on all 13 demos on both ISAs:
+  the synth and mixer are sample-exact on ARM. The copying builds cannot play
+  sound on the qemu boards (the mixer reads effects in place from the WAD),
+  so these run lumps in place.
 - The M0+ calls software helpers up to 19,646 times a tic for 64-bit multiply
   (`__aeabi_lmul`) and 3,414 for divide; their instructions are in its count.
 - Memory: the default build needs a 1,216 KiB zone for the 13 demos and
@@ -516,7 +575,7 @@ intermission) and the biggest maps need more zone than any demo, and whether a
 run fits is not monotone in zone size. So the floors below are play-inclusive:
 the lowest size from which every 4 KiB step upward runs all 13 demos plus the
 play set (each demo exited into its next level, and a scripted run on all 132
-IWAD maps, 129 of them saved and loaded), with 4 KiB less failing. At 4 KiB below
+IWAD maps, every one saved and loaded), with 4 KiB less failing. At 4 KiB below
 each floor the first map to fail is tnt MAP20 (plutonia MAP28 for `LEAN=1`).
 
 | build | zone, 13 demos | zone, play-inclusive | leg |
@@ -563,30 +622,39 @@ function) at the worst graded tic, ARMv6-M / ARMv8-M:
 - BSP and seg code 695,170 / 583,702.
 - Simulation 554,495 / 492,105.
 - On ARMv6-M, the 64-bit FixedMul and FixedDiv helpers (488,004 + 712,910) and
-  the 32-bit divide (413,404).
+  the 32-bit divide (413,404). On ARMv8-M, libgcc's 64-bit divide for
+  FixedDiv (98,630 in 1,516 calls).
 
 Two exact levers (`FAST=1` in tools/cortexm):
 - **Drawers.** Thumb-1 and Thumb-2 R_DrawColumn and R_DrawSpan.
-- **FixedMul and FixedDiv on ARMv6-M without libgcc's 64-bit helpers.**
-  - FixedMul is three MULS on the operands' 16-bit halves. It is proven equal
-    to `(int64)a*b >> 16` for all inputs: a·b = 2¹⁶(a·bh + ah·bl) + al·bl
-    exactly, with 0 ≤ al·bl < 2³².
-  - FixedDiv is a 30-step restoring division, exact past the clamp.
+- **FixedMul and FixedDiv without libgcc's 64-bit helpers.**
+  - ARMv6-M FixedMul is three MULS on the operands' 16-bit halves. It is
+    proven equal to `(int64)a*b >> 16` for all inputs: a·b = 2¹⁶(a·bh +
+    ah·bl) + al·bl exactly, with 0 ≤ al·bl < 2³². (ARMv8-M keeps
+    `m_fixed.h`'s SMULL form.)
+  - ARMv6-M FixedDiv is a 30-step restoring division, exact past the clamp.
+  - ARMv8-M FixedDiv is two UDIV digits (`fixed_v8m.S`): the first exact,
+    the second estimated from a normalised divisor, never low and at most 2
+    high, corrected against an exact 64-bit remainder. 15.5 instructions a
+    call at the worst tic against libgcc's 65 (`89c9155`); held to the engine's FixedDiv on
+    1,000,000 random pairs, the edges and 200,000 pairs near the estimate's
+    error (90,818 off by one, 10,148 by two, none by three).
 
 | | ARMv6-M worst / mean | ARMv8-M worst / mean |
 |---|---|---|
 | before | 4,922,520 / 1,817,319 | 2,588,800 / 1,049,253 |
-| fast | **3,398,520 / 1,320,331** (−31%) | **2,366,150 / 943,909** (−8.6%) |
+| fast | **3,398,520 / 1,320,331** (−31%) | **2,293,850 / 933,587** (−11.4%) |
 
 **A two-core split of one frame** (`tools/cortexm/dualcore.mjs`):
 - **The split:**
   - core 0 runs the simulation and BSP walk, queueing wall columns;
   - core 1 draws the queued columns;
   - both draw planes and masked by screen half.
-- **The result:** core 0 still carries 83–90% of the worst tic (by ISA and by
+- **The result:** core 0 still carries 82–90% of the worst tic (by ISA and by
   how plane and masked overheads split), because the simulation and the BSP
   walk are serial. The board figures below are the highest core-0 load over
-  all 44,567 graded tics, measured on the FAST builds that copy lumps (6707ebc);
+  all 44,567 graded tics, measured on the FAST builds that copy lumps
+  (re-measured 2026-10-08 with the ARMv8-M FixedDiv);
   the zero-copy FAST builds the design assumes differ by under 0.4% at the
   worst tic (3,410,225 and 2,360,468 instructions, 0add728).
 - **Status:** a costed model from measured stage counts. Its queue and
@@ -603,11 +671,11 @@ one.
 
 | target | stock clock | budget per core (cycles/tic) | game, worst tic | L2 music | RAM (floor 1.33 MB) |
 |---|---|---|---|---|---|
-| N64 VR4300 (ares) | 93.75 MHz | 2,678,571 | **4.21×, measured** (emulated) | RSP needed | 4 MB fits |
-| Teensy 4.1 (M7) | 600 MHz | 17,142,857 | 0.08–0.14× (fast build) | 0.25–0.42× total, one core | 1 MB on chip: PSRAM needed |
-| RP2350 (2× M33) | 150 MHz | 4,285,714 | 0.61–0.88× one core; 0.50–0.77× core 0 split | **1.24–1.80×** of core 1 | 520 KB SRAM: PSRAM needed (links, section above) |
+| N64 VR4300 (ares) | 93.75 MHz | 2,678,571 | **4.21×, measured** (emulated); **4.64×** showing the frame in exact colour | RSP needed | 4 MB fits |
+| Teensy 4.1 (M7) | 600 MHz | 17,142,857 | 0.08–0.13× (fast build) | 0.30–0.50× total, one core (measured ARMv8-M sound) | 1 MB on chip: PSRAM needed |
+| RP2350 (2× M33) | 150 MHz | 4,285,714 | 0.59–0.86× one core; 0.48–0.75× core 0 split | **1.65–2.40×** of core 1 (measured ARMv8-M sound) | 520 KB SRAM: PSRAM needed (links, section above) |
 | RP2040 (2× M0+) | 133 MHz | 3,800,000 | 0.96–1.28× one core; 0.84–1.15× core 0 split | no | 264 KB: 4.97× short (links) |
-| EFR32MG24 (M33) | 78 MHz | 2,228,571 | **1.17–1.70×** | no | 256 KB: about 5× short |
+| EFR32MG24 (M33) | 78 MHz | 2,228,571 | **1.13–1.65×** | no | 256 KB: about 5× short |
 
 So, before any hardware: the N64 is out on its CPU (the software renderer
 cannot reach 35 Hz on the VR4300 even with perfect caching, about 1.5× by
