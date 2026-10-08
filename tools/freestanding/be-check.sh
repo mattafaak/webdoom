@@ -101,9 +101,13 @@ for entry in "${DEMOS[@]}"; do
 
     printf "running %-16s ... " "$out_prefix"
     ret=0
-    # audio off for the sim goldens: under qemu the music synth costs ~9x the
-    # game (doom-demo4: 0.6 s without, 5.2 s with), and the audio is checked
-    # once, below, against the x86 reference
+    # audio off for the sim goldens: under qemu a run with audio (the OPL
+    # synth and the sfx mixer) costs ~5x one without (doom-demo4 on
+    # qemu-ppc-static, this command: 1.09 s CPU without, 5.67 s with, median
+    # of 3 interleaved runs pinned to one P-core, 2026-10-08 on alder at load
+    # average ~50; 3f27f53 measured 0.6 s and 5.2 s, before 26f87f8 and
+    # e450fbe cut the synth's OPL2 instructions 501 -> 229 M per second of
+    # audio), and the audio is checked once, below, against the x86 reference
     WD_AUDIO=0 "$QEMU" "$BE_BIN" "$wad_path" -timedemo "$demo" \
         -sim "$ABS_OUT_DIR/${out_prefix}.json" >/dev/null 2>&1 || ret=$?
 

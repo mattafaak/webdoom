@@ -6,7 +6,12 @@
 #       EXPERIMENTAL; no qemu-m68k-static confirmed on this host.
 #   (2) powerpc-linux-musleabi — SELECTED: BE, 32-bit, integer unaligned
 #       loads OK (rung A), solid LLVM backend, qemu-ppc-static present.
-#   (3) mips-linux-musl — not tried yet (strict alignment = rung B variable).
+#   (3) mips-linux-musleabi — tried in 5d4be7e: 13/13 bit-identical under
+#       qemu-mips-static once the strict-alignment sites were fixed (qemu-user
+#       mips raises SIGBUS on an unaligned access, so it is the rung B
+#       check; `git log -1 5d4be7e`).  Run by hand, not by a leg:
+#       BE_TARGET=mips-linux-musleabi QEMU_BE=qemu-mips-static \
+#       BE_BIN=tools/freestanding/fs-doom-mips bash tools/freestanding/be-check.sh
 #
 # Usage:
 #   bash tools/freestanding/be-build.sh [outfile]

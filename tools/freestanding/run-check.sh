@@ -61,7 +61,9 @@ SKIPPED_WADS=""
 # numerator, so a run that found three WADs printed "PASS: 9/9" and a run that
 # found none printed "PASS: 0/0", both exit 0, both indistinguishable from a
 # complete pass.  ro-wad-check.sh execs this script, so both legs emitted the
-# identical headline (docs/2026-09-11-suite-baseline.md:196-197).
+# identical headline (the 2026-09-11 suite baseline's table, lines 196-197 as
+# of c9deeba: `git show c9deeba:docs/2026-09-11-suite-baseline.md`; the file
+# itself was deleted in b0630dd).
 EXPECTED=${#DEMOS[@]}
 TMPROOT="$(mktemp -d)"
 trap 'rm -rf "$TMPROOT"' EXIT

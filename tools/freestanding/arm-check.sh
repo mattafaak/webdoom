@@ -3,12 +3,15 @@
 #
 # WHY THIS EXISTS
 # ---------------
-# spec.md's reference fleet lists pi5 (Cortex-A76) as "ARM reference".  What pi5
-# actually ran was `node tools/bench.mjs` against the WASM build — a pure
-# PERFORMANCE sample.  wasm is architecture-independent by construction, so the
-# ARM row never tested ARM code generation, the ARM ABI, or ARM alignment at
-# all.  And pi5 has been down since before 2026-09-11, which left the four-host
-# perf gate unrunnable as written (finding F4).
+# spec.md's reference fleet listed pi5 (Cortex-A76) as "ARM reference" until
+# 3bf5c6b retired it from the gate on 2026-09-11; spec.md's "Reference
+# hardware" table now lists wbox, tank and alder, alder running the
+# cross-architecture legs.  What pi5 actually ran was `node tools/bench.mjs`
+# against the WASM build — a pure PERFORMANCE sample.  wasm is
+# architecture-independent by construction, so the ARM row never tested ARM
+# code generation, the ARM ABI, or ARM alignment at all.  And pi5 had been
+# down since before 2026-09-11, which left the four-host perf gate unrunnable
+# as written (finding F4).
 #
 # Timings cannot be migrated to alder: emulated cycles are not hardware cycles,
 # and a number produced that way would be fiction.  CORRECTNESS can, and it is
