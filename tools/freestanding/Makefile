@@ -363,8 +363,16 @@ check-all: $(OUT) synth-bench
 imports: $(OUT)
 	@bash gen-imports.sh
 
+# The cross-build and read-only legs leave their outputs here too, though no
+# rule of this file makes them: be-build.sh's fs-doom-be (be-cross),
+# arm-check.sh's fs-doom-arm and out-arm (arm-cross), rv32-check.sh's
+# fs-doom-rv32imac, fs-doom-rv32gc and their out-rv32* dirs (rv32-cross),
+# be-check.sh's out-be, and ro-wad-check.sh's out-ro and out-ro-zc (ro-wad,
+# ro-wad-zc; the out dirs tools/run-tests.sh passes).
+CROSS_OUT := fs-doom-be fs-doom-arm fs-doom-rv32* out-be out-arm out-rv32* out-ro out-ro-zc
+
 clean:
-	rm -rf obj obj-* fs-doom fs-doom-o2 fs-doom-fixed fs-doom-zc fs-doom-lean fs-doom-lean-ref fs-doom-lean-rp-stride fs-doom-leanzc fs-doom-leanzc-rp-* fs-doom-leanzc-lv fs-doom-lean-lv fs-doom-lean-floor fs-doom-leanzc-floor fs-doom-full-floor fs-doom-full fs-doom-leanzc-lvref fs-doom-rp-ramfloor *.map .*.lock $(OUT_DIR) synth-bench-O1 synth-bench-O2 synth-bench-x87 synth-exact
+	rm -rf $(CROSS_OUT) obj obj-* fs-doom fs-doom-o2 fs-doom-fixed fs-doom-zc fs-doom-lean fs-doom-lean-ref fs-doom-lean-rp-stride fs-doom-leanzc fs-doom-leanzc-rp-* fs-doom-leanzc-lv fs-doom-lean-lv fs-doom-lean-floor fs-doom-leanzc-floor fs-doom-full-floor fs-doom-full fs-doom-leanzc-lvref fs-doom-rp-ramfloor *.map .*.lock $(OUT_DIR) synth-bench-O1 synth-bench-O2 synth-bench-x87 synth-exact
 
 # ro-wad-check: read-only-WAD proof (XIP feasibility).
 # Runs all 13 demos with WD_RO_WAD=1: WAD blob mprotect(PROT_READ) after load.
