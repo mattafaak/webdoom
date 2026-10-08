@@ -119,8 +119,10 @@ bash tools/n64/run-n64-demos.sh '^doom-demo1$'     # one demo (grep -E over <iwa
 ```
 
 The leg is tagged `slow` and `heavy`: `--no-slow` skips it by name, and under
-`--jobs` it may overlap other legs. It is the longest leg in the suite: 435 s
-for all 13 demos on alder (`7f5c682`, 2026-10-05). A filter that matches no demo is an error, and a filtered pass
+`--jobs` it may overlap other legs. It takes 6–7 minutes for all 13 demos on
+alder (435 s alone at `7f5c682`; 392 s inside the full suite at `--jobs 6`,
+2026-10-08). The two ARM RAM-floor legs, about 40 minutes each, are now the
+longest. A filter that matches no demo is an error, and a filtered pass
 says it is not the full 13.
 
 For each demo [run-n64-demos.sh](../tools/n64/run-n64-demos.sh):
@@ -179,7 +181,8 @@ stock 4 MB:
   (also the host's worst tic): **4.21×** the budget. Mean 2,323,029 (1.73×);
   95.5% of graded tics are over. Code layout alone moves these: a few
   instructions added to `I_Error` moved the worst tic by 0.14%.
-- `n64-floor` takes 76 s on alder (13 ROMs at a time); `n64-demos` 6 m 15 s.
+- `n64-floor` took 76 s on alder alone (13 ROMs at a time), and 175 s
+  inside the full suite at `--jobs 6` on 2026-10-08.
 - Against the host tic for tic, 3.41 N64 cycles per x86 instruction over all
   graded tics (2.97–3.72 per demo): section 4's *F*, measured in an emulator.
 - ares's own profiler (`--xprof`, at `190ce86`, ForceInterpreter, all 13

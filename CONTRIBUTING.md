@@ -7,8 +7,10 @@ are what keep it small.
 
 1. `bash tools/run-tests.sh` before you open anything. It needs a WAD
    library, a built engine and Chrome. Use `--jobs 6`: on a 24-thread host
-   the whole thing takes about ten minutes, most of it the N64 leg, and
-   verdicts do not depend on the job count. On a host with fewer cores, try
+   the whole thing takes about 52 minutes, most of it the two ARM RAM-floor
+   legs, and verdicts do not depend on the job count. While iterating,
+   `--no-slow` skips the slow legs by name (about 18 minutes), but the full
+   run is the one that counts. On a host with fewer cores, try
    3. The runner prints its own time at the end.
 2. A change to the simulation must be **tic-identical**: 13/13 demo
    goldens, byte for byte. If it is not, it is wrong, however good it

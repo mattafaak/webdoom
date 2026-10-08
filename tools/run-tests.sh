@@ -57,9 +57,11 @@ while [ $# -gt 0 ]; do
         # `alone` (timing-graded -- contention IS the measurement) drains the
         # pool first, while `heavy` (expensive but hash-graded) may overlap.
         #
-        # 6 is the recommendation on a 24-thread host: the same full table
-        # took 642 s at 3, 577 s at 6 and 564 s at 10, and n64-demos alone is
-        # 434 s of it.  The default stays 1: CI runs this file with no --jobs
+        # 6 is the recommendation on a 24-thread host (measured when the
+        # table was smaller: 642 s at 3, 577 s at 6, 564 s at 10).  The full
+        # table of 118 legs took 51 min 54 s at 6 on alder (2026-10-08), set
+        # by ram-floor-armv6m and -armv8m (~40 min each); --no-slow, 17 min
+        # 48 s, set by synth-exact (~19 min).  The default stays 1: CI runs this file with no --jobs
         # on a 2-core runner, where six concurrent Chromes are untested and the
         # timing-graded legs have nowhere to hide, and a default is what an
         # unmeasured host gets.
@@ -67,8 +69,9 @@ while [ $# -gt 0 ]; do
         # opt-in because it reaches other machines (~30 s), not because it is
         # slow; it SKIPs, named and counted, in the default run
         --perf)             PERF=1; shift ;;
-        # n64-demos is ~8 min of the run; --no-slow is for iterating, and the
-        # leg still SKIPs named and counted (--require-complete still fails)
+        # the slow legs are the two ARM RAM floors (~40 min each) and the N64
+        # legs (n64-demos 6-7 min); --no-slow is for iterating, and each still
+        # SKIPs named and counted (--require-complete still fails)
         --no-slow)          NO_SLOW=1; shift ;;
         --full)             TIER=full; shift ;;
         --only)             ONLY+=("$2"); shift 2 ;;
@@ -164,7 +167,7 @@ declare -A NEED=(
     [emsdk]='have_emsdk|emsdk not found (run: tools/setup-emsdk.sh)'
     [baseline]='have_baseline|no browser-pipeline baseline for host HOST'
     [shared]='have_shared|shared browser server on 8668 not started'
-    [slow]='have_notslow|--no-slow given: a slow leg (n64-demos ~8 min; ram-floor-armv6m and -armv8m ~34 min each, measured at --jobs 3)'
+    [slow]='have_notslow|--no-slow given: a slow leg (ram-floor-armv6m and -armv8m ~40 min each at --jobs 6; n64-demos 6-7 min)'
     [perf]='have_perf|perf tier not requested (run: tools/run-tests.sh --perf; ~30 s measured, needs wbox and tank up)'
     # not a prerequisite: under --jobs the leg runs with the pool drained
     [alone]='true|'
@@ -740,7 +743,7 @@ leg arm-cross       zig,qemuarm,wad "freestanding core 13/13 on 32-bit ARM" -- b
 # The big-endian leg.  tools/freestanding/be-check.sh defaults to PowerPC, the
 # target docs/bare-metal.md cites; arm-check.sh execs the same script with
 # little-endian ARM32 overrides, so only this leg tests byte order.  It is the
-# cheap big-endian cover; n64-demos is the other, at about 7 minutes.
+# cheap big-endian cover; n64-demos is the other, at 6-7 minutes.
 leg be-cross        zig,qemuppc,wad "freestanding core 13/13 on big-endian PowerPC" -- bash tools/freestanding/be-check.sh
 # RISC-V, through the same be-check.sh: RV32IMAC soft-float (the candidate
 # boards' RISC-V cores have no FPU, so tables.c's libm runs in software) and
@@ -748,10 +751,10 @@ leg be-cross        zig,qemuppc,wad "freestanding core 13/13 on big-endian Power
 leg rv32-cross      zig,qemurv,wad "freestanding core 13/13 on RV32IMAC (soft-float) and RV32GC" -- bash tools/freestanding/rv32-check.sh
 # The N64 rung of the same argument, and the strongest one: a 93.75 MHz
 # big-endian MIPS console, a 12.4 MB WAD read in place out of cartridge space,
-# and the whole 44,580-tic golden set reproduced bit-for-bit.  It is the
-# longest leg by a wide margin (--no-slow skips it) and it is in the suite
-# because a gate nobody runs rots.
-leg n64-demos       n64,wad,slow,heavy "13/13 demo sim-hashes on emulated N64 (~8 min)" -- bash tools/n64/run-n64-demos.sh
+# and the whole 44,580-tic golden set reproduced bit-for-bit.  It takes 6-7
+# minutes (--no-slow skips it) and it is in the suite because a gate nobody
+# runs rots.
+leg n64-demos       n64,wad,slow,heavy "13/13 demo sim-hashes on emulated N64 (~7 min)" -- bash tools/n64/run-n64-demos.sh
 # The N64 in render mode: the same 13 demos with the renderer running every
 # tic (no -nodraw), each tic's sim AND render hash held to the goldens through
 # floor-gate --correctness, which can only say CORRECT or FAIL.  n64-demos is

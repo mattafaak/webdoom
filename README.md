@@ -72,8 +72,11 @@ re-probes. `tools/deploy.sh --check` reports drift and changes nothing.
 ```sh
 tools/run-tests.sh            # everything, one leg at a time
 tools/run-tests.sh --jobs 6   # the same legs six at a time, identical verdicts;
-                              # about 10 min on a 24-thread host, most of it the
-                              # N64 leg.  The runner prints its own time.
+                              # about 52 min on a 24-thread host, most of it the
+                              # two ARM RAM-floor legs.  The runner prints its
+                              # own time.
+tools/run-tests.sh --jobs 6 --no-slow   # skips those and the N64 legs, named
+                              # and counted: about 18 min
 tools/run-tests.sh --quick    # no WADs, no build, no browser — what CI runs
 tools/run-tests.sh --list     # the leg registry
 ```
