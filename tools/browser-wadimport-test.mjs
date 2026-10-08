@@ -237,12 +237,15 @@ const bootStarted = await tab.ev(`
 `);
 if (bootStarted !== 'clicked') fatal(`could not click testmod entry: ${bootStarted}`);
 
-// Wait for engine to boot (canvas visible, status empty) — up to 120s
-// (doom.wad is ~12MB, needs to download then engine initialise).
+// Wait for the engine to run (its handle published, the loading panel gone,
+// canvas visible, status empty) — up to 120s (doom.wad is ~12MB, needs to
+// download then engine initialise).  tab.inGame() alone turns true when the
+// boot shows the screen, before the engine has loaded anything, so it could
+// not say the PWAD loaded.
 const booted = await tab.waitFor(async () => {
     const s = await tab.ev(`document.getElementById('status')?.textContent`);
     if (s?.startsWith('engine error') || s?.startsWith('cannot')) fatal(`engine error during SP boot: "${s}"`);
-    return tab.inGame();
+    return tab.running();
 }, { timeout: 120000, every: 500 });
 if (!booted)
     fatal(`engine did not boot within 120s (status: "${await tab.ev(`document.getElementById('status')?.textContent`)}")`);

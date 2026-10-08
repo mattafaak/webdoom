@@ -137,6 +137,12 @@ async function attach(port, target) {
             return false;
         },
         inGame: () => tab.ev(`!document.getElementById('screen').hidden && document.getElementById('status')?.textContent === ''`),
+        // inGame() turns true as soon as a boot shows the screen, before the
+        // engine runs (measured: 1 ms after SPECTATE, the engine at 1,464 ms).
+        // running() is the engine itself: its handle published and the loading
+        // panel gone, as browser-join-test.mjs waits for it.
+        running: async () => (await tab.ev(`!!window.webdoom?.doom && document.getElementById('loading')?.hidden === true &&
+            !document.getElementById('screen').hidden && document.getElementById('status')?.textContent === ''`)) === true,
         // SINGLE PLAYER → the first Doom entry → the engine running.  "Running"
         // is a handle other than the one present when this started: a page
         // that kept the previous session's handle would otherwise satisfy the

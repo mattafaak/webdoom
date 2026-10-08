@@ -25,8 +25,15 @@ const shot = async (tab, file) => {
 };
 const onLobby = tab => tab.ev(`!!document.querySelector('#dmenu .row[data-label*="START GAME"]')`);
 
-const A = await chrome.tab(url);
-const B = await chrome.tab(url);
+// A window each: a tab opened beside another hides it, a hidden page gets no
+// requestAnimationFrame (which runs the game), and the server drops a player
+// silent for 5 s (tools/lib/cdp.mjs openWindow).  In one window this test
+// passed only because it finished before that drop.
+const A = await chrome.window(url);
+const B = await chrome.window(url);
+// A page that stops answering CDP must end the test, not hang the suite.
+const TEST_S = 300;
+setTimeout(() => fatal(`the test did not finish within ${TEST_S} s: a page stopped answering CDP`), TEST_S * 1000).unref();
 await sleep(2500);
 
 // lobby-first: MULTIPLAYER lands straight on the lobby screen
@@ -75,14 +82,15 @@ await shot(A, 'webdoom-lobby-doomfont.png');
 
 if (!await A.click('START GAME')) fatal('A: START GAME not clickable');
 
+// in the game means the engine running (tab.running), not the boot begun
 let inGame = 0;
-for (let i = 0; i < 40; i++) {
+for (let i = 0; i < 180; i++) {
     await sleep(500);
     inGame = 0;
-    for (const t of [A, B]) if (await t.inGame()) inGame++;
+    for (const t of [A, B]) if (await t.running()) inGame++;
     if (inGame === 2) break;
 }
-check('both tabs reach the game', inGame === 2, `only ${inGame}/2 tabs in-game`);
+check('both tabs reach the game', inGame === 2, `only ${inGame}/2 tabs running the engine after 90 s`);
 
 // GO melt ~1s in the foreground; background tabs throttle the timer
 // backstop, so poll rather than assume
