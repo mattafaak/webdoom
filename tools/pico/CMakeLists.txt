@@ -49,12 +49,12 @@
 #   ZONE_KB        the zone arena, KiB (default 604: the full diet's
 #                  play-inclusive floor, tools/golden/floor-ram.json)
 #   HEAP_KB        newlib's heap, reserved in RAM, or in PSRAM in the
-#                  psram-heap variants (default 295: armv8m/full's measured
-#                  peak over the play set, 301,496 B, a saved game included,
+#                  psram-heap variants (default 282: armv8m/full's measured
+#                  peak over the play set, 288,264 B, a saved game included,
 #                  rounded up; it also holds the qemu board's copy of tnt's
 #                  directory, which a doom.wad port has no need of)
 #   STACK_KB       core 0's stack (default 6: armv8m/full's measured peak,
-#                  5,200 B, rounded up): SCRATCH_X + SCRATCH_Y as one region;
+#                  5,208 B, rounded up): SCRATCH_X + SCRATCH_Y as one region;
 #                  core 1 is not used
 #   OPT            the engine's optimisation (default -O1, as the floor
 #                  measures); pico-sdk's own code is built CMAKE_BUILD_TYPE
@@ -75,7 +75,7 @@ project(webdoom_pico C CXX ASM)
 pico_sdk_init()
 
 set(ZONE_KB 604 CACHE STRING "zone arena, KiB")
-set(HEAP_KB 295 CACHE STRING "heap reserved, KiB (in RAM; in PSRAM for psram-heap)")
+set(HEAP_KB 282 CACHE STRING "heap reserved, KiB (in RAM; in PSRAM for psram-heap)")
 set(STACK_KB 6 CACHE STRING "core 0 stack, KiB (SCRATCH_X + SCRATCH_Y)")
 set(OPT -O1 CACHE STRING "engine optimisation level")
 set(WAD_OFFSET_KB 3072 CACHE STRING "the WAD's offset in XIP flash, KiB")

@@ -40,7 +40,7 @@
 # variant: a compile error, a link that failed some other way, a map that does
 # not say what it should.  It exits 0 only if it measured every variant.
 #
-# Environment: ZONE_KB (604), HEAP_KB (295), STACK_KB (6): the full diet's
+# Environment: ZONE_KB (604), HEAP_KB (282), STACK_KB (6): the full diet's
 # measured floor, ARMv8-M heap and stack (tools/golden/floor-ram.json); WAD_OFFSET_KB
 # (3072), OPTS ("-O1 -Os": the engine's levels; -O1 is the floor's), CHIPS
 # ("rp2350 rp2040"), REQUIRE_FIT (variant labels, comma-separated, as the
@@ -58,7 +58,7 @@ PROBE=0
 if [ "${1:-}" = "--probe" ]; then PROBE=1; shift; fi
 BUILD="${1:-$HERE/build}"
 ZONE_KB="${ZONE_KB:-604}"
-HEAP_KB="${HEAP_KB:-295}"
+HEAP_KB="${HEAP_KB:-282}"
 STACK_KB="${STACK_KB:-6}"
 WAD_OFFSET_KB="${WAD_OFFSET_KB:-3072}"
 OPTS="${OPTS:--O1 -Os}"

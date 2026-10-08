@@ -729,11 +729,11 @@ leg wipe-probe           gcc,wad       "a melt wipe's instructions and zone, lea
 # The RP2350 and RP2040 at link time (tools/pico): the full diet linked with
 # pico-sdk for each chip's memory map (doom.wad's const texture tables in
 # flash), at the full diet's measured zone (604 KiB) and ARMv8-M heap and
-# stack peaks (301,496 and 5,200 B, rounded up to KiB); the zone,
+# stack peaks (288,264 and 5,208 B, rounded up to KiB); the zone,
 # screens[0] and the heap in the RP2350's PSRAM or not.  Nothing runs; every
 # variant must be measured, and the RP2350 with the zone, screens[0] and the
 # heap in PSRAM must fit its SRAM with sound.
-leg pico-link            pico          "RP2350/RP2040 link check, the full diet: what fits in SRAM, what needs PSRAM (link only)" -- env ZONE_KB=604 HEAP_KB=295 STACK_KB=6 OPTS=-O1 "REQUIRE_FIT=RP2350 psram-heap-sound -O1" bash tools/pico/link-check.sh
+leg pico-link            pico          "RP2350/RP2040 link check, the full diet: what fits in SRAM, what needs PSRAM (link only)" -- env ZONE_KB=604 HEAP_KB=282 STACK_KB=6 OPTS=-O1 "REQUIRE_FIT=RP2350 psram-heap-sound -O1" bash tools/pico/link-check.sh
 # The ARM reference.  wasm is architecture-independent, so only a native build
 # tests ARM codegen, ABI and alignment; emulated cycles are not hardware
 # cycles, so this gates correctness, not timing.  zig cross-builds the
