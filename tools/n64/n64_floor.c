@@ -10,11 +10,16 @@
 //            (n64_render_hash), the same algorithms as tools/freestanding;
 //   mode B   no hashing at all: the engine's own stage timers instead (sim,
 //            frame, bsp, planes, masked, in COUNT ticks; perf_n64.c).
+//   N64_DISPLAY (i_video_n64.c shows each frame): mode A also keeps the
+//            hash of the 32-bit framebuffer the VI scans out
+//            (n64_display_hash), mode B the COUNT the display path took
+//            (n64_display_count: the conversion and any palette LUT build).
 // Nothing is printed until the demo has ended.  Then n64_floor_emit() writes
 // the FLOOR log (tools/floor/floor_log.h) over libdragon's debug channel
 // between N64_FLOOR_BEGIN/N64_FLOOR_END lines, the END line carrying the final
-// sim and render hashes in both modes, followed by the stage table (mode B)
-// and the XPROF profile (N64_XPROF).  tools/floor/run-n64.sh extracts them.
+// sim and render hashes in both modes, followed by the stage table (mode B),
+// the display records (N64_DISPLAY) and the XPROF profile (N64_XPROF).
+// tools/floor/run-n64.sh extracts them.
 //
 // N64_XPROF (ares emux profiler, developer builds only): ares implements COP0
 // function codes 0x28 XPROF and 0x29 XPROFREAD when HomebrewMode is on; real
@@ -108,6 +113,13 @@ static unsigned      fl_ren[FL_MAX];
 static unsigned      fl_stage[FL_MAX][FL_STAGES];
 static double        fl_snap[FL_STAGES];
 #endif
+#ifdef N64_DISPLAY
+#if N64_FLOOR_MODE == 'A'
+static unsigned      fl_dhash[FL_MAX];   /* the 32-bit framebuffer's hash */
+#else
+static unsigned      fl_disp[FL_MAX];    /* COUNT in the display path */
+#endif
+#endif
 static int                fl_n;
 static int                fl_overflow;
 static unsigned long long fl_last;     /* COUNT at the end of the last boundary */
@@ -137,6 +149,9 @@ void n64_floor_begin (void)
 #endif
     n64_floor_load = 0;
     n64_cart_bytes = 0;
+#ifdef N64_DISPLAY
+    n64_display_count = 0;
+#endif
 #if N64_FLOOR_MODE != 'A'
     fl_snapshot (fl_snap);
 #endif
@@ -154,6 +169,10 @@ void n64_floor_tic (void)
     unsigned long long d   = now - fl_last;
     unsigned flags = n64_floor_load ? FLOOR_TIC_LOAD : 0;
     unsigned mb    = n64_cart_bytes;
+#ifdef N64_DISPLAY
+    unsigned dc    = n64_display_count;
+    n64_display_count = 0;
+#endif
 #ifdef N64_XPROF
     xp_tic_end ();
 #endif
@@ -167,9 +186,20 @@ void n64_floor_tic (void)
         fl_gametic[fl_n] = gametic;
         fl_flags[fl_n]   = (unsigned char) flags;
 #if N64_FLOOR_MODE == 'A'
+#ifdef N64_DISPLAY
+        // First, before any cached read here: n64_render_hash reads all of
+        // screens[0] through the D-cache, which writes back every dirty line
+        // it evicts, so a display path that left its lines in the cache
+        // would pass if this came after it (measured: a ROM with no
+        // writeback at all, N64_DISPLAY_FAULT=4, matched on every tic).
+        fl_dhash[fl_n] = n64_display_hash ();
+#endif
         fl_sim[fl_n] = (unsigned) n64_state_hash ();
         fl_ren[fl_n] = n64_render_hash ();
 #else
+#ifdef N64_DISPLAY
+        fl_disp[fl_n] = dc;
+#endif
         {
             double s[FL_STAGES];
             int k;
@@ -214,6 +244,12 @@ static void fl_putc (int c)
 
 #ifdef N64_XPROF
 static void xp_emit (void);
+#endif
+#ifdef N64_DISPLAY
+static void n64_display_emit (const char* name);
+#ifndef N64_DISPLAY_FAULT
+#define N64_DISPLAY_FAULT 0
+#endif
 #endif
 
 void n64_floor_emit (void)
@@ -273,10 +309,47 @@ void n64_floor_emit (void)
                 fl_stage[i][2], fl_stage[i][3], fl_stage[i][4]);
     debugf ("N64_STAGES_END %s\n", name);
 #endif
+#ifdef N64_DISPLAY
+    n64_display_emit (name);
+#endif
 #ifdef N64_XPROF
     xp_emit ();
 #endif
 }
+
+#ifdef N64_DISPLAY
+// The display records, after the demo: the VI registers read back, then per
+// tic the framebuffer hash (mode A, eight to a line) or the display COUNT
+// (mode B, one "D <tic> <count>" line each).
+static void n64_display_emit (const char* name)
+{
+    unsigned ctrl, origin, width, xscale, yscale, fb;
+    int      i;
+    n64_display_vi (&ctrl, &origin, &width, &xscale, &yscale, &fb);
+    debugf ("N64_DISPLAY_VI name=%s ctrl=%08x origin=%08x width=%u xscale=%08x "
+            "yscale=%08x fb=%08x frames=%u lut_builds=%u variant=%d fault=%d\n",
+            name, ctrl, origin, width, xscale, yscale, fb, n64_display_frames,
+            n64_display_lut_builds, N64_DISPLAY, N64_DISPLAY_FAULT);
+#if N64_FLOOR_MODE == 'A'
+    debugf ("N64_FB32_BEGIN %s %d\n", name, fl_n);
+    for (i = 0; i < fl_n; i += 8)
+    {
+        int k, n = fl_n - i < 8 ? fl_n - i : 8;
+        char line[96], *p = line;
+        p += sprintf (p, "H %d", i);
+        for (k = 0; k < n; k++)
+            p += sprintf (p, " %08x", fl_dhash[i + k]);
+        debugf ("%s\n", line);
+    }
+    debugf ("N64_FB32_END %s\n", name);
+#else
+    debugf ("N64_DISPLAY_BEGIN %s %d\n", name, fl_n);
+    for (i = 0; i < fl_n; i++)
+        debugf ("D %d %u\n", i, fl_disp[i]);
+    debugf ("N64_DISPLAY_END %s\n", name);
+#endif
+}
+#endif
 
 // ── XPROF (ares emux) ────────────────────────────────────────────────────────
 #ifdef N64_XPROF
@@ -330,17 +403,19 @@ static const int xp_tics[] = { N64_XPROF_TICS };
 //   s 16 R_StoreWallRange (a wall's setup and column loop, its bsp.col calls
 //     included): bsp minus this is the BSP walk and clipping
 //   s 17 R_RenderMaskedSegRange (masked midtextures, inside masked)
+//   s 18 the display conversion (N64_DISPLAY, i_video_n64.c's I_FinishUpdate;
+//     outside the five stages: part of "other")
 #define XP_AGG 1000
 #define XP_CAL 1020
-#define XP_SLOTS 18
+#define XP_SLOTS 19
 #define XP_STRIDE 20
 #define XP_STAGES 6
-#define XP_PRIMS 12   /* slots 6..17 */
+#define XP_PRIMS 13   /* slots 6..18 */
 static const char* const xp_slot_name[XP_SLOTS] =
     { "whole", "sim", "frame", "bsp", "planes", "masked",
       "bsp.col", "bsp.span", "bsp.fuzz", "planes.col", "planes.span", "planes.fuzz",
       "masked.col", "masked.span", "masked.fuzz", "other.draw",
-      "bsp.wall", "masked.seg" };
+      "bsp.wall", "masked.seg", "display" };
 
 static int      xp_ok;          /* XPROF detected */
 static int      xp_cur = -1;    /* j of the tic being profiled, -1 none */
@@ -482,6 +557,12 @@ void __wrap_R_RenderMaskedSegRange (drawseg_t* ds, int x1, int x2)
     xp_span_slot (17, x2 - x1 + 1, 1);
     __real_R_RenderMaskedSegRange (ds, x1, x2);
     xp_span_slot (17, 0, 0);
+}
+
+// The display conversion, one call a frame, 64,000 pixels (i_video_n64.c).
+void n64_xprof_display (int begin)
+{
+    xp_span_slot (18, SCREENWIDTH * SCREENHEIGHT, begin);
 }
 
 // One calibration loop: n iterations of a 3-instruction loop (addiu, bnez,

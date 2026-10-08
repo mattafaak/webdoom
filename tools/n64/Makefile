@@ -146,6 +146,18 @@ COMMON_FLAGS += -DN64_CART_DMA=$(N64_CART_DMA)
 #   N64_XPROF_CAL_SKEW  extra calibration iterations outside the profiler
 #                    (the calibration red-proof; 0 normally)
 #   N64_BUILD        the build id the log carries (default: git short sha)
+#   N64_DISPLAY      show each frame (i_video_n64.c): convert screens[0] into
+#                    a 320x240 32-bit framebuffer the VI scans out, inside the
+#                    tic.  1 = through the D-cache (Create Dirty Exclusive,
+#                    four 32-bit stores, Hit Writeback Invalidate); 2 = uncached
+#                    stores (ares does not model their cost: a data point
+#                    about ares); 3 = 1 without Create Dirty Exclusive (each line is
+#                    filled from RDRAM first).  Off (empty) by default.  The
+#                    307,200 B framebuffer comes from the heap, which the
+#                    default zone leaves too small: tools/floor/run-n64.sh
+#                    --display builds with N64_ZONE_KB=2224.
+#   N64_DISPLAY_FAULT 1|2|3|4 = a deliberately wrong conversion (the
+#                    exactness check's red-proofs; i_video_n64.c lists them)
 # A floor build needs N64_TIMEDEMO.  Like N64_TIMEDEMO, these must be appended
 # above the two `:=` lines below.
 N64_BUILD ?= $(shell git -C ../.. rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -170,6 +182,14 @@ ifneq ($(strip $(N64_FLOOR)),)
       COMMON_FLAGS += -DN64_XPROF_TICS=$(N64_XPROF_TICS)
     endif
   endif
+  ifneq ($(strip $(N64_DISPLAY)),)
+    ifeq ($(filter 1 2 3,$(N64_DISPLAY)),)
+      $(error N64_DISPLAY=$(N64_DISPLAY): must be 1 (cached, CDE), 2 (uncached) or 3 (cached, no CDE))
+    endif
+    COMMON_FLAGS += -DN64_DISPLAY=$(N64_DISPLAY) -DN64_DISPLAY_FAULT=$(or $(N64_DISPLAY_FAULT),0)
+  endif
+else ifneq ($(strip $(N64_DISPLAY)),)
+  $(error N64_DISPLAY needs a floor build (N64_FLOOR=A|B): the n64-demos ROM runs -nodraw and never draws a frame)
 endif
 
 # engine/core: C89 (DOOM source uses implicit-int, pre-C99 declarations).
@@ -187,6 +207,12 @@ PLAT_CFLAGS := $(COMMON_FLAGS) -std=gnu11
 ifneq ($(strip $(N64_FLOOR)),)
   ifeq (,$(findstring -DN64_FLOOR_MODE,$(PLAT_CFLAGS)))
     $(error N64_FLOOR=$(N64_FLOOR) was requested but -DN64_FLOOR_MODE is absent \
+from PLAT_CFLAGS: the floor block must precede the `:=` assignments)
+  endif
+endif
+ifneq ($(strip $(N64_DISPLAY)),)
+  ifeq (,$(findstring -DN64_DISPLAY=,$(PLAT_CFLAGS)))
+    $(error N64_DISPLAY=$(N64_DISPLAY) was requested but -DN64_DISPLAY is absent \
 from PLAT_CFLAGS: the floor block must precede the `:=` assignments)
   endif
 endif

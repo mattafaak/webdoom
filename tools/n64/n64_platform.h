@@ -101,4 +101,17 @@ void n64_floor_tic(void);                  // once per tic, at the boundary
 void n64_floor_emit(void);                 // after the demo: print the log
 #endif
 
+// ── Display (i_video_n64.c; only with N64_DISPLAY=1|2|3, under N64_FLOOR) ───
+#ifdef N64_DISPLAY
+extern volatile unsigned n64_display_count; // COUNT in the display path, cleared per tic
+extern unsigned n64_display_frames;         // conversions so far
+extern unsigned n64_display_lut_builds;     // palette LUT builds so far
+unsigned n64_display_hash(void);            // FNV-1a over the 32-bit framebuffer in RDRAM
+void n64_display_vi(unsigned* ctrl, unsigned* origin, unsigned* width,
+                    unsigned* xscale, unsigned* yscale, unsigned* fb_phys);
+#ifdef N64_XPROF
+void n64_xprof_display(int begin);          // n64_floor.c: the profiler's "display" slot
+#endif
+#endif
+
 #endif /* __N64_PLATFORM_H__ */
