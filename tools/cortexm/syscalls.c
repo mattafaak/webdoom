@@ -11,6 +11,7 @@
 //   _kill     abort() -> raise(SIGABRT) lands here: exit 128+sig
 //   clock_gettime / _gettimeofday
 //             the board timer (I_GetTime; the demo never depends on it)
+//   sysconf   a page of 8 bytes, not libc's 4096, for malloc (see there)
 //   the rest  "no such file": a timedemo reads no config and writes no save
 // Copyright (C) 2026, GPL-2.0-or-later.
 #include <errno.h>
@@ -18,6 +19,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "board.h"
 #include "semihost.h"
@@ -54,10 +56,32 @@ void* _sbrk (ptrdiff_t incr)
     return prev;
 }
 
-// the most of the heap ever handed out, for the stats file (RAM accounting)
+// the most of the heap ever handed out, for the stats file (RAM accounting):
+// what newlib's malloc took from _sbrk, its chunk headers and 8-byte
+// alignment included, and no page rounding (sysconf below), so the figure
+// does not move with where the heap starts
 unsigned cm_heap_peak (void)
 {
     return (unsigned) (brk_peak - _heap_start);
+}
+
+// newlib's malloc (the full one, mallocr.c) asks sysconf(_SC_PAGESIZE) for a
+// page: it grows the heap through _sbrk by whole pages, each extension the
+// whole request whatever the top chunk already holds, and keeps the break on
+// a page boundary in absolute address.  With libc's 4096 the high-water above
+// carried pages nothing used, and depended on where the heap starts (in the
+// zero-copy builds, after .text: sections.ld): 2 KiB more code moved it by
+// about 2 KiB with nothing allocated differently.  A board has no pages; with
+// 8, malloc's own alignment, the break moves in 8-byte steps and the figure
+// is what the allocator took, wherever the heap starts.  Defined here, this
+// replaces libc's (mallocr.o and freer.o leave sysconf undefined); every
+// other name is EINVAL, as libc's.
+long sysconf (int name)
+{
+    if (name == _SC_PAGESIZE)
+        return 8;
+    errno = EINVAL;
+    return -1;
 }
 
 void _exit (int code)

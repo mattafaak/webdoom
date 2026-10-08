@@ -15,6 +15,11 @@
 //   _stat, mkdir   no file system: m_misc.c's access() (newlib's, through
 //                  stat) finds nothing, and d_main.c's -cdrom mkdir fails;
 //                  pico-sdk's newlib_interface.c has the other system calls
+//   sysconf        a page of 8 bytes for newlib's malloc (the full one,
+//                  mallocr.c, which pico-sdk links under pico_malloc's
+//                  wrapper), not libc's 4096: the boards' (tools/cortexm/
+//                  syscalls.c says why), so the heap the floor measured there,
+//                  HEAP_KB, is what this heap needs, with no page on top
 //   web_perf_*     the stage brackets' accumulators (perf.h); no counter, so
 //                  web_perf_now() reads 0
 // Display, input and the DAC are the platform layer's no-ops already
@@ -24,6 +29,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "pico/stdlib.h"
 
@@ -80,6 +86,16 @@ int mkdir (const char* path, mode_t mode)
     (void) path;
     (void) mode;
     errno = ENOSYS;
+    return -1;
+}
+
+// replaces libc's (mallocr.o and freer.o leave sysconf undefined); every
+// other name is EINVAL, as libc's
+long sysconf (int name)
+{
+    if (name == _SC_PAGESIZE)
+        return 8;
+    errno = EINVAL;
     return -1;
 }
 

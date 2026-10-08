@@ -39,12 +39,13 @@
 // -timedemo lump (wad_semi.c's cm_wad_demo), an L line after every level load
 // (what the zone holds), and at the end a MEM line: the peak stack (from the
 // top of the stack region, init and play together) and newlib's heap
-// high-water.  -audio 1 runs the sound (the OPL synth and the mixer) as fs-doom
-// does, as in the floor log mode.  -save-at, -load-at and -end-at are
-// fs-doom's WD_SAVE_AT, WD_LOAD_AT and WD_END_AT in slot 0: the game saved
-// (an S line: frame, gametic, slot, the save's bytes), kept by files.c in a
-// buffer in .big (fs_keep_alloc), loaded back, the run ended.  No floor log
-// is written.
+// high-water (syscalls.c's cm_heap_peak: no page rounding, so the figure does
+// not move with where the heap starts).  -audio 1 runs the sound (the OPL
+// synth and the mixer) as fs-doom does, as in the floor log mode.  -save-at,
+// -load-at and -end-at are fs-doom's WD_SAVE_AT, WD_LOAD_AT and WD_END_AT in
+// slot 0: the game saved (an S line: frame, gametic, slot, the save's bytes),
+// kept by files.c in a buffer in .big (fs_keep_alloc), loaded back, the run
+// ended.  No floor log is written.
 //
 // The zero-copy build (Makefile ZC=1, CM_ZERO_COPY) reads lumps in place
 // (WEB_LUMPS_IN_PLACE): the WAD is put in guest memory before the engine

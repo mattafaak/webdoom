@@ -29,7 +29,10 @@
 //            region, init and play, crt0.S paints it)
 //   heap     the peak, the same way (fs-doom: the bytes the engine and port
 //            requested, heap_wrap.c; cortexm: newlib's sbrk high-water, which
-//            includes its allocator's overhead)
+//            includes its allocator's overhead, chunk headers and 8-byte
+//            alignment, but no page rounding: tools/cortexm/syscalls.c gives
+//            malloc a page of 8 bytes, so the figure does not move with where
+//            the heap starts, which in a zero-copy build is where .text ends)
 //
 // The play set (play-set.mjs) is the 13 demos with a level exit and every map of
 // the four IWADs (each then saved and loaded back: the save is heap
