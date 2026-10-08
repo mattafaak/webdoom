@@ -58,7 +58,8 @@
 // 37,287 (measured), and every sample after differs.  So the synth's objects
 // are built -msse2 -mfpmath=sse, which is IEEE double; synth-bench-x87 is the
 // default-x87 build, kept to show the trap and that a 53-bit precision control
-// word removes it.
+// word removes it, which tools/synth-native-test.mjs (check 4) does on every
+// run.
 // Copyright (C) 2026, GPL-2.0-or-later (see LICENSE).
 #include <errno.h>
 #include <fcntl.h>

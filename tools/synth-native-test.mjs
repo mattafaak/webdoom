@@ -22,7 +22,12 @@
 //      same samples as fs-doom's per-tic blocks;
 //   3. itself: a corrupted sample and a corrupted register write must each be
 //      caught and located (the frame named), so a comparison that silently
-//      compared nothing cannot pass.
+//      compared nothing cannot pass;
+//   4. the trap itself: synth-bench-x87, the same sources at gcc -m32's
+//      default x87 code, must differ from synth.wasm on D_STLKS2 (located),
+//      and match it with the x87 precision control at 53 bits (--x87-pc53),
+//      so the gate is seen to catch the defect it exists for, and the
+//      difference is seen to be that precision and nothing else.
 // A difference is reported with the first differing frame, both builds' values
 // and the time into the song.
 //
@@ -268,6 +273,24 @@ check(`references: ${refOk} of ${refRuns.length} register streams (L1) and sampl
           `l1 ${field(n.out, 'l1')} vs reference ${want?.l1}; ${loc.text ?? loc}`);
 }
 
+// 4. the x87 trap, on the song where it was found: doom2-demo1's D_STLKS2,
+// OPL2, at the reference rate, against that config's synth.wasm render above
+let x87Caught = false;
+{
+    const c = configs.find(c => c.song === 'D_STLKS2' && c.mode === 0 && c.rate === REF_RATE);
+    const wl2 = field(res[c.wasmIdx].out, 'l2');
+    const [x, pc] = await Promise.all([native('x87', c.d, c.wad, c.song, 0, REF_RATE)(),
+                                       native('x87', c.d, c.wad, c.song, 0, REF_RATE, ['--x87-pc53'])()]);
+    const xl2 = field(x.out, 'l2'), pl2 = field(pc.out, 'l2');
+    const where = xl2 && wl2 && xl2 !== wl2 ? await locate('x87', c.d, c.wad, c.song, 0, REF_RATE) : null;
+    if (where?.text) console.log(`  x87 trap, ${c.song}: ${where.text}`);
+    x87Caught = check(`the x87 trap: synth-bench-x87 (gcc's default x87 code) differs from synth.wasm on ${c.song}, and is located`,
+          !!xl2 && !!wl2 && xl2 !== wl2 && Number.isInteger(where?.frame),
+          `l2 ${xl2 ?? x.err.trim()} vs synth.wasm ${wl2}${where ? `; ${where.text ?? where}` : ''}`);
+    x87Caught = check(`the x87 trap: with a 53-bit x87 precision control (--x87-pc53) synth-bench-x87 == synth.wasm on ${c.song}`,
+          !!pl2 && pl2 === wl2, `l2 ${pl2 ?? pc.err.trim()} vs synth.wasm ${wl2}`) && x87Caught;
+}
+
 if (WRITE_REF) {
     if (!allMatch) fatal('--write-ref refused: not every native render matched synth.wasm');
     writeFileSync(REF_FILE, JSON.stringify(newRef, null, 1) + '\n');
@@ -275,4 +298,4 @@ if (WRITE_REF) {
 }
 console.log(`  (${((Date.now() - t0) / 1000).toFixed(0)} s)`);
 summary(`native synth == synth.wasm: ${nativeOk}/${renders} renders byte-identical over ${DEMO_SONGS.length} demo songs x ` +
-        `OPL2/OPL3 x ${RATES.join('/')} Hz x -O1/-O2; ${refOk}/${refRuns.length} L1+L2 references`, { min: 4 });
+        `OPL2/OPL3 x ${RATES.join('/')} Hz x -O1/-O2; ${refOk}/${refRuns.length} L1+L2 references; the x87 trap ${x87Caught ? 'caught' : 'NOT shown'}`, { min: 6 });

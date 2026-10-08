@@ -270,7 +270,9 @@ $(OBJDIR)/floor/%.o: ../floor/%.c
 # arithmetic (SYNTH_FP: the sequencer's clock is a double, and x87's 64-bit
 # mantissas move an event by a frame against synth.wasm; synth-bench.c says
 # where).  synth-bench-x87 is the -O1 build at gcc's default x87 code, kept for
-# that evidence.  stub/ supplies an empty EMSCRIPTEN_KEEPALIVE; --wrap taps the
+# that evidence: tools/synth-native-test.mjs (check 4) runs it on every pass,
+# where it must differ from synth.wasm on D_STLKS2 and match it with
+# --x87-pc53.  stub/ supplies an empty EMSCRIPTEN_KEEPALIVE; --wrap taps the
 # register stream; -no-pie keeps the profile's sampled addresses the binary's
 # own; -fno-pie is fs-doom's SYNTH_NOPIE (above), for all of synth-bench.
 # See synth-bench.c.
