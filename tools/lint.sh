@@ -15,6 +15,8 @@
 #   JS: client/js/*.js  client/sw.js  server/*.js
 #       tools/*.mjs  tools/fuzz/*.mjs  tools/archaeology/*.mjs
 #       tools/floor/*.mjs  tools/cortexm/*.mjs
+#   Python and shell syntax (with the JS, so leg lint-js runs them): every
+#       tracked *.py through py_compile, every tracked *.sh through bash -n
 #
 # The JS line named `client/game.js`, which does not exist, and omitted
 # tools/fuzz — a scope comment that described neither the code nor the globs.
@@ -22,7 +24,8 @@
 # engine/core/ is EXEMPT (vendored linuxdoom-1.10 archaeology record).
 set -euo pipefail
 NODE_CHECK_ERR="$(mktemp -t node-check-err-XXXXXX)"
-trap 'rm -f "$NODE_CHECK_ERR"' EXIT
+PYC_DIR=""
+trap 'rm -f "$NODE_CHECK_ERR"; [ -z "$PYC_DIR" ] || rm -rf "$PYC_DIR"' EXIT
 
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -190,6 +193,58 @@ if [ "$NODE_FAIL" = "1" ]; then
 elif [ "$DO_JS" = "1" ]; then
     echo "lint: node --check OK (${#JS_FILES[@]} files)"
     JS_COUNT_NOTE=", node --check ${#JS_FILES[@]} JS files"
+fi
+
+# ---------------------------------------------------------------------------
+# Python and shell syntax: every tracked *.py through py_compile, every
+# tracked *.sh through bash -n
+#
+# node --check covers the JS and clang-format the web layer's C, but a tracked
+# Python or shell script was parsed only when some leg happened to run it, and
+# several run only on paths no leg takes (tools/floor/synth-savings.py,
+# tools/freestanding/synth-profile.py, tools/floor/run-n64.sh's timing modes).
+# Both checks are syntax only: py_compile does not run the module, so a name
+# that is never imported still passes (check-heredoc-lang.mjs's caveat), and
+# bash -n resolves no command.  The list is `git ls-files`, so a new script is
+# in scope by existing; a file deleted from the worktree but not from the index
+# is skipped, and a run that checked none of either kind fails, because this
+# tree has both.  Measured at 34 ms for the Python (one interpreter, 4 files;
+# a loop of one interpreter per file took 223 ms) and 32 ms for 29 scripts.
+# py_compile writes a .pyc for every file it compiles, so PYTHONPYCACHEPREFIX
+# sends them to a temporary directory instead of beside the sources.
+# ---------------------------------------------------------------------------
+if [ "$DO_JS" = "1" ]; then
+    PY_FILES=()
+    while IFS= read -r f; do if [ -f "$f" ]; then PY_FILES+=("$f"); fi; done < <(git ls-files '*.py')
+    SH_FILES=()
+    while IFS= read -r f; do if [ -f "$f" ]; then SH_FILES+=("$f"); fi; done < <(git ls-files '*.sh')
+    if [ "${#PY_FILES[@]}" -eq 0 ] || [ "${#SH_FILES[@]}" -eq 0 ]; then
+        echo "lint: FAIL the syntax check found ${#PY_FILES[@]} tracked .py and ${#SH_FILES[@]} tracked .sh files; this tree has both"
+        ERRORS=1
+    else
+        # one interpreter for all of them: py_compile stops at the first file
+        # that does not compile and names it
+        PYC_DIR="$(mktemp -d -t lint-pyc-XXXXXX)"
+        if PYTHONPYCACHEPREFIX="$PYC_DIR" python3 -m py_compile "${PY_FILES[@]}"; then
+            echo "lint: python3 -m py_compile OK (${#PY_FILES[@]} files)"
+        else
+            echo "lint: FAIL python3 -m py_compile (the file named above does not compile; later files were not checked)"
+            ERRORS=1
+        fi
+        SH_BAD=0
+        for f in "${SH_FILES[@]}"; do
+            if ! bash -n "$f"; then
+                echo "lint: FAIL bash -n $f"
+                SH_BAD=1
+            fi
+        done
+        if [ "$SH_BAD" = "1" ]; then
+            ERRORS=1
+        else
+            echo "lint: bash -n OK (${#SH_FILES[@]} files)"
+        fi
+        JS_COUNT_NOTE="${JS_COUNT_NOTE}, py_compile ${#PY_FILES[@]} Python files, bash -n ${#SH_FILES[@]} shell scripts"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
