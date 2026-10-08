@@ -33,6 +33,23 @@ ONLY=()
 LIST=0
 JOBS=1
 KEEP_LOGS=""
+# Every leg runs under a deadline, so one that hangs (a page that stops
+# answering CDP, an emulator that never exits) fails by name instead of
+# holding the suite open.  It is a backstop, far above any leg's measured
+# time: the longest, ram-floor-armv6m, took 2,333 s at --jobs 6 on alder.
+# RUN_TESTS_LEG_TIMEOUT_S=0 turns it off.
+LEG_TIMEOUT_S="${RUN_TESTS_LEG_TIMEOUT_S:-5400}"
+# Serially a leg runs in the terminal's process group, so timeout(1) stays in
+# it (--foreground) and a Ctrl-C still reaches the leg; on its deadline it
+# then signals only the leg's own process.  Under --jobs each leg is a session
+# of its own (setsid), timeout(1) signals its whole process group on the
+# deadline, and cleanup() ends every process in the session on an interrupt.
+leg_deadline() {   # leg_deadline serial|jobs -> the prefix a leg runs behind
+    if [ "$LEG_TIMEOUT_S" -gt 0 ] 2>/dev/null; then
+        if [ "$1" = serial ]; then printf 'timeout --foreground --kill-after=60 %s ' "$LEG_TIMEOUT_S"
+        else printf 'timeout --kill-after=60 %s ' "$LEG_TIMEOUT_S"; fi
+    fi
+}
 while [ $# -gt 0 ]; do
     case "$1" in
         --quick)            TIER=quick; shift ;;
@@ -220,7 +237,8 @@ leg() {
     printf '\n── %-26s %s\n' "$id" "$desc"
     local log="$LOGDIR/$id.log" rc=0 t0 t1
     t0=$(date +%s)
-    bash tools/gate.sh --tail 2 --log "$log" "$id" -- "$@" || rc=$?
+    # shellcheck disable=SC2046  # leg_deadline is empty or three words
+    bash tools/gate.sh --tail 2 --log "$log" "$id" -- $(leg_deadline serial) "$@" || rc=$?
     t1=$(date +%s)
     record_leg "$id" "$rc" "$((t1 - t0))"
 }
@@ -232,6 +250,11 @@ skip_leg() {   # skip_leg <id> <why>
 record_leg() {   # record_leg <id> <rc> <secs>
     local id="$1" rc="$2" secs="$3" log="$LOGDIR/$1.log" head
     head="$(headline "$log" "$rc")"
+    # timeout(1) exits 124 on its deadline (137 if it had to SIGKILL)
+    if [ "$LEG_TIMEOUT_S" -gt 0 ] 2>/dev/null && { [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; } &&
+        [ "$secs" -ge "$LEG_TIMEOUT_S" ]; then
+        head="TIMED OUT after ${LEG_TIMEOUT_S} s (RUN_TESTS_LEG_TIMEOUT_S): $head"
+    fi
     if [ -n "$KEEP_LOGS" ]; then mkdir -p "$KEEP_LOGS" && cp "$log" "$KEEP_LOGS/$id.log"; fi
     if [ "$rc" -eq 0 ]; then
         PASSED=$((PASSED + 1))
@@ -274,7 +297,7 @@ launch_leg() {   # launch_leg <id> <desc> <needs> <cmd>
         cmd="${cmd//__SHARED_URL__/http://127.0.0.1:$port/}"
     fi
     LEG_T0[$id]=$(date +%s)
-    setsid bash -c "exec bash tools/gate.sh --tail 2 --log \"$LOGDIR/$id.log\" \"$id\" -- $cmd" \
+    setsid bash -c "exec bash tools/gate.sh --tail 2 --log \"$LOGDIR/$id.log\" \"$id\" -- $(leg_deadline jobs)$cmd" \
         > "$LOGDIR/$id.out" 2>&1 &
     RUNNING[$!]="$id"
 }
@@ -380,10 +403,25 @@ serve_stop_all() {
 # one trap for every server and every running leg this run starts
 cleanup() {
     local p
-    for p in ${!RUNNING[@]+"${!RUNNING[@]}"}; do kill -- "-$p" 2>/dev/null; kill "$p" 2>/dev/null; done
+    # (this loop was `for p in ${!RUNNING[@]+"${!RUNNING[@]}"}`, which bash
+    # parses as an indirect expansion and rejects -- "invalid variable name"
+    # -- so an interrupted --jobs run left every running leg behind)
+    if [ "${#RUNNING[@]}" -gt 0 ]; then
+        for p in "${!RUNNING[@]}"; do
+            kill -- "-$p" 2>/dev/null; kill "$p" 2>/dev/null
+            # the leg's timeout(1) leads a process group of its own inside the
+            # leg's session (sid = $p); never with a sid of 0 or 1, which would
+            # mean this shell's own session or init's
+            [ "$p" -gt 1 ] 2>/dev/null && pkill -TERM -s "$p" 2>/dev/null
+        done
+    fi
     serve_stop_all; rm -rf "$LOGDIR"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+# an interrupt ends the run: cleanup, then exit (the EXIT trap repeats it,
+# harmlessly), rather than going back into the scheduler
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # THE LEG REGISTRY
