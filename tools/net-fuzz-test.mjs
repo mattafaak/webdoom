@@ -1633,9 +1633,20 @@ async function fuzzReservationOwnership() {
 // closes inside the grace window, or it never connected at all -- the tics
 // the others have already filled must seal without waiting for a frame that
 // is not coming.
+//
+// 'never, 150 ms away': the same, with players that see each bundle 150 ms
+// after it is sent, as a client across a tailnet would.  A seat that never
+// connected holds the seal for 10 s while the others wait with their whole
+// lead sent; the relay used to keep their `lastSeen` from when they sent it,
+// so the first sweep after the release found them 10 s stale and dropped
+// every one whose reply had not arrived within that sweep (50 ms).  Red-proof:
+// without sealTic renewing `lastSeen` for a tic sealed with a player's own
+// cmd, both players are dropped.
 const LEAD = 16;    // an honest client's cmds stay below frontier + LEAD
 async function fuzzLaggardLeaves(variant) {
     const s = await spawnServer();
+    const latency = variant === 'never, 150 ms away' ? 150 : 0;
+    if (latency) variant = 'never';
     const seats = variant === 'never' ? 3 : 2;
     const lobs = [], wel = [];
     for (let i = 0; i < seats; i++) {
@@ -1654,7 +1665,12 @@ async function fuzzLaggardLeaves(variant) {
     });
     await open(a); await open(b);
     let frontier = 0;           // one past the newest sealed tic a has seen
-    a.on('message', d => { if (Buffer.isBuffer(d)) frontier = Math.max(frontier, d.readUInt32LE(0) + 1); });
+    a.on('message', d => {
+        if (!Buffer.isBuffer(d)) return;
+        const f = d.readUInt32LE(0) + 1;
+        if (latency) setTimeout(() => { frontier = Math.max(frontier, f); }, latency);
+        else frontier = Math.max(frontier, f);
+    });
     const sent = new Map([[a, 0], [b, 0]]);
     const send = (w, upto) => {
         for (let t = sent.get(w); t < upto; t++) { const c = Buffer.alloc(12); c.writeUInt32LE(t, 0); w.send(c); }
@@ -1680,18 +1696,19 @@ async function fuzzLaggardLeaves(variant) {
         filled = LEAD;
         await sleep(Math.max(0, 10000 + 1500 - (Date.now() - t0)));   // NEVER_JOINED_MS is 10 s
     }
-    check(`laggard leaves (${variant}): every tic the rest filled is sealed`, frontier >= filled,
+    const tag = latency ? `${variant}, ${latency} ms away` : variant;
+    check(`laggard leaves (${tag}): every tic the rest filled is sealed`, frontier >= filled,
           `frontier ${frontier}, ${filled} tics filled by everyone still playing`);
 
     const f0 = frontier;
     await sleep(1000);
-    check(`laggard leaves (${variant}): the game goes on for the players left`,
+    check(`laggard leaves (${tag}): the game goes on for the players left`,
           frontier - f0 >= 20 && a.readyState === 1, `frontier ${f0} -> ${frontier} in 1 s, a readyState ${a.readyState}`);
 
     timers.forEach(clearInterval);
     for (const w of [a, b, ...lobs]) try { w.close(); } catch {}
     const alive = await serverAlive(s.base);
-    check(`laggard leaves (${variant}): server survives`, alive && !s.didCrash(), `alive=${alive} crashed=${s.didCrash()}`);
+    check(`laggard leaves (${tag}): server survives`, alive && !s.didCrash(), `alive=${alive} crashed=${s.didCrash()}`);
     s.kill();
 }
 
@@ -1965,6 +1982,7 @@ const SUITES = [
     ['[26] A stale reservation\'s owner leaving', fuzzReservationOwnership],
     ['[27] Laggard leaves: closes in the grace window', () => fuzzLaggardLeaves('close')],
     ['[27] Laggard leaves: never connected',     () => fuzzLaggardLeaves('never')],
+    ['[27] Laggard leaves: never connected, the others 150 ms away', () => fuzzLaggardLeaves('never, 150 ms away')],
     ['[28] Silent player: a pause, repeated',    () => fuzzSilentRepeat('pause')],
     ['[28] Silent player: attack, repeated',     () => fuzzSilentRepeat('attack')],
     ['[29] Everyone quiet: the relay stopped',   () => fuzzCollectiveQuiet('relay stopped')],
