@@ -18,8 +18,9 @@
 //                  (4 KiB less fails tnt MAP31; the reference fails there too)
 //        glass     doom E1M5 with every 4th eligible one-sided line a glass
 //                  window (two-sided, no back side: SEG_BACK's null sector),
-//                  ended before frame 412, where a hitscan crosses one and
-//                  vanilla's PTR_ShootTraverse reads its NULL backsector
+//                  demo 1 to its end: from frame 412 its hitscans cross them,
+//                  where PTR_AimTraverse and PTR_ShootTraverse compare heights
+//                  with a NULL backsector (P_ZeroSector stands in, p_mobj.c)
 //        save      doom2 MAP11 (demo 1): saved at tic 800, loaded at once, saved
 //                  again at 835, played on to 1150; then each build loads the
 //                  other's save.  Every save's world part (S lines: sectors,
@@ -149,7 +150,7 @@ const LARGEST = [
 ];
 const SCEN = {
     ...Object.fromEntries(LARGEST.map(s => [s.id, { ...s, env: {} }])),
-    glass: { dir: 'glass', wad: 'doomu.wad', demo: 'demo1', map: [1, 5], env: { WD_END_AT: '400' } },
+    glass: { dir: 'glass', wad: 'doomu.wad', demo: 'demo1', map: [1, 5], env: {} },
     save: { dir: 'save', wad: 'doom2.wad', demo: 'demo1', map: [1, 11], env: SAVE },
     misaligned: { dir: 'odd', wad: 'doomu.wad', demo: 'demo1', map: [1, 5], env: {} },
 };
@@ -258,7 +259,7 @@ for (const [id, s] of Object.entries(SCEN)) {
     const ref = R[`${id}.ref`];
     if (!ref.end || ref.code !== 0) fail(`${id}: the reference ${ended(ref)}`);
     const onMap = ref.frames.filter(f => f.gs === 0 && f.ep === s.map[0] && f.map === s.map[1]).length;
-    const need = id === 'glass' ? 350 : id === 'save' ? 1000 : 800;
+    const need = id === 'glass' ? 1600 : id === 'save' ? 1000 : 800;
     if (onMap < need) fail(`${id}: the reference has ${onMap} level frames on ${mapName(s, ...s.map)} (at least ${need} expected): the scenario no longer plays what it tests`);
     if (!/lean_screens=1/.test(ref.head ?? '') || !/zone=8388608 /.test(ref.head ?? '')) fail(`${id}: the reference's header is ${ref.head}`);
     const builds = id === 'misaligned' ? ['lv'] : ['lv', 'copy'];
