@@ -28,7 +28,8 @@
 #           counts; unaligned accesses trap as on an M0+)
 #   armv8m  -mcpu=cortex-m33 code on mps2-an505
 #
-# 1. builds (tools/cortexm/Makefile);
+# 1. builds (tools/cortexm/Makefile), and maps the ELF for attribution
+#    (attrib.mjs --map-only: every timer call classified, or a FAIL);
 # 2. proves the instrument and the traps on the board (selftest.c), every run:
 #    instrument  1e6 and 2e6 known instructions read back within one step;
 #    wrongloop   the same check fed a 1,499,999-instruction loop must FAIL;
@@ -135,6 +136,12 @@ make -s -C "$CM" ISA="$ISA" OPT="$OPT" COUNT="$COUNT" ZC="$ZC" DRAWERS="$DRAWERS
 grep -E '^(built|armv)' "$BLOG" || true
 ELF="$B/cm-doom.elf"
 [ -f "$ELF" ] || { echo "FAIL run-floor: $ELF not built"; exit 1; }
+# attrib.mjs's map of this ELF, with every timer call in it classified
+# (objdump and nm, no run): a harness change attrib cannot read fails here.
+# Its PASS line is indented, as the selftests' are: the verdict is the gate's.
+MAPLINE="$(node "$CM/attrib.mjs" "$ISA" --map-only --build "$B" 2>&1)" ||
+    { echo "$MAPLINE"; echo "FAIL run-floor: attrib.mjs cannot attribute this build: $(tail -1 <<< "$MAPLINE" | sed 's/^FAIL attrib map: //')"; exit 1; }
+echo "  $MAPLINE"
 
 GITSHA="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 [ -n "$(git -C "$ROOT" status --porcelain -- engine tools/freestanding tools/floor tools/cortexm 2>/dev/null)" ] && GITSHA="$GITSHA+dirty"

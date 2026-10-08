@@ -5,6 +5,15 @@
 // usage: node tools/cortexm/attrib.mjs armv6m|armv8m [--zero-copy] [--variant NAME]
 //            [--drawers | --fixed | --fast] [--jobs N] [--no-run] [--json FILE]
 //            [--demos a,b] [--red-proof]
+//        node tools/cortexm/attrib.mjs armv6m|armv8m --map-only [--build DIR]
+//            [--zero-copy] [--variant NAME] [--drawers | --fixed | --fast]
+//
+// --map-only builds the bucket map and classifies every timer call in the ELF
+// (objdump and nm only: no qemu, no earlier run read) and prints one PASS line
+// with the counts, or a FAIL; run-floor.sh runs it on every ELF it builds
+// (--build names that build's directory), so a change to the harness that this
+// tool cannot attribute fails the leg that built it, not a later attribution.
+// --no-run is not that check: it re-reads an earlier run's files.
 //
 // It runs the 13 demos (mode B, the timing run) of a build run-floor.sh has
 // already built and run, under qemu with tools/cortexm/qemu_attrib.c loaded:
@@ -116,12 +125,18 @@ function stageAfter(file, line) {
     }
     return null;
 }
+// cm_ticks callers outside cm_main.c, none of them a tic boundary: perf.c's
+// web_perf_now (the engine's stage brackets, classified by their own call
+// sites), board.c's cm_get_time (I_GetTime) and syscalls.c's newlib clocks.
+// A call from any other file is unclassified, as one in cm_main.c would be.
+const TIMER_READERS = ['perf.c', 'board.c', 'syscalls.c'];
 export function events(elf) {
     const ev = [];
     for (const s of callSites(elf)) {
         const f = basename(s.file), t = srcLine(s.file, s.line);
         if (s.callee === 'cm_ticks') {
-            if (f !== 'cm_main.c') continue;
+            if (TIMER_READERS.includes(f)) continue;
+            if (f !== 'cm_main.c') throw new Error(`unclassified cm_ticks call at ${f}:${s.line}: ${t.trim()}`);
             if (/\bnow\s*=\s*cm_ticks/.test(t)) ev.push({ addr: s.addr, kind: 'E', stage: 0, at: `${f}:${s.line}` });
             else if (/\blast\s*=\s*cm_ticks/.test(t)) ev.push({ addr: s.addr, kind: 'B', stage: 0, at: `${f}:${s.line}` });
             // play_run's frame timer: play mode only, and attrib runs demos
@@ -269,7 +284,7 @@ async function main() {
     const args = process.argv.slice(2);
     const isa = args[0];
     if (!['armv6m', 'armv8m'].includes(isa)) { console.log('FAIL attrib: first argument must be armv6m or armv8m'); process.exit(2); }
-    const known = new Set(['--zero-copy', '--variant', '--jobs', '--no-run', '--json', '--demos', '--red-proof', '--fixed', '--drawers', '--fast']);
+    const known = new Set(['--zero-copy', '--variant', '--jobs', '--no-run', '--json', '--demos', '--red-proof', '--fixed', '--drawers', '--fast', '--map-only', '--build']);
     for (const a of args.slice(1)) if (a.startsWith('--') && !known.has(a)) { console.log(`FAIL attrib: unknown flag ${a}`); process.exit(2); }
     const opt = k => (args.includes(k) ? args[args.indexOf(k) + 1] : null);
     const zc = args.includes('--zero-copy'), variant = opt('--variant');
@@ -281,6 +296,22 @@ async function main() {
     const suf = `${zc ? '-zc' : ''}${psuf}${variant ? `-${variant}` : ''}`;
     const red = args.includes('--red-proof');
     const build = join(CM, `build/${isa}-O1${suf}`), ref = join(CM, `out/${isa}-O1${suf}`), out = join(CM, `out/${isa}-O1${suf}-attrib${red ? '-red' : ''}`);
+    if (args.includes('--map-only')) {
+        // the map alone, for a fresh ELF: everything a run would need from the
+        // build, checked without running it
+        if (args.some(a => ['--red-proof', '--no-run', '--json', '--demos', '--jobs'].includes(a))) { console.log('FAIL attrib: --map-only takes only --build and the build flags'); process.exit(2); }
+        const dir = opt('--build') ?? build;
+        for (const p of [join(dir, 'cm-doom.elf'), join(dir, 'cm-doom.map')])
+            if (!existsSync(p)) { console.log(`FAIL attrib map: ${p} absent`); process.exit(1); }
+        try {
+            const { names, events: ev, drawers } = writeMapFile(dir, join(dir, 'attrib-buckets.map'));
+            const by = k => ev.filter(e => e.kind === k).length;
+            console.log(`PASS attrib map: ${basename(dir)}: ${names.length} buckets, ${ev.length} timer events classified ` +
+                        `(tic ${by('B')} begin + ${by('E')} end, stage ${by('S')} start + ${by('X')} stop), ${drawers} drawers x-split at 160`);
+            process.exit(0);
+        } catch (e) { console.log(`FAIL attrib map: ${basename(dir)}: ${e.message}`); process.exit(1); }
+    }
+    if (opt('--build')) { console.log('FAIL attrib: --build is for --map-only (a run reads the leg\'s own build and out directories)'); process.exit(2); }
     for (const p of [join(build, 'cm-doom.elf'), join(build, 'cm-doom.map'), ref])
         if (!existsSync(p)) { console.log(`FAIL attrib: ${p} absent (run: bash tools/cortexm/run-floor.sh ${isa}${zc ? ' --zero-copy' : ''}${psuf ? ` --${{ '-fast': 'fast', '-dr': 'drawers', '-fx': 'fixed' }[psuf]}` : ''}${variant ? ` --variant ${variant} ...` : ''})`); process.exit(1); }
 
