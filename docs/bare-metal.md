@@ -835,7 +835,7 @@ all 13 demos by its own leg. tools/freestanding and tools/cortexm build them wit
 | `LEAN_LEVELS` | the level read in place and narrowed | `lean-levels` |
 
 With all of them, a Cortex-M port's whole RAM, with real play included, is
-1,329,939 B on ARMv6-M (statics, a 604 KiB zone, heap and stack peaks), against
+1,316,715 B on ARMv6-M (statics, a 604 KiB zone, heap and stack peaks), against
 3,023,193 B for the default build on x86. [retro.md](retro.md) §5 has the
 per-lever figures and the RP2350 and RP2040 links.
 

@@ -12,12 +12,12 @@ platform contract a no-OS port implements is [bare-metal.md](bare-metal.md).
 |---|---|---|
 | Freestanding core (x86-32, ARM32, PowerPC, RV32, Cortex-M0+/M33) | **runs**, 13/13 demos tic-exact | legs `freestanding-sim`, `ro-wad`, `ro-wad-zc`, `arm-cross`, `be-cross`, `rv32-cross`, `armv6m-qemu`, `armv8m-qemu` |
 | N64 (VR4300, emulated) | **runs, rendering every tic**, 13/13 demos, 44,580 tics bit-identical in simulation and framebuffer; 4.21× over the 35 Hz budget in ares, 4.64× showing the frame in exact colour | legs `n64-demos`, `n64-floor`, `n64-display`; no input or sound yet |
-| RP2040 (2× Cortex-M0+, 133 MHz) | **predicted marginal on CPU, short on RAM** | section 5: 0.96–1.28× one core, 0.84–1.15× of core 0 split; the full memory diet links 4.97× over its SRAM |
+| RP2040 (2× Cortex-M0+, 133 MHz) | **predicted marginal on CPU, short on RAM** | section 5: 0.96–1.28× one core, 0.84–1.15× of core 0 split; the full memory diet links 4.92× over its SRAM |
 | 386-class | **no harness** | about 3× short of 35 Hz; nothing here measures this code on one |
 | Sega 32X | **open** | simulation fits one SH-2; render 1.5–3.4× over both |
 | ESP32-S3 | **plausible, untested** | CPU 0.28–0.54× of one core (mean tic, section 4); needs PSRAM |
 | RP2350 (2× Cortex-M33, 150 MHz) | **predicted: game fits one core; exact music does not fit the other** | section 5; worst tic measured on ARMv8-M in qemu, cycles estimated; PSRAM needed |
-| Teensy 4.1 (Cortex-M7, 600 MHz) | **predicted pass, the upper bracket** | section 5; cycles estimated; PSRAM needed (the diet's 1.33 MB floor exceeds its 1 MB) |
+| Teensy 4.1 (Cortex-M7, 600 MHz) | **predicted pass, the upper bracket** | section 5; cycles estimated; PSRAM needed (the diet's 1.32 MB floor exceeds its 1 MB) |
 | EFR32MG24 (Cortex-M33, 78 MHz) | **predicted fail** | section 5: 1.13–1.65× one core on the worst tic |
 | Genesis + Sega CD | **infeasible** | CPU 13.5–30.6× over the combined budget |
 | GBA | **infeasible** | CPU 5.4–12.3× over; RAM 5.9× short |
@@ -386,7 +386,7 @@ Each range pairs the lightest IWAD (doom.wad) with the low *F* and the
 heaviest (plutonia.wad) with the high *F*. RAM shortfalls are against
 section 3's 1.65 MiB, a demos-only estimate for the default build. Section 5
 measures the floor with real play included: 3,023,193 B for the default build,
-and 1,329,939 B with the memory diet on Cortex-M.
+and 1,316,715 B with the memory diet on Cortex-M.
 
 **N64.** The simulation and the renderer are proven tic-exact (`n64-demos`,
 `n64-floor`). The estimate above said the full game was 0.58–1.10× of the
@@ -403,8 +403,8 @@ N64, playable, with demo compatibility not verified.
 
 **RP2040 (link only).** Section 5 measures it on the current tree: ARMv6-M
 code under qemu, and the full memory diet linked with pico-sdk 2.3.0. The
-diet's play-inclusive RAM floor is 1,329,939 B, and the link is 1,065,236 B
-over the 268,288 B of SRAM pico-sdk's linker script gives it (4.97×). A 2 MB
+diet's play-inclusive RAM floor is 1,316,715 B, and the link is 1,051,924 B
+over the 268,288 B of SRAM pico-sdk's linker script gives it (4.92×). A 2 MB
 Pico cannot hold the code and tables (about 1.75 MB) and the WAD. On the CPU,
 at the stock 133 MHz, the worst graded tic is 0.96–1.28× of one core, and
 0.84–1.15× of core 0 with the frame split over both cores. kilograham's
@@ -510,7 +510,7 @@ iteration per tic, as on a target at 35 Hz).
   (`__aeabi_lmul`) and 3,414 for divide; their instructions are in its count.
 - Memory: the default build needs a 1,216 KiB zone for the 13 demos and
   1,764 KiB for real play; the memory diet below takes a Cortex-M port's whole
-  RAM floor to 1.33 MB.
+  RAM floor to 1.32 MB.
 
 ### Zero-copy lumps
 
@@ -543,9 +543,9 @@ byte-identical. Measured on the 13 demos, all tic-exact in sim and render:
   the 13 demos only, from the ARMv6-M map file and the runs' stats (harness
   buffers excluded): zone + engine `.data`/`.bss` (467,737 B) +
   screens (320,000 B) + audio state (71,676 B) + heap peak + stack peak
-  (5,576 B) + newlib and platform (3,900 B). Copying: 2,232,213 B (its
-  1,200 KiB zone, heap peak 134,656 B); in place: **1,948,737 B** (1.86 MiB,
-  heap peak 133,672 B), 13% less. Still 3.7× the RP2350's 520 KB: PSRAM stays
+  (5,576 B) + newlib and platform (3,900 B). Copying: 2,221,733 B (its
+  1,200 KiB zone); in place: **1,939,241 B** (1.85 MiB), 13% less; the heap
+  peak is 124,176 B in both. Still 3.6× the RP2350's 520 KB: PSRAM stays
   necessary.
 - The WAD: tools/cortexm's zero-copy build loads it into the qemu board's
   16 MiB PSRAM at boot, as flash would hold it. doom.wad and doom2.wad fit
@@ -596,12 +596,15 @@ The RAM floor, play-inclusive (`tools/floor/ram-floor.mjs`, held to
 |---|---|---|---|---|---|
 | x86, default | 972,832 | 1,806,336 | 238,505 | 5,520 | 3,023,193 B |
 | x86, full diet | 514,172 | 618,496 | 238,505 | 5,520 | 1,376,693 B |
-| ARMv6-M, full diet | 404,299 | 618,496 | 301,496 | 5,648 | **1,329,939 B** |
-| ARMv8-M, full diet | 404,299 | 618,496 | 301,496 | 5,200 | **1,329,491 B** |
+| ARMv6-M, full diet | 404,299 | 618,496 | 288,264 | 5,656 | **1,316,715 B** |
+| ARMv8-M, full diet | 404,299 | 618,496 | 288,264 | 5,208 | **1,316,267 B** |
 
 - The heap includes a 158 KB savegame buffer. On tnt and plutonia the
   Cortex-M heap also holds the qemu rig's 49–50 KB copy of the WAD's
-  directory.
+  directory. It is newlib's high-water with an 8-byte page
+  (`tools/cortexm/syscalls.c`): with libc's 4 KiB page it read 11,400–12,504 B
+  more on the six zero-copy Cortex-M targets, and moved with the size of the
+  code.
 - Flash holds the code, the const tables and the load images: 1.73–1.75 MB
   linked with doom.wad's texture tables and composites (1,400,292 B of it).
   tnt's are the largest, 2,080,980 B. With the WAD at 3 MiB on a 16 MiB flash
@@ -609,8 +612,8 @@ The RAM floor, play-inclusive (`tools/floor/ram-floor.mjs`, held to
   (`pico-link`).
 - **RP2350, link only:** the full diet links with pico-sdk 2.3.0 only with the
   zone, `screens[0]` and the heap in PSRAM: 354,096 of 530,432 B of SRAM.
-  With the heap in SRAM it is 125,744 B over (`pico-link`). Nothing has run.
-- **RP2040, link only:** 1,065,236 B over (4.97×). A 2 MB Pico cannot hold
+  With the heap in SRAM it is 112,432 B over (`pico-link`). Nothing has run.
+- **RP2040, link only:** 1,051,924 B over (4.92×). A 2 MB Pico cannot hold
   the code and tables (about 1.75 MB) and the WAD.
 - A melt wipe costs 3.7 M instructions over 41 frames and holds 128 KB of zone
   (`wipe-probe`; wipes are not graded).
@@ -672,12 +675,12 @@ issue, code through a flash cache), Cortex-M0+ 1.2–1.6, Cortex-M7 0.6–1.0
 on a real chip; L2 = the exact software synth on a second core where there is
 one.
 
-| target | stock clock | budget per core (cycles/tic) | game, worst tic | L2 music | RAM (floor 1.33 MB) |
+| target | stock clock | budget per core (cycles/tic) | game, worst tic | L2 music | RAM (floor 1.32 MB) |
 |---|---|---|---|---|---|
 | N64 VR4300 (ares) | 93.75 MHz | 2,678,571 | **4.21×, measured** (emulated); **4.64×** showing the frame in exact colour | RSP needed | 4 MB fits |
 | Teensy 4.1 (M7) | 600 MHz | 17,142,857 | 0.08–0.13× (fast build) | 0.30–0.50× total, one core (measured ARMv8-M sound) | 1 MB on chip: PSRAM needed |
 | RP2350 (2× M33) | 150 MHz | 4,285,714 | 0.59–0.86× one core; 0.48–0.75× core 0 split | **1.65–2.40×** of core 1 (measured ARMv8-M sound) | 520 KB SRAM: PSRAM needed (links, section above) |
-| RP2040 (2× M0+) | 133 MHz | 3,800,000 | 0.96–1.28× one core; 0.84–1.15× core 0 split | no | 264 KB: 4.97× short (links) |
+| RP2040 (2× M0+) | 133 MHz | 3,800,000 | 0.96–1.28× one core; 0.84–1.15× core 0 split | no | 264 KB: 4.92× short (links) |
 | EFR32MG24 (M33) | 78 MHz | 2,228,571 | **1.13–1.65×** | no | 256 KB: about 5× short |
 
 So, before any hardware: the N64 is out on its CPU (the software renderer

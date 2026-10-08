@@ -223,7 +223,7 @@ PASS; an emulator log is a prediction.
 |--------|--------|
 | N64 (VR4300) | **test bed; out on its CPU.** `n64-demos` and `n64-floor` gate correctness (13/13 in ares, rendering included). ares predicts the worst tic at 4.21× the budget, 4.64× showing the frame in exact colour; a hardware run on the Analogue 3D is optional (Plans.md). |
 | RP2350 (2× Cortex-M33) | **predicted floor with an OPL2 chip; untested.** One core 0.59–0.86× of the budget with the fast drawers and FixedDiv; PSRAM needed. |
-| RP2040 (2× Cortex-M0+) | **predicted marginal; untested.** 0.96–1.28× of one core, 0.84–1.15× of core 0 split over two cores, at 133 MHz; RAM 4.97× short even after the memory diet (link only). |
+| RP2040 (2× Cortex-M0+) | **predicted marginal; untested.** 0.96–1.28× of one core, 0.84–1.15× of core 0 split over two cores, at 133 MHz; RAM 4.92× short even after the memory diet (link only). |
 | EFR32MG24 (Cortex-M33, 78 MHz) | **predicted fail.** 1.13–1.65× one core. |
 | Teensy 4.1 (Cortex-M7) | **predicted pass**, the upper bracket. |
 | 386-class | **no harness.** Nothing here measures this code on one. |
