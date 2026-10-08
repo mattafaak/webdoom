@@ -12,9 +12,10 @@
 //        node tools/demo-test.mjs --render --record  # force re-record render goldens
 //        node tools/demo-test.mjs --sim-drawn --smooth --pitch 40  # sim invariance with the renderer running
 //        node tools/demo-test.mjs --sim-drawn --build-dir build-invariants  # same, on the armed build
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { packTrace, readGolden } from './lib/golden.mjs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { root } from './lib/util.mjs';
 
 const record = process.argv.includes('--record');
@@ -28,6 +29,18 @@ const fracticIdx     = process.argv.indexOf('--fractic');
 const fracticPin     = fracticIdx >= 0 ? Number(process.argv[fracticIdx + 1]) : -1;
 const crossIdx = process.argv.indexOf('--cross');
 const chocoBin = crossIdx >= 0 ? process.argv[crossIdx + 1] : null;
+// Chocolate Doom keeps its config under $HOME (.local/share/chocolate-doom):
+// a directory of this run's own, made on first use and removed at exit, so a
+// cross-check neither writes into the user's home nor depends on a path that
+// exists only in one session.
+let chocoHomeDir = null;
+function chocoHome() {
+    if (!chocoHomeDir) {
+        chocoHomeDir = mkdtempSync(join(tmpdir(), 'webdoom-chocohome-'));
+        process.on('exit', () => rmSync(chocoHomeDir, { recursive: true, force: true }));
+    }
+    return chocoHomeDir;
+}
 const buildDirIdx = process.argv.indexOf('--build-dir');
 const buildDir = buildDirIdx >= 0 ? process.argv[buildDirIdx + 1] : 'build';
 
@@ -609,7 +622,7 @@ for (const [wad, engineName, demos] of MATRIX) {
             const { spawnSync } = await import('node:child_process');
             const r = spawnSync(chocoBin,
                 ['-iwad', path, '-timedemo', demo, '-nodraw'],
-                { env: { ...process.env, SDL_VIDEODRIVER: 'dummy', SDL_AUDIODRIVER: 'dummy', HOME: '/tmp/claude-1000/chocohome' },
+                { env: { ...process.env, SDL_VIDEODRIVER: 'dummy', SDL_AUDIODRIVER: 'dummy', HOME: chocoHome() },
                   maxBuffer: 64 * 1024 * 1024, timeout: 180000 });
             const choco = (r.stderr?.toString() ?? '').split('\n')
                 .filter(l => l.startsWith('T ')).map(l => l.slice(2));
