@@ -491,7 +491,7 @@ echo "logs: $LOGDIR"
 leg lint-js         -        "JS syntax + pipe-exit rule + exec bits" -- bash tools/lint.sh --js-only
 leg lint-c          clangfmt "clang-format over the web layer"        -- bash tools/lint.sh --c-only --require-c
 leg archaeology     gcc  "every derived engine figure reproduces from its script" -- node tools/archaeology/run.mjs
-leg docs            -    "doc links resolve; spec's named gates are legs" -- node tools/check-docs.mjs
+leg docs            -    "doc links resolve; spec's named gates are legs; cited commits are in history" -- node tools/check-docs.mjs
 leg sw-precache     -    "sw.js SHELL list <-> app-shell imports"   -- node tools/check-sw-precache.mjs
 leg sw-wad-stream   -    "sw.js streams a WAD and caches it behind; an update keeps the launcher's API reads; a loader gets only its own module" -- node tools/sw-wad-stream-test.mjs
 leg audio-stop-race -    "audio stopped while arming starts nothing afterwards" -- node tools/audio-stop-race-test.mjs

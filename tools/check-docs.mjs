@@ -4,7 +4,14 @@
 //   1. every relative link in a tracked .md file points at a file that exists;
 //   2. every leg spec.md's "What ships" table names as a feature's gate is a
 //      leg in tools/run-tests.sh, so the contract cannot cite a gate that was
-//      deleted or renamed.
+//      deleted or renamed;
+//   3. every commit a tracked text file cites is in HEAD's history.  Work
+//      landed by cherry-pick gets new hashes, and the old ones stay in the
+//      local object store until gc, so a citation of a worker branch's
+//      commit resolves here and nowhere else (2026-10-08: three such, after
+//      four in retro.md before).  A token that names no object is not
+//      judged: it may be a content hash, an upstream project's commit, or a
+//      commit a shallow clone did not fetch.
 //
 // Nothing here reads prose, counts, or figures.
 import { execFileSync } from 'node:child_process';
@@ -40,8 +47,27 @@ for (const row of (ships ?? '').split('\n').filter(l => /^\|/.test(l) && !/^\|\s
     }
 }
 
-if (links < 50 || named < 20 || legs.size < 40)
-    problems.push(`saw only ${links} links, ${named} named gates and ${legs.size} legs; the parser is not reading these files`);
+// 3. cited commits: hex tokens in tracked text files that name a commit object
+const git = (args, input) => execFileSync('git', args, { cwd: root, encoding: 'utf8', input, maxBuffer: 64 << 20 });
+const cites = new Map();        // token -> first "file:line" citing it
+for (const l of git(['grep', '-nIoE', '\\b[0-9a-f]{7,40}\\b']).split('\n').filter(Boolean)) {
+    const [file, line, token] = l.split(':');
+    if (!cites.has(token)) cites.set(token, `${file}:${line}`);
+}
+const tokens = [...cites.keys()];
+const kinds = git(['cat-file', '--batch-check=%(objectname) %(objecttype)'], tokens.join('\n') + '\n').split('\n');
+const history = new Set(git(['rev-list', 'HEAD']).split('\n').filter(Boolean));
+let commits = 0;
+tokens.forEach((t, i) => {
+    const [full, type] = (kinds[i] ?? '').split(' ');
+    if (type !== 'commit') return;          // missing, ambiguous, or not a commit
+    commits++;
+    if (!history.has(full)) problems.push(`${cites.get(t)}: cites commit ${t}, which is not in HEAD's history (re-hashed by a cherry-pick or rebase?)`);
+});
+const shallow = git(['rev-parse', '--is-shallow-repository']).trim() === 'true';
+
+if (links < 50 || named < 20 || legs.size < 40 || (!shallow && commits < 20))
+    problems.push(`saw only ${links} links, ${named} named gates, ${legs.size} legs and ${commits} cited commits; the parser is not reading these files`);
 for (const p of problems) console.log(`FAIL  ${p}`);
 if (problems.length) { console.log(`FAIL check-docs: ${problems.length} problem(s)`); process.exit(1); }
-console.log(`PASS check-docs: ${links} links in ${md.length} documents resolve; ${named} gates named by spec.md are legs`);
+console.log(`PASS check-docs: ${links} links in ${md.length} documents resolve; ${named} gates named by spec.md are legs; ${commits} cited commits are in HEAD's history${shallow ? ' (shallow clone: only fetched commits judged)' : ''}`);
