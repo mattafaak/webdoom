@@ -924,6 +924,60 @@ void P_CheckMissileSpawn (mobj_t* th)
 
 
 //
+// P_ZeroMobj, P_ZeroSector
+// webdoom: what vanilla reads through a NULL pointer, read without the NULL.
+// A loaded game's mobjs have no target (P_UnArchiveThinkers clears every
+// mobj->target, a raw pointer in the file): a mancubus saved mid-volley calls
+// P_SpawnMissile with no dest, a boss cube in flight reads its target in
+// A_SpawnFly, and a BFG ball in flight aims its spray from its target in
+// A_BFGSpray.  And a two-sided line with no back side (the "glass" hack) has
+// no backsector, whose heights PTR_AimTraverse and PTR_ShootTraverse compare
+// when a hitscan crosses it.  A native build faults on each.  doom.wasm read
+// linear memory from address 0, where nothing lives (the link places static
+// data at GLOBAL_BASE 1024, the stack and heap above it) and nothing writes,
+// so it read zeros: these are those zeros, and the browser's game stays as it
+// was.  (DOS read its interrupt vectors there, P_NullSector's heights in
+// p_setup.c: this keeps the browser's behaviour, not vanilla's.)  The armed
+// build (WEBDOOM_INVARIANTS) compares each with what address 0 holds whenever
+// one is handed out.
+//
+static const mobj_t	p_zeromobj;
+static const sector_t	p_zerosector;
+
+#if defined(WEBDOOM_INVARIANTS) && defined(__EMSCRIPTEN__)
+#include "doomassert.h"
+// 0, hidden from the optimiser, which may assume a NULL is never read
+static volatile unsigned long p_zero_address;
+
+static void P_ZeroRead (const void* standin, int size)
+{
+    const volatile byte*	old = (const volatile byte*) p_zero_address;
+    const byte*			now = (const byte*) standin;
+    int				i;
+
+    for (i = 0; i < size; i++)
+	DOOM_ASSERT (old[i] == now[i]);
+}
+#endif
+
+mobj_t* P_ZeroMobj (void)
+{
+#if defined(WEBDOOM_INVARIANTS) && defined(__EMSCRIPTEN__)
+    P_ZeroRead (&p_zeromobj, sizeof p_zeromobj);
+#endif
+    return (mobj_t*) &p_zeromobj;
+}
+
+sector_t* P_ZeroSector (void)
+{
+#if defined(WEBDOOM_INVARIANTS) && defined(__EMSCRIPTEN__)
+    P_ZeroRead (&p_zerosector, sizeof p_zerosector);
+#endif
+    return (sector_t*) &p_zerosector;
+}
+
+
+//
 // P_SpawnMissile
 //
 mobj_t*
@@ -935,6 +989,10 @@ P_SpawnMissile
     mobj_t*	th;
     angle_t	an;
     int		dist;
+
+    // webdoom: a loaded game's monster has no target (P_ZeroMobj)
+    if (!dest)
+	dest = P_ZeroMobj ();
 
     th = P_SpawnMobj (source->x,
 		      source->y,

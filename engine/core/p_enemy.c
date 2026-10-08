@@ -1959,6 +1959,9 @@ void A_SpawnFly (mobj_t* mo)
 	return;	// still flying
 	
     targ = mo->target;
+    // webdoom: a cube loaded in flight has no target (P_ZeroMobj)
+    if (!targ)
+	targ = P_ZeroMobj ();
 
     // First spawn teleport fog.
     fog = P_SpawnMobj (targ->x, targ->y, targ->z, MT_SPAWNFIRE);

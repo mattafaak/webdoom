@@ -793,7 +793,9 @@ void A_BFGSpray (mobj_t* mo)
 
 	// mo->target is the originator (player)
 	//  of the missile
-	P_AimLineAttack (mo->target, an, 16*64*FRACUNIT);
+	// webdoom: a BFG ball loaded in flight has no target (P_ZeroMobj)
+	P_AimLineAttack (mo->target ? mo->target : P_ZeroMobj (),
+			 an, 16*64*FRACUNIT);
 
 	if (!linetarget)
 	    continue;

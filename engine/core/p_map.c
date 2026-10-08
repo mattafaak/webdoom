@@ -870,6 +870,7 @@ boolean
 PTR_AimTraverse (intercept_t* in)
 {
     line_t*		li;
+    sector_t*		back;
     mobj_t*		th;
     fixed_t		slope;
     fixed_t		thingtopslope;
@@ -893,14 +894,17 @@ PTR_AimTraverse (intercept_t* in)
 	
 	dist = FixedMul (attackrange, in->frac);
 
-	if (li->frontsector->floorheight != li->backsector->floorheight)
+	// webdoom: a glass hack's line has no back sector (P_ZeroSector)
+	back = li->backsector ? li->backsector : P_ZeroSector ();
+
+	if (li->frontsector->floorheight != back->floorheight)
 	{
 	    slope = FixedDiv (openbottom - shootz , dist);
 	    if (slope > bottomslope)
 		bottomslope = slope;
 	}
 		
-	if (li->frontsector->ceilingheight != li->backsector->ceilingheight)
+	if (li->frontsector->ceilingheight != back->ceilingheight)
 	{
 	    slope = FixedDiv (opentop - shootz , dist);
 	    if (slope < topslope)
@@ -958,6 +962,7 @@ boolean PTR_ShootTraverse (intercept_t* in)
     fixed_t		frac;
     
     line_t*		li;
+    sector_t*		back;
     
     mobj_t*		th;
 
@@ -981,14 +986,17 @@ boolean PTR_ShootTraverse (intercept_t* in)
 		
 	dist = FixedMul (attackrange, in->frac);
 
-	if (li->frontsector->floorheight != li->backsector->floorheight)
+	// webdoom: a glass hack's line has no back sector (P_ZeroSector)
+	back = li->backsector ? li->backsector : P_ZeroSector ();
+
+	if (li->frontsector->floorheight != back->floorheight)
 	{
 	    slope = FixedDiv (openbottom - shootz , dist);
 	    if (slope > aimslope)
 		goto hitline;
 	}
 		
-	if (li->frontsector->ceilingheight != li->backsector->ceilingheight)
+	if (li->frontsector->ceilingheight != back->ceilingheight)
 	{
 	    slope = FixedDiv (opentop - shootz , dist);
 	    if (slope < aimslope)
