@@ -44,7 +44,7 @@
 //
 // usage: node tools/wad-content-fuzz-test.mjs [--build-dir DIR]
 // Copyright (C) 2026, GPL-2.0-or-later.
-import { readFileSync, existsSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
@@ -168,8 +168,16 @@ if (texIdx >= 0) {
 const caseIdx = process.argv.indexOf('--case');
 if (caseIdx >= 0) {
     const name = process.argv[caseIdx + 1];
-    const dir = mkdtempSync(join(tmpdir(), 'wadfuzz-'));
-    const file = join(dir, 'fuzz.wad');
+    // The parent's work directory, which it removes; run by hand, a child
+    // makes and removes its own.
+    const dirIdx = process.argv.indexOf('--dir');
+    let dir = dirIdx >= 0 ? process.argv[dirIdx + 1] : null;
+    if (!dir) {
+        dir = mkdtempSync(join(tmpdir(), 'wadfuzz-'));
+        const own = dir;
+        process.on('exit', () => rmSync(own, { recursive: true, force: true }));
+    }
+    const file = join(dir, `${name}.wad`);
     writeFileSync(file, CASES[name].wad());
 
     const createDoom = (await import(join(root, buildDir, 'doom.js'))).default;
@@ -200,9 +208,17 @@ if (!existsSync(join(root, 'wads/lib/doom.wad'))) {
     console.log('FAIL wad-content-fuzz: doom.wad not fetched - verified nothing'); process.exit(1);
 }
 
+// One work directory for the run: every case's PWAD and the server cases'
+// WADs go in it, and it is removed when the run exits, pass or fail.  (Each
+// child and the server section used to make a mkdtemp of their own and leave
+// it: eight per run.)  A run killed by a signal still leaves this one.
+const work = mkdtempSync(join(tmpdir(), 'wadfuzz-'));
+process.on('exit', () => rmSync(work, { recursive: true, force: true }));
+
 let passes = 0, failures = 0;
 for (const name of Object.keys(CASES)) {
-    const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--build-dir', buildDir, '--case', name],
+    const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--build-dir', buildDir,
+                                           '--dir', work, '--case', name],
                         { timeout: CASE_MS, encoding: 'utf8' });
     const hung = r.error && r.error.code === 'ETIMEDOUT';
     const line = (r.stdout || '').split('\n').find(l => l.startsWith('CHILD-OK')) ?? '';
@@ -231,7 +247,8 @@ for (const name of Object.keys(CASES)) {
 // Not the engine, but the same class and the same input: the operator's own
 // wads/lib.  A corrupt WAD should cost its own box art, not the server process.
 console.log('');
-const badDir = mkdtempSync(join(tmpdir(), 'wadfuzz-srv-'));
+const badDir = join(work, 'srv');
+mkdirSync(badDir);
 const { uiAssets } = await import(join(root, 'server/ui-assets.js'));
 const SERVER_CASES = [
     ['truncated-header',  Buffer.from('IWAD')],
