@@ -30,6 +30,18 @@
 //                    player 1, and the fallback spawned him at the zeroed
 //                    playerstarts[1] -- type 0, so playeringame[-1] and
 //                    players[-1].  It must end in P_SpawnPlayer's I_Error.
+//   stairs-glass     the player walks over a W1 "raise stairs 8" line (8)
+//                    whose first step's first line is a glass line (two-sided,
+//                    no side 1).  EV_BuildStairs took that line's NULL back
+//                    sector as a candidate for the next step: its index, its
+//                    floorpic (nat-doom: UBSan's member access within a null
+//                    pointer).  wasm read 0 there, and the steps are on flat 0
+//                    (doom2.wad's F1_START marker, never drawn: both run
+//                    -nodraw), so it took NULL as the next step, put a floor
+//                    thinker on it and never raised the real one.  The demo
+//                    must run with no sanitizer report, and every wasm tic's
+//                    state (web_demo_state) must equal the control's, the same
+//                    map with a one-sided wall for the glass line.
 //
 // And these render, natively under ASan/UBSan and in wasm, and pass only with
 // no sanitizer report and no trap:
@@ -108,7 +120,9 @@ function map(sectors, draw, things) {
         lines.push({ v1: v(x1, y1), v2: v(x2, y2), front: side(sector, STARTAN), flags: 1, ...extra });
     const twoSided = (x1, y1, x2, y2, front, back, frontTex = {}, backTex = {}, extra = {}) =>
         lines.push({ v1: v(x1, y1), v2: v(x2, y2), front: side(front, frontTex), back: side(back, backTex), flags: 4, ...extra });
-    draw({ wall, twoSided });
+    // the glass hack: two-sided (ML_TWOSIDED), no side 1, its front on the right
+    const glass = (x1, y1, x2, y2, sector) => lines.push({ v1: v(x1, y1), v2: v(x2, y2), front: side(sector), flags: 4 });
+    draw({ wall, twoSided, glass });
     return buildMap({ vertices, sectors, sides, lines, things });
 }
 
@@ -148,6 +162,30 @@ function dmNoStart() {
         wall(0, 0, 0, 1024, 0); wall(0, 1024, 1024, 1024, 0); wall(1024, 1024, 1024, 0, 0); wall(1024, 0, 0, 0, 0);
     }, [...Array.from({ length: 4 }, () => ({ x: 256, y: 256, type: 11 })), { x: 768, y: 768, angle: 90, type: 1 }]);
     return { lumps, tics: Array.from({ length: 35 }, () => [{}, {}]), demo: { deathmatch: 1, players: 2 } };
+}
+
+// ── a staircase beside a glass line ──────────────────────────────────────────
+// The room (sector 0, the player's: the first seg's) has the W1 stairs line
+// across it at y=200, tag 1; the player starts at y=64 and walks north over
+// it.  The steps are their own pair of sectors east of the room: 1, tagged,
+// and 2, both on flat 0.  Sector 1's first line (P_GroupLines keeps linedef
+// order) is the glass line, its front on sector 1; its second is the riser
+// to sector 2, front on 1, back on 2.  With `glass` false a one-sided wall
+// takes the glass line's place: the control.
+function stairsGlass(glass = true) {
+    const STEP = { floor: 0, ceil: 128, floorpic: 'F1_START', ceilpic: 'CEIL3_5', light: 192 };
+    const lumps = map([ROOM, { ...STEP, tag: 1 }, STEP], ({ wall, twoSided, glass: pane }) => {
+        wall(0, 0, 0, 1024, 0); wall(0, 1024, 1024, 1024, 0); wall(1024, 1024, 1024, 0, 0); wall(1024, 0, 0, 0, 0);
+        twoSided(0, 200, 1024, 200, 0, 0, {}, {}, { special: 8, tag: 1 });
+        if (glass) pane(2000, 0, 2000, 100, 1);
+        else wall(2000, 0, 2000, 100, 1);
+        twoSided(2100, 100, 2100, 0, 1, 2);
+        wall(2000, 100, 2100, 100, 1); wall(2100, 0, 2000, 0, 1);
+        wall(2100, 100, 2200, 100, 2); wall(2200, 100, 2200, 0, 2); wall(2200, 0, 2100, 0, 2);
+    }, [{ x: 512, y: 64, angle: 90, type: 1 }]);
+    // walk over the line, then wait while the steps rise (8 and 16 units at
+    // a quarter unit a tic)
+    return { lumps, tics: [...idle(5), ...Array.from({ length: 40 }, () => [{ forward: 25 }]), ...idle(100)] };
 }
 
 // ── more masked walls than openings ──────────────────────────────────────────
@@ -235,26 +273,32 @@ function playNative(c, { draw = false } = {}) {
 }
 
 // Play a case; returns { y } (player 0's y in map units) and, drawn, the
-// last { frame }, or { error }.
-async function play(c, { draw = false } = {}) {
+// last { frame }, or { error }.  With `trace`, also { states }: every tic's
+// web_demo_state (P_Random's index, player 0, every sector's heights and the
+// thinker count).
+async function play(c, { draw = false, trace = false } = {}) {
     const { tics } = c;
     const bytes = lmp(c);
     let err = null;
     const doom = await bootEngine(BUILD, [['doom2.wad', loadWad('doom2.wad')], ['crafted.wad', bytes]],
                                   { onDoomError: m => { err = m; } });
+    const p = doom._malloc(24);    // web_demo_state writes six ints
+    const states = [];
     try {
         doom.callMain(['-file', 'crafted.wad', '-playdemo', 'DEMO', ...(draw ? [] : ['-nodraw'])]);
         doom._web_set_singletics(1);
         if (!draw) doom._web_set_nodraw(1);
-        for (let i = 0; i < tics.length - 2 && !err; i++) { doom._web_wipe_skip(); doom._web_frame(); }
+        for (let i = 0; i < tics.length - 2 && !err; i++) {
+            doom._web_wipe_skip(); doom._web_frame();
+            if (trace) { doom._web_demo_state(p); states.push(Array.from(doom.HEAP32.subarray(p / 4, p / 4 + 6)).join(' ')); }
+        }
     } catch (e) {
-        if (!err) return { error: `trapped: ${String(e.message ?? e).split('\n')[0]}` };
+        if (!err) return { error: `trapped: ${String(e.message ?? e).split('\n')[0]}`, states };
     }
-    if (err) return { error: `I_Error: ${err}`, ierror: err };
-    const p = doom._malloc(24);    // web_demo_state writes six ints
+    if (err) return { error: `I_Error: ${err}`, ierror: err, states };
     doom._web_demo_state(p);
     const fb = doom._web_framebuffer();
-    return { y: doom.HEAP32[p / 4 + 2] / 65536, frame: draw ? Buffer.from(doom.HEAPU8.subarray(fb, fb + 320 * 200)) : null };
+    return { y: doom.HEAP32[p / 4 + 2] / 65536, frame: draw ? Buffer.from(doom.HEAPU8.subarray(fb, fb + 320 * 200)) : null, states };
 }
 
 // VACUITY-EXEMPT R3: play() is the one bootEngine call site, and every case
@@ -309,6 +353,25 @@ const REFUSED = [
 ];
 for (const [name, build, expected] of REFUSED) await refuses(name, build(), expected);
 
+// The staircase beside a glass line: wasm against its control, tic by tic,
+// and nat-doom under the sanitizers.
+{
+    const w = await play(stairsGlass(), { trace: true });
+    const ctl = await play(stairsGlass(false), { trace: true });
+    // what makes the control a test: the player crossed the line and both
+    // steps rose; sector 2's 16 units at a quarter unit a tic are 64 tics on
+    // which the world's part of the state moves
+    const crossed = ctl.y > 200, moved = ctl.states.filter((s, i) => i && s.split(' ')[5] !== ctl.states[i - 1].split(' ')[5]).length;
+    check(`stairs-glass: the control raises its stairs (player at y=${ctl.y?.toFixed(0)}, the world changed on ${moved} tics)`,
+          !ctl.error && crossed && moved >= 64, ctl.error ?? 'the stairs did not rise');
+    const d = w.states.findIndex((s, i) => s !== ctl.states[i]);
+    check(`stairs-glass: wasm raises the same stairs with the glass line, every tic (${w.states.length} tics)`,
+          !w.error && d < 0 && w.states.length === ctl.states.length,
+          w.error ?? (d >= 0 ? `tic ${d}: [${w.states[d]}], the control [${ctl.states[d]}]` : `${w.states.length} tics, the control ${ctl.states.length}`));
+    const n = playNative(stairsGlass());
+    check('stairs-glass: nat-doom plays the demo with no sanitizer report', n.ran, n.sanitizer ?? n.crash ?? n.ierror);
+}
+
 // ── a real map past vanilla's visplane limit ─────────────────────────────────
 // doom.wad as the engine's doomu.wad, sigil.wad, and a demo that stands at
 // E5M6's start for 35 tics, drawn.
@@ -353,4 +416,4 @@ if (!existsSync(join(root, 'wads/lib/sigil.wad'))) fatal('needs wads/lib/sigil.w
           /^R_CheckPlane/.test(v.ierror ?? ''), v.sanitizer ?? v.crash ?? v.ierror ?? 'it ran on');
 }
 
-summary(`crafted maps reach their limits through the real loader and a demo (${4 + RENDERED.length + REFUSED.length} cases)`);
+summary(`crafted maps reach their limits through the real loader and a demo (${5 + RENDERED.length + REFUSED.length} cases)`);
