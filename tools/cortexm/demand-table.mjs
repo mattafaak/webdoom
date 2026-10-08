@@ -2,24 +2,35 @@
 // tools/cortexm/demand-table.mjs — the demand table: what one tic of webdoom
 // costs, per ISA, from the floor logs the legs wrote.
 //
-//   x86       tools/floor/out-x86/*.B.log           (bash tools/floor/run-x86.sh)
+//   x86       tools/cortexm/out/x86-game/*.B.log    (--x86-run: WD_AUDIO=0
+//                                                   bash tools/floor/run-x86.sh)
 //   ARMv6-M   tools/cortexm/out/armv6m<opt>/        (run-floor.sh armv6m [--opt])
 //   ARMv8-M   tools/cortexm/out/armv8m<opt>/        (run-floor.sh armv8m [--opt])
 //   helpers   tools/cortexm/out/<isa><opt>-count/   (run-floor.sh <isa> --count)
+//
+// The game alone on every row: the Cortex-M builds run without the sound
+// (FS_AUDIO_DEFAULT=0), so the x86 row is fs-doom with WD_AUDIO=0, as
+// tools/floor/demand.mjs measures the game, and not floor-x86's logs
+// (tools/floor/out-x86, the sound on in every tic).  Every log's AUDIO line
+// must read 0, or the table refuses it.
 //
 // Every number is read from a log, a stats file or an ELF; nothing is typed in.
 // A graded tic is one the floor gate grades (no L flag); means are over graded
 // tics, from the timing (mode B) run.  The stage split is the engine's own
 // brackets (d_main.c, r_main.c): sim = G_Ticker, frame = view setup, bsp, planes,
-// masked; other = the tic minus the five (status bar, HUD, NetUpdate, sound).
+// masked; other = the tic minus the five (status bar, HUD, NetUpdate, and the
+// sound's bookkeeping, s_sound.c; no synth or mixer).
 // x86's split comes from fs-doom -attrib (all tics, load tics included), so the
 // ARM split is also given over all tics, beside the graded-tic one.
 //
-// usage: node tools/cortexm/demand-table.mjs [--opt -O1,-O2] [--x86-attrib]
-//   --x86-attrib  (re)run fs-doom -attrib on the 13 demos, pinned to a P-core,
-//                 into tools/cortexm/out/x86-attrib/ (13 runs, ~10 s)
+// usage: node tools/cortexm/demand-table.mjs [--opt -O1,-O2] [--x86-run] [--x86-attrib]
+//   --x86-run     (re)run WD_AUDIO=0 bash tools/floor/run-x86.sh into
+//                 tools/cortexm/out/x86-game/ (26 runs, pinned to P-cores)
+//   --x86-attrib  (re)run fs-doom -attrib on the 13 demos with WD_AUDIO=0,
+//                 pinned to a P-core, into tools/cortexm/out/x86-attrib/ (13
+//                 runs, ~10 s)
 // Copyright (C) 2026, GPL-2.0-or-later.
-import { readFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,6 +52,9 @@ function demand(dir) {
         if (!existsSync(f)) { fails.push(`no ${f}`); continue; }
         const { header, demos } = parseLog(readFileSync(f, 'utf8'), f);
         const d = demos[0];
+        // the game alone, on every row
+        if (Object.entries(d.audio).some(([k, v]) => !/^0+$/.test(v)))
+            fails.push(`${f}: the sound was on (AUDIO ${Object.entries(d.audio).map(([k, v]) => `${k}=${v}`).join(' ')}): this table compares the game alone`);
         const g = d.rows.filter(r => !r.load);
         const w = g.reduce((a, r) => (r.elapsed > a.elapsed ? r : a), g[0]);
         per[name] = { mean: g.reduce((s, r) => s + r.elapsed, 0) / g.length, worst: w, n: g.length, header, rows: d.rows };
@@ -123,6 +137,14 @@ function sizes(elf) {
              screens: sym('fs_screenbufs') + sym('fs_screenbuf'), big: sec['.big'], heap: sec['.heap'], stack: sec['.stack'] };
 }
 
+// ── x86, the game alone (run-x86.sh with WD_AUDIO=0) ─────────────────────────
+const X86G = join(CM, 'out/x86-game');
+if (args.includes('--x86-run')) {
+    try {
+        execFileSync('bash', [join(root, 'tools/floor/run-x86.sh'), X86G], { env: { ...process.env, WD_AUDIO: '0' }, stdio: ['ignore', 'inherit', 'inherit'] });
+    } catch (e) { console.log(`FAIL demand-table: WD_AUDIO=0 bash tools/floor/run-x86.sh ${X86G} exited ${e.status}`); process.exit(1); }
+}
+
 // ── x86 attrib (fs-doom -attrib), optional ───────────────────────────────────
 const X86A = join(CM, 'out/x86-attrib');
 if (args.includes('--x86-attrib')) {
@@ -136,11 +158,14 @@ if (args.includes('--x86-attrib')) {
         mkdirSync(join(X86A, name), { recursive: true });
         symlinkSync(join(root, 'wads/lib', src), join(X86A, name, as));
         execFileSync('taskset', ['-c', cpus, fsd, join(X86A, name, as), '-timedemo', demo, '-attrib', join(X86A, `${name}.json`)],
-                     { env: { ...process.env, WD_CYCLES: '1' }, stdio: ['ignore', 'ignore', 'ignore'] });
+                     { env: { ...process.env, WD_CYCLES: '1', WD_AUDIO: '0' }, stdio: ['ignore', 'ignore', 'ignore'] });
     }
+    // the JSON does not say whether the sound ran: this file does
+    writeFileSync(join(X86A, 'audio.txt'), 'WD_AUDIO=0\n');
 }
 function x86Split() {
-    if (!existsSync(X86A)) return null;
+    // a split made before WD_AUDIO=0 (the sound in "other") is not used
+    if (!existsSync(join(X86A, 'audio.txt')) || readFileSync(join(X86A, 'audio.txt'), 'utf8').trim() !== 'WD_AUDIO=0') return null;
     let tot = Array(6).fill(0), n = 0;
     for (const name of DEMOS) {
         const f = join(X86A, `${name}.json`);
@@ -155,8 +180,9 @@ function x86Split() {
 
 // ── the report ───────────────────────────────────────────────────────────────
 const rows = [];
-const x86 = demand(join(root, 'tools/floor/out-x86'));
-rows.push({ label: 'x86 (fs-doom, gcc -m32 -O1, host)', dm: x86, split: x86Split() ? { a: x86Split() } : null });
+if (!existsSync(X86G)) { console.log(`FAIL demand-table: no ${X86G} (run with --x86-run: the game alone on x86, WD_AUDIO=0)`); process.exit(1); }
+const x86 = demand(X86G);
+rows.push({ label: 'x86 (fs-doom, gcc -m32 -O1, host, WD_AUDIO=0)', dm: x86, split: x86Split() ? { a: x86Split() } : null });
 for (const isa of ['armv6m', 'armv8m'])
     for (const o of opts) {
         const dir = join(CM, `out/${isa}${o}`);
@@ -183,7 +209,7 @@ for (const r of rows) {
         if (r.split.g) P(`  stage mean, graded tics: ${lab.map((s, k) => `${s} ${fmt(r.split.g[k])}`).join(', ')}`);
         if (r.split.a) P(`  stage mean, all tics:    ${lab.map((s, k) => `${s} ${fmt(r.split.a[k])}`).join(', ')}`);
         if (r.split.atWorst) P(`  stages at the worst tic: ${lab.map((s, k) => `${s} ${fmt(r.split.atWorst[k])}`).join(', ')}`);
-    } else P('  stage split: none (run with --x86-attrib)');
+    } else P('  stage split: none (run with --x86-attrib, which runs the game alone, WD_AUDIO=0)');
     if (r.size) {
         const s = r.size;
         P(`  size (B): text ${fmt(s.text)} (code + rodata, newlib and libgcc included), data ${fmt(s.data)}, bss ${fmt(s.bss)}; ` +
