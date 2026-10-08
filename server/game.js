@@ -5,8 +5,9 @@
 // cmd for tic T is in, the server broadcasts a sealed bundle
 // [u32 tic][u8 ingameMask][u8 fabricatedMask][ticcmd × numplayers].
 // WebSocket (TCP) makes delivery ordered+reliable — no resend protocol exists
-// or is needed. A player silent past the grace window gets their last cmd
-// duplicated (bounded stall for others); past the drop window they're out.
+// or is needed. A player silent past the grace window no longer holds the
+// seal: its last cmd is repeated and the others play on at their own pace;
+// past the drop window it is out, and told why.
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { envInt } from './env.js';
@@ -14,8 +15,17 @@ import { envInt } from './env.js';
 const COLORS = ['Green', 'Indigo', 'Brown', 'Red'];
 const MAXPLAYERS = 4;
 const CMD_SIZE = 8;
+const SWEEP_MS = 50;            // the grace/drop sweep's period (sealSweep)
 const GRACE_MS = 250;           // fabricate a missing cmd after this
+const QUIET_SWEEPS = GRACE_MS / SWEEP_MS;   // on-time sweeps unheard while others are: silent
 const DROP_MS = 5000;           // remove the player after this
+// the close reason a dropped player's client shows (net.js shows ev.reason);
+// 4000 is the first code the WebSocket spec leaves to applications
+const DROP_CODE = 4000;
+const DROP_REASON = `dropped by the server: no input from this player for ${DROP_MS / 1000} seconds`;
+// ticcmd_t's last two bytes (engine/core/d_ticcmd.h): chatchar, then buttons,
+// whose BT_SPECIAL bit (d_event.h) makes the rest a pause or a savegame
+const CMD_CHATCHAR = 6, CMD_BUTTONS = 7, BT_SPECIAL = 0x80;
 const NEVER_JOINED_MS = 10000;  // a launched player that never connected is dropped
 const JOIN_MARGIN = 12;         // tics between a drop-in going live and spawning
 const JOIN_TIMEOUT_MS = envInt('WEBDOOM_JOIN_TIMEOUT', 30000);   // reclaim a stalled reservation
@@ -282,8 +292,11 @@ export function createGame(log = console.log, servedWads = () => []) {
                 slot, ws: null,
                 token: null,            // the seat token /ws/game must present (newToken)
                 cmds: new Map(),        // tic → Buffer(8)
-                last: Buffer.alloc(CMD_SIZE),
-                lastSeen: Date.now(),
+                last: Buffer.alloc(CMD_SIZE),   // the cmd a fabricated tic repeats
+                lastSeen: Date.now(),           // last filled the tic being sealed
+                lastHeard: Date.now(),          // last sent any well-formed frame
+                quiet: 0,                       // on-time sweeps unheard while others were heard
+                silent: false,                  // judged silent by sealSweep; any frame clears it
                 ingame: lobby.has(slot),
                 joined: !lobby.has(slot),
                 joining: false,         // a drop-in holds this slot (reserved, or catching up)
@@ -320,8 +333,8 @@ export function createGame(log = console.log, servedWads = () => []) {
                                                   token: me.players[s].token }), log, 'lobby');
             }
             log(`game: launching ${slots.length}p (slots ${slots.join(',')}) ${params.wad} E${params.episode}M${params.map} skill ${params.skill} ${params.mode}`);
-            me.launched = Date.now();
-            me.timer = setInterval(sealSweep, 50);
+            me.launched = me.lastSweep = Date.now();
+            me.timer = setInterval(sealSweep, SWEEP_MS);
         };
         tick();
     }
@@ -402,7 +415,9 @@ export function createGame(log = console.log, servedWads = () => []) {
         const mine = () => session === me && p.ws === ws;
         p.ws = ws;
         p.joined = true;
-        p.lastSeen = Date.now();
+        p.lastSeen = p.lastHeard = Date.now();
+        p.quiet = 0;                // a slot's last occupant may have been silent
+        p.silent = false;
         ws.binaryType = 'nodebuffer';
 
         // a slot connecting while not-ingame is a drop-in: stream the history
@@ -435,6 +450,15 @@ export function createGame(log = console.log, servedWads = () => []) {
             if (!mine() || buf.length !== 4 + CMD_SIZE) return;
             const tic = buf.readUInt32LE(0);
             p.sentAny = true;
+            // Heard, whatever the tic: a player catching up after a freeze
+            // sends cmds only for tics the relay already sealed without it,
+            // and those are discarded below, yet it is back and holds the seal
+            // again.  Judged by `lastSeen` instead, it never fills a tic,
+            // stays silent, and is dropped while sending (net-hidden's 3 s
+            // case).
+            p.lastHeard = Date.now();
+            p.quiet = 0;
+            p.silent = false;
             // a joiner's first cmd means it caught up: promote it a short
             // margin ahead so its cmds are ready by the join tic
             if (p.joining && !p.ingame && !p.joinAt) {
@@ -470,13 +494,20 @@ export function createGame(log = console.log, servedWads = () => []) {
 
     const allJoined = () => session.players.every(p => p.joined || !p.ingame);
 
-    // Seal every tic whose live cmds are all present.  The live set is
-    // recomputed each pass: sealTic may promote a drop-in mid-loop.
+    // Seal every tic whose live cmds are all present, a silent player's last
+    // cmd standing in for its own (sealTic fabricates it, and sealSweep judges
+    // who is silent), so the players still sending go on at their own 35
+    // tics/s.  Only a tic some live player really sent is sealed here: with
+    // every player silent there is none, and the loop ends instead of
+    // spinning -- the sweep paces that case.  The live set is recomputed each
+    // pass: sealTic may promote a drop-in mid-loop.
     function seal() {
         if (!session || !allJoined()) return;
         for (;;) {
             const live = session.players.filter(p => p.ingame);
-            if (!live.length || !live.every(p => p.cmds.has(session.tic))) break;
+            const t = session.tic;
+            if (!live.some(p => p.cmds.has(t))) break;
+            if (!live.every(p => p.cmds.has(t) || p.silent)) break;
             sealTic();
         }
     }
@@ -485,6 +516,10 @@ export function createGame(log = console.log, servedWads = () => []) {
     function sealSweep() {
         if (!session) return;
         const now = Date.now();
+        // A sweep this late means the relay itself was stalled (GC, a starved
+        // host): what it reads next is backlog, not news of who went quiet.
+        const prev = session.lastSweep, late = now - prev > 2 * SWEEP_MS;
+        session.lastSweep = now;
         // A reservation that never went live must not hold the slot: the slot
         // is offered again.  Its token still binds until a new `join` takes
         // the slot and replaces it, so a client whose boot outlasts the
@@ -510,30 +545,75 @@ export function createGame(log = console.log, servedWads = () => []) {
         if (!live.length || !allJoined()) return;
         // no fabrication until the game is rolling — wasm boot times differ
         if (!live.every(p => p.sentAny) && now - session.launched < NEVER_JOINED_MS) return;
-        const laggards = live.filter(p => !p.cmds.has(session.tic));
-        // No laggard can mean the one there was has just left: its socket
-        // closed, or it never connected and was dropped above.  The players
-        // left may already have sent their whole lead and gone silent waiting
-        // (an engine runs at most BACKUPTICS/2-1 tics past its last bundle),
-        // so no frame is coming to seal what they filled.  Seal it here.
-        if (!laggards.length) { seal(); return; }
+        // Silent: a player that has sent nothing for GRACE_MS, and through
+        // QUIET_SWEEPS sweeps since its last frame that ran on time and in
+        // which another live player was heard -- a frozen page, a tab whose
+        // game loop stopped.  It no longer holds the seal (seal()) until its
+        // next frame, which also resets the count.  Silence is counted in time
+        // the relay was itself running and hearing someone else: when
+        // everyone goes quiet at once (the opening melt, a stall of the relay
+        // or of its link), their frames come back as bursts read one socket at
+        // a time, and a clock alone would find the second player silent while
+        // its burst was still unread and seal the first one's burst with the
+        // second fabricated -- measured with the relay stopped for 400 ms, one
+        // player fabricated for 13-14 tics, against 1 each before this rule.
+        // That case keeps the old pace below.  A player whose cmd is merely
+        // late is still being heard, so it is never silent, and boot is not
+        // silence (the sentAny rule above).
+        if (!late)
+            for (const p of live) {
+                if (!p.sentAny || p.lastHeard > prev) continue;      // heard since the last sweep
+                if (!live.some(q => q !== p && now - q.lastHeard <= 2 * SWEEP_MS)) continue;  // nobody is
+                if (++p.quiet >= QUIET_SWEEPS && now - p.lastHeard > GRACE_MS) p.silent = true;
+            }
+        // This also seals what the players left have filled when the one
+        // missing a tic has just left (its socket closed, or it never
+        // connected and was dropped above): they may already have sent their
+        // whole lead and gone quiet waiting (an engine runs at most
+        // BACKUPTICS/2-1 tics past its last bundle), so no frame is coming.
+        // If it moved the seal, nobody is holding it: no drop and no
+        // fabrication this sweep.  The players it was waiting on have not
+        // seen the new bundles yet, and their `lastSeen` dates from when they
+        // sent that lead -- seconds ago if a player that never connected held
+        // the seal (net-fuzz SURFACE 27) -- so judging them now would drop
+        // them for the stall the others caused.
+        const was = session.tic;
+        seal();
+        if (session.tic !== was) return;
+        const laggards = session.players.filter(p => p.ingame && !p.cmds.has(session.tic));
+        if (!laggards.length) return;
+        // The drop is on `lastSeen`, not `lastHeard`: a peer that sends
+        // frames which never fill the tic it owes is heard all the time, and
+        // must still go (net-fuzz SURFACE 10).
         for (const p of laggards) {
             if (now - p.lastSeen > DROP_MS) {
                 p.ingame = false;
-                p.ws?.close();
+                p.ws?.close(DROP_CODE, DROP_REASON);
                 log(`game: ${COLORS[p.slot]} dropped (unresponsive)`);
             }
         }
-        if (laggards.some(p => p.ingame) &&
-            now - Math.min(...laggards.map(p => p.lastSeen)) < GRACE_MS)
-            return;
+        // A laggard that filled a tic within the grace has its next cmd in
+        // flight, and while any has, the sweep fabricates nothing: sealing
+        // now would fabricate that player too.  (The test was the OLDEST
+        // laggard's age, so a silent player past the grace got everyone
+        // missing the tic fabricated, the players still sending included.)
+        // A silent laggard is never in flight -- it has not been heard for
+        // GRACE_MS -- and seal() repeats its cmd whenever the others send.
+        // What is left for the sweep is a tic nobody has sent (everyone
+        // quiet), or one owed by a player still heard that has not filled a
+        // tic for the grace (a peer sending useless tics, a client catching
+        // up).  Those keep the old pace, one tic per sweep.
+        if (laggards.some(p => p.ingame && now - p.lastSeen < GRACE_MS)) return;
         sealTic();      // fabricate what's missing, once per sweep
         seal();
     }
 
     // bundle: [u32 tic][u8 ingameMask][u8 fabricatedMask][ticcmd × n].
     // A fabricated cmd carries no valid consistancy checksum; the flag tells
-    // clients to skip the desync comparison for exactly those.
+    // clients to skip the desync comparison for exactly those.  It repeats the
+    // player's last cmd without its one-tic events: no chat character, and no
+    // buttons at all when BT_SPECIAL makes them a pause or a savegame, which
+    // repeated would toggle the pause, or save, on every fabricated tic.
     function sealTic() {
         const tic = session.tic++;
         // a drop-in goes live exactly at its scheduled tic, so every client
@@ -574,7 +654,11 @@ export function createGame(log = console.log, servedWads = () => []) {
             let cmd = p.cmds.get(tic);
             if (!cmd) { fab |= 1 << i; cmd = p.last; }
             cmd.copy(buf, 6 + i * CMD_SIZE);
-            if (cmd !== p.last) cmd.copy(p.last);     // p.last is allocated once per player
+            if (cmd !== p.last) {
+                cmd.copy(p.last);       // p.last is allocated once per player
+                p.last[CMD_CHATCHAR] = 0;
+                if (p.last[CMD_BUTTONS] & BT_SPECIAL) p.last[CMD_BUTTONS] = 0;
+            }
             p.cmds.delete(tic);
         });
         buf[4] = mask;

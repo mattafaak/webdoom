@@ -85,11 +85,53 @@ for (const [label, [fa, ra], [fb, rb]] of MIRRORS) {
     }
 }
 
+// ── the relay's view of a ticcmd ────────────────────────────────────────────────
+//
+// server/game.js reads two bytes of the cmd it repeats for a silent player
+// (sealTic): chatchar and buttons, and buttons' BT_SPECIAL bit.  The offsets
+// are ticcmd_t's layout (engine/core/d_ticcmd.h), which net.js sends byte for
+// byte, and the bit is d_event.h's.  The layout is computed from the header
+// here, so a reordered or retyped field moves the expected offset.
+const TICCMD_MIRRORS = 3;
+{
+    const SIZE = { char: 1, byte: 1, short: 2 };
+    const body = /typedef\s+struct\s*\{([^}]*)\}\s*ticcmd_t\s*;/.exec(src('engine/core/d_ticcmd.h'))?.[1] ?? '';
+    const off = {};
+    let at = 0, aligned = true;
+    for (const [, type, name] of body.matchAll(/^\s*(char|byte|short)\s+(\w+)\s*;/gm)) {
+        if (at % SIZE[type]) aligned = false;           // padding would move every later field
+        off[name] = at;
+        at += SIZE[type];
+    }
+    const game = src('server/game.js');
+    const num = re => { const m = re.exec(game); return m ? Number(m[1]) : undefined; };
+    const bt = /BT_SPECIAL\s*=\s*(\d+)/.exec(src('engine/core/d_event.h'))?.[1];
+    const pairs = [
+        ['CMD_CHATCHAR', off.chatchar, num(/CMD_CHATCHAR\s*=\s*(\w+)/)],
+        ['CMD_BUTTONS',  off.buttons,  num(/CMD_BUTTONS\s*=\s*(\w+)/)],
+        ['BT_SPECIAL',   bt === undefined ? undefined : Number(bt), num(/BT_SPECIAL\s*=\s*(\w+)/)],
+    ];
+    if (!aligned || at !== 8)
+        { console.log(`  FAIL ticcmd_t: ${at} bytes${aligned ? '' : ', with padding'} -- not the 8-byte cmd the wire carries`); bad++; }
+    for (const [label, engine, relay] of pairs) {
+        if (engine === undefined || relay === undefined) {
+            console.log(`  FAIL ${label}: not found in ${engine === undefined ? 'the engine headers' : 'server/game.js'}`
+                      + ' -- the constant moved or was renamed, and this check went blind');
+            bad++;
+            continue;
+        }
+        checked++;
+        if (engine === relay) console.log(`  ok   ${label} = ${relay} in server/game.js, as engine/core says`);
+        else { console.log(`  FAIL ${label}: server/game.js says ${relay}, engine/core says ${engine}`); bad++; }
+    }
+}
+
 if (checked === 0) {
     console.log('FAIL wire-constants: nothing was compared');
     process.exit(1);
 }
+const total = MIRRORS.length + 1 + TICCMD_MIRRORS;
 console.log(bad
-    ? `FAIL wire-constants: ${bad} of ${MIRRORS.length + 1} mirrors disagree or could not be read`
-    : `PASS wire-constants: ${checked} of ${MIRRORS.length + 1} cross-wire mirrors agree (4 constants, plus the WAD title tables, which are imported rather than copied)`);
+    ? `FAIL wire-constants: ${bad} of ${total} mirrors disagree or could not be read`
+    : `PASS wire-constants: ${checked} of ${total} cross-wire mirrors agree (4 constants, the relay's 3 ticcmd constants against the engine's headers, and the WAD title tables, which are imported rather than copied)`);
 process.exit(bad ? 1 : 0);
