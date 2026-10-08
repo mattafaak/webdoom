@@ -45,11 +45,14 @@ import { startServer } from './lib/server.mjs';
 import { check, summary, fatal } from './lib/report.mjs';
 const chrome = await launchChrome();
 const url = process.argv[2] ?? (await startServer()).url;
-const tab = await chrome.tab(url);
+// The shim must be installed before anything attaches, so it is registered to
+// run in every new document before the page's own scripts, and only then is
+// the page loaded.  (It used to be evaluated just after the tab opened, which
+// raced the navigation: 2 runs in 30 evaluated into about:blank, lost the shim
+// and failed "/api/wads returned -1".)
+const tab = await chrome.tab('about:blank');
 const { cdp, ev } = tab;
-
-// The shim must be installed before anything attaches.
-await ev(`(() => {
+const SHIM = `(() => {
     if (window.__lt) return 'already';
     const proto = EventTarget.prototype, add = proto.addEventListener, rem = proto.removeEventListener;
     const tally = new Map();
@@ -154,7 +157,12 @@ await ev(`(() => {
     });
 
     return 'installed';
-})()`);
+})()`;
+await cdp('Page.addScriptToEvaluateOnNewDocument', { source: SHIM });
+await cdp('Page.navigate', { url });
+const loaded = await tab.waitFor(() => ev(`location.href.startsWith(${JSON.stringify(url)}) && document.readyState === 'complete' && !!window.__lt`),
+                                 { timeout: 30000, every: 200 });
+if (!loaded) fatal(`the page never loaded with the counting shim in place (${await ev('location.href + " " + document.readyState')})`);
 
 const snapshot = () => ev(`(() => ({
     listeners: [...window.__lt].reduce((n, [, v]) => n + v, 0),
