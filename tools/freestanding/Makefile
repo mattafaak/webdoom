@@ -17,7 +17,7 @@
 #                      zone (WEB_LUMPS_IN_PLACE, engine/core/w_wad.h)
 #   make check         run doom.wad demo3 vs golden (requires wads/lib/doom.wad)
 #   make check-all     run all available WADs vs goldens
-#   make imports       regenerate tools/freestanding/IMPORTS.md
+#   make imports       check tools/freestanding/IMPORTS.md against fs-doom
 #   make clean
 
 CC      := gcc
@@ -361,7 +361,7 @@ check-all: $(OUT) synth-bench
 	@bash run-check.sh $(WAD_DIR) $(OUT_DIR)
 	@python3 ../native-sanitize/compare.py $(GOLDEN) $(OUT_DIR) sim
 
-# imports: regenerate IMPORTS.md from the built binary.
+# imports: check IMPORTS.md's symbol list against the built binary (leg fs-imports).
 imports: $(OUT)
 	@bash gen-imports.sh
 

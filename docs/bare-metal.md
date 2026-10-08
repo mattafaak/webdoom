@@ -431,8 +431,8 @@ The wasm linear-memory layout (perf.md §3):
 |--------|------|
 | C shadow stack | 1 MiB (`-sSTACK_SIZE=1MB`, engine/Makefile) |
 | Initialised data (DATA) | ~74 KiB (perf.md §1) |
-| Zero-initialised BSS | ~462 KiB (DATA + BSS = ~536 KiB) |
-| **`__heap_base`** | **1.52 MiB** (1,598,752 bytes, `size-budget`, 2026-10-06) |
+| Zero-initialised BSS | ~464 KiB (DATA + BSS = ~538 KiB) |
+| **`__heap_base`** | **1.53 MiB** (1,599,136 bytes, `size-budget`, 2026-10-08) |
 
 BSS is dominated by renderer scratch arrays: `visplanes[256]` (~166 KiB),
 `vissprites[1024]` (~50 KiB), `openings[20480]` (40 KiB) and
@@ -441,12 +441,12 @@ BSS is dominated by renderer scratch arrays: `visplanes[256]` (~166 KiB),
 above vanilla; the opening and drawseg limits are vanilla's. The trig tables are BSS too (§4.1). The
 screen buffers (250 KiB) are not in BSS; `I_AllocLow` places them (§1.5).
 
-**What a native target needs**: about 537 KiB of writable data and BSS, plus a
+**What a native target needs**: about 538 KiB of writable data and BSS, plus a
 stack, plus the 250 KiB screen block. One MiB of stack is proven enough:
 `make check-stack-1m` in `tools/freestanding/` replays all 13 demos, rendering,
 under `ulimit -s 1024`. The true requirement is lower but not measured. With
-a 1 MiB stack the static minimum is **1.52 MiB** (`__heap_base`), and
-**~1.76 MiB** with the screen buffers. That is before the zone and the WAD. The budget
+a 1 MiB stack the static minimum is **1.53 MiB** (`__heap_base`), and
+**~1.77 MiB** with the screen buffers. That is before the zone and the WAD. The budget
 tables below use these figures.
 
 The N64 build, measured with its toolchain, puts `.data + .bss` at 3,458,164
@@ -531,7 +531,7 @@ IWAD sizes:
 
 | Region | Size |
 |--------|------|
-| Static (stack + DATA + BSS, = `__heap_base`) | 1.52 MiB |
+| Static (stack + DATA + BSS, = `__heap_base`) | 1.53 MiB |
 | Screen buffers (`I_AllocLow`) | 0.24 MiB |
 | Zone | 4 MiB |
 | WAD | 11.83 MiB |
@@ -546,7 +546,7 @@ The shareware IWAD (episode 1 only) is about 4 MiB.
 
 | Region | Size |
 |--------|------|
-| Static (= `__heap_base`) | 1.52 MiB |
+| Static (= `__heap_base`) | 1.53 MiB |
 | Screen buffers (`I_AllocLow`) | 0.24 MiB |
 | Zone | 4 MiB |
 | WAD | ~4 MiB |
@@ -1125,7 +1125,7 @@ ESP32-S3 class:
 
 ### 7.2 Memory fit
 
-The static segment needs 1.52 MiB with a 1 MiB stack (§2.1), plus the 250 KiB
+The static segment needs 1.53 MiB with a 1 MiB stack (§2.1), plus the 250 KiB
 screen block (§1.5). 512 KiB of internal SRAM cannot hold the static segment,
 so PSRAM is mandatory. Internal SRAM is best spent on `screens[0]` (§1.5
 hybrid), which addresses the §7.3 bottleneck.
@@ -1134,7 +1134,7 @@ hybrid), which addresses the §7.3 bottleneck.
 
 | Region | Size | Location |
 |--------|------|----------|
-| Static (stack + DATA + BSS, = `__heap_base`) | 1.52 MiB | PSRAM |
+| Static (stack + DATA + BSS, = `__heap_base`) | 1.53 MiB | PSRAM |
 | `screens[0]` (render target) | 64,000 B | internal SRAM (§1.5 hybrid) |
 | `I_AllocLow` block (`screens[1..3]`, save workspace) | 250 KiB | PSRAM |
 | Zone | 4 MiB | PSRAM |
@@ -1212,21 +1212,24 @@ Touching the level's textures at load time moves the stall to the load.
 
 The functions in §1 are what a porter writes. The libc symbols the core and
 its platform layer reference are what the porter's runtime must provide.
-`make imports` in `tools/freestanding/` lists them from the built `fs-doom`
-binary (`nm -u`) into
-[tools/freestanding/IMPORTS.md](../tools/freestanding/IMPORTS.md): 51 strong
-undefined symbols and 4 weak ones, each with a disposition.
+[tools/freestanding/IMPORTS.md](../tools/freestanding/IMPORTS.md) lists them
+from the built `fs-doom` binary (`nm -u`): 62 strong undefined symbols and 3
+weak ones on 2026-10-08, each with a disposition, 12 of them the measuring
+harness's own (perf counters, the read-only WAD check), which a port does not
+carry. `make imports` (leg `fs-imports`) fails when the list and the binary
+differ.
 
 | Category | Symbols | What a bare-metal port does |
 |----------|---------|-----------------------------|
 | WAD loading in the hosted shim | `open`, `read`, `close`, `lseek`, `malloc`, `free` | nothing: they disappear when the WAD is a linker symbol, a ROM blob or a flash mapping |
-| `-sim` trace output and config file I/O | `fopen`, `fclose`, `fwrite`, `fputc`, `fread`, `fseek`, `ftell`, `fstat` | nothing: send the trace over the byte-out; config and saves can be no-ops |
+| `-sim` trace output and config file I/O | `fopen`, `fclose`, `fwrite`, `fputc`, `fread`, `fstat` | nothing: send the trace over the byte-out; config and saves can be no-ops |
 | Platform primitives | `write` (the byte-out), `clock_gettime`, `_setjmp`, `longjmp`, `abort`, `exit`, `__stack_chk_fail` | replace: UART or SWO write, hardware timer, a flag-and-poll demo exit, spin or reset; build with `-fno-stack-protector` or provide the guard |
 | stdio called from the core | `fprintf`, `printf`, `putchar`, `puts`, `setbuf`, `sprintf`, `vsnprintf`, `sscanf` | provide from newlib or picolibc, routing output to the byte-out |
 | Heap and filesystem called from the core | `realloc` (`W_AddFile`), `access` (`M_ScreenShot`), `mkdir` (`D_DoomMain`, `-cdrom` only) | `realloc` must work (§1.10); `access` can return −1; `mkdir` can be a no-op |
 | String and memory | `memcpy`, `memset`, `strcpy`, `strncpy`, `strcmp`, `strncmp`, `strcasecmp`, `strncasecmp`, `strlen`, `strchr`, `strrchr`, `strtol` | provide from newlib, musl, picolibc or compiler built-ins |
 | Math, once at boot | `sin`, `tan`, `atan` | provide libm for `T_GenerateTables`, or ship the tables as `const` and drop the call (§4.1) |
-| C runtime | `__libc_start_main`, `__ctype_toupper_loc`, `stdout`, `stderr`; weak `__cxa_finalize`, `__gmon_start__`, `_ITM_*` | crt0 and the target libc |
+| Math, with music | `log10` (`mus_opl.c`'s volume curve) | provide libm, or tabulate its 128 values |
+| C runtime | `__libc_start_main`, `__ctype_toupper_loc`, `stdout`, `stderr`; weak `__gmon_start__`, `_ITM_*` | crt0 and the target libc |
 
 This matters most on a constrained libc (newlib-nano, picolibc): even with
 `exit` and `abort` replaced, the string, stdio and math symbols must still

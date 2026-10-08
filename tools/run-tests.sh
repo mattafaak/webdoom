@@ -579,6 +579,9 @@ leg ro-wad          fs,wad     "WAD blob stays read-only over 13 demos (XIP)" --
 # out and must fault inside the blob (ro-wad's probe must not): the red-proof,
 # both ways, every run.
 leg ro-wad-zc       fszc,wad   "zero-copy build: no lump is ever written, 13 demos (a write into one faults)" -- bash tools/freestanding/ro-wad-check.sh --zero-copy wads/lib tools/freestanding/out-ro-zc
+# IMPORTS.md's libc surface is the bare-metal porting checklist; it drifted
+# from 55 to 65 symbols unnoticed before this checked it (2026-10-08)
+leg fs-imports      fs         "IMPORTS.md lists exactly what fs-doom imports, each with a disposition" -- bash tools/freestanding/gen-imports.sh
 # The demand every bare-metal target is measured against: fs-doom through the
 # floor gate, correctness (sim + render hashes) and x86 instructions per tic.
 leg floor-x86       fs,wad     "floor gate on the host: 13 demos correct, worst graded tic" -- bash tools/floor/run-x86.sh
