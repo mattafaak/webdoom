@@ -486,6 +486,12 @@ iteration per tic, as on a target at 35 Hz).
 | ARMv8-M fast, lumps in place, with the exact synth and mixer | 8,580,950 instructions | ~6.95 M | the same |
 | N64 in ares, game + the exact 32-bit display (2,224 KB zone) | 12.42 M cycles (6,209,424 COUNT) | 6.15 M | section 2 |
 
+- The counts above are as measured on 2026-10-07, and a code change moves
+  them by a few hundred instructions at most. On 2026-10-08, at the tree
+  that rebuilt boss targets on a load and put DOS's null sector at glass
+  lines, the four Cortex-M legs read 4,922,640 (`armv6m-qemu`), 2,588,950
+  (`armv8m-qemu`), 4,934,360 (`armv6m-zc`) and 2,583,300 (`armv8m-zc`).
+  Master just before that read 2,583,250 on `armv8m-zc`.
 - The exact synth (byte-identical to `tools/floor/synth-ref.json`, the L2
   grade) was 14.3 M x86 instructions per tic. Its exact savings are now in
   `engine/web/opl3.c` (bank 1 skipped until it is written, the noise LFSR
