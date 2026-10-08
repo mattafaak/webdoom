@@ -123,8 +123,13 @@ EMSCRIPTEN_KEEPALIVE void synth_volume (int vol127)
 //   mus_play(D_INTRO, 0)         D_StartTitle -> S_StartMusic(mus_intro)
 //   mus_init(rate)               client/js/audio.js arm(), at the context rate
 //
-// and that is what this replays.  Only the last volume matters (no voice is
-// live before the song starts), so the caller passes one value.
+// and that is what this replays.  Only the last volume matters, so the caller
+// passes one value.  Not because the earlier calls write nothing: until a
+// song's mus_play keys them off, every voice reads as owned by MUS channel 0
+// with no instrument (voice[] starts zeroed; mus_opl.c's no_instrument), and
+// each volume call writes all of their levels.  The last mus_init's
+// OPL3_Reset clears the chip, its write buffer and the buffer's timestamps,
+// so what survives a volume call is musicvolume alone.
 EMSCRIPTEN_KEEPALIVE void synth_boot (int rate, byte* gm, int gmlen, byte* s,
                                       int slen, int looping, int paused,
                                       int vol127, int oplmode)

@@ -97,7 +97,7 @@ void I_InitMusic (void)
 {
     if (!fs_audio_on ())
         return;
-    fs_mus_preinit (); // see fs_mus.c: mus_init must not meet a NULL voice
+    fs_mus_preinit (); // see fs_mus.c: every voice free before the first call
     mus_init (FS_AUDIO_RATE);
     fs_mus_bank_endian (); // and a big-endian target's GENMIDI (fs_mus.c)
 }

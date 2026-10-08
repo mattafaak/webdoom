@@ -194,9 +194,44 @@ static void init_volatten (void)
     }
 }
 
+// A voice nothing has keyed on has no instrument.  voice[] starts zeroed, so
+// until voice_off frees it every voice reads muschan == 0 ("owned by MUS
+// channel 0") with gv == NULL: mus_init's re-program loop and mus_setvolume
+// reach such voices at every boot, and channel_update does for MUS channel 0
+// in OPL3 mode after an OPL2 song (only voices 0..8 were freed).  Those reads
+// used to go through the NULL.  In wasm that read linear memory 0..15, where
+// nothing lives: the link places static data at GLOBAL_BASE 1024 and the stack
+// and heap above it (--no-stack-first), so it read zeros.  The same zeros, read
+// from an all-zero instrument, keep the output as it was:
+// tools/golden/opl2-ref.f32 (opl-mode gate 2) is the chip programmed from them.
+static const genmidi_voice_t no_instrument;
+
+#if defined(WEBDOOM_INVARIANTS) && defined(__EMSCRIPTEN__)
+#include "doomassert.h"
+// 0, hidden from the optimiser: the armed build reads what the NULL read
+// would have, and stops if it is not no_instrument's zeros.
+static volatile unsigned long zero_address;
+#endif
+
+static const genmidi_voice_t* voice_instrument (int v)
+{
+    if (voice[v].gv)
+        return voice[v].gv;
+#if defined(WEBDOOM_INVARIANTS) && defined(__EMSCRIPTEN__)
+    {
+        const volatile byte* old = (const volatile byte*) zero_address;
+        const byte* now = (const byte*) &no_instrument;
+        unsigned i;
+        for (i = 0; i < sizeof no_instrument; i++)
+            DOOM_ASSERT (old[i] == now[i]);
+    }
+#endif
+    return &no_instrument;
+}
+
 static void voice_volume (int v)
 {
-    const genmidi_voice_t* gv = voice[v].gv;
+    const genmidi_voice_t* gv = voice_instrument (v);
     int bk = vbank (v);
     int ch = vch (v);
     int vol; // 0..127 combined
@@ -224,7 +259,7 @@ static void voice_volume (int v)
 
 static __attribute__ ((noinline)) void voice_program (int v)
 {
-    const genmidi_voice_t* gv = voice[v].gv;
+    const genmidi_voice_t* gv = voice_instrument (v);
     int bk = vbank (v);
     int ch = vch (v);
     int o1 = op1off[ch], o2 = op2off (v);
