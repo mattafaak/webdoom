@@ -1247,7 +1247,14 @@ async function fuzzStaleJoiner(variant) {
 // spectator ~2 MB.  So the wait is long and ends at the refusal, and the RSS
 // bound is loose: RSS also counts uncollected garbage, which grows with the
 // traffic needed to fill those buffers (~90 MiB measured), while the
-// unbounded case passes 256 MiB within seconds and is stopped at 512.
+// unbounded case passes 256 MiB within seconds and is stopped at 512.  The
+// traffic is the same however long it takes -- about 760,000 bundles for a
+// paused player -- but on a loaded host it takes longer: 12.8 and 20.3 s at
+// load average ~26 on alder (2026-10-08), where a 15 s wait failed on the
+// relay as of 7349c27 too, and the whole suite took 6.8-64.0 s over 15 runs
+// at 28-33.  So the wait is up to 180 s; a run that works ends at the
+// refusal, and the unbounded case still ends at the memory cap (reached in
+// 56-99 s at load ~31 with the cap removed, where it is seconds unloaded).
 const rssOf = pid => { try { return +/VmRSS:\s+(\d+)/.exec(readFileSync(`/proc/${pid}/status`, 'utf8'))[1] * 1024; } catch { return NaN; } };
 async function pausedPeer(port, path) {
     const sock = await rawJoin(port, path);
@@ -1269,11 +1276,19 @@ async function fuzzSendBacklog(path) {
     if (path === '/ws/lobby') {
         paused = await pausedPeer(s.port, path);
         // the honest member renames itself as fast as it can: every rename
-        // casts a roster to both members
+        // casts a roster to both members.  As fast as it can READ them, too:
+        // the cap applies to it as well, and on a loaded host (load average
+        // ~31) a flood that ran ahead of its own reading left the honest
+        // member over the 64 KiB cap and refused with the paused one ("lobby
+        // 2 -> 0").  So at most 500 renames are unanswered at a time, and the
+        // rosters it never needs are not kept.
+        let rosters = 0;
+        lob.on('message', () => { rosters++; });
         (async () => {
             let k = 0;
             while (!stopped) {
-                if (lob.bufferedAmount < 1 << 16)
+                lob._buf.length = 0;
+                if (lob.bufferedAmount < 1 << 16 && k - rosters < 500)
                     for (let j = 0; j < 500; j++) lob.send(JSON.stringify({ t: 'name', name: `n${k++ % 1000}` }));
                 await new Promise(r => setImmediate(r));
             }
@@ -1312,7 +1327,7 @@ async function fuzzSendBacklog(path) {
     const before = await status();
     const rss0 = rssOf(s.srv.pid);
     let after = before, peak = 0;
-    for (let t = 0; t < 150; t++) {             // up to 15 s
+    for (let t = 0; t < 1800; t++) {            // up to 180 s
         await sleep(100);
         after = await status();
         peak = Math.max(peak, rssOf(s.srv.pid) - rss0);
@@ -1324,14 +1339,19 @@ async function fuzzSendBacklog(path) {
     check(`send backlog (${path}): server memory stays bounded`, peak < 256 * 2 ** 20,
           `RSS grew ${(peak / 2 ** 20).toFixed(1)} MiB`);
     if (host) {
+        // any progress at all, waited for: a loaded host can sit on it
         const f0 = frontier;
-        await sleep(300);
+        for (const end = Date.now() + 5000; Date.now() < end && frontier === f0;) await sleep(100);
         check(`send backlog (${path}): the honest player is still served`, frontier > f0, `frontier ${f0} -> ${frontier}`);
     } else {
         const ok = await (async () => {
+            // the flood stops first: its own rosters are queued ahead of
+            // the pong, and on a loaded host they took longer than 2 s to read
+            stopped = true;
+            await sleep(100);
             lob._buf.length = 0;
             lob.send(JSON.stringify({ t: 'ping', t0: 9 }));
-            return onceMsg(lob, m => m.t === 'pong', 2000).then(() => true, () => false);
+            return onceMsg(lob, m => m.t === 'pong', 10000).then(() => true, () => false);
         })();
         check('send backlog (/ws/lobby): the honest member is still served', ok, ok ? 'pong' : 'no pong');
     }
@@ -1712,20 +1732,95 @@ async function fuzzLaggardLeaves(variant) {
     s.kill();
 }
 
+// ── shared by SURFACES 28-30: seated players, and an engine's pacing ─────────
+//
+// These suites grade rates and orderings, and they share this process with
+// the floods above, on a host that may be loaded: a timer here can fire
+// hundreds of ms late (measured: one stall of 1.6 s at load average 26).  So
+// what they assert is put in terms such a stall cannot fake: tics and counts
+// rather than one timer's cadence, I/O drained before a reading
+// (settle()), a close awaited rather than sampled, and a fabrication that
+// follows this process's own stall excused by name.
+
+// n seats in one game, each with its relay socket open.
+async function seatedGame(s, n) {
+    const lobs = [], wel = [];
+    for (let i = 0; i < n; i++) {
+        const l = lobbyWs(s.base); await open(l);
+        wel.push(await onceMsg(l, m => m.t === 'welcome'));
+        lobs.push(l);
+    }
+    lobs[0].send(JSON.stringify({ t: 'start' }));
+    const launches = await Promise.all(lobs.map(l => onceMsg(l, m => m.t === 'launch', 6000)));
+    const ws = wel.map((w, i) => {
+        const g = gameWs(s.base, w.slot, launches[i].token);
+        g.binaryType = 'nodebuffer';
+        return g;
+    });
+    for (const g of ws) await open(g);
+    return { lobs, ws, slots: wel.map(w => w.slot) };
+}
+
+// Every bundle the first socket receives, with when; the frontier is one past
+// the newest.
+function watchBundles(w) {
+    const bundles = [];
+    w.on('message', d => { if (Buffer.isBuffer(d) && d.length === 38) bundles.push({ at: Date.now(), d: Buffer.from(d) }); });
+    return { bundles, frontier: () => bundles.length ? bundles[bundles.length - 1].d.readUInt32LE(0) + 1 : 0 };
+}
+
+// let every frame already received be read before a measurement
+const settle = () => new Promise(r => setImmediate(r));
+
+// Players sending as an engine builds cmds: 35 a second by the wall clock (a
+// late timer sends what it owes in one go), never more than `lead` tics past
+// the frontier they have seen, and never behind it (NetUpdate moves maketic up
+// to the sim's tic).  One timer for all, so they keep step with each other.
+// `ticks` logs each player's sends: [time, first tic, last tic].
+function pacer(players, frontier, { lead = 16 } = {}) {
+    const start = Date.now();
+    const sent = new Map(players.map(w => [w, 0]));
+    const ticks = new Map(players.map(w => [w, []]));
+    const active = new Set(players);
+    const sendOne = (w, chat = 0, buttons = 0) => {
+        const c = Buffer.alloc(12); c.writeUInt32LE(sent.get(w), 0);
+        c[4 + 6] = chat; c[4 + 7] = buttons;
+        if (w.readyState === 1) w.send(c);
+        sent.set(w, sent.get(w) + 1);
+    };
+    const tick = () => {
+        const due = Math.floor((Date.now() - start) * 35 / 1000), f = frontier();
+        for (const w of active) {
+            if (sent.get(w) < f) sent.set(w, f);
+            const from = sent.get(w), upto = Math.min(due, f + lead);
+            while (sent.get(w) < upto) sendOne(w);
+            if (sent.get(w) > from) ticks.get(w).push([Date.now(), from, sent.get(w) - 1]);
+        }
+    };
+    const timer = setInterval(tick, 28);
+    return { sent, ticks, active, sendOne, stop: () => clearInterval(timer) };
+}
+
 // ── SURFACE 28: a silent player's last cmd, repeated ──────────────────────────
 //
 // A player the relay has not heard from for GRACE_MS, while another player is
 // heard, is silent: it no longer holds the seal, and each tic sealed without
 // it repeats its last cmd with the fabricated bit set.  From the bytes on the
 // wire:
-//   - the others go on at their own pace, about 35 tics a second, not at the
-//     sweep's 20 (one fabricated tic per 50 ms, the rule before 2026-10-08);
+//   - the other player goes on at its own pace: every cmd it sends is sealed,
+//     about 35 tics a second, not at the sweep's 20 (one fabricated tic per
+//     50 ms, the rule before 2026-10-08).  It sends by the wall clock and not
+//     bounded by the frontier, so the frontier it gets back is what the relay
+//     sealed and nothing else, and the rate is read after it stops, once the
+//     relay has answered what it sent;
 //   - a repeated cmd carries none of the original's one-tic events: chatchar
 //     (ticcmd_t byte 6) is 0, and buttons (byte 7) are 0 when BT_SPECIAL
 //     (0x80) made them a pause or a savegame -- repeated verbatim, a pause
 //     pressed just before going silent would toggle on every fabricated tic.
 //     Ordinary buttons (attack) repeat as they were;
-//   - the player still sending is never fabricated: its cmd is in flight;
+//   - the player still sending is never fabricated: its cmd is in flight.  A
+//     tic it sent only after this process stalled past the grace is excused,
+//     and counted: the relay heard nothing from it then;
 //   - past DROP_MS it is closed with code 4000 and a reason that says why.
 // Red-proofs: without the two sanitising lines in sealTic every fabricated
 // cmd reads chatchar 0x41 (and buttons 0x81 in the 'pause' variant); with
@@ -1733,62 +1828,36 @@ async function fuzzLaggardLeaves(variant) {
 // second; with the sweep's old in-flight test (the oldest laggard's age), a
 // is fabricated on about 50 tics.
 const BT_SPECIAL = 0x80, BTS_PAUSE = 1, BT_ATTACK = 1;
+const STALL_MS = 200;       // a gap in this process's own sends that long excuses the relay
 async function fuzzSilentRepeat(variant) {
     const lastButtons = variant === 'pause' ? BT_SPECIAL | BTS_PAUSE : BT_ATTACK;
     const wantButtons = variant === 'pause' ? 0 : BT_ATTACK;
     const s = await spawnServer();
-    const lobs = [], wel = [];
-    for (let i = 0; i < 2; i++) {
-        const l = lobbyWs(s.base); await open(l);
-        wel.push(await onceMsg(l, m => m.t === 'welcome'));
-        lobs.push(l);
-    }
-    lobs[0].send(JSON.stringify({ t: 'start' }));
-    const launches = await Promise.all(lobs.map(l => onceMsg(l, m => m.t === 'launch', 6000)));
-    const [a, b] = [0, 1].map(i => {
-        const w = gameWs(s.base, wel[i].slot, launches[i].token);
-        w.binaryType = 'nodebuffer';
-        return w;
-    });
-    await open(a); await open(b);
-    const slotA = wel[0].slot, slotB = wel[1].slot;
-    let bClose = null;
-    b.on('close', (code, reason) => { bClose = { code, reason: String(reason) }; });
-
-    const bundles = [];         // every bundle a receives, with when
-    a.on('message', d => { if (Buffer.isBuffer(d) && d.length === 38) bundles.push({ at: Date.now(), d: Buffer.from(d) }); });
+    const { lobs, ws: [a, b], slots: [slotA, slotB] } = await seatedGame(s, 2);
+    const closed = new Promise(res => b.on('close', (code, reason) => res({ code, reason: String(reason) })));
+    const { bundles, frontier } = watchBundles(a);
     const cmdOf = (d, slot) => d.subarray(6 + slot * 8, 14 + slot * 8);
-    const frontier = () => bundles.length ? bundles[bundles.length - 1].d.readUInt32LE(0) + 1 : 0;
-    const LEAD = 16;            // an honest engine stays below frontier + LEAD
-    const sent = new Map([[a, 0], [b, 0]]);
-    const sendOne = (w, chat = 0, buttons = 0) => {
-        const c = Buffer.alloc(12); c.writeUInt32LE(sent.get(w), 0);
-        c[4 + 6] = chat; c[4 + 7] = buttons;
-        if (w.readyState === 1) w.send(c);
-        sent.set(w, sent.get(w) + 1);
-    };
-    // 35 cmds a second by the wall clock, never past frontier + LEAD: a timer
-    // that fires late (a loaded host) sends the cmds it owes in one go, so
-    // the rate below measures the relay and not this process's timers
-    const start = Date.now();
-    const due = () => Math.floor((Date.now() - start) * 35 / 1000);
-    const pace = w => setInterval(() => {
-        const upto = Math.min(due(), frontier() + LEAD);
-        while (sent.get(w) < upto) sendOne(w);
-    }, 28);
-    const timers = [pace(a), pace(b)];
+    const pace = pacer([a, b], frontier, { lead: 400 });
+
     await sleep(1500);                      // both playing, nothing fabricated
-    clearInterval(timers.pop());            // b: one last cmd with the events, then nothing
-    sendOne(b, 0x41, lastButtons);
-    const lastTic = sent.get(b) - 1;
+    pace.active.delete(b);                  // b: one last cmd with the events, then nothing
+    pace.sendOne(b, 0x41, lastButtons);
+    const lastTic = pace.sent.get(b) - 1;
     const silentAt = Date.now();
 
-    await sleep(1000);                      // past GRACE_MS, and the jitter of it
-    const n0 = bundles.length, t0 = Date.now();
-    await sleep(2000);
-    const rate = (bundles.length - n0) / ((Date.now() - t0) / 1000);
+    await sleep(1000);                      // past the grace, however late the sweeps
+    await settle();
+    const t0 = Date.now(), f0 = frontier(), s0 = pace.sent.get(a);
+    await sleep(3000);
+    pace.stop();                            // a stops; what it sent, the relay must seal
+    const t1 = Date.now(), sentA = pace.sent.get(a);
+    for (const end = Date.now() + 800; Date.now() < end && frontier() < sentA;) await sleep(20);
+    await settle();
+    const rate = (frontier() - f0) / ((t1 - t0) / 1000);
+    const sendRate = (sentA - s0) / ((t1 - t0) / 1000);
     check(`silent repeat (${variant}): the other player goes on at its own pace`, rate >= 30,
-          `${rate.toFixed(1)} tics/s while b is silent (35 is true time; one fabricated tic per sweep is 20)`);
+          `${rate.toFixed(1)} tics/s sealed while b is silent, a sending ${sendRate.toFixed(1)}/s ` +
+          `(35 is true time; one fabricated tic per sweep is 20); frontier ${frontier()} of a's ${sentA}`);
 
     const after = bundles.filter(x => x.at > silentAt && ((x.d[5] >> slotB) & 1));
     const real = bundles.filter(x => x.d.readUInt32LE(0) === lastTic && !((x.d[5] >> slotB) & 1));
@@ -1802,26 +1871,38 @@ async function fuzzSilentRepeat(variant) {
           wrong.length ? `${wrong.length} of ${after.length} read chatchar 0x${cmdOf(wrong[0].d, slotB)[6].toString(16)}, ` +
                          `buttons 0x${cmdOf(wrong[0].d, slotB)[7].toString(16)}`
                        : `${after.length} fabricated cmds for b`);
-    const aFabs = bundles.filter(x => x.at > silentAt && ((x.d[5] >> slotA) & 1));
-    const aFab = aFabs.length;
-    check(`silent repeat (${variant}): a, still sending, is never fabricated`, aFab === 0,
-          aFab ? `${aFab} bundles fabricated a, tics ${aFabs[0].d.readUInt32LE(0)}..${aFabs[aFab - 1].d.readUInt32LE(0)}, ` +
-                 `${aFabs[0].at - silentAt}..${aFabs[aFab - 1].at - silentAt} ms after b went silent; a sent up to ${sent.get(a)}`
-               : '0 bundles fabricated a');
 
-    await sleep(Math.max(0, 5000 + 800 - (Date.now() - silentAt)));    // DROP_MS is 5 s
+    // a's fabricated tics among those it sent while b was silent; a tic a sent
+    // only after a gap of STALL_MS in its own sends is this process's stall
+    const gapBefore = new Map();            // tic -> ms since a's previous send
+    pace.ticks.get(a).forEach(([at, lo, hi], i, arr) => {
+        const gap = i ? at - arr[i - 1][0] : 0;
+        for (let t = lo; t <= hi; t++) gapBefore.set(t, gap);
+    });
+    const aFabs = bundles.filter(x => x.at > silentAt && ((x.d[5] >> slotA) & 1) && x.d.readUInt32LE(0) < sentA)
+        .map(x => x.d.readUInt32LE(0));
+    const excused = aFabs.filter(t => (gapBefore.get(t) ?? 0) >= STALL_MS);
+    const unexcused = aFabs.filter(t => (gapBefore.get(t) ?? 0) < STALL_MS);
+    check(`silent repeat (${variant}): a, still sending, is never fabricated`, unexcused.length === 0,
+          unexcused.length ? `${unexcused.length} of a's tics fabricated (tics ${unexcused[0]}..${unexcused[unexcused.length - 1]}), ` +
+                             `${excused.length} more after this process stalled ${STALL_MS} ms or longer`
+                           : `0 (${excused.length} after this process stalled ${STALL_MS} ms or longer)`);
+
+    // DROP_MS is 5 s; the close is awaited, so a late reading cannot miss it
+    const left = Math.max(0, silentAt + 5000 + 4000 - Date.now());
+    const bClose = await Promise.race([closed, sleep(left).then(() => null)]);
     check(`silent repeat (${variant}): b is dropped with code 4000 and a reason`,
           bClose?.code === 4000 && /dropped/.test(bClose.reason),
-          bClose ? `closed ${bClose.code} "${bClose.reason}"` : `b still open (readyState ${b.readyState})`);
+          bClose ? `closed ${bClose.code} "${bClose.reason}" ${Date.now() - silentAt} ms after it went silent`
+                 : `b still open 9 s after it went silent (readyState ${b.readyState})`);
 
-    timers.forEach(clearInterval);
     for (const w of [a, b, ...lobs]) try { w.close(); } catch {}
     const alive = await serverAlive(s.base);
     check(`silent repeat (${variant}): server survives`, alive && !s.didCrash(), `alive=${alive} crashed=${s.didCrash()}`);
     s.kill();
 }
 
-// ── SURFACE 29: everyone quiet at once, then back in some order ────────────────────
+// ── SURFACE 29: everyone quiet at once, then back in some order ──────────────
 //
 // SURFACE 28's rule has a trap: when every player goes quiet together -- the
 // relay process stalls, its link stalls, or both engines sit in a shared melt
@@ -1829,44 +1910,23 @@ async function fuzzSilentRepeat(variant) {
 // relay that judged silence by the clock alone would find the second player
 // silent while its burst is still unread, and seal the first player's whole
 // burst with the second fabricated: measured with the relay stopped for
-// 400 ms, 13-14 tics for one player.  So silence is judged only while someone
-// else is being heard, and a collective quiet keeps the old pace (one tic per
-// sweep, every player fabricated alike).  The check: after the quiet, no
-// bundle fabricates exactly one of the two.
+// 400 ms, 13-14 tics for one player.  So silence is counted only in sweeps in
+// which someone else was heard, and a collective quiet keeps the old pace
+// (one tic per sweep, every player fabricated alike).  The check: after the
+// quiet, no burst of tics sealed with only one of the two fabricated.  The
+// two players keep step (one timer), so their cmds stop and resume together;
+// at most 2 one-sided tics are allowed for a frame that crossed the quiet's
+// edge, against 11-14 for the trap.
 //   'relay stopped'  the server process is SIGSTOPped for 400 ms;
 //   'both quiet'     both players stop sending for 400 ms, then a's backlog
 //                    goes first and b's straight after.
-// Red-proof: judge silence whenever nothing is heard (no "someone else was
-// heard" condition) and one player reads about a dozen one-sided bundles.
+// Red-proof: judge silence by the clock alone and one player reads about a
+// dozen one-sided bundles.
 async function fuzzCollectiveQuiet(variant) {
     const s = await spawnServer();
-    const lobs = [], wel = [];
-    for (let i = 0; i < 2; i++) {
-        const l = lobbyWs(s.base); await open(l);
-        wel.push(await onceMsg(l, m => m.t === 'welcome'));
-        lobs.push(l);
-    }
-    lobs[0].send(JSON.stringify({ t: 'start' }));
-    const launches = await Promise.all(lobs.map(l => onceMsg(l, m => m.t === 'launch', 6000)));
-    const [a, b] = [0, 1].map(i => {
-        const w = gameWs(s.base, wel[i].slot, launches[i].token);
-        w.binaryType = 'nodebuffer';
-        return w;
-    });
-    await open(a); await open(b);
-    const slotA = wel[0].slot, slotB = wel[1].slot;
-    const bundles = [];
-    a.on('message', d => { if (Buffer.isBuffer(d) && d.length === 38) bundles.push({ at: Date.now(), d: Buffer.from(d) }); });
-    const frontier = () => bundles.length ? bundles[bundles.length - 1].d.readUInt32LE(0) + 1 : 0;
-    const LEAD = 16;
-    const sent = new Map([[a, 0], [b, 0]]);
-    const sendTo = (w, upto) => {
-        for (let t = sent.get(w); t < upto; t++) { const c = Buffer.alloc(12); c.writeUInt32LE(t, 0); if (w.readyState === 1) w.send(c); }
-        sent.set(w, Math.max(sent.get(w), upto));
-    };
-    let quiet = false;
-    const pace = w => setInterval(() => { if (!quiet) sendTo(w, Math.min(sent.get(w) + 1, frontier() + LEAD)); }, 28);
-    const timers = [pace(a), pace(b)];
+    const { lobs, ws: [a, b], slots: [slotA, slotB] } = await seatedGame(s, 2);
+    const { bundles, frontier } = watchBundles(a);
+    const pace = pacer([a, b], frontier);
     await sleep(1500);
     const quietAt = Date.now();
     if (variant === 'relay stopped') {
@@ -1874,28 +1934,29 @@ async function fuzzCollectiveQuiet(variant) {
         await sleep(400);
         s.srv.kill('SIGCONT');
     } else {
-        quiet = true;
+        pace.active.clear();
         await sleep(400);
-        const back = Math.min(sent.get(a), sent.get(b)) + 14;   // 400 ms of tics
-        sendTo(a, back); sendTo(b, back);                      // a's burst, then b's
-        quiet = false;
+        const back = Math.min(pace.sent.get(a), pace.sent.get(b)) + 14;   // 400 ms of tics
+        for (const w of [a, b]) while (pace.sent.get(w) < back) pace.sendOne(w);   // a's burst, then b's
+        pace.active.add(a); pace.active.add(b);
     }
     await sleep(1500);
+    await settle();
+    pace.stop();
     const after = bundles.filter(x => x.at >= quietAt);
     const one = after.filter(x => ((x.d[5] >> slotA) & 1) !== ((x.d[5] >> slotB) & 1));
     const both = after.filter(x => ((x.d[5] >> slotA) & 1) && ((x.d[5] >> slotB) & 1)).length;
-    check(`collective quiet (${variant}): no tic is sealed with only one of the two fabricated`,
-          after.length >= 30 && one.length === 0,
+    check(`collective quiet (${variant}): no burst sealed with only one of the two fabricated`,
+          after.length >= 20 && one.length <= 2,
           `${one.length} one-sided of ${after.length} bundles since the quiet (${both} with both fabricated)` +
           (one.length ? `, tics ${one[0].d.readUInt32LE(0)}..${one[one.length - 1].d.readUInt32LE(0)}` : ''));
-    timers.forEach(clearInterval);
     for (const w of [a, b, ...lobs]) try { w.close(); } catch {}
     const alive = await serverAlive(s.base);
     check(`collective quiet (${variant}): server survives`, alive && !s.didCrash(), `alive=${alive} crashed=${s.didCrash()}`);
     s.kill();
 }
 
-// ── SURFACE 30: the one player still sending leaves the silent ones ────────────
+// ── SURFACE 30: the one player still sending leaves the silent ones ──────────
 //
 // seal() seals a tic with a silent player's last cmd repeated, but only a tic
 // some live player really sent.  The case that needs the second half: two
@@ -1903,52 +1964,31 @@ async function fuzzCollectiveQuiet(variant) {
 // Every live player is then silent and none has a cmd, and without that
 // condition seal() would seal fabricated tics in a loop that never yields --
 // the relay hung, every socket starved.  With it, the sweep paces them, one
-// tic per 50 ms, until they are dropped.
+// tic per sweep (at most 20 a second), until they are dropped.  The pace is
+// read from tic numbers over 2 s, with what has arrived drained first.
 // Red-proof: drop the "some live player sent this tic" condition and the
 // relay stops answering.
 async function fuzzLastSenderLeaves() {
     const s = await spawnServer();
-    const lobs = [], wel = [];
-    for (let i = 0; i < 3; i++) {
-        const l = lobbyWs(s.base); await open(l);
-        wel.push(await onceMsg(l, m => m.t === 'welcome'));
-        lobs.push(l);
-    }
-    lobs[0].send(JSON.stringify({ t: 'start' }));
-    const launches = await Promise.all(lobs.map(l => onceMsg(l, m => m.t === 'launch', 6000)));
-    const ws = [0, 1, 2].map(i => {
-        const w = gameWs(s.base, wel[i].slot, launches[i].token);
-        w.binaryType = 'nodebuffer';
-        return w;
-    });
-    for (const w of ws) await open(w);
+    const { lobs, ws, slots } = await seatedGame(s, 3);
     const [a, b, c] = ws;
-    let bBundles = 0, frontier = 0;
-    b.on('message', d => { if (Buffer.isBuffer(d) && d.length === 38) { bBundles++; frontier = d.readUInt32LE(0) + 1; } });
-    const sent = new Map(ws.map(w => [w, 0]));
-    const start = Date.now();
-    const due = () => Math.floor((Date.now() - start) * 35 / 1000);
-    const live = new Set(ws);
-    const timer = setInterval(() => {
-        for (const w of live) {
-            const upto = Math.min(due(), frontier + 16);
-            for (let t = sent.get(w); t < upto; t++) { const m = Buffer.alloc(12); m.writeUInt32LE(t, 0); if (w.readyState === 1) w.send(m); }
-            sent.set(w, Math.max(sent.get(w), upto));
-        }
-    }, 28);
+    const { frontier } = watchBundles(b);
+    const pace = pacer(ws, frontier);
     await sleep(1500);
-    live.delete(b); live.delete(c);         // b and c go silent
-    await sleep(1000);                      // judged silent while a is heard
-    live.delete(a); a.close();              // the one still sending leaves
+    pace.active.delete(b); pace.active.delete(c);       // b and c go silent
+    await sleep(1500);                                  // judged silent while a is heard
+    pace.active.delete(a); a.close();                   // the one still sending leaves
     await sleep(500);
-    const n0 = bBundles, t0 = Date.now();
-    await sleep(1000);
-    const rate = (bBundles - n0) / ((Date.now() - t0) / 1000);
+    await settle();
+    const t0 = Date.now(), f0 = frontier();
+    await sleep(2000);
+    await settle();
+    const rate = (frontier() - f0) / ((Date.now() - t0) / 1000);
     const alive = await serverAlive(s.base);
     check('last sender leaves: the relay still answers', alive && !s.didCrash(), `alive=${alive} crashed=${s.didCrash()}`);
     check('last sender leaves: the silent players are paced by the sweep, not sealed in a loop',
-          rate > 0 && rate <= 30, `${rate.toFixed(1)} bundles/s to b (one 50 ms sweep is 20)`);
-    clearInterval(timer);
+          rate > 0 && rate <= 30, `${rate.toFixed(1)} tics/s to b over 2 s (one 50 ms sweep is 20)`);
+    pace.stop();
     for (const w of [...ws, ...lobs]) try { w.close(); } catch {}
     s.kill();
 }
