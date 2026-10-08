@@ -20,7 +20,7 @@
 //                  window (two-sided, no back side: SEG_BACK's null sector),
 //                  demo 1 to its end: from frame 412 its hitscans cross them,
 //                  where PTR_AimTraverse and PTR_ShootTraverse compare heights
-//                  with a NULL backsector (P_ZeroSector stands in, p_mobj.c)
+//                  with a NULL backsector (P_NullSector stands in, p_setup.c)
 //        save      doom2 MAP11 (demo 1): saved at tic 800, loaded at once, saved
 //                  again at 835, played on to 1150; then each build loads the
 //                  other's save.  Every save's world part (S lines: sectors,

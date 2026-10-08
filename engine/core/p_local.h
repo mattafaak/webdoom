@@ -163,9 +163,10 @@ void 	P_SpawnBlood (fixed_t x, fixed_t y, fixed_t z, int damage);
 mobj_t* P_SpawnMissile (mobj_t* source, mobj_t* dest, mobjtype_t type);
 void	P_SpawnPlayerMissile (mobj_t* source, mobjtype_t type);
 
-// webdoom: the zeroed objects read where vanilla reads through NULL (p_mobj.c)
+// webdoom: the zeroed mobj read where vanilla reads a NULL target (p_mobj.c),
+// and the glass hack's back sector as DOS 6.22 read it (p_setup.c)
 mobj_t*		P_ZeroMobj (void);
-sector_t*	P_ZeroSector (void);
+sector_t*	P_NullSector (void);
 
 
 //

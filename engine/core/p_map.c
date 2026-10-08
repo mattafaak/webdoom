@@ -894,8 +894,16 @@ PTR_AimTraverse (intercept_t* in)
 	
 	dist = FixedMul (attackrange, in->frac);
 
-	// webdoom: a glass hack's line has no back sector (P_ZeroSector)
-	back = li->backsector ? li->backsector : P_ZeroSector ();
+	// webdoom: a glass hack's line has no back sector: DOS 6.22's null
+	// sector stands in (P_NullSector, p_setup.c), as it does for its segs
+	back = li->backsector ? li->backsector : P_NullSector ();
+#ifdef WEBDOOM_INVARIANTS
+	// and neither front height equals its height, so both comparisons
+	// below differ: the rule Chocolate, Crispy, PrBoom+ and dsda apply here
+	DOOM_ASSERT (li->backsector
+		     || (li->frontsector->floorheight != back->floorheight
+			 && li->frontsector->ceilingheight != back->ceilingheight));
+#endif
 
 	if (li->frontsector->floorheight != back->floorheight)
 	{
@@ -986,8 +994,16 @@ boolean PTR_ShootTraverse (intercept_t* in)
 		
 	dist = FixedMul (attackrange, in->frac);
 
-	// webdoom: a glass hack's line has no back sector (P_ZeroSector)
-	back = li->backsector ? li->backsector : P_ZeroSector ();
+	// webdoom: a glass hack's line has no back sector: DOS 6.22's null
+	// sector stands in (P_NullSector, p_setup.c), as it does for its segs
+	back = li->backsector ? li->backsector : P_NullSector ();
+#ifdef WEBDOOM_INVARIANTS
+	// and neither front height equals its height, so both comparisons
+	// below differ: the rule Chocolate, Crispy, PrBoom+ and dsda apply here
+	DOOM_ASSERT (li->backsector
+		     || (li->frontsector->floorheight != back->floorheight
+			 && li->frontsector->ceilingheight != back->ceilingheight));
+#endif
 
 	if (li->frontsector->floorheight != back->floorheight)
 	{

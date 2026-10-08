@@ -195,8 +195,10 @@ void P_LoadVertexes (int lump)
 // impassable window (OTTAWAU.WAD).  Vanilla read sides[-1].sector, which in
 // DOS was memory at address 0; this is the sector Chocolate Doom builds from
 // that memory under DOS 6.22, its default: zero but for the two heights.
+// webdoom: segs get it here, and a hitscan or aim crossing such a line reads
+// it as the line's back sector (PTR_AimTraverse, PTR_ShootTraverse).
 //
-static sector_t* P_NullSector (void)
+sector_t* P_NullSector (void)
 {
     static sector_t	null_sector;
 
