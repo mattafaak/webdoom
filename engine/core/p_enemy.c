@@ -1812,7 +1812,19 @@ mobj_t*		braintargets[MAXBRAINTARGETS];
 int		numbraintargets;
 int		braintargeton;
 
-void A_BrainAwake (mobj_t* mo)
+//
+// P_BrainTargets
+// webdoom: A_BrainAwake's scan for the boss shooter's target spots, without
+// its sound, so that G_DoLoadGame can run it too.  Vanilla built the list only
+// when the shooter woke, saved none of it, and kept it across a load: a game
+// loaded in a fresh session spat at no target (A_BrainSpit's modulo by 0), and
+// one loaded in the same session at the previous level's freed mobjs.  A save
+// keeps its thinkers in their list order, so the scan finds the list the
+// shooter built, in its order; the cycle restarts at its first spot (Crispy
+// and PrBoom+ save the index, which this save format has no room for).
+// A_BrainSpit's `easy` is left alone.
+//
+void P_BrainTargets (void)
 {
     thinker_t*	thinker;
     mobj_t*	m;
@@ -1836,7 +1848,8 @@ void A_BrainAwake (mobj_t* mo)
 	    // webdoom: guard — caps at MAXBRAINTARGETS (vanilla had no check;
 	    //   a PWAD with >32 Icon-of-Sin targets would corrupt adjacent data).
 	    //   Excess targets are silently ignored (fail-soft, demo-neutral —
-	    //   no golden demo uses the Icon of Sin; Doom II MAP30 only has 8).
+	    //   no golden demo uses the Icon of Sin).  At ultra-violence this scan
+	    //   finds 13 on Doom II MAP30, 4 on TNT's and 9 on Plutonia's.
 	    if (numbraintargets < MAXBRAINTARGETS)
 	    {
 		braintargets[numbraintargets] = m;
@@ -1844,7 +1857,11 @@ void A_BrainAwake (mobj_t* mo)
 	    }
 	}
     }
-	
+}
+
+void A_BrainAwake (mobj_t* mo)
+{
+    P_BrainTargets ();
     S_StartSound (NULL,sfx_bossit);
 }
 

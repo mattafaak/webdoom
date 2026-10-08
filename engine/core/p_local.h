@@ -172,6 +172,7 @@ sector_t*	P_ZeroSector (void);
 // P_ENEMY
 //
 void P_NoiseAlert (mobj_t* target, mobj_t* emmiter);
+void P_BrainTargets (void);	// webdoom: A_BrainAwake's scan, also run on a load
 
 
 //

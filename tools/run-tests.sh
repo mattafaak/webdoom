@@ -796,6 +796,9 @@ leg launch-args     build,wad  "RULES reach the engine; hostile launch params ar
 leg demo-seek       build,wad  "scrubber seek == linear replay"        -- node tools/demo-seek-test.mjs
 leg demo-verify     build,wad  "13 goldens + doctored + hostile"        -- node tools/demo-verify-test.mjs
 leg save-compat     build,wad  "savegames written by 2a6a2de load and replay identically" -- node tools/save-compat-test.mjs
+# The boss shooter's targets are not in a save; G_DoLoadGame rebuilds them.
+# Red-proof: without that call the fresh-session load ends in A_BrainSpit's I_Error.
+leg brain-load      build,wad  "a doom2 MAP30 save plays the same loaded in a fresh session as in the one that saved it" -- node tools/brain-load-test.mjs
 leg demo-replay     build,wad  "13 IWAD demos through web_play_demo_buf, seek, -fast, two-player" -- node tools/demo-replay-test.mjs
 
 # ── tenet 4: the sanitizer IS the gate ───────────────────────────────────────

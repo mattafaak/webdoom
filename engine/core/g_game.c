@@ -1337,6 +1337,7 @@ void G_DoLoadGame (void)
     P_UnArchivePlayers (); 
     P_UnArchiveWorld (); 
     P_UnArchiveThinkers (); 
+    P_BrainTargets ();	// webdoom: the boss shooter's targets, not saved
     P_UnArchiveSpecials (); 
  
     if (save_p >= save_end || *save_p != 0x1d) 
