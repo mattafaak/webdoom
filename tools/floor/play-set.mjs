@@ -111,7 +111,7 @@ export const SCRIPT_SKILL = 3;   // sk_hard: ultra-violence, as the IWAD demos
 // the save, the load and the end, in gametics (i_main.c's WD_SAVE_AT,
 // WD_LOAD_AT, WD_END_AT; cm_main.c's -save-at, -load-at, -end-at)
 export const SAVE_AT = 1900, LOAD_AT = 2000, END_AT = 2350;
-// (Until 30dae24, doom2 MAP07 and MAP30 and plutonia MAP32 skipped the save
+// (Until 3099e83, doom2 MAP07 and MAP30 and plutonia MAP32 skipped the save
 // and load: the loaded game's mancubus or boss cube read its NULL target and
 // the engine faulted.  P_ZeroMobj, p_mobj.c, stands in for it now.)
 

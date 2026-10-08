@@ -53,7 +53,7 @@ owner):
   any change in what the game allocates. Measuring the peak of what malloc
   handed out, not of the break, would remove it.
 - **Glass in the browser is not DOS vanilla.** A two-sided line with no back
-  side now reads a zeroed back sector (`P_ZeroSector`, 30dae24), which is what
+  side now reads a zeroed back sector (`P_ZeroSector`, 3099e83), which is what
   doom.wasm always read at address 0. DOS read its interrupt vector table
   there, the values `P_NullSector` already uses for segs; on E1M5 nine glass
   lines have floor 0, where the two differ. Matching DOS would move behaviour

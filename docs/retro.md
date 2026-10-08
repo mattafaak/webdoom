@@ -495,7 +495,7 @@ iteration per tic, as on a target at 35 Hz).
   it sample-identical to the unmodified core on all 137 IWAD scores, both
   modes, and on random register streams. On a real OPL2 chip (the L1 grade,
   vanilla's own setup) the CPU only sequences.
-- The sound on ARM, measured (`e806675`): the synth, the mixer and the
+- The sound on ARM, measured (`615a1b0`): the synth, the mixer and the
   channels cost, per graded tic over the 13 demos at -O1, 8,785,826 mean and
   9,341,360 max instructions on ARMv6-M, 6,020,706 and 6,434,200 on ARMv8-M
   (5,307,997 and 5,733,750 at -O2), against 6,707,493 and 7,250,166 on x86.
