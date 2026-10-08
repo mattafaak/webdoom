@@ -11,15 +11,17 @@
 //   registration guard in lobby.js never fires, navigator.serviceWorker is
 //   absent, and wad-cache.js IDB path activates.
 //
-// Session 1: boot SP → WAD downloaded from network (server logs /wads/ hit).
-// Session 2: fresh tab, same Chrome profile (same IDB) → WAD served from IDB;
-//            server receives ZERO /wads/ requests, and a WAD seeded between
-//            the sessions under a sha256 the server does not serve is pruned.
+// Session 1: boot SP → WAD downloaded from network (server logs /wads/ hit),
+//            and its IndexedDB copy committed before the tab is closed.
+// Session 2: fresh tab, same Chrome profile (same IDB), the HTTP cache
+//            bypassed → WAD served from IDB; server receives ZERO /wads/
+//            requests, and a WAD seeded between the sessions under a sha256
+//            the server does not serve is pruned.
 //
 // RED-PROOF: stash the wad-cache.js + main.js changes and run — session 2
 // will re-download the WAD (wadHits.s2 > 0) and the assertion fails.
 //
-// Wired into run-tests.sh as the insecure-origin leg.
+// Wired into run-tests.sh as the browser-insecure leg.
 //
 // Usage: node tools/browser-insecure-test.mjs
 import { join } from 'node:path';
@@ -28,13 +30,43 @@ import { startServer } from './lib/server.mjs';
 import { sleep } from './lib/util.mjs';
 import { check, summary, fatal } from './lib/report.mjs';
 
-// the server logs each request; the test counts /wads/ hits per session
+// the server logs each request; the test counts /wads/ hits per session, and
+// keeps the names session 1 fetched
 const wadHits = { s1: 0, s2: 0 };
+const wadFiles1 = new Set();
 let activeSession = 0;
 const srv = await startServer({ env: { LOG_REQUESTS: '1' }, onStderr: chunk => {
     for (const line of chunk.split('\n'))
-        if (line.includes('/wads/')) { if (activeSession === 1) wadHits.s1++; else if (activeSession === 2) wadHits.s2++; }
+        if (line.includes('/wads/')) {
+            if (activeSession === 1) {
+                wadHits.s1++;
+                const m = /^GET \/wads\/(\S+)/.exec(line);
+                if (m) wadFiles1.add(decodeURIComponent(m[1]));
+            } else if (activeSession === 2) wadHits.s2++;
+        }
 } });
+
+// The keys of the webdoom-wads store, or null when it cannot be read.  The
+// open creates the store if this read comes first, as client/js/idb.js does,
+// so a read can never leave a version-1 database without it.
+const IDB_KEYS = `(async () => {
+    try {
+        const db = await new Promise((res, rej) => {
+            const r = indexedDB.open('webdoom-wads', 1);
+            r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('wads')) r.result.createObjectStore('wads'); };
+            r.onsuccess = () => res(r.result);
+            r.onerror = () => rej(r.error);
+        });
+        const keys = await new Promise((res, rej) => {
+            const t = db.transaction('wads', 'readonly');
+            const r = t.objectStore('wads').getAllKeys();
+            t.oncomplete = () => res(r.result);
+            t.onerror = () => rej(t.error);
+        });
+        db.close();
+        return keys;
+    } catch (e) { return null; }
+})()`;
 const insecureUrl = `http://insecure.test:${srv.port}/`;
 // a fresh profile per run (launchChrome), so the SW cache is always cold on entry
 const chrome = await launchChrome({ gpu: 'none', flags: ['--host-resolver-rules=MAP insecure.test 127.0.0.1'] });
@@ -77,8 +109,15 @@ async function bootIntoSP(tab, label = 'tab', timeoutSecs = 90) {
             })()`);
             continue;
         }
+        // The engine running, not the boot begun: bootDoom un-hides the
+        // canvas before it fetches anything (client/js/main.js), so the canvas
+        // and an empty status line hold from the first moment of a boot, and a
+        // check of the server's /wads/ log made then sees no request yet.  The
+        // engine handle is published, and the loading panel hidden, only once
+        // the WAD is in the heap and the frame loop starts.
         const running = await tab.ev(
-            `!document.getElementById('screen').hidden &&
+            `!!window.webdoom?.doom && document.getElementById('loading')?.hidden === true &&
+             !document.getElementById('screen').hidden &&
              document.getElementById('status')?.textContent === ''`,
         );
         if (running) return;
@@ -129,6 +168,25 @@ check('session 1: the WAD was downloaded from the server', wadHits.s1 > 0,
       'session 1 made zero /wads/ server requests');
 console.log(`  session 1: ${wadHits.s1} /wads/ server hit(s) — WAD downloaded from network`);
 
+// The IndexedDB copy is written fire-and-forget once the download is in the
+// engine's heap (client/js/main.js fetchWad: wadCachePut(...).catch(() => {})),
+// so a running engine says nothing about whether that write has committed, and
+// closing the tab can abort a transaction still in flight.  Wait for the copy
+// itself, under the sha256 the server lists for each file session 1 fetched,
+// before anything closes the tab.
+const listed = (await tab1.ev(`fetch('/api/wads').then(r => r.json()).catch(() => null)`))?.wads ?? [];
+const wantShas = [...wadFiles1].map(f => listed.find(w => w.file === f)?.sha256).filter(Boolean);
+if (!wantShas.length) fatal(`session 1 fetched ${[...wadFiles1].join(', ') || 'no WAD'}, none of which /api/wads lists`);
+const idbT0 = Date.now();
+const inIdb1 = await tab1.waitFor(async () => {
+    const k = await tab1.ev(IDB_KEYS);
+    return Array.isArray(k) && wantShas.every(sha => k.includes(sha));
+}, { timeout: 20000, every: 250 });
+check('session 1: the downloaded WAD reached IndexedDB before the tab closed', inIdb1,
+      `${[...wadFiles1].join(', ')} (${wantShas.map(x => x.slice(0, 8)).join(', ')}…) not in webdoom-wads after 20 s; ` +
+      `keys: ${JSON.stringify(await tab1.ev(IDB_KEYS))}`);
+if (inIdb1) console.log(`  session 1: ${[...wadFiles1].join(', ')} in IndexedDB ${Date.now() - idbT0} ms after the boot`);
+
 // A WAD the server no longer serves: a sha256 no manifest lists.  The next
 // launcher load must prune it, keeping the WAD it does serve.
 const STALE = 'f'.repeat(64);
@@ -151,13 +209,21 @@ const seeded = await tab1.ev(`(async () => {
 if (seeded !== true) fatal(`could not seed a stale WAD into IndexedDB: ${seeded}`);
 tab1.close();
 
-// Brief pause to let IDB write settle (wadCachePut is fire-and-forget async).
-await sleep(2000);
-
 // ── Session 2: fresh tab, same IDB — WAD must NOT hit network ────────────────
 console.log('[2] Session 2: fresh tab, same profile — IDB must serve WAD...');
 activeSession = 2;
-const tab2 = await openTab(insecureUrl);
+// Chrome's HTTP cache must not answer for IndexedDB: the server sends /wads/
+// as `public, max-age=31536000, immutable` (server/serve.js), so a session 2
+// that read nothing from IndexedDB still made zero /wads/ requests (measured
+// both ways: with the IndexedDB write delayed past the tab's close, the store
+// held 0 keys after session 2 while the zero-request check passed; with the
+// client's IndexedDB read disabled, every check passed).  The tab bypasses the
+// HTTP cache from before its first request, so a WAD not taken from
+// IndexedDB is a request the server sees.
+const tab2 = await openTab('about:blank');
+await tab2.cdp('Network.enable');
+await tab2.cdp('Network.setCacheDisabled', { cacheDisabled: true });
+await tab2.cdp('Page.navigate', { url: insecureUrl });
 await waitForMenu(tab2, 'tab2 (session 2)');
 
 // One-shot notice must stay suppressed in session 2 as well.
@@ -172,28 +238,10 @@ await sleep(500);
 check('session 2: the WAD came from IndexedDB, with no /wads/ request', wadHits.s2 === 0,
       `session 2 made ${wadHits.s2} /wads/ server request(s).` +
       ' RED-PROOF: on unfixed client session 2 always re-downloads.');
-console.log(`  session 2: ${wadHits.s2} /wads/ server request(s) — WAD served from IDB cache`);
+console.log(`  session 2: ${wadHits.s2} /wads/ server request(s)${wadHits.s2 === 0 ? ' — WAD served from IDB cache' : ''}`);
 
 // Confirm IDB has the WAD stored, and only the WADs the server serves.
-const idbKeys = await tab2.ev(`
-    (async () => {
-        try {
-            const db = await new Promise((res, rej) => {
-                const r = indexedDB.open('webdoom-wads', 1);
-                r.onsuccess = () => res(r.result);
-                r.onerror = () => rej(r.error);
-            });
-            const keys = await new Promise((res, rej) => {
-                const t = db.transaction('wads', 'readonly');
-                const r = t.objectStore('wads').getAllKeys();
-                t.oncomplete = () => res(r.result);
-                t.onerror = () => rej(t.error);
-            });
-            db.close();
-            return keys;
-        } catch (e) { return null; }
-    })()
-`) ?? [];
+const idbKeys = await tab2.ev(IDB_KEYS) ?? [];
 const served = new Set(((await tab2.ev(`fetch('/api/wads').then(r => r.json()).catch(() => null)`))?.wads ?? []).map(w => w.sha256));
 const servedKeys = idbKeys.filter(k => served.has(k));
 console.log(`  IDB webdoom-wads keys after session 2: ${idbKeys.length} (${servedKeys.length} the server serves)`);
@@ -219,9 +267,15 @@ await sleep(60);
 await tab2.cdp('Input.dispatchKeyEvent', {
     type: 'keyUp', code: 'KeyW', key: 'w', windowsVirtualKeyCode: 87,
 });
-// arm() is async; pump() runs every PUMP_MS=100ms.  Wait for at least one
-// full pump cycle plus arm() async completion margin.
-await sleep(700);
+// arm() is async (it awaits ctx.resume() before choosing a sink), and the
+// first chunk exists once pump(), every PUMP_MS = 100 ms, has run: wait for a
+// sink and a chunk, with a deadline, rather than a fixed 700 ms.  A timeout
+// falls through to the checks below, which say what was missing.
+const armT0 = Date.now();
+const armed = await tab2.waitFor(
+    () => tab2.ev(`!!window.doomAudio?.sinkKind?.() && (window.doomAudio.lastChunk?.()?.length ?? 0) > 0`),
+    { timeout: 20000, every: 100 });
+console.log(`  music: ${armed ? `a sink and a first chunk ${Date.now() - armT0} ms after the key-up` : 'no sink with a chunk within 20 s'}`);
 
 const musicSinkKind = await tab2.ev(`window.doomAudio?.sinkKind()`);
 if (musicSinkKind !== 'buffer') {
@@ -272,5 +326,5 @@ check('no uncaught JS exceptions in either session', allErrors.length === 0, all
 
 tab2.close();
 summary('insecure origin: IDB WAD cache hit, an unserved WAD pruned, BufferSink music fallback confirmed (no synthetic forcing)',
-        { min: 14 });
+        { min: 15 });
 process.exit();
